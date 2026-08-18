@@ -4494,7 +4494,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TerminalSpawnRequest',
-    declaration: 'export interface TerminalSpawnRequest {\n    type: string;\n    name?: string;\n    cwd?: string;\n}',
+    declaration: 'export interface TerminalSpawnRequest {\n    type: string;\n    name?: string;\n    cwd?: string;\n    promptText?: string;\n}',
   },
   {
     name: 'TerminalSpawnResult',

@@ -173,6 +173,71 @@ describe('LocalPtySession readiness and output', () => {
     expect((await operation.done).waitReason).toBe('stdin_read')
   })
 
+  // A consumer needing a collision-resistant prompt declares it at spawn, and readiness
+  // compares against that prompt. Comparing against the module default instead poisons the
+  // prompt tail on every prompt, so each command falls back to silence-based settling —
+  // `idleSilenceMs + handoffGraceMs` per command wherever the platform cannot probe stdin
+  // waits, which is every macOS host (`MacProcessInspector.isStdinWaiting` returns false).
+  it('settles on the prompt the session was spawned with', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const prompt = '__DSH_PERSISTENT_BASH_PROMPT__ '
+    // The fake inspector reports waiting = false, keeping the exact stdin probe out of
+    // the way exactly as macOS does.
+    const session = new LocalPtySession(terminal, config(), prompt)
+
+    const startup = session.initialize()
+    terminal.emitData(`\x1b]133;D;0\x07${prompt}`)
+    await vi.advanceTimersByTimeAsync(10)
+    await startup
+
+    const operation = session.startSend({ text: 'pwd', submit: true })
+    // Let the write settle first: readiness seen before it is deliberately discarded.
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitData(`/tmp\r\n\x1b]133;D;0\x07${prompt}`)
+    await vi.advanceTimersByTimeAsync(10)
+    expect((await operation.done).waitReason).toBe('stdin_read')
+  })
+
+  // The tail poison is deliberate. It rejects two prompts that are not this send's
+  // completion: the previous prompt trailed by the echoed command, and a child prompt.
+  // Foreground ownership cannot reject either one, so the text match carries that weight.
+  it('falls back to silence when the observed prompt is not the session prompt', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config())
+    await initialize(session, terminal)
+
+    const operation = session.startSend({ text: 'pwd', submit: true })
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitData('/tmp\r\n\x1b]133;D;0\x07__DSH_PERSISTENT_BASH_PROMPT__ ')
+    await vi.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(60)
+    expect((await operation.done).waitReason).toBe('inferred_idle')
+  })
+
+  // An interactive child inherits PROMPT_COMMAND and emits the marker on every one of its
+  // own prompts. Job control keeps it in its own process group, so repeated markers must
+  // never settle the send while it owns the terminal.
+  it('ignores repeated markers emitted by a child that keeps the foreground', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = terminal.inspector
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+
+    const operation = session.startSend({ text: 'bash -i', submit: true })
+    let settled = false
+    void operation.done.then(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(0)
+    inspector.pgid = 999
+    for (let round = 0; round < 3; round += 1) {
+      terminal.emitData('\x1b]133;D;0\x07dsh> ')
+      await vi.advanceTimersByTimeAsync(10)
+      expect(settled).toBe(false)
+    }
+  })
+
   it('discards prompt readiness observed during asynchronous pre-write inspection', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()

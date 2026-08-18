@@ -8,6 +8,7 @@ import TerminalSessionService from '@deepseek-ai/dsh-terminal'
 import type {
   TerminalBackend,
   TerminalBackendSession,
+  TerminalBackendSpawnSpec,
   TerminalReadRequest,
   TerminalSendOperation,
   TerminalSendRequest,
@@ -116,9 +117,12 @@ class StubPtySession implements TerminalBackendSession {
     this.mode = mode
   }
 
+  setupText: string | undefined
+
   startSend(request: TerminalSendRequest): TerminalSendOperation {
     this.sends += 1
     if (request.text.startsWith('stty -echo')) {
+      this.setupText = request.text
       if (this.mode === 'init-exit') {
         this.statusValue = { kind: 'exited', exitCode: 1, signal: null }
         return this.operation(Promise.resolve(this.result('', 'session_exit')))
@@ -282,16 +286,18 @@ class StubPtySession implements TerminalBackendSession {
 
 function stubBackend(initialMode: StubMode = 'normal') {
   const sessions: StubPtySession[] = []
+  const specs: TerminalBackendSpawnSpec[] = []
   const backend: TerminalBackend = {
     type: 'stub',
-    async spawn() {
+    async spawn(spec) {
+      specs.push(spec)
       if (initialMode === 'spawn-error') throw new Error('stub spawn failed')
       const session = new StubPtySession(initialMode)
       sessions.push(session)
       return session
     },
   }
-  return { backend, sessions }
+  return { backend, sessions, specs }
 }
 
 async function setup(
@@ -338,6 +344,18 @@ describe('tool-bash-persistent', () => {
     await fiber.dispose()
     expect(ctx.tools.schemas()).toEqual([])
     expect(ctx.tools.get('bash')).toBeUndefined()
+  })
+
+  // The prompt must be declared at spawn so the backend spawns and matches the same string.
+  // Reassigning PS1 after startup left the backend waiting for a prompt the shell no longer
+  // printed, so every command settled by silence instead of on the prompt.
+  it('declares its prompt at spawn instead of reassigning PS1 afterwards', async () => {
+    const { ctx, owner, stub } = await setup()
+    expect(text(await call(ctx, owner, 'pwd'))).toBe('hello from stub')
+
+    expect(stub.specs[0]?.promptText).toBe('__DSH_PERSISTENT_BASH_PROMPT__ ')
+    expect(stub.sessions[0]?.setupText).toBe('stty -echo')
+    expect(stub.sessions[0]?.setupText).not.toContain('PS1=')
   })
 
   it('handles inferred idle, stdin_read fallback, shell exit, clipping, and cleanup', async () => {
