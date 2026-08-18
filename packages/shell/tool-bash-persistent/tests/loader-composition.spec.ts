@@ -159,9 +159,12 @@ suite('persistent Bash through a real cordis.yml Loader composition', () => {
 
     // `exec` replaces the wrapper before its end marker prints; the seam's
     // stdin_read readiness is what returns the replacement shell's prompt
-    // instead of spinning until the tool deadline.
+    // instead of spinning until the tool deadline. The replacement shell
+    // inherits the spawn-declared PS1 (and the PROMPT_COMMAND that re-asserts
+    // it), so the prompt it prints is the persistent-shell marker rather than
+    // the backend default.
     const execed = text(await execute('exec-replacement', 'exec bash --noprofile --norc -i'))
-    expect(execed).toBe('dsh> ')
+    expect(execed).toBe('__DSH_PERSISTENT_BASH_PROMPT__ ')
 
     const exited = text(await execute('exit', 'exit'))
     expect(exited).toContain('next bash call starts from the workspace')

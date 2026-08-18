@@ -188,6 +188,8 @@ export class LocalPtySession implements TerminalBackendSession {
   constructor(
     private readonly terminal: SubprocessTerminalHandle,
     private readonly config: ResolvedConfig,
+    /** Prompt this shell was spawned with; readiness compares against it, not the default. */
+    private readonly promptText: string = CONTROLLED_PROMPT,
   ) {
     this.pid = terminal.pid
     this.sanitizer = new TerminalSanitizer(config.maxReadBytes)
@@ -391,10 +393,10 @@ export class LocalPtySession implements TerminalBackendSession {
       this.lastOutputAt = Date.now()
     }
     if (this.promptSeen && sanitized.promptTail !== undefined) {
-      const remaining = Math.max(0, CONTROLLED_PROMPT.length + 1 - this.promptTail.length)
+      const remaining = Math.max(0, this.promptText.length + 1 - this.promptTail.length)
       this.promptTail += sanitized.promptTail.slice(0, remaining)
-      if (sanitized.promptTail.length > remaining) this.promptTail = `${CONTROLLED_PROMPT}\0`
-      this.promptTextSeen = this.promptTail === CONTROLLED_PROMPT
+      if (sanitized.promptTail.length > remaining) this.promptTail = `${this.promptText}\0`
+      this.promptTextSeen = this.promptTail === this.promptText
     }
   }
 
