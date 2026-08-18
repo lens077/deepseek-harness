@@ -48,6 +48,14 @@ export interface TerminalSpawnRequest {
   name?: string
   /** Optional initial working directory interpreted by the backend. */
   cwd?: string
+  /**
+   * Optional shell prompt this session will use, replacing the backend default.
+   * A caller that needs a collision-resistant prompt declares it here instead of
+   * reassigning `PS1` after startup: the backend owns both the spawned prompt and
+   * the readiness comparison, so a post-hoc reassignment would leave the backend
+   * waiting for a prompt the shell no longer prints.
+   */
+  promptText?: string
 }
 
 /** Fully identified request handed from the registry to a backend. */
