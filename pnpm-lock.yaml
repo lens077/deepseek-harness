@@ -756,7 +756,7 @@ importers:
         version: link:packages/entry
       '@types/node':
         specifier: ^26.0.1
-        version: 26.1.2
+        version: 26.1.1
       tsx:
         specifier: ^4.20.6
         version: 4.22.4
@@ -3930,8 +3930,8 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       e2b:
-        specifier: 2.29.1
-        version: 2.29.1
+        specifier: 2.36.0
+        version: 2.36.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -9650,16 +9650,16 @@ packages:
   '@chevrotain/types@11.1.2':
     resolution: {integrity: sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw==}
 
-  '@connectrpc/connect-web@2.0.0-rc.3':
-    resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
+  '@connectrpc/connect-web@2.1.2':
+    resolution: {integrity: sha512-1tfaK85MU+gJjwwmL31d2rzdf0XCYX99chZf63uG89SGBUd4XuZ4ZzhGo2u79TPXOE6nLIZQ2okrpyey42PYdg==}
     peerDependencies:
-      '@bufbuild/protobuf': ^2.2.0
-      '@connectrpc/connect': 2.0.0-rc.3
+      '@bufbuild/protobuf': ^2.7.0
+      '@connectrpc/connect': 2.1.2
 
-  '@connectrpc/connect@2.0.0-rc.3':
-    resolution: {integrity: sha512-ARBt64yEyKbanyRETTjcjJuHr2YXorzQo0etyS5+P6oSeW8xEuzajA9g+zDnMcj1hlX2dQE93foIWQGfpru7gQ==}
+  '@connectrpc/connect@2.1.2':
+    resolution: {integrity: sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA==}
     peerDependencies:
-      '@bufbuild/protobuf': ^2.2.0
+      '@bufbuild/protobuf': ^2.7.0
 
   '@csstools/color-helpers@6.1.0':
     resolution: {integrity: sha512-064IFJdjTfUqnjpCVpMOdbr8FLQBhinbZj6yRv2An2E41O/pLEXqfFRWqGq/SxlE5PEUYTlvWsG2r8MswAVvkg==}
@@ -11775,8 +11775,8 @@ packages:
   '@types/node@25.9.3':
     resolution: {integrity: sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg==}
 
-  '@types/node@26.1.2':
-    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
+  '@types/node@26.1.1':
+    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
 
   '@types/picomatch@3.0.2':
     resolution: {integrity: sha512-n0i8TD3UDB7paoMMxA3Y65vUncFJXjcUf7lQY7YyKGl6031FNjfsLs6pdLFCy2GNFxItPJG8GvvpbZc2skH7WA==}
@@ -12552,9 +12552,9 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
-  e2b@2.29.1:
-    resolution: {integrity: sha512-n4aGNwRKTj2oct7BrOWfR4T+xGO834vbsrzfSlWUNJrhz615Lp+ad9hc8KtRaaHULKr/W/14Z6v4c7fqk3y0pg==}
-    engines: {node: '>=20.18.1'}
+  e2b@2.36.0:
+    resolution: {integrity: sha512-aFz1V9m18hysbpTBaxr0lWo0xonzNvoFx6yJKX+u+3MBPVqIvBBWCsh+GqgGCey9ZfARlSL+p6CMgXdzOfJbBw==}
+    engines: {node: '>=20.18.1 <21 || >=22'}
 
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
@@ -14387,6 +14387,10 @@ packages:
     resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
     engines: {node: '>=20.18.1'}
 
+  undici@8.8.0:
+    resolution: {integrity: sha512-ubshXMXwF3MQIMF1y/WxZdNBnjEKeSg2wF5mcGUtU55YTw34tnVVpKRlLf7ruDXZ5344KokPVX4RBx1wJm64Bw==}
+    engines: {node: '>=22.19.0'}
+
   unicorn-magic@0.3.0:
     resolution: {integrity: sha512-+QBBXBCvifc56fsbuxZQ6Sic3wqqc3WWaqxs58gvJrcOuN83HGTCwz3oS5phzU9LthRNE9VrJCFCLUgHeeFnfA==}
     engines: {node: '>=18'}
@@ -15342,12 +15346,12 @@ snapshots:
 
   '@chevrotain/types@11.1.2': {}
 
-  '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.13.0))':
+  '@connectrpc/connect-web@2.1.2(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0))':
     dependencies:
       '@bufbuild/protobuf': 2.13.0
-      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.13.0)
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.13.0)
 
-  '@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.13.0)':
+  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0)':
     dependencies:
       '@bufbuild/protobuf': 2.13.0
 
@@ -16937,7 +16941,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/node@26.1.2':
+  '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
 
@@ -17717,11 +17721,11 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  e2b@2.29.1:
+  e2b@2.36.0:
     dependencies:
       '@bufbuild/protobuf': 2.13.0
-      '@connectrpc/connect': 2.0.0-rc.3(@bufbuild/protobuf@2.13.0)
-      '@connectrpc/connect-web': 2.0.0-rc.3(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.13.0))
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.13.0)
+      '@connectrpc/connect-web': 2.1.2(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0))
       chalk: 5.6.2
       compare-versions: 6.1.1
       dockerfile-ast: 0.7.1
@@ -17730,6 +17734,8 @@ snapshots:
       platform: 1.3.6
       tar: 7.5.22
       undici: 7.28.0
+    optionalDependencies:
+      undici8: undici@8.8.0
 
   eastasianwidth@0.2.0: {}
 
@@ -19947,6 +19953,9 @@ snapshots:
   undici-types@8.3.0: {}
 
   undici@7.28.0: {}
+
+  undici@8.8.0:
+    optional: true
 
   unicorn-magic@0.3.0: {}
 
