@@ -103,6 +103,10 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** A plugin occupies `conversation.session.tabs.leading`. */
+    tabsLeadingOccupied?: boolean
+    /** A plugin occupies `conversation.session.rail`. */
+    railOccupied?: boolean
   } = {},
 ) {
   const root = sid('root')
@@ -151,6 +155,14 @@ function mount(
     subscribe: () => () => {},
     version: () => 1,
   }
+  // Slot-occupancy sources: the ledger array identity is the uSES snapshot, so
+  // a fixed array per case is exactly what the real `slots.entries` supplies.
+  const occupancy = (occupied: boolean | undefined) => {
+    const entries: readonly unknown[] = occupied === true ? ['entry'] : []
+    return { getSnapshot: () => entries, subscribe: () => () => {} }
+  }
+  const tabsLeading = occupancy(options.tabsLeadingOccupied)
+  const railOccupancy = occupancy(options.railOccupied)
   /** Owner share handed to the two composer tool-row seats, per render. */
   const seatOwners: { key: string; owner: unknown }[] = []
   let pickerOwner: unknown
@@ -180,6 +192,7 @@ function mount(
           renderSlot={renderSlot as never}
           views={views}
           open={open}
+          tabsLeading={tabsLeading}
           t={t}
         />
       )
@@ -262,6 +275,7 @@ function mount(
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
+    useRailSeat: select => select(railOccupancy.getSnapshot()),
     useInput,
     inputActions,
     renderSlot,
@@ -384,6 +398,35 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
+  })
+
+  it('single view with an unoccupied leading seat draws no tab row', () => {
+    const b = mount(conversationSnapshot(), undefined, undefined, {
+      viewTabs: [{ id: 'chat', label: 'Chat' }],
+    })
+    expect(b.view.container.querySelector('[role="tablist"]')).toBeNull()
+    expect(b.slotCalls).not.toContain('conversation.session.tabs.leading')
+  })
+
+  it('an occupied leading seat draws the tab row even for a single view', () => {
+    const b = mount(conversationSnapshot(), undefined, undefined, {
+      viewTabs: [{ id: 'chat', label: 'Chat' }],
+      tabsLeadingOccupied: true,
+    })
+    expect(b.view.container.querySelector('[role="tablist"]')).not.toBeNull()
+    expect(b.slotCalls).toContain('conversation.session.tabs.leading')
+  })
+
+  it('an unoccupied rail leaves the view area tree untouched', () => {
+    const b = mount(conversationSnapshot())
+    expect(b.view.container.querySelector('[data-rail]')).toBeNull()
+    expect(b.slotCalls).not.toContain('conversation.session.rail')
+  })
+
+  it('an occupied rail splits the view area into rail and body', () => {
+    const b = mount(conversationSnapshot(), undefined, undefined, { railOccupied: true })
+    expect(b.view.container.querySelector('[data-rail]')).not.toBeNull()
+    expect(b.slotCalls).toContain('conversation.session.rail')
   })
 
   it('sticky composer seat wraps the whole overlay chain, not only the fallback stack', () => {

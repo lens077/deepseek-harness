@@ -104,6 +104,21 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.session.header.utilities': { kind: 'list'; scope: 'session'; owner: ConversationHeaderActionOwnerProps }
     /**
+     * Controls drawn at the head of the view-tab row, before the first tab.
+     * The seat is for a control that governs the session pane beside the
+     * tabs rather than a view of its own; a tab belongs in `conversation.view`.
+     * Occupying it also makes the tab row render for a single-view session,
+     * which otherwise draws no row at all.
+     */
+    'conversation.session.tabs.leading': { kind: 'list'; scope: 'session'; owner: ConversationHeaderActionOwnerProps }
+    /**
+     * A resident pane beside the transcript, below the session header and
+     * OUTSIDE its scrollport, sized by its own occupant. Empty by default:
+     * with no occupant the transcript fills the session exactly as it does
+     * without this seat.
+     */
+    'conversation.session.rail': { kind: 'single'; scope: 'session'; owner: ConversationHeaderActionOwnerProps }
+    /**
      * The conversation view ring: one list entry per view tab (chat here;
      * trajectory/waterfall from ui-trajectory), rendered one-at-a-time by
      * the session body via `only: <active id>`. Declared by this package's
@@ -374,6 +389,58 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
+ * One recorded change to one file, in the shape an inline diff surface draws.
+ * Structurally `SideBySideSegment`, redeclared here so this contract stays free
+ * of the primitives package (the `MarkdownFileMentions` decoupling, applied to
+ * diffs).
+ */
+export interface ChatFileDiffSegment {
+  /** Where the change came from, drawn as the segment's header (`Turn 3 · Edit`). */
+  label: string
+  /** Prior content of this hunk, or null for a create. */
+  oldText: string | null
+  /** Content of this hunk after the change. */
+  newText: string
+}
+
+/**
+ * Optional session-change provider, consumed via `ctx.get('chatFileDiffs')`
+ * (optional-service convention): a surface that lists a turn's changed files
+ * asks it what this session did to one of them and draws the answer inline.
+ * Absent service — the providing plugin composed out of cordis.yml — turns the
+ * surface off, and a file reference keeps whatever behavior it had without it.
+ */
+export interface ChatFileDiffs {
+  /**
+   * This session's accumulated hunks for one path, in the order they happened.
+   * @param sessionId - the session whose log is read.
+   * @param path - the file-tool path exactly as the mutation recorded it.
+   * @returns the segments to draw, empty when this session recorded no diff for the path.
+   */
+  forPath(sessionId: SessionId, path: string): readonly ChatFileDiffSegment[]
+  /**
+   * How much of a turn's changed files opens without being asked. Reactive so
+   * a Settings change reaches transcripts already on screen; a reader's own
+   * per-file toggle outranks it.
+   */
+  expansion: ObservableSnapshot<ChatFileDiffExpansion>
+}
+
+/**
+ * Expansion modes a diff surface honors: every changed file of a turn, only a
+ * turn that changed exactly one, or none. Read files are absent by
+ * construction — a read has no diff to open.
+ */
+export type ChatFileDiffExpansion = 'all' | 'single' | 'none'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Session-change provider (ui-session-files); reach via ctx.get — optional. */
+    chatFileDiffs: ChatFileDiffs
+  }
+}
+
+/**
  * Owner currency of the chat view's turn-tail hole: the engine-owned Turn and
  * the closing assistant's anchor. Registrants read their own typed Turn data
  * and open files through the same opener the tool rows use.
@@ -479,9 +546,15 @@ export interface ConversationInjected {
   /**
    * Framework-bound sources. `composerBlock` is this session's block when a
    * plugin raised one; the reason is the blocker's own localized copy, which
-   * the root renders as the inert composer's placeholder.
+   * the root renders as the inert composer's placeholder. `railSeat` is the
+   * live occupancy of `conversation.session.rail`: the row split around the
+   * scrollport is drawn only for an occupied seat, so the root has to know
+   * whether it is taken, and that changes when a plugin mounts or unmounts.
    */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  hooks: {
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    railSeat: ObservableSnapshot<readonly unknown[]>
+  }
 }
 
 /** Business callbacks injected into the strict Session body seat. */
@@ -508,6 +581,19 @@ export interface ConversationSessionHeaderInjected {
   }
   /** Select a real Session through the runtime navigation owner. */
   open: (sessionId: SessionId) => void
+  /**
+   * Live occupancy of `conversation.session.tabs.leading`. The tab row draws
+   * for more than one view OR for an occupied leading seat, so the header has
+   * to know whether that seat is taken — and it changes when a plugin mounts
+   * or unmounts, which is why this is a subscription rather than a boolean.
+   * Declared with function properties, like `views` above: the header passes
+   * these straight to `useSyncExternalStore`, which method shorthand would
+   * make an unbound reference.
+   */
+  tabsLeading: {
+    getSnapshot: () => readonly unknown[]
+    subscribe: (fn: () => void) => () => void
+  }
 }
 
 /**
@@ -638,7 +724,7 @@ export interface HeroBrandMarkOwnerProps {
  */
 export type ConversationSlotProps =
   PropsRuntime<'conversation'> & PropsRenderSlots<
-    | 'conversation.session' | 'conversation.session.header'
+    | 'conversation.session' | 'conversation.session.header' | 'conversation.session.rail'
     | 'conversation.composer' | 'conversation.composer.bar'
     | 'conversation.input.overlay'
     | 'conversation.input.dock' | 'conversation.composer.dock'
@@ -664,6 +750,7 @@ export type ConversationSessionHeaderSlotProps =
     'conversation.session.header.lineage'
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
+    | 'conversation.session.tabs.leading'
   >
   & PropsStore<ChatStore>
   & ConversationSessionHeaderInjected

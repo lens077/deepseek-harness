@@ -45,6 +45,9 @@ import type { TrajectorySnapshot } from '../src/client/trajectory-contract.ts'
 import { deriveTrajectoryTimeline } from '../src/client/timeline.ts'
 
 const SID = 's1' as SessionId
+/** Slot-occupancy source for a seat no plugin takes in these cases. */
+const NO_SEAT_ENTRIES: readonly unknown[] = []
+const UNOCCUPIED_SEAT = { getSnapshot: () => NO_SEAT_ENTRIES, subscribe: () => () => {} }
 const sessionSnapshots = new WeakMap<SlotRegistry, SnapshotStore<ConversationSnapshot>>()
 const tConversation: ConversationSessionHeaderProps['t'] =
   key => (conversationZh as Record<string, string>)[key] ?? key
@@ -276,6 +279,7 @@ function mount(slots: SlotRegistry, nodes: ConversationSnapshot['nodes'] = NODES
         useInput={useInput}
         inputActions={inputActions}
         open={vi.fn()}
+        tabsLeading={UNOCCUPIED_SEAT}
         t={tConversation}
       />
       <ConversationSession
