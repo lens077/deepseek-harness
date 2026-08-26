@@ -86,6 +86,34 @@
   text-decoration: underline;
 }
 
+/* The expanded file's inline diff: its own row spanning both tracks, so the
+   chip lane's measured geometry is untouched by what opens under it. */
+.diff {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+}
+
+.openFile {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.openFile:hover {
+  color: var(--dsw-alias-label-secondary);
+  text-decoration: underline;
+}
+
+.diffHeader {
+  display: flex;
+  align-items: baseline;
+}
+
 /* Exact browser-native probes for every candidate shown count. They share the
    visible styles but never affect layout, accessibility, or scroll width. */
 .measure {

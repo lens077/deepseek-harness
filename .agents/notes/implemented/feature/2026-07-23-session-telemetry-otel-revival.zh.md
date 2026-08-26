@@ -14,7 +14,7 @@ Status: implemented
 
 - **`@deepseek-ai/dsh-session-telemetry`** —— seam 本体。`SessionTelemetrySink`（`emit`/`flush?`/`shutdown`）、服务注册形态的 `SessionTelemetryBackend`、以及拥有捕获侧的 `SessionTelemetryCoordinator`：带游标回读的实时纳管与逐 append 的 firehose（投影 → `structuredClone` → 脱敏 → `emit`，零 I/O）、从权威日志进行的无缓冲按需回放、固定的每个（轮次、步骤）组合首分片投影、实时 `agent/error` 转发，以及实时 dispose（资源释放）时的 `shutdown` 记录。
 - **`session-telemetry/record` waterfall（瀑布式事件）** —— 相对分支版本的增量，也是该 seam 的脱敏扩展点。每条记录抵达任何后端前必经此处；seam 自身不带任何规则——最内层 `next()` 原样透传，部署方以监听器挂载自己的规则（通过变换 `next()` 的返回值堆叠），抛异常的规则将该记录 fail-closed 扣下。脱敏只作用于导出副本；canonical log 永不改写。
-- **`@deepseek-ai/dsh-session-telemetry-otel`** —— 参考后端：OTel JS SDK 日志流水线（`LoggerProvider` → `BatchLogRecordProcessor` → OTLP/HTTP exporter），经 `exporter`/`processor` passthrough 原样配置。`DISABLED` 是默认值，且不构造任何传输；[反馈门控遥测决策](2026-08-05-feedback-gated-session-telemetry.zh.md)定义了需显式启用的 `FULL` 与 `FEEDBACK_ONLY` 投递模式，这两种模式要求 `exporter.url`，且不移动脱敏或后端边界。[无缓冲反馈回放](../simplification/2026-08-06-buffer-free-feedback-telemetry.zh.md)避免在内存中创建会话前缀的第二份副本。
+- **`@deepseek-ai/dsh-session-telemetry-otel`** —— 参考后端：先以封闭的 metadata-only 默认边界准备记录，再交给 OTel JS SDK 日志流水线（`LoggerProvider` → `BatchLogRecordProcessor` → OTLP/HTTP exporter），`exporter`/`processor` 配置仍原样透传。`captureContent: true` 显式选择原始 body；`includeAnonymousUserId: true` 独立选择持久 Resource 身份。`DISABLED` 仍是默认值，且不构造任何传输；[反馈门控遥测决策](2026-08-05-feedback-gated-session-telemetry.zh.md)定义了需显式启用的 `FULL` 与 `FEEDBACK_ONLY` 投递模式，这两种模式要求 `exporter.url`，且不移动 seam 或后端边界。[无缓冲反馈回放](../simplification/2026-08-06-buffer-free-feedback-telemetry.zh.md)避免在内存中创建会话前缀的第二份副本。
 
 
 边界公理保持不变：harness 的职责止于 `emit()`。批处理、重试、排队与丢失策略属于 reporting SDK，经 passthrough 配置——投递是尽力而为（崩溃时至多一次），两份 README 对此如实陈述。
@@ -25,7 +25,7 @@ Status: implemented
 
 **不设进程内脱敏点，交给接收端 collector processor。** 否决——接收端脱敏是先把秘密发出去再擦除。waterfall 在字节离开进程前提供一个可审计、可堆叠的擦除点；分支版本（PR #222 交付的形态）完全没有脱敏点，如今每条记录都必经该脱敏点。
 
-**在 waterfall 最内层 `next()` 内置一套保守规则集。** 否决：作为 SDK 我们无法预知某个部署里什么模式算秘密，内置列表只覆盖已知形状却会带来「脱敏已开启」的虚假信心，且误报会破坏未提出此要求的消费方所接收的导出 body。seam 拥有机制，部署方拥有策略——最内层 `next()` 原样透传，规则以监听器挂载。
+**在 waterfall 最内层 `next()` 内置一套保守规则集。** 否决：作为 SDK 我们无法预知某个部署里什么模式算秘密，内置 pattern 列表只覆盖已知形状，却会带来「脱敏已开启」的虚假信心；误报还会破坏未提出此要求的消费方所接收的导出 body。seam 拥有机制，最内层 `next()` 仍原样透传，部署方规则以监听器挂载。参考 OTel 后端后来增加的 metadata-only 下限并未推翻该决定：它是命名明确的 exporter 边界模式，采用结构化 allowlist、未知事件默认拒绝内容，并要求显式启用完整内容；它不是隐藏在共享 seam 中的启发式 secret 检测。
 
 **映射到 OTel span（GenAI 语义约定）而非日志。** 本次复活否决：分支实现的日志映射已经过评审、形态可交付；span 模型对可 fork、可中断的会话有损，留给将来真正有 span 查询需求的消费方。
 
@@ -35,4 +35,4 @@ Status: implemented
 
 ## 后果
 
-部署方在 `cordis.yml` 加一个带 OTLP endpoint 的 Cordis 配置项，并显式选择 `FULL`，即可把会话流接入任何 OTel 兼容体系；选择 `FEEDBACK_ONLY` 则会在记录反馈时回放权威日志前缀。`DISABLED` 是[默认值](2026-08-10-telemetry-default-off.zh.md)，且不构造上报流水线；删除该配置项仍是静默退出方式，而禁用模式会保留本地反馈警告。未挂载规则的部署导出的记录与捕获时完全一致，包括文件内容与命令输出中内嵌的任何凭据。因此，跨信任边界的部署必须挂载 `session-telemetry/record` 监听器，两个 README 对此如实陈述。挂载规则后，导出的 body 可能与 canonical log 字节不同，接收端不得把遥测当作字节精确副本；日志仍是真源。崩溃持久性在上述 outbox 决定重新审议前明确不在范围内。
+部署方在 `cordis.yml` 加一个带 OTLP endpoint 的 Cordis 配置项，并显式选择 `FULL`，即可把会话流接入任何 OTel 兼容体系；选择 `FEEDBACK_ONLY` 则会在记录反馈时回放权威日志前缀。`DISABLED` 是[默认值](2026-08-10-telemetry-default-off.zh.md)，且不构造上报流水线；删除该配置项仍是静默退出方式，而禁用模式会保留本地反馈警告。没有进一步隐私配置时，上传只包含 OTel 后端的 metadata allowlist，并省略持久匿名 user id。原始内容现在需要 `captureContent: true`；启用后，文件内容或命令输出中的凭据仍可能离开本机，除非部署方挂载更严格的 `session-telemetry/record` 监听器。metadata 模式或挂载规则后，导出的 body 都不是 canonical log 的字节精确副本；日志仍是真源。崩溃持久性在上述 outbox 决定重新审议前明确不在范围内。

@@ -12,6 +12,8 @@ Web 聊天统计条的每个非 token 数字都折算自 `StatsLine` 已加载�
 
 新的函数插件 `@deepseek-ai/dsh-session-stats` 在 `ctx.sessionProjections` 上注册 `sessionStats` 投影单元，作为 web-app bundle 行挂载。值携带统计条完整的非 token 数字集——`{ turns, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens }`，字段名与窗口折叠一一对应以便整体互换。`steps` 统计 `step/end` 事件，`turns` 统计含至少一条该事件的不同 turn（turn 号单调递增，一个 `lastTurn` 槽即可）；`llmMs` 累加 `step/start` → `assistant/message`；TTFT 记录每步首个非空 delta chunk（在步内 `llm/retry` 后保留，与窗口 `resetForRetry` 对齐）；解码时长覆盖首 token → 已组装消息、仅统计上报 usage 的步；`toolMs` 按 callId 配对 `tool/call` → `tool/result`，未解决的调用在 `turn/end` 时丢弃。首 token 谓词 `isTokenDelta` 移入 `@deepseek-ai/dsh-llm/message`（与其判别的 `StreamChunk` 类型同处），Host 折叠与客户端计时索引共用同一实现；client-runtime 转发导出。投递完全复用现有投影缝——history 尾页块、`session/projection` 推送帧、列表行——apiproxy、wire schema 与客户端运行时零改动。`StatsLine` 读取 `useProjection('sessionStats')`，键为 undefined（未组合该单元的装配）时整体回退到窗口折叠。客户端 connection fixture 按其「镜像每个已组合键」的既有纪律以 `sessionStatsOf` 平行实现该折叠。
 
+2026-08-24 的可观测增量保留该 seam，并把值扩展为 `turnMs`、`stepMs`、`toolCalls`、`toolResults`、`toolErrors`、`llmRetries`、`retryDelayMs`，以及六个核心 `turn/end` 结果计数器（`completedTurns`、`errorTurns`、`abortedTurns`、`blockedTurns`、`maxTokenTurns`、`interruptedTurns`）。即使没有组装出 assistant 消息，完整的 turn/step 生命周期耗时仍可观测；模型耗时则保留较窄的已组装消息定义。Web 统计条展示总 turn 耗时，以及非零的重试、工具错误、运行错误、中断、受阻和 token 上限信号。所有新增项都是从日志派生的标量元数据；projection 不会新增提示词、消息、工具 payload 或错误文本。
+
 计数事件选 `step/end` 而非 `assistant/message`，源于评审直觉方案（按消息计数）时发现的两个正确性问题：
 
 1. max-tokens 步会追加一条仅为承载 usage 而存在的空内容 `assistant/message`，它从不进入 surface；按消息计数会把 transcript 上看不到的步计进去。
@@ -35,4 +37,4 @@ Web 聊天统计条的每个非 token 数字都折算自 `StatsLine` 已加载�
 
 ## 后果
 
-统计条从第一个尾页起就显示全日志数字；翻页不再改变任何分组。与旧窗口语义的已定义边缘差异记录在包 README 中：未产生可见输出的步（在内容之前失败）仍计入；被崩溃打断的步在重新加载、恢复为其补写合成 `step/end` 后计入（`interruptedTurnClosers`）；被取消的步计数但不计时（没有组装出消息）；max-tokens 的 usage 宿主消息贡献 surface 上看不到的模型时间。每个 web 尾页与列表行多携带一个小键，且单元内部状态在步边界与首 token chunk 处变化，变更流每步会多发几帧值相同的推送；TUI 与 headless 装配不提供 `sessionStats` 键，其消费者回退窗口折叠。两个曾把统计条当作已加载窗口探针解析的 e2e（`chat-scroll-contract`、`complex-history.perf`）改为统计已挂载的消息流行／turn-tail 页脚。`stats-paged-history` web 场景冷种一份 28 轮日志，钉住整条统计条在不完整尾页上即读出全量数字、且「加载更早」前后不变。
+统计条从第一个尾页起就显示全日志数字；翻页不再改变任何分组。与旧窗口语义的已定义边缘差异记录在包 README 中：未产生可见输出的步（在内容之前失败）仍计入；被崩溃打断的步在重新加载、恢复为其补写合成 `step/end` 后计入（`interruptedTurnClosers`）；被取消的步贡献完整生命周期耗时，但不贡献已组装消息模型耗时；max-tokens 的 usage 宿主消息贡献 surface 上看不到的模型时间。每个 web 尾页与列表行多携带一个小键，且单元内部状态在步边界与首 token chunk 处变化，变更流每步会多发几帧值相同的推送；TUI 与 headless 装配不提供 `sessionStats` 键，其消费者回退窗口折叠。两个曾把统计条当作已加载窗口探针解析的 e2e（`chat-scroll-contract`、`complex-history.perf`）改为统计已挂载的消息流行／turn-tail 页脚。`stats-paged-history` web 场景冷种一份 28 轮日志，钉住整条统计条在不完整尾页上即读出全量数字、且「加载更早」前后不变。

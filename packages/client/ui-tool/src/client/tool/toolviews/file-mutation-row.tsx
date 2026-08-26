@@ -9,16 +9,28 @@
 // section, its first line in the collapsed summary.
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { IconEditOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ChatFileDiffExpansion } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
 import { diffCardModel } from '../models/diff-card-model.ts'
 import { toolRowModel } from '../models/tool-call-model.ts'
 import { ToolRow } from '../components/ToolRow.tsx'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 
-/** Full row props: the toolview runtime share plus the standard locale seat. */
-type FileMutationRowProps = ToolCallViewProps & PropsLocale<'conversation'>
+/**
+ * The reader's inline-diff preference, from the optional `chatFileDiffs`
+ * provider. Absent provider resolves to `none`, which is this row's own
+ * long-standing default, so the seat costs nothing when unoccupied.
+ */
+export interface FileMutationRowInjected {
+  hooks: { diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> }
+}
+
+/** Full row props: the toolview runtime share, the locale seat, and the preference. */
+type FileMutationRowProps =
+  ToolCallViewProps & PropsLocale<'conversation'> & InjectFace<FileMutationRowInjected>
 
 /**
  * File-mutation row: icon + {Edit,Write} · {path} in the shared ToolRow chrome,
@@ -29,11 +41,17 @@ type FileMutationRowProps = ToolCallViewProps & PropsLocale<'conversation'>
  * model-facing error text through its Output section and its first line in the
  * collapsed summary instead.
  */
-export function FileMutationRow({ toolName, block, cwd, home, openFile, inspect, t }: FileMutationRowProps) {
+export function FileMutationRow({
+  toolName, block, cwd, home, openFile, inspect, useDiffExpansion, t,
+}: FileMutationRowProps) {
   const model = toolRowModel(toolName, block, cwd, home)
   const diff = diffCardModel(block)
+  // `all` is the only mode that opens a row: the other two exist to keep the
+  // flow scannable, and a turn's rows are where it gets long fastest.
+  const openOnArrival = useDiffExpansion(mode => mode === 'all')
   return (
     <ToolRow
+      initiallyExpanded={diff !== null && openOnArrival}
       t={t}
       variant={model.variant}
       toolName={toolName}
@@ -65,9 +83,17 @@ export const fileMutationToolview = {
    * @param ctx - registrant context (disposal rides ctx.effect inside slots.register).
    */
   apply(ctx: Context): void {
+    // One stable source resolved lazily: the provider is optional AND may be
+    // composed after this registrant, so reading it at registration time would
+    // freeze the row on the absent default.
+    const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
+      getSnapshot: () => ctx.get('chatFileDiffs')?.expansion.getSnapshot() ?? 'none',
+      subscribe: listener => ctx.get('chatFileDiffs')?.expansion.subscribe(listener) ?? (() => {}),
+    }
+    const inject = (): FileMutationRowInjected => ({ hooks: { diffExpansion } })
     ctx.slots.inject('tool.call.toolview', function* () {
-      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'edit', locale: NS }, FileMutationRow)
-      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'write', locale: NS }, FileMutationRow)
+      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'edit', locale: NS, inject }, FileMutationRow)
+      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'write', locale: NS, inject }, FileMutationRow)
     })
   },
 }

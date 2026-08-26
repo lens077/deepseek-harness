@@ -8,7 +8,10 @@
  * the owning view renders an empty chain and inert prose at zero cost.
  */
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  ClientContext, ObservableSnapshot, SessionId,
+} from '@deepseek-ai/dsh-client-runtime/client'
+import type { ChatFileDiffExpansion } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ChatFileMentions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { ProducedFiles } from './ProducedFiles.tsx'
@@ -36,6 +39,13 @@ export const inject = ['slots', 'locale', 'conversationEvents', 'connection']
  */
 export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
+  // One stable source resolved lazily. The provider is optional AND is composed
+  // after this plugin, so reading it when the seat registers would freeze the
+  // row on the absent default and nothing would ever open.
+  const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
+    getSnapshot: () => ctx.get('chatFileDiffs')?.expansion.getSnapshot() ?? 'none',
+    subscribe: listener => ctx.get('chatFileDiffs')?.expansion.subscribe(listener) ?? (() => {}),
+  }
   ctx.conversationEvents.register(deliverablesDefinition)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-deliverables: dictionaries')
   ctx.slots.inject(
@@ -44,9 +54,12 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.chat.turnTail',
       select: selectProducedFiles,
       locale: NS,
-      inject: () => ({
+      inject: (sessionId: SessionId) => ({
         isLoopback: connection.isLoopback,
-        hooks: { hostDescription: connection.hostDescription },
+        // Resolved per call, not captured: the provider is optional, and a
+        // deployment that composes it out leaves every chip on its opener.
+        fileDiffs: (path: string) => ctx.get('chatFileDiffs')?.forPath(sessionId, path) ?? [],
+        hooks: { hostDescription: connection.hostDescription, diffExpansion },
       }),
     }, ProducedFiles),
   )

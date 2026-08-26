@@ -69,6 +69,14 @@ export interface ToolRowProps {
    */
   diff?: DiffCardModel | null | undefined
   /**
+   * Whether this row's body starts open. Rows are collapsed by default — the
+   * flow has to stay scannable across many calls — so only a row whose owner
+   * knows the reader asked for its content up front passes true. It seeds the
+   * initial state and nothing more: the reader's own toggle outranks it from
+   * the first click.
+   */
+  initiallyExpanded?: boolean | undefined
+  /**
    * Read-card material for a call whose render intent is a read card (derived by
    * `readCardModel`); it replaces the text body with the file's line-numbered,
    * syntax-highlighted window when present.
@@ -145,8 +153,9 @@ export function ToolRow({
   filePath,
   onOpenFile,
   inspect,
+  initiallyExpanded,
 }: ToolRowProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initiallyExpanded === true)
   const terminalBody = terminal ?? null
   const diffBody = diff ?? null
   const readBody = read ?? null
@@ -192,7 +201,9 @@ export function ToolRow({
   // row keeps DisclosureRow's icon→chevron hover preview (its default) instead
   // of losing it with the icon.
   return (
-    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state}>
+    // `data-file` is the row's addressable identity for surfaces outside the
+    // transcript that navigate to a file's activity (the session file rail).
+    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state} data-file={filePath}>
       {status !== null && <span className={css.visuallyHidden}>{status}</span>}
       <DisclosureRow
         rowClassName={css.row}

@@ -65,10 +65,11 @@ function equalBreadcrumbs(left: readonly Breadcrumb[], right: readonly Breadcrum
  */
 export function ConversationSessionHeader({
   sessionId, useSession, useSessions, useStore, actions,
-  renderSlot, views, open, t,
+  renderSlot, views, open, tabsLeading, t,
 }: ConversationSessionHeaderProps) {
   useSyncExternalStore(views.subscribe, views.version)
   const tabs = views.list()
+  const leadingOccupied = useSyncExternalStore(tabsLeading.subscribe, tabsLeading.getSnapshot).length > 0
   const selectedId = useStore(s => s.view)
   const active = resolveActiveView(tabs, selectedId)
   const ancestry = useSessions(s => deriveAncestry(s, sessionId), equalBreadcrumbs)
@@ -142,8 +143,9 @@ export function ConversationSessionHeader({
               {renderSlot('conversation.session.header.utilities', {})}
             </div>
           </div>
-          {tabs.length > 1 && (
+          {(tabs.length > 1 || leadingOccupied) && (
             <div className={css.tabs} role="tablist">
+              {renderSlot('conversation.session.tabs.leading', {})}
               {tabs.map(viewTab => (
                 <button
                   key={viewTab.id}

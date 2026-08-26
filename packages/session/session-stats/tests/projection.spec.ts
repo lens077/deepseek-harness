@@ -50,7 +50,27 @@ function appendEmptyAssistantMessage(session: Session, turn: number, step: numbe
 /** The all-zero projection value plus overrides, for exact fold expectations. */
 function totals(overrides: Partial<SessionStatsProjection> = {}): SessionStatsProjection {
   return {
-    turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
+    turns: 0,
+    steps: 0,
+    turnMs: 0,
+    stepMs: 0,
+    llmMs: 0,
+    toolMs: 0,
+    toolCalls: 0,
+    toolResults: 0,
+    toolErrors: 0,
+    llmRetries: 0,
+    retryDelayMs: 0,
+    completedTurns: 0,
+    errorTurns: 0,
+    abortedTurns: 0,
+    blockedTurns: 0,
+    maxTokenTurns: 0,
+    interruptedTurns: 0,
+    ttftMs: 0,
+    ttftSteps: 0,
+    decodeMs: 0,
+    decodeTokens: 0,
     ...overrides,
   }
 }
@@ -72,30 +92,30 @@ describe('sessionStats projection unit (registry drive)', () => {
     const secondSeq = closeStep(session, 1, 2)
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     session.append('turn/start', { turn: 2 })
-    const thirdSeq = closeStep(session, 2, 1)
+    closeStep(session, 2, 1)
     session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
-    // Boundary events that carry no figure change (turn/start, empty-prune
-    // turn/end, user input) fold to the same reference and stay silent;
-    // step/start opens a boundary (internal state) and step/end commits the
-    // counts, so each closed step notifies twice with the step/end value last.
-    const counted = changes.filter(change => (change.value as SessionStatsProjection).steps > 0
-      || change.seq === firstSeq)
+    // Turn and step boundaries update internal timing state; their closing
+    // events commit counts, durations, and outcome classifications.
     expect(changes.every(change => change.key === 'sessionStats')).toBe(true)
-    expect(counted.map(change => ({ seq: change.seq, value: change.value }))).toContainEqual(
-      { seq: firstSeq, value: totals({ turns: 1, steps: 1 }) },
-    )
-    expect(changes.at(-1)).toEqual({ key: 'sessionStats', value: totals({ turns: 2, steps: 3 }), seq: thirdSeq })
+    expect(changes.find(change => change.seq === firstSeq)?.value)
+      .toMatchObject({ turns: 1, steps: 1 })
+    expect(changes.at(-1)).toMatchObject({
+      key: 'sessionStats',
+      seq: session.events.at(-1)?.seq,
+      value: { turns: 2, steps: 3, completedTurns: 2 },
+    })
     const snapshot = ctx.sessionProjections.snapshot(session)
-    expect(snapshot.values.sessionStats).toEqual(totals({ turns: 2, steps: 3 }))
+    expect(snapshot.values.sessionStats).toMatchObject({ turns: 2, steps: 3, completedTurns: 2 })
     expect(snapshot.asOfSeq).toBe(session.seq - 1)
     expect(changes.map(change => change.seq)).toContain(secondSeq)
   })
 
-  it('does not count a rejected or empty turn that closes with no step', async () => {
+  it('does not count a rejected turn as work but records its blocked outcome', async () => {
     const { ctx, session } = await harness(true)
     session.append('turn/start', { turn: 1 })
     session.append('turn/end', { turn: 1, reason: { kind: 'blocked' } })
-    expect(ctx.sessionProjections.snapshot(session).values.sessionStats).toEqual(totals())
+    expect(ctx.sessionProjections.snapshot(session).values.sessionStats)
+      .toMatchObject({ turns: 0, steps: 0, blockedTurns: 1 })
   })
 
   it('counts a cancelled step that closed without an assistant message', async () => {
@@ -175,7 +195,8 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(4_800, 'assistant/message', { turn: 1, step: 1, message, usage: { inputTokens: 10, outputTokens: 60 } }),
       at(4_900, 'step/end', { turn: 1, step: 1 }),
     ])).toEqual(totals({
-      turns: 1, steps: 1, llmMs: 3_800, ttftMs: 800, ttftSteps: 1, decodeMs: 3_000, decodeTokens: 60,
+      turns: 1, steps: 1, stepMs: 3_900, llmMs: 3_800,
+      ttftMs: 800, ttftSteps: 1, decodeMs: 3_000, decodeTokens: 60,
     }))
   })
 
@@ -183,11 +204,43 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
     expect(fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_200, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: 'x' } }),
-      at(2_000, 'llm/retry', { turn: 1, step: 1 }),
+      at(2_000, 'llm/retry', { turn: 1, step: 1, delayMs: 750 }),
       at(3_000, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'y' } }),
       at(5_000, 'assistant/message', { turn: 1, step: 1, message }),
       at(5_100, 'step/end', { turn: 1, step: 1 }),
-    ])).toEqual(totals({ turns: 1, steps: 1, llmMs: 4_000, ttftMs: 200, ttftSteps: 1 }))
+    ])).toEqual(totals({
+      turns: 1, steps: 1, stepMs: 4_100, llmMs: 4_000,
+      llmRetries: 1, retryDelayMs: 750, ttftMs: 200, ttftSteps: 1,
+    }))
+  })
+
+  it('ignores retry and close records outside their matching lifecycle boundary', () => {
+    expect(fold([
+      at(500, 'llm/retry', { turn: 1, step: 1, delayMs: 999 }),
+      at(1_000, 'step/start', { turn: 1, step: 1 }),
+      at(1_100, 'llm/retry', { turn: 1, step: 2, delayMs: 999 }),
+      at(1_200, 'llm/retry', { turn: 1, step: 1, delayMs: 250 }),
+      at(1_300, 'step/end', { turn: 1, step: 2 }),
+      at(1_500, 'assistant/message', { turn: 1, step: 1, message }),
+      at(1_600, 'llm/retry', { turn: 1, step: 1, delayMs: 999 }),
+      at(2_000, 'step/end', { turn: 1, step: 1 }),
+      at(2_100, 'llm/retry', { turn: 1, step: 1, delayMs: 999 }),
+      at(2_200, 'step/end', { turn: 1, step: 1 }),
+      at(3_000, 'turn/end', { turn: 2, reason: { kind: 'error', error: { code: 'ORPHAN', message: 'x' } } }),
+      at(4_000, 'turn/start', { turn: 2 }),
+      at(4_100, 'turn/end', { turn: 1, reason: { kind: 'error', error: { code: 'WRONG', message: 'x' } } }),
+      at(5_000, 'turn/end', { turn: 2, reason: { kind: 'completed' } }),
+      at(5_100, 'turn/end', { turn: 2, reason: { kind: 'completed' } }),
+    ])).toEqual(totals({
+      turns: 1,
+      steps: 1,
+      turnMs: 1_000,
+      stepMs: 1_000,
+      llmMs: 500,
+      llmRetries: 1,
+      retryDelayMs: 250,
+      completedTurns: 1,
+    }))
   })
 
   it('ignores empty deltas, non-token chunks, and chunks outside the open step', () => {
@@ -201,7 +254,9 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(1_400, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'first' } }),
       at(2_000, 'assistant/message', { turn: 1, step: 1, message }),
       at(2_100, 'step/end', { turn: 1, step: 1 }),
-    ])).toEqual(totals({ turns: 1, steps: 1, llmMs: 1_000, ttftMs: 400, ttftSteps: 1 }))
+    ])).toEqual(totals({
+      turns: 1, steps: 1, stepMs: 1_100, llmMs: 1_000, ttftMs: 400, ttftSteps: 1,
+    }))
   })
 
   it('leaves a cancelled step untimed: counted by step/end, no assembled message to accrue from', () => {
@@ -209,12 +264,15 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_500, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'partial' } }),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
-    ])).toEqual(totals({ turns: 1, steps: 1 }))
+    ])).toEqual(totals({ turns: 1, steps: 1, stepMs: 1_000 }))
   })
 
   it('pairs tool wall time by callId, ignores orphan results, and prunes leftovers at turn/end', () => {
-    const result = (callId: string): unknown =>
-      ({ turn: 1, step: 1, message: { source: { kind: 'tool', callId } } })
+    const result = (callId: string, isError = false): unknown => ({
+      turn: 1,
+      step: 1,
+      message: { source: { kind: 'tool', callId }, content: [{ type: 'text', text: '', isError }] },
+    })
     const paired = fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_100, 'tool/call', { turn: 1, step: 1, callId: 'a', name: 'read', arguments: '{}' }),
@@ -222,40 +280,58 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       // Out-of-order settlement pairs by id, not adjacency.
       at(4_200, 'tool/result', result('b')),
       at(1_600, 'tool/result', result('a')),
-      at(5_000, 'tool/result', result('ghost')),
+      at(5_000, 'tool/result', result('ghost', true)),
       at(5_100, 'step/end', { turn: 1, step: 1 }),
     ])
-    expect(paired).toEqual(totals({ turns: 1, steps: 1, toolMs: 3_500 }))
+    expect(paired).toEqual(totals({
+      turns: 1, steps: 1, stepMs: 4_100, toolMs: 3_500,
+      toolCalls: 2, toolResults: 3, toolErrors: 1,
+    }))
     // An unresolved call is dropped at turn/end; a later result cannot pair.
     const pruned = fold([
+      at(500, 'turn/start', { turn: 1 }),
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_100, 'tool/call', { turn: 1, step: 1, callId: 'orphan', name: 'read', arguments: '{}' }),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
       at(2_100, 'turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'legacy' } } }),
       at(9_000, 'tool/result', result('orphan')),
     ])
-    expect(pruned).toEqual(totals({ turns: 1, steps: 1 }))
+    expect(pruned).toEqual(totals({
+      turns: 1, steps: 1, turnMs: 1_600, stepMs: 1_000,
+      toolCalls: 1, toolResults: 1, abortedTurns: 1,
+    }))
   })
 
-  it('pairs only own pendingCalls keys: a prototype-name callId without a recorded call stays unmatched', () => {
-    const result = (callId: string): unknown =>
-      ({ turn: 1, step: 1, message: { source: { kind: 'tool', callId } } })
-    // Crash recovery (TOOL_NOT_STARTED) emits results with no preceding
-    // tool/call; a provider-minted callId colliding with an Object prototype
-    // property must read as absent, not as an inherited function that would
-    // fold toolMs to NaN and fail the value schema.
+  it('handles provider-minted prototype property names as ordinary pending-call keys', () => {
+    const result = (callId: string): unknown => ({
+      turn: 1,
+      step: 1,
+      message: { source: { kind: 'tool', callId }, content: [{ type: 'text', text: '', isError: false }] },
+    })
+    // Crash recovery (TOOL_NOT_STARTED) emits results with no preceding call;
+    // prototype names must remain absent instead of reading inherited values.
     expect(fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_500, 'tool/result', result('toString')),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
-    ])).toEqual(totals({ turns: 1, steps: 1 }))
+    ])).toEqual(totals({ turns: 1, steps: 1, stepMs: 1_000, toolResults: 1 }))
     // The same name pairs normally once its call is recorded.
     expect(fold([
       at(1_000, 'step/start', { turn: 1, step: 1 }),
       at(1_100, 'tool/call', { turn: 1, step: 1, callId: 'constructor', name: 'read', arguments: '{}' }),
       at(1_600, 'tool/result', result('constructor')),
       at(2_000, 'step/end', { turn: 1, step: 1 }),
-    ])).toEqual(totals({ turns: 1, steps: 1, toolMs: 500 }))
+    ])).toEqual(totals({
+      turns: 1, steps: 1, stepMs: 1_000, toolMs: 500, toolCalls: 1, toolResults: 1,
+    }))
+    expect(fold([
+      at(1_000, 'step/start', { turn: 1, step: 1 }),
+      at(1_100, 'tool/call', { turn: 1, step: 1, callId: '__proto__', name: 'read', arguments: '{}' }),
+      at(1_700, 'tool/result', result('__proto__')),
+      at(2_000, 'step/end', { turn: 1, step: 1 }),
+    ])).toEqual(totals({
+      turns: 1, steps: 1, stepMs: 1_000, toolMs: 600, toolCalls: 1, toolResults: 1,
+    }))
   })
 
   it('skips decode for an invalid usage report and ignores a duplicate assembled message', () => {
@@ -266,7 +342,9 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(2_000, 'assistant/message', { turn: 1, step: 1, message, usage: { inputTokens: 1, outputTokens: -5 } }),
     ]
     expect(fold([...events, at(2_100, 'step/end', { turn: 1, step: 1 })]))
-      .toEqual(totals({ turns: 1, steps: 1, llmMs: 1_000, ttftMs: 400, ttftSteps: 1 }))
+      .toEqual(totals({
+        turns: 1, steps: 1, stepMs: 1_100, llmMs: 1_000, ttftMs: 400, ttftSteps: 1,
+      }))
     // The first message closed the step boundary; a defensive duplicate finds
     // no open step and folds to the same reference.
     const state = events.reduce<Parameters<typeof sessionStatsProjectionDefinition.apply>[0]>(
@@ -279,6 +357,31 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
     )).toBe(state)
   })
 
+  it('classifies every core turn outcome and sums complete turn wall time', () => {
+    expect(fold([
+      at(1_000, 'turn/start', { turn: 1 }),
+      at(1_500, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      at(2_000, 'turn/start', { turn: 2 }),
+      at(2_600, 'turn/end', { turn: 2, reason: { kind: 'error', error: { code: 'TEST', message: 'x' } } }),
+      at(3_000, 'turn/start', { turn: 3 }),
+      at(3_700, 'turn/end', { turn: 3, reason: { kind: 'aborted', reason: { kind: 'legacy' } } }),
+      at(4_000, 'turn/start', { turn: 4 }),
+      at(4_800, 'turn/end', { turn: 4, reason: { kind: 'blocked' } }),
+      at(5_000, 'turn/start', { turn: 5 }),
+      at(5_900, 'turn/end', { turn: 5, reason: { kind: 'max-tokens' } }),
+      at(6_000, 'turn/start', { turn: 6 }),
+      at(7_000, 'turn/end', { turn: 6, reason: { kind: 'interrupted' } }),
+    ])).toEqual(totals({
+      turnMs: 4_500,
+      completedTurns: 1,
+      errorTurns: 1,
+      abortedTurns: 1,
+      blockedTurns: 1,
+      maxTokenTurns: 1,
+      interruptedTurns: 1,
+    }))
+  })
+
   it('accrues nothing for unrelated events and clamps negative clock skew to zero', () => {
     const state = sessionStatsProjectionDefinition.init()
     const untouched = sessionStatsProjectionDefinition.apply(state, at(1, 'user/message', { content: [] }))
@@ -287,6 +390,6 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       at(2_000, 'step/start', { turn: 1, step: 1 }),
       at(1_000, 'assistant/message', { turn: 1, step: 1, message }),
       at(2_100, 'step/end', { turn: 1, step: 1 }),
-    ])).toEqual(totals({ turns: 1, steps: 1 }))
+    ])).toEqual(totals({ turns: 1, steps: 1, stepMs: 100 }))
   })
 })

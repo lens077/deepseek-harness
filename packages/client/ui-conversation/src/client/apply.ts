@@ -199,6 +199,7 @@ export function apply(ctx: Context): void {
     children: {
       'conversation.session': { kind: 'single', scope: 'session' },
       'conversation.session.header': { kind: 'single', scope: 'session' },
+      'conversation.session.rail': { kind: 'single', scope: 'session' },
       'conversation.composer': { kind: 'chain', scope: 'session' },
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.overlay': { kind: 'list', scope: 'session' },
@@ -211,7 +212,15 @@ export function apply(ctx: Context): void {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
-      hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
+      hooks: {
+        composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
+        railSeat: {
+          // `entries` returns the ledger's cached array, stable between
+          // mutations, which is what makes it a legal uSES snapshot source.
+          getSnapshot: () => slots.entries('conversation.session.rail'),
+          subscribe: fn => slots.subscribe('conversation.session.rail', fn),
+        },
+      },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
         if (sessionId !== undefined && nextId !== sessionId) {
@@ -262,11 +271,18 @@ export function apply(ctx: Context): void {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
+      'conversation.session.tabs.leading': { kind: 'list', scope: 'session' },
     },
     store: chatStore,
     inject: (): ConversationSessionHeaderInjected => ({
       views,
       open: (id) => { sessions.open(id) },
+      tabsLeading: {
+        // `entries` returns the ledger's cached array, stable between
+        // mutations, which is what makes it a legal uSES snapshot source.
+        getSnapshot: () => slots.entries('conversation.session.tabs.leading'),
+        subscribe: fn => slots.subscribe('conversation.session.tabs.leading', fn),
+      },
     }),
   }, ConversationSessionHeader)
 

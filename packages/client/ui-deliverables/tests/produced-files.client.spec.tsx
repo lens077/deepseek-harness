@@ -17,7 +17,9 @@ import type {
   ConversationViewNode, ToolResultNode, TurnLocation,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
-import type { ChatFileMentions, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {
+  ChatFileDiffExpansion, ChatFileMentions, TurnTailOwnerProps,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import {
   fitProducedFiles, ProducedFiles, type ProducedFilesProps,
@@ -283,15 +285,27 @@ describe('ProducedFiles row', () => {
   const capability = (
     canOpenPath: boolean | undefined,
     isLoopback = true,
-  ): Pick<ProducedFilesProps, 'isLoopback' | 'useHostDescription'> => {
+    fileDiffs: ProducedFilesProps['fileDiffs'] = () => [],
+    expansion: ChatFileDiffExpansion = 'all',
+  ): Pick<
+    ProducedFilesProps,
+    'isLoopback' | 'useHostDescription' | 'fileDiffs' | 'useDiffExpansion'
+  > => {
     const description = canOpenPath === undefined
       ? undefined
       : { version: 'test', cwd: '/workspace', attachedSessions: 1, home: '/h', canOpenPath }
     return {
       isLoopback,
+      fileDiffs,
       useHostDescription: selector => selector(description),
+      useDiffExpansion: selector => selector(expansion),
     }
   }
+
+  /** A provider that records one hunk for every path it is asked about. */
+  const everyPathChanged: ProducedFilesProps['fileDiffs'] = path => [
+    { label: 'Turn 1 · Edit', oldText: `old ${path}`, newText: `new ${path}` },
+  ]
 
   it('selects the largest prefix using the exact remainder width', () => {
     expect(fitProducedFiles(230, 8, [70, 60, 60], [55, 55, 55, 55])).toBe(2)
@@ -407,6 +421,101 @@ describe('ProducedFiles row', () => {
     if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
     expect(within(row).getByText('+ 1 file')).toBeTruthy()
   })
+
+  it('expands every changed file by default', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'all')}
+        t={t}
+      />,
+    )
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(2)
+    for (const name of ['打开 a.md', '打开 b.md']) {
+      expect(view.getByRole('button', { name }).getAttribute('aria-expanded')).toBe('true')
+    }
+
+    // A toggle closes one file without disturbing the other.
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(1)
+    expect(view.getByText('b.md', { selector: '[class*="_path_"]' })).toBeTruthy()
+  })
+
+  it('opens only a single-file turn under the single mode', () => {
+    const single = render(
+      <ProducedFiles
+        matched={['out/report.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'single')}
+        t={t}
+      />,
+    )
+    expect(single.getByText('Turn 1 · Edit')).toBeTruthy()
+    cleanup()
+
+    const several = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'single')}
+        t={t}
+      />,
+    )
+    expect(several.queryByText('Turn 1 · Edit')).toBeNull()
+  })
+
+  it('keeps every file closed under the none mode until a chip is clicked', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'none')}
+        t={t}
+      />,
+    )
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getByText('a.md', { selector: '[class*="_path_"]' })).toBeTruthy()
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(1)
+
+    // Each chip is its own toggle: a second one opens beside the first.
+    fireEvent.click(view.getByRole('button', { name: '打开 b.md' }))
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(2)
+
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(1)
+  })
+
+  it('keeps the host opener on a chip whose file recorded no diff', () => {
+    const openFile = vi.fn()
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={openFile}
+        {...capability(false, true, path => (path === 'a.md' ? everyPathChanged(path) : []), 'none')}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '打开 b.md' }))
+    expect(openFile).toHaveBeenCalledWith('b.md')
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+  })
+
+  it('offers the host opener from inside the expanded panel', () => {
+    const openFile = vi.fn()
+    const view = render(
+      <ProducedFiles
+        matched={['deep/out/report.md']}
+        openFile={openFile}
+        {...capability(false, true, everyPathChanged)}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '在编辑器中打开 report.md' }))
+    expect(openFile).toHaveBeenCalledWith('deep/out/report.md')
+  })
 })
 
 describe('producedFileMentions resolver', () => {
@@ -475,7 +584,39 @@ describe('plugin registration', () => {
     await fiber.await()
     const [entry] = ctx.slots.entries('conversation.chat.turnTail')
     expect(entry).toBeDefined()
-    expect(entry?.inject?.()).toEqual({ isLoopback: false, hooks: { hostDescription } })
+    const face = entry?.inject?.() as unknown as {
+      isLoopback: boolean
+      fileDiffs: (path: string) => readonly unknown[]
+      hooks: unknown
+    }
+    expect(face.isLoopback).toBe(false)
+    // No `chatFileDiffs` provider: the preference falls back to the static
+    // never-expands source, so a composition without it opens nothing.
+    const hooks = face.hooks as {
+      hostDescription: unknown
+      diffExpansion: { getSnapshot: () => string; subscribe: (fn: () => void) => () => void }
+    }
+    expect(hooks.hostDescription).toBe(hostDescription)
+    expect(hooks.diffExpansion.getSnapshot()).toBe('none')
+    expect(face.fileDiffs('out/report.md')).toEqual([])
+    // A static source still has to honor the subscribe contract the renderer
+    // binds it through; it simply never notifies.
+    const release = hooks.diffExpansion
+      .subscribe(() => { throw new Error('a static preference must never notify') })
+    expect(() => { release() }).not.toThrow()
+
+    // With a provider present the face forwards its live sources instead.
+    const expansion = { getSnapshot: () => 'single', subscribe: () => () => {} }
+    ctx.provide('chatFileDiffs', {
+      expansion,
+      forPath: () => [{ label: 'Turn 2 · edit', oldText: 'a', newText: 'b' }],
+    } as never)
+    const served = entry?.inject?.() as unknown as {
+      fileDiffs: (path: string) => readonly unknown[]
+      hooks: { diffExpansion: unknown }
+    }
+    expect(served.hooks.diffExpansion).toBe(expansion)
+    expect(served.fileDiffs('out/report.md')).toHaveLength(1)
 
     // The prose face is live while the plugin is: a produced turn yields a
     // resolver whose matches open through the owner-supplied opener.

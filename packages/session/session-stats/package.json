@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-session-stats",
-  "description": "Whole-log conversation counts and wall times projection (sessionStats) for the DeepSeek Harness",
+  "description": "Whole-log lifecycle, timing, retry, and outcome projection (sessionStats) for the DeepSeek Harness",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
@@ -43,6 +43,7 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
+    "@deepseek-ai/dsh-llm-retry": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
@@ -55,6 +56,7 @@
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
+    "@deepseek-ai/dsh-llm-retry": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"

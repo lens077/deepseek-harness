@@ -233,6 +233,12 @@
     - id: ui-deliverables
       name: '@deepseek-ai/dsh-client-ui-deliverables'
 
+    # Session file rail: the view-tab row's leading control and the pane beside
+    # the active view. Remove this entry and both seats render empty — the tab
+    # row returns to drawing only for more than one view.
+    - id: ui-session-files
+      name: '@deepseek-ai/dsh-client-ui-session-files'
+
 
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'

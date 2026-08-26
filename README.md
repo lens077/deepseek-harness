@@ -2,6 +2,18 @@
 
 English | [中文](README.zh.md)
 
+## About this fork
+
+This is a personal fork of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). Upstream is the source of truth for the project; this repository is not affiliated with DeepSeek AI and carries no support commitment.
+
+**Why it exists.** The Web client shows a session's file work only where it happened — one diff card per `edit`/`write` tool row, plus the closing turn's produced-file chips. Reviewing what a session did to the workspace therefore means scrolling the whole transcript and rebuilding the per-file story by hand, and a long session buries the answer under hundreds of steps. Nothing showed which files the agent was touching right now, and nothing collected one file's repeated edits into one place.
+
+**What it adds.** A session file rail beside the transcript listing what the session read and changed, plus an inline side-by-side diff — before on the left, after on the right, paired line by line — that opens by default and is governed by a General setting. Descendant subagent sessions are read through the durable child catalog and merged in, one row per file with each segment labelled by the agent, turn, and tool that made it. The design, its rejected alternatives, and its known limits are recorded in [the file panel Agent Note](.agents/notes/proposed/feature/2026-08-26-web-session-file-panel.md).
+
+**Status.** A work in progress that tracks upstream. Branches here may contain unfinished work from several parallel efforts; nothing is promised stable, and changes are not upstreamed automatically. The MIT license and every upstream notice are inherited unchanged — see [LICENSE](LICENSE).
+
+---
+
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
 It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).

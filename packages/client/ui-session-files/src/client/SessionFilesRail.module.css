@@ -1,0 +1,150 @@
+/* A resident pane inside the session body, not a frame column: it sizes itself
+   from the persisted preference and the transcript takes the remainder. The
+   handle is the pane's own right edge rather than a frame-level absolute strip,
+   because this rail is not part of AppFrame's concession chain. */
+
+.rail {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--dsw-alias-separator-primary);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 0 16px;
+  overflow-y: auto;
+}
+
+.section {
+  padding: 8px 16px 4px;
+  font: var(--dsw-font-xs-13);
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.empty {
+  margin: 0;
+  padding: 4px 16px 8px;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 16px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xs-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.file:hover {
+  background: var(--dsw-alias-fill-tertiary);
+}
+
+.selected {
+  background: var(--dsw-alias-fill-tertiary);
+  font-weight: 600;
+}
+
+/* The name is the scannable part; a long one truncates rather than widening the
+   rail or wrapping to a second row. The full path rides the button's title.
+
+   The component drops the HEAD before this ever overflows — what distinguishes
+   two names in one session is almost always at the end (`notes.md` vs
+   `notes.zh.md`). This trailing ellipsis is only the backstop for a name whose
+   measured width beats the component's character estimate. A `direction: rtl`
+   truncation was tried first and rejected: it reorders a leading digit run, so
+   `2026-08-25-notes.md` renders as `notes.md-2026-08-25`. */
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spinner {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  animation: session-files-rail-spin 700ms linear infinite;
+}
+
+@keyframes session-files-rail-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Stated, not implied: a partial list that says nothing reads as a complete
+   one, and the reader has no way to tell the difference. */
+.partial {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 16px;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.loadAll {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.readToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 16px 4px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.read {
+  display: block;
+  padding: 4px 16px 4px 34px;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Above `.scroll`: the list's own scrollbar sits at the rail's right edge and
+   wins hit-testing against an overlapping element at the same layer, which ate
+   every drag until this raised the handle out of that contest. */
+.handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.handle:hover {
+  background: var(--dsw-alias-state-business-primary);
+  opacity: 0.3;
+}

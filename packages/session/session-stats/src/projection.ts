@@ -10,40 +10,44 @@
  * max-tokens usage-host messages (empty content, excluded from the surface)
  * and undercount cancelled steps (aborted before the message assembles).
  *
- * The wall-time folds mirror the client window fold field by field
- * (`deriveStats` in dsh-client-ui-conversation, that fold's whole-window
- * fallback role): model time is `step/start` → `assistant/message`, first
- * token is the first non-empty delta chunk and survives an in-step
- * `llm/retry`, decode spans first token → assembled message on steps that
- * also report output tokens, and tool time pairs `tool/call` → `tool/result`
- * by callId. A cancelled step assembles no message, so its partial stream
- * time stays uncounted in every time figure — matching the window, which
- * renders it as an untimed interrupted node.
+ * Complete lifecycle time pairs turn/start→turn/end and step/start→step/end.
+ * Model time retains the client window fold's narrower
+ * step/start→assistant/message definition; first token is the first non-empty
+ * delta chunk and survives an in-step llm/retry, decode spans first token to
+ * the assembled message on usage-reporting steps, and tool time pairs calls
+ * with results by callId. A cancelled step therefore contributes stepMs and
+ * turnMs without inventing model-completion, TTFT, or decode time.
  *
  * @module @deepseek-ai/dsh-session-stats/projection
  */
 
 import { z } from 'zod'
 import { isTokenDelta } from '@deepseek-ai/dsh-llm/message'
+import type {} from '@deepseek-ai/dsh-llm-retry'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 
 /** Accumulated whole-log figures (the view is exactly these totals). */
 interface SessionStatsTotals {
-  /** Distinct turns with at least one closed step so far. */
   turns: number
-  /** Closed steps so far. */
   steps: number
-  /** Summed model wall time over message-assembling steps, ms. */
+  turnMs: number
+  stepMs: number
   llmMs: number
-  /** Summed matched tool call→result wall time, ms. */
   toolMs: number
-  /** Summed first-token latency over `ttftSteps`, ms. */
+  toolCalls: number
+  toolResults: number
+  toolErrors: number
+  llmRetries: number
+  retryDelayMs: number
+  completedTurns: number
+  errorTurns: number
+  abortedTurns: number
+  blockedTurns: number
+  maxTokenTurns: number
+  interruptedTurns: number
   ttftMs: number
-  /** Steps carrying a recorded first token. */
   ttftSteps: number
-  /** Summed decode wall time over usage-reporting steps, ms. */
   decodeMs: number
-  /** Summed provider output tokens over the same steps. */
   decodeTokens: number
 }
 
@@ -56,7 +60,11 @@ interface SessionStatsTotals {
 interface SessionStatsState extends SessionStatsTotals {
   /** Turn of the last counted `step/end`; null before the first. */
   lastTurn: number | null
-  /** The open step's boundary facts; null outside a step or after its message assembled. */
+  /** Current turn boundary used for complete turn wall time. */
+  openTurn: { turn: number; startTime: number } | null
+  /** Current step boundary retained until `step/end`, including cancelled steps. */
+  openStepBoundary: { turn: number; step: number; startTime: number } | null
+  /** Model boundary retained only until one assistant message assembles. */
   openStep: { turn: number; step: number; startTime: number; firstTokenTime: number | null } | null
   /** Dispatch times of tool calls whose result has not landed, by callId. */
   pendingCalls: Record<string, number>
@@ -71,8 +79,21 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 const sessionStatsSchema = z.object({
   turns: z.number().int().nonnegative(),
   steps: z.number().int().nonnegative(),
+  turnMs: z.number().nonnegative(),
+  stepMs: z.number().nonnegative(),
   llmMs: z.number().nonnegative(),
   toolMs: z.number().nonnegative(),
+  toolCalls: z.number().int().nonnegative(),
+  toolResults: z.number().int().nonnegative(),
+  toolErrors: z.number().int().nonnegative(),
+  llmRetries: z.number().int().nonnegative(),
+  retryDelayMs: z.number().nonnegative(),
+  completedTurns: z.number().int().nonnegative(),
+  errorTurns: z.number().int().nonnegative(),
+  abortedTurns: z.number().int().nonnegative(),
+  blockedTurns: z.number().int().nonnegative(),
+  maxTokenTurns: z.number().int().nonnegative(),
+  interruptedTurns: z.number().int().nonnegative(),
   ttftMs: z.number().nonnegative(),
   ttftSteps: z.number().int().nonnegative(),
   decodeMs: z.number().nonnegative(),
@@ -87,6 +108,15 @@ const sessionStatsSchema = z.object({
  */
 const sessionStatsStateSchema = sessionStatsSchema.extend({
   lastTurn: z.number().int().nonnegative().nullable(),
+  openTurn: z.object({
+    turn: z.number().int().nonnegative(),
+    startTime: z.number().nonnegative(),
+  }).nullable(),
+  openStepBoundary: z.object({
+    turn: z.number().int().nonnegative(),
+    step: z.number().int().nonnegative(),
+    startTime: z.number().nonnegative(),
+  }).nullable(),
   openStep: z.object({
     turn: z.number().int().nonnegative(),
     step: z.number().int().nonnegative(),
@@ -108,30 +138,58 @@ function usageOutputTokens(usage: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
+/** Clamp an optional duration-like value to a finite non-negative contribution. */
+function durationValue(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0
+}
+
+/** Namespace provider-minted ids so special object property names stay ordinary keys. */
+function pendingCallKey(callId: string): string {
+  return `call:${callId}`
+}
+
 /** The `sessionStats` unit registered on `ctx.sessionProjections` (exported for the unit spec). */
 export const sessionStatsProjectionDefinition = {
   key: 'sessionStats',
-  stateVersion: 1,
+  stateVersion: 3,
   stateSchema: sessionStatsStateSchema,
   init: () => ({
     turns: 0,
     steps: 0,
+    turnMs: 0,
+    stepMs: 0,
     llmMs: 0,
     toolMs: 0,
+    toolCalls: 0,
+    toolResults: 0,
+    toolErrors: 0,
+    llmRetries: 0,
+    retryDelayMs: 0,
+    completedTurns: 0,
+    errorTurns: 0,
+    abortedTurns: 0,
+    blockedTurns: 0,
+    maxTokenTurns: 0,
+    interruptedTurns: 0,
     ttftMs: 0,
     ttftSteps: 0,
     decodeMs: 0,
     decodeTokens: 0,
     lastTurn: null,
+    openTurn: null,
+    openStepBoundary: null,
     openStep: null,
     pendingCalls: {},
   }),
   apply: (state, event) => {
     // Every uninteresting event returns the same reference (Object.is gates the change feed).
     switch (event.type) {
+      case 'turn/start':
+        return { ...state, openTurn: { turn: event.data.turn, startTime: event.time } }
       case 'step/start':
         return {
           ...state,
+          openStepBoundary: { turn: event.data.turn, step: event.data.step, startTime: event.time },
           openStep: { turn: event.data.turn, step: event.data.step, startTime: event.time, firstTokenTime: null },
         }
       case 'assistant/chunk': {
@@ -161,34 +219,92 @@ export const sessionStatsProjectionDefinition = {
         }
         return next
       }
-      case 'tool/call':
-        return { ...state, pendingCalls: { ...state.pendingCalls, [event.data.callId]: event.time } }
-      case 'tool/result': {
-        // Own-key check: callId is provider-minted (model/tool JSON boundary),
-        // so a prototype property name ('constructor', 'toString') on a result
-        // with no recorded call must read as unmatched, not as an inherited
-        // function that would poison toolMs with NaN.
-        const callId = event.data.message.source.callId
-        const dispatched = Object.hasOwn(state.pendingCalls, callId) ? state.pendingCalls[callId] : undefined
-        if (dispatched === undefined) return state
-        const pendingCalls = Object.fromEntries(
-          Object.entries(state.pendingCalls).filter(([id]) => id !== callId),
-        )
-        return { ...state, toolMs: state.toolMs + Math.max(0, event.time - dispatched), pendingCalls }
+      case 'tool/call': {
+        const key = pendingCallKey(event.data.callId)
+        return {
+          ...state,
+          toolCalls: state.toolCalls + 1,
+          pendingCalls: { ...state.pendingCalls, [key]: event.time },
+        }
       }
-      case 'step/end':
+      case 'tool/result': {
+        // Namespacing makes provider-minted prototype names ordinary own keys;
+        // the own-key check still treats an orphan result as unmatched.
+        const key = pendingCallKey(event.data.message.source.callId)
+        const dispatched = Object.hasOwn(state.pendingCalls, key) ? state.pendingCalls[key] : undefined
+        const pendingCalls = dispatched === undefined
+          ? state.pendingCalls
+          : Object.fromEntries(Object.entries(state.pendingCalls).filter(([id]) => id !== key))
+        return {
+          ...state,
+          toolResults: state.toolResults + 1,
+          toolErrors: state.toolErrors + (event.data.message.content[0].isError === true ? 1 : 0),
+          toolMs: state.toolMs + (dispatched === undefined ? 0 : Math.max(0, event.time - dispatched)),
+          pendingCalls,
+        }
+      }
+      case 'llm/retry': {
+        const boundary = state.openStep
+        if (boundary === null || boundary.turn !== event.data.turn || boundary.step !== event.data.step) return state
+        return {
+          ...state,
+          llmRetries: state.llmRetries + 1,
+          retryDelayMs: state.retryDelayMs + durationValue(event.data.delayMs),
+        }
+      }
+      case 'step/end': {
+        const boundary = state.openStepBoundary
+        if (boundary === null || boundary.turn !== event.data.turn || boundary.step !== event.data.step) return state
+        const stepMs = Math.max(0, event.time - boundary.startTime)
         return {
           ...state,
           turns: state.lastTurn === event.data.turn ? state.turns : state.turns + 1,
           steps: state.steps + 1,
+          stepMs: state.stepMs + stepMs,
           lastTurn: event.data.turn,
+          openStepBoundary: null,
           openStep: null,
         }
-      case 'turn/end':
-        // A call whose result never landed belongs to a cancelled or failed
-        // turn; results always land within their turn, so drop the leftovers
-        // instead of growing persisted state forever.
-        return Object.keys(state.pendingCalls).length === 0 ? state : { ...state, pendingCalls: {} }
+      }
+      case 'turn/end': {
+        const boundary = state.openTurn
+        if (boundary === null || boundary.turn !== event.data.turn) return state
+        const turnMs = Math.max(0, event.time - boundary.startTime)
+        const outcome: Partial<SessionStatsTotals> = {}
+        switch (event.data.reason.kind) {
+          case 'completed':
+            outcome.completedTurns = state.completedTurns + 1
+            break
+          case 'error':
+            outcome.errorTurns = state.errorTurns + 1
+            break
+          case 'aborted':
+            outcome.abortedTurns = state.abortedTurns + 1
+            break
+          case 'blocked':
+            outcome.blockedTurns = state.blockedTurns + 1
+            break
+          case 'max-tokens':
+            outcome.maxTokenTurns = state.maxTokenTurns + 1
+            break
+          case 'interrupted':
+            outcome.interruptedTurns = state.interruptedTurns + 1
+            break
+          default:
+            break
+        }
+        // Calls whose result never landed belong to the closed turn; clear them
+        // instead of retaining unbounded projection state.
+        return {
+          ...state,
+          ...outcome,
+          turnMs: state.turnMs + turnMs,
+          openTurn: null,
+          openStepBoundary: null,
+          openStep: null,
+          pendingCalls: {},
+        }
+      }
       default:
         return state
     }
@@ -198,8 +314,21 @@ export const sessionStatsProjectionDefinition = {
     view: state => ({
       turns: state.turns,
       steps: state.steps,
+      turnMs: state.turnMs,
+      stepMs: state.stepMs,
       llmMs: state.llmMs,
       toolMs: state.toolMs,
+      toolCalls: state.toolCalls,
+      toolResults: state.toolResults,
+      toolErrors: state.toolErrors,
+      llmRetries: state.llmRetries,
+      retryDelayMs: state.retryDelayMs,
+      completedTurns: state.completedTurns,
+      errorTurns: state.errorTurns,
+      abortedTurns: state.abortedTurns,
+      blockedTurns: state.blockedTurns,
+      maxTokenTurns: state.maxTokenTurns,
+      interruptedTurns: state.interruptedTurns,
       ttftMs: state.ttftMs,
       ttftSteps: state.ttftSteps,
       decodeMs: state.decodeMs,

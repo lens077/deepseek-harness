@@ -127,16 +127,17 @@
       name: '@deepseek-ai/dsh-session-projection'
 
     # Session telemetry is mounted but disabled by default. DSH_TELEMETRY_MODE
-    # explicitly opts into FULL or FEEDBACK_ONLY reporting; uploading mirrors
-    # session-log records onto OTLP/HTTP logs with no session-telemetry/record redaction
-    # rule, so exports are the raw captured copy. The deployment stance, env
-    # seams, and follow-ups are pinned in the default-off Agent Note.
+    # explicitly opts into FULL or FEEDBACK_ONLY reporting. Uploading is
+    # metadata-only by default: an event-type allowlist preserves lifecycle,
+    # timing, usage, retry, and error classification while removing prompts,
+    # tool payloads, file/command content, cwd, and unknown event bodies.
+    # DSH_TELEMETRY_CAPTURE_CONTENT=true explicitly opts into raw bodies;
+    # DSH_TELEMETRY_INCLUDE_ANONYMOUS_USER_ID=true separately opts into the
+    # persistent Harness-home user.id. The telemetry Agent Note owns this stance.
     # DSH_TELEMETRY_OTLP_URL overrides the production endpoint. A non-empty
     # DSH_TELEMETRY_DISABLED — any value, including '0'/'false' — opts the
     # process out (the launchers patch the row disabled; config cannot disable
-    # a row). Exports carry the harness home's anonymous user id ($DSH_HOME/.anonymous-user-id,
-    # random UUID; delete the file to reset the identity) as the Resource's
-    # user.id. The exporter/processor values normally bound the shutdown drain
+    # a row). The exporter/processor values normally bound the shutdown drain
     # to ~1s against an unreachable collector: exporter.timeoutMillis is both
     # the per-attempt socket timeout and the retry deadline (1s effectively
     # disables the SDK's 5-try backoff), while maxExportBatchSize == maxQueueSize
@@ -149,6 +150,8 @@
       name: '@deepseek-ai/dsh-session-telemetry-otel'
       config:
         mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
+        captureContent: !!js process.env.DSH_TELEMETRY_CAPTURE_CONTENT === 'true'
+        includeAnonymousUserId: !!js process.env.DSH_TELEMETRY_INCLUDE_ANONYMOUS_USER_ID === 'true'
         shutdownTimeoutMillis: 3000
         exporter:
           url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://harness-telemetry.deepseeksvc.com/v1/logs'

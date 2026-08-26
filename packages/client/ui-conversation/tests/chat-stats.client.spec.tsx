@@ -103,9 +103,9 @@ describe('deriveStats', () => {
     // source either, so the fold exposes no billing fields (billing rides the
     // tokenUsage projection); decodeTokens is a throughput input, not a
     // billed total.
-    expect(Object.keys(stats).sort()).toEqual(
-      ['decodeMs', 'decodeTokens', 'llmMs', 'steps', 'toolMs', 'ttftMs', 'ttftSteps', 'turns'],
-    )
+    expect(stats).toMatchObject({ turns: 2, steps: 3, llmMs: 0, toolMs: 0 })
+    expect(stats).not.toHaveProperty('inputTokens')
+    expect(stats).not.toHaveProperty('outputTokens')
   })
 
   it('ignores tool results with no call time', () => {
@@ -116,6 +116,8 @@ describe('deriveStats', () => {
     const stats = deriveStats([tool, assistant(1, 1)])
     expect(stats.steps).toBe(1)
     expect(stats.toolMs).toBe(0)
+    expect(stats.toolCalls).toBe(0)
+    expect(stats.toolResults).toBe(1)
   })
 
   it('sums LLM wall time from assistant timing and tool wall time from call/result pairs', () => {
@@ -134,6 +136,8 @@ describe('deriveStats', () => {
     const stats = deriveStats([timed, untimed, tool])
     expect(stats.llmMs).toBe(2_500)
     expect(stats.toolMs).toBe(3_000)
+    expect(stats.toolCalls).toBe(1)
+    expect(stats.toolResults).toBe(1)
   })
 
   it('sums ttft per recorded step and decode throughput inputs per usage-carrying step', () => {
@@ -174,7 +178,27 @@ describe('StatsLine', () => {
   /** A whole-log sessionStats value: zeros plus overrides. */
   function sessionStats(overrides: Record<string, number>): Record<string, number> {
     return {
-      turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
+      turns: 0,
+      steps: 0,
+      turnMs: 0,
+      stepMs: 0,
+      llmMs: 0,
+      toolMs: 0,
+      toolCalls: 0,
+      toolResults: 0,
+      toolErrors: 0,
+      llmRetries: 0,
+      retryDelayMs: 0,
+      completedTurns: 0,
+      errorTurns: 0,
+      abortedTurns: 0,
+      blockedTurns: 0,
+      maxTokenTurns: 0,
+      interruptedTurns: 0,
+      ttftMs: 0,
+      ttftSteps: 0,
+      decodeMs: 0,
+      decodeTokens: 0,
       ...overrides,
     }
   }
@@ -331,6 +355,27 @@ describe('StatsLine', () => {
       .toBe('10 turns · 89 steps| Cache hit 90%| Input 100 tok · Output 5 tok')
   })
 
+  it('surfaces whole-log retries and failure outcomes without exposing event content', () => {
+    const { source } = makeSource()
+    const view = render(<StatsLine {...props(source, {
+      sessionStats: sessionStats({
+        turns: 4,
+        steps: 2,
+        llmRetries: 2,
+        retryDelayMs: 1_500,
+        toolErrors: 1,
+        errorTurns: 1,
+        abortedTurns: 1,
+        interruptedTurns: 1,
+        blockedTurns: 1,
+        maxTokenTurns: 1,
+      }),
+    })} />)
+    expect(view.container.textContent).toBe(
+      '4 turns · 2 steps| Retries 2 (1.5s waiting) · Tool errors 1 · Run errors 1 · Interruptions 2 · Blocked 1 · Token-limit stops 1',
+    )
+  })
+
   it('treats a defined zero-count projection as empty, not as fallback', () => {
     // A composed unit always serves the key; all-zero genuinely means no
     // closed step in the whole log, so nothing renders on a brand-new session.
@@ -373,12 +418,12 @@ describe('StatsLine', () => {
     const view = render(<StatsLine {...props(source, {
       tokenUsage: USAGE,
       sessionStats: sessionStats({
-        turns: 200, steps: 200, llmMs: 100_000, toolMs: 62_000,
+        turns: 200, steps: 200, turnMs: 300_000, llmMs: 100_000, toolMs: 62_000,
         ttftMs: 1_600, ttftSteps: 2, decodeMs: 3_000, decodeTokens: 60,
       }),
     })} />)
     expect(view.container.textContent).toBe(
-      '200 turns · 200 steps| LLM 1m40s · Tool call 1m2s| TTFT avg 0.8s · 20 tok/s| Cache hit 90%| Input 100 tok · Output 5 tok',
+      '200 turns · 200 steps| Total 5m0s · LLM 1m40s · Tool call 1m2s| TTFT avg 0.8s · 20 tok/s| Cache hit 90%| Input 100 tok · Output 5 tok',
     )
   })
 

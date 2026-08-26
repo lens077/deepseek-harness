@@ -28,7 +28,8 @@ export type {
   RetryChatData, ToolChatData, TurnTailChatData,
 } from './contract/chat-nodes.ts'
 export type {
-  ChatFileMentions, ChatNodeOwnerProps, ChatNodeViewProps,
+  ChatFileDiffExpansion, ChatFileDiffs, ChatFileDiffSegment, ChatFileMentions,
+  ChatNodeOwnerProps, ChatNodeViewProps,
   ChatStore, ChatViewInjected, ChatViewSlotProps, CommandRowOwnerProps, CommandRowProps, ComposerBarInjected,
   ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps, ComposerChainProps, ConversationInjected,
   ConversationHeaderLineageOwnerProps, ConversationSessionHeaderInjected, ConversationSessionInjected,

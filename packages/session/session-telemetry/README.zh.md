@@ -24,7 +24,9 @@
 
 ## 脱敏 waterfall（瀑布式事件）
 
-每条记录在投影后立即经过 `sessionTelemetry/record` waterfall，这是 Service Definition 的脱敏扩展点。本包自身不带任何规则：最内层的 `next()` 原样透传记录，因此未挂载监听器时，记录以捕获时的原样到达后端；导出数据能干净到什么程度，恰恰取决于部署方挂载了什么规则。监听器通过变换 `next()` 的返回值来堆叠；不调用 `next()` 就返回，即替换其下方的全部逻辑；抛出异常的监听器会在协调器的隔离范围内以 fail-closed 方式拦下这一条记录。实时捕获在追加时运行 waterfall；按需捕获则在回放权威日志时使用当时挂载的规则运行 waterfall。脱敏只作用于外发副本；权威会话日志永不改写。
+每条记录在投影后立即经过 `session-telemetry/record` waterfall，这是 Service Definition 的脱敏扩展点。本包自身不带任何规则：最内层的 `next()` 原样透传记录，因此未挂载监听器时，记录以捕获时的原样到达后端。监听器通过变换 `next()` 的返回值来堆叠；不调用 `next()` 就返回，即替换其下方的全部逻辑；抛出异常的监听器会在协调器的隔离范围内以 fail-closed 方式拦下这一条记录。实时捕获在追加时运行 waterfall；按需捕获则在回放权威日志时使用当时挂载的规则运行 waterfall。脱敏只作用于外发副本；权威会话日志永不改写。
+
+后端可以在此 seam 之后强制更严格的输出下限。随附的 OTel 后端就是如此：默认使用结构化 metadata allowlist，只有显式设置 `captureContent: true` 后，原始 body 才能越过导出边界。该后端策略不会改变可复用 seam 的透传约定，也不会削弱部署方挂载的 waterfall 规则。
 
 ## handoff 游标
 
@@ -36,7 +38,7 @@
 
 ## 逻辑记录
 
-`SessionTelemetryRecord` 包含：`channel`（`ledger` | `ops`）、`time`（epoch 毫秒）、`severity`（预先映射好的严重级别：`tool/result.isError`、`turn/end` 的错误原因与 `agent-error` 映射为 ERROR，其他已捕获记录映射为 INFO，而 `sessionTelemetry/record` 策略可以指定 WARN）、只含身份信息的 `attributes`（`session.id`、`event.type`、`event.seq`，header 中存在时再加 `session.cwd`/`session.parent_id`/`session.seed_length`），以及作为 `body` 的完整深拷贝 `event.data`，且以脱敏后的内容为准。运维记录携带 `sessionTelemetry.op`（`agent-error` | `shutdown`）和 `session.id`，并刻意不带 `event.seq`/`event.type`：它们是用来告警的信号，不是用来累加的条目；`agent-error` 会把任意抛出值规范化为稳定的 `{ name, message }` 记录主体。交接之后的投递由后端 SDK 负责；重复仍然可能出现（无游标的重新收养、SDK 重试），因此接收端基于 `(session.id, event.seq)` 去重。
+`SessionTelemetryRecord` 包含：`channel`（`ledger` | `ops`）、`time`（epoch 毫秒）、`severity`（预先映射好的严重级别：`tool/result.isError`、`turn/end` 的错误原因与 `agent-error` 映射为 ERROR，其他已捕获记录映射为 INFO，而 `session-telemetry/record` 策略可以指定 WARN）、只含身份信息的 `attributes`（`session.id`、`event.type`、`event.seq`，header 中存在时再加 `session.cwd`/`session.parent_id`/`session.seed_length`），以及作为 `body` 的完整深拷贝 `event.data`，且以脱敏后的内容为准。运维记录携带 `sessionTelemetry.op`（`agent-error` | `shutdown`）和 `session.id`，并刻意不带 `event.seq`/`event.type`：它们是用来告警的信号，不是用来累加的条目；`agent-error` 会把任意抛出值规范化为稳定的 `{ name, message }` 记录主体。交接之后的投递由后端 SDK 负责；重复仍然可能出现（无游标的重新收养、SDK 重试），因此接收端基于 `(session.id, event.seq)` 去重。
 
 ## 模型体验
 
@@ -49,5 +51,5 @@
 ## 已知限制与暂缓事项
 
 - **尽力而为的投递**：游标标记的是已交接而非已投递；在重载窗口内被拆除的会话无法重新收养；崩溃时留在后端队列中的内容会丢失。持久化 outbox（spool、每 sink 游标、at-least-once）推迟到有部署方提出明确的崩溃丢失要求时再实现；见[复活 Agent Note](../../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.zh.md)。
-- **不内置脱敏规则**：未挂载 `sessionTelemetry/record` 监听器时，记录以捕获时的原样离开进程，包括文件内容或命令输出中内嵌的任何凭据；向共享 collector 导出的部署方自行负责其规则集。
+- **Seam 层不内置脱敏规则**：未挂载 `session-telemetry/record` 监听器时，记录以捕获时的原样到达后端。若自定义后端直接转发，就可能导出文件内容或命令输出中内嵌的凭据。随附的 OTel 后端独立提供默认 metadata-only 输出；其他后端也需要拥有同样明确的策略。
 - **按需脱敏使用当前状态**：未捕获的事件只存在于权威会话日志中。后续的 `captureSession()` 会使用当时挂载的策略，深拷贝并脱敏其当前值；不存在捕获时的遥测快照或持久化的捕获前 spool。

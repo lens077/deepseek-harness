@@ -2,7 +2,7 @@
 
 [English](session-telemetry.md) | 中文
 
-对外的会话上报拆分为一项[能力 seam](../capability-seams.zh.md)：Service Definition 与捕获协调器（[dsh-session-telemetry](../../packages/session/session-telemetry)，`ctx.sessionTelemetry`）拥有捕获点、固定分片投影、`session-telemetry/record` 脱敏 waterfall（瀑布式事件）、handoff 游标与最小后端约定；部署方加载的 Service Provider（[dsh-session-telemetry-otel](../../packages/session/session-telemetry-otel)）则是原样配置的 OpenTelemetry JS SDK 日志流水线。它是一项可选能力，不属于 agent loop（智能体循环）主干，这里也没有任何内容会进入模型请求。边界公理（harness 的职责止于 `emit()`；批处理、重试、排队与丢失策略都属于上报 SDK）连同被否决的替代方案，均已在[复活 Agent Note](../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.zh.md)中定案；捕获点、游标与投影的约定见 [Service Definition README](../../packages/session/session-telemetry/README.zh.md)。
+对外的会话上报拆分为一项[能力 seam](../capability-seams.zh.md)：Service Definition 与捕获协调器（[dsh-session-telemetry](../../packages/session/session-telemetry)，`ctx.sessionTelemetry`）拥有捕获点、固定分片投影、`session-telemetry/record` 脱敏 waterfall（瀑布式事件）、handoff 游标与最小后端约定；部署方加载的 Service Provider（[dsh-session-telemetry-otel](../../packages/session/session-telemetry-otel)）会先通过默认 metadata-only 的隐私边界准备记录，再配置 OpenTelemetry JS SDK 日志流水线。它是一项可选能力，不属于 agent loop（智能体循环）主干，这里也没有任何内容会进入模型请求。边界公理（harness 的职责止于 `emit()`；批处理、重试、排队与丢失策略都属于上报 SDK）连同被否决的替代方案，均已在[复活 Agent Note](../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.zh.md)中定案；捕获点、游标与投影的约定见 [Service Definition README](../../packages/session/session-telemetry/README.zh.md)。
 
 源码：[`packages/session/session-telemetry/src/index.ts`](../../packages/session/session-telemetry/src/index.ts)
 
@@ -123,7 +123,13 @@ interface SessionTelemetrySink {
 
 ## 脱敏 waterfall：`session-telemetry/record`
 
-每条记录在投影与 `emit()` 之间都要经过 `session-telemetry/record` [waterfall](../cordis-primer.zh.md#cordis-waterfall-semantics)（[事件条目](#session-telemetryrecord--waterfall)）。seam 自身不带任何规则：未挂载监听器时，记录以捕获时的原样到达后端；导出数据能干净到什么程度，恰恰取决于部署方挂载了什么规则。监听器通过变换 `next()` 的返回值来堆叠；不调用 `next()` 就返回，即替换其下方的全部逻辑；抛出异常的监听器会在协调器的隔离范围内以 fail-closed 方式扣下这一条记录。脱敏只作用于导出副本；权威会话日志永不改写。
+每条记录在投影与 `emit()` 之间都要经过 `session-telemetry/record` [waterfall](../cordis-primer.zh.md#cordis-waterfall-semantics)（[事件条目](#session-telemetryrecord--waterfall)）。seam 自身不带任何规则：未挂载监听器时，记录以捕获时的原样到达后端。监听器通过变换 `next()` 的返回值来堆叠；不调用 `next()` 就返回，即替换其下方的全部逻辑；抛出异常的监听器会在协调器的隔离范围内以 fail-closed 方式扣下这一条记录。脱敏只作用于外发副本；权威会话日志永不改写。后端可以在 waterfall 之后施加额外的输出下限。
+
+## 随附的隐私下限
+
+OTel 后端的 `captureContent` 默认为 `false`。其封闭 allowlist 会保留符合标识符形态的关联字段、谱系、生命周期边界、耗时、token 用量、提供方/模型/工具名称、重试等待，以及结果/错误分类；同时移除不透明的工具调用 id、`session.cwd` 与所有提示词、消息、schema、工具 payload、文件、命令、反馈、钩子、todo、摘要和错误消息内容。未知事件 body 会变为 `{ redacted: true, originalBodyBytes }`，因此未来新增事件类型仍可观测，但不会隐式成为内容导出通道。记录带有 `dsh.telemetry.content_mode=metadata-only` 和 body 大小；不会导出内容哈希。保留的标识符受语法约束，但没有匿名化；若部署拓扑或租户命名也属于敏感信息，应保持 telemetry 关闭。
+
+原始 body 需要独立设置 `captureContent: true`。跨进程持久身份还需单独设置 `includeAnonymousUserId: true`；否则后端不会读取或导出 Harness home 的 `user.id`。这些控制项不会启用传输：`mode` 仍默认为 `DISABLED`，本地 `sessionStats` 可观测性也不需要 collector 或云凭据。随附的 base 组合要求两个隐私 opt-in 环境变量精确等于 `true`，任意其他非空值都不会意外启用它们。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -166,7 +172,7 @@ Source: [`packages/session/session-telemetry/src/index.ts`](../../packages/sessi
 
 #### `session-telemetry/record` — waterfall
 
-Transform one outbound record before it reaches the backend. This waterfall is the Service Definition's redaction extension point. It ships NO rules of its own: the innermost `next()` passes the record through unchanged, and with no listener mounted records reach the backend as captured, so exported data is exactly as clean as the rules a deployment mounts. Listeners stack by transforming `next()`'s return value; returning without `next()` replaces everything beneath. Dispatched synchronously on the capture hot path inside the coordinator's containment: a throwing listener withholds that one record (fail-closed) and never reaches the agent loop. Live capture dispatches at append time; on-demand capture dispatches while reading the canonical log. Redaction applies to the exported copy only; the canonical session log is never rewritten.
+Transform one outbound record before it reaches the backend. This waterfall is the Service Definition's redaction extension point. It ships NO rules of its own: the innermost `next()` passes the record through unchanged, and with no listener mounted records reach the backend as captured. A backend may impose an additional output floor after this seam. Listeners stack by transforming `next()`'s return value; returning without `next()` replaces everything beneath. Dispatched synchronously on the capture hot path inside the coordinator's containment: a throwing listener withholds that one record (fail-closed) and never reaches the agent loop. Live capture dispatches at append time; on-demand capture dispatches while reading the canonical log. Redaction applies to the outbound copy only; the canonical session log is never rewritten.
 
 ```ts cordis-catalog
 /**
@@ -174,15 +180,15 @@ Transform one outbound record before it reaches the backend. This waterfall is t
  * waterfall is the Service Definition's redaction extension point. It ships NO rules
  * of its own: the
  * innermost `next()` passes the record through unchanged, and with no
- * listener mounted records reach the backend as captured, so exported
- * data is exactly as clean as the rules a deployment mounts. Listeners
+ * listener mounted records reach the backend as captured. A backend may
+ * impose an additional output floor after this seam. Listeners
  * stack by transforming `next()`'s return value; returning without
  * `next()` replaces everything beneath. Dispatched synchronously on the
  * capture hot path inside the coordinator's containment: a throwing
  * listener withholds that one record (fail-closed) and never reaches the
  * agent loop. Live capture dispatches at append time; on-demand capture
  * dispatches while reading the canonical log. Redaction applies to the
- * exported copy only; the canonical session log is never rewritten.
+ * outbound copy only; the canonical session log is never rewritten.
  * @param record - the candidate record, already the coordinator's own deep
  *   copy; listeners return a (possibly new) record and must not mutate it.
  * @mode waterfall

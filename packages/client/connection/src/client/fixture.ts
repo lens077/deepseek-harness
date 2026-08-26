@@ -888,24 +888,65 @@ function tokenUsageOf(log: readonly SessionEvent[]): FixtureTokenUsageProjection
   return totals
 }
 
-/** Fixture parallel of session-stats' whole-log counting and wall-time fold. */
+/** Fixture parallel of session-stats' whole-log counting, timing, and outcome fold. */
 function sessionStatsOf(log: readonly SessionEvent[]): {
   turns: number
   steps: number
+  turnMs: number
+  stepMs: number
   llmMs: number
   toolMs: number
+  toolCalls: number
+  toolResults: number
+  toolErrors: number
+  llmRetries: number
+  retryDelayMs: number
+  completedTurns: number
+  errorTurns: number
+  abortedTurns: number
+  blockedTurns: number
+  maxTokenTurns: number
+  interruptedTurns: number
   ttftMs: number
   ttftSteps: number
   decodeMs: number
   decodeTokens: number
 } {
-  const value = { turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0 }
+  const value = {
+    turns: 0,
+    steps: 0,
+    turnMs: 0,
+    stepMs: 0,
+    llmMs: 0,
+    toolMs: 0,
+    toolCalls: 0,
+    toolResults: 0,
+    toolErrors: 0,
+    llmRetries: 0,
+    retryDelayMs: 0,
+    completedTurns: 0,
+    errorTurns: 0,
+    abortedTurns: 0,
+    blockedTurns: 0,
+    maxTokenTurns: 0,
+    interruptedTurns: 0,
+    ttftMs: 0,
+    ttftSteps: 0,
+    decodeMs: 0,
+    decodeTokens: 0,
+  }
   let lastTurn: number | null = null
+  let openTurn: { turn: number; startTime: number } | null = null
+  let openStepBoundary: { turn: number; step: number; startTime: number } | null = null
   let openStep: { turn: number; step: number; startTime: number; firstTokenTime: number | null } | null = null
   const pendingCalls = new Map<string, number>()
   for (const event of log) {
     switch (event.type) {
+      case 'turn/start':
+        openTurn = { turn: event.data.turn, startTime: event.time }
+        break
       case 'step/start':
+        openStepBoundary = { turn: event.data.turn, step: event.data.step, startTime: event.time }
         openStep = { turn: event.data.turn, step: event.data.step, startTime: event.time, firstTokenTime: null }
         break
       case 'assistant/chunk':
@@ -930,9 +971,12 @@ function sessionStatsOf(log: readonly SessionEvent[]): {
         break
       }
       case 'tool/call':
+        value.toolCalls += 1
         pendingCalls.set(event.data.callId, event.time)
         break
       case 'tool/result': {
+        value.toolResults += 1
+        if (event.data.message.content[0].isError === true) value.toolErrors += 1
         const callId = event.data.message.source.callId
         const dispatched = pendingCalls.get(callId)
         if (dispatched === undefined) break
@@ -941,18 +985,67 @@ function sessionStatsOf(log: readonly SessionEvent[]): {
         break
       }
       case 'step/end':
+        if (openStepBoundary === null
+          || openStepBoundary.turn !== event.data.turn
+          || openStepBoundary.step !== event.data.step) break
         if (event.data.turn !== lastTurn) {
           value.turns += 1
           lastTurn = event.data.turn
         }
         value.steps += 1
+        value.stepMs += Math.max(0, event.time - openStepBoundary.startTime)
+        openStepBoundary = null
         openStep = null
         break
       case 'turn/end':
+        if (openTurn === null || openTurn.turn !== event.data.turn) break
+        value.turnMs += Math.max(0, event.time - openTurn.startTime)
+        switch (event.data.reason.kind) {
+          case 'completed':
+            value.completedTurns += 1
+            break
+          case 'error':
+            value.errorTurns += 1
+            break
+          case 'aborted':
+            value.abortedTurns += 1
+            break
+          case 'blocked':
+            value.blockedTurns += 1
+            break
+          case 'max-tokens':
+            value.maxTokenTurns += 1
+            break
+          case 'interrupted':
+            value.interruptedTurns += 1
+            break
+          default:
+            break
+        }
+        openTurn = null
+        openStepBoundary = null
+        openStep = null
         pendingCalls.clear()
         break
-      default:
+      default: {
+        // The fixture graph does not depend on the host retry plugin; keep the
+        // one extensible event read at this client wire boundary.
+        const candidate = event as unknown as {
+          type: string
+          data?: { turn?: unknown; step?: unknown; delayMs?: unknown }
+        }
+        if (candidate.type === 'llm/retry'
+          && openStep !== null
+          && candidate.data?.turn === openStep.turn
+          && candidate.data.step === openStep.step) {
+          value.llmRetries += 1
+          const delayMs = candidate.data.delayMs
+          if (typeof delayMs === 'number' && Number.isFinite(delayMs)) {
+            value.retryDelayMs += Math.max(0, delayMs)
+          }
+        }
         break
+      }
     }
   }
   return value

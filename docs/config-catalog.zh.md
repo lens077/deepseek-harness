@@ -1871,13 +1871,18 @@ export interface Config {
 
 ```ts config-catalog
 /**
- * Plugin configuration: one sharing policy, two verbatim SDK option objects,
- * and one DSH-owned shutdown bound. Uploading modes validate their endpoint
- * and shutdown deadline at plugin load; `DISABLED` reads neither.
+ * Plugin configuration: one sharing policy, two privacy opt-ins, two verbatim
+ * SDK option objects, and one DSH-owned shutdown bound. Uploading modes validate
+ * their endpoint and shutdown deadline at plugin load; `DISABLED` reads none of
+ * the transport settings.
  */
 export interface Config {
   /** Sharing policy; defaults to local-only `DISABLED` behavior. */
   mode?: SessionTelemetryMode
+  /** Export raw event bodies. Defaults to false; metadata-only export uses a closed allowlist. */
+  captureContent?: boolean
+  /** Add the persistent Harness-home anonymous user id to the OTel Resource. Defaults to false. */
+  includeAnonymousUserId?: boolean
   /**
    * Passed verbatim to the SDK's OTLP/HTTP log exporter — the complete
    * `OTLPExporterNodeConfigBase` shape (`headers`, `timeoutMillis`,
@@ -1907,7 +1912,7 @@ export enum SessionTelemetryMode {
 
 依赖：`BatchLogRecordProcessorOptions`（`@opentelemetry/sdk-logs`）· `OTLPExporterNodeConfigBase`（`@opentelemetry/otlp-exporter-base`）
 
-来源：[`packages/session/session-telemetry-otel/src/index.ts:91`](../packages/session/session-telemetry-otel/src/index.ts)
+来源：[`packages/session/session-telemetry-otel/src/index.ts:94`](../packages/session/session-telemetry-otel/src/index.ts)
 
 <a id="deepseek-aidsh-session-title"></a>
 
@@ -3250,6 +3255,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-plan`（[`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-reference`（[`packages/client/ui-reference/src/index.ts`](../packages/client/ui-reference/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-renderer`（[`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-session-files`（[`packages/client/ui-session-files/src/index.ts`](../packages/client/ui-session-files/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings`（[`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）

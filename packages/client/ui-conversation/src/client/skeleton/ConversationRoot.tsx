@@ -13,9 +13,10 @@ import css from './ConversationRoot.module.css'
 export type ConversationRootProps = ConversationSlotProps
 
 export function ConversationRoot({
-  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock,
+  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, useRailSeat,
   renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
+  const railOccupied = useRailSeat(entries => entries.length > 0)
   const openState = useSession(s => s.openState)
   const composerPhase = useSession(s => s.composerPhase)
   const pending = useSession(s => s.pending) ?? []
@@ -183,13 +184,27 @@ export function ConversationRoot({
     </div>
   )
 
+  const scrollBody = (
+    <div className={css.scrollBody} data-conversation-scroll="">
+      {renderSlot('conversation.session', {})}
+      {composerSeat}
+    </div>
+  )
   return (
     <div className={css.root} data-phase={phase}>
       {renderSlot('conversation.session.header', {})}
-      <div className={css.scrollBody} data-conversation-scroll="">
-        {renderSlot('conversation.session', {})}
-        {composerSeat}
-      </div>
+      {/* The rail sits BESIDE the scrollport, never inside it: a pane inside
+          would stretch to the transcript's full height and scroll away with
+          it. An unoccupied seat keeps the column's exact tree — no wrapper in
+          the `min-height: 0` chain the scrollport depends on. */}
+      {railOccupied
+        ? (
+          <div className={css.bodyRow} data-rail="">
+            {renderSlot('conversation.session.rail', {})}
+            {scrollBody}
+          </div>
+        )
+        : scrollBody}
     </div>
   )
 }

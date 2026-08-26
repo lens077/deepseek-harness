@@ -7,29 +7,14 @@ import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConversationSnapshot, UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: merges the sessionStats key into SessionProjectionMap for useProjection.
-import type {} from '@deepseek-ai/dsh-session-stats/client'
+import type { SessionStatsProjection } from '@deepseek-ai/dsh-session-stats/client'
 import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type { ComposerBarProps } from '../contract/slots.ts'
 import { formatTokensPerSecond } from './message-chrome.ts'
 import { assistantStepReading } from './turn-metrics.ts'
 import css from './StatsLine.module.css'
 
-interface WindowStats {
-  turns: number
-  steps: number
-  /** Summed request wall time (step/start → assistant/message); 0 when no node carries timing. */
-  llmMs: number
-  /** Summed tool wall time (tool/call → tool/result); 0 when no pair is in-window. */
-  toolMs: number
-  /** Summed first-token latency over `ttftSteps`; 0 when no step records it. */
-  ttftMs: number
-  /** Steps carrying a recorded TTFT. */
-  ttftSteps: number
-  /** Summed decode wall time over steps that also report output tokens. */
-  decodeMs: number
-  /** Summed output tokens over the same decode-timed steps. */
-  decodeTokens: number
-}
+type WindowStats = SessionStatsProjection
 
 /**
  * Fold assistant and tool-result nodes into window-scoped display totals —
@@ -48,13 +33,31 @@ export function deriveStats(nodes: ConversationSnapshot['nodes']): WindowStats {
   let steps = 0
   let llmMs = 0
   let toolMs = 0
+  let toolCalls = 0
+  let toolResults = 0
+  let toolErrors = 0
+  let errorTurns = 0
+  let maxTokenTurns = 0
   let ttftMs = 0
   let ttftSteps = 0
   let decodeMs = 0
   let decodeTokens = 0
   for (const node of nodes) {
+    if (node.kind === 'turn-error') {
+      errorTurns += 1
+      continue
+    }
+    if (node.kind === 'turn-max-tokens') {
+      maxTokenTurns += 1
+      continue
+    }
     if (node.kind === 'tool-result') {
-      if (node.callTime !== null) toolMs += Math.max(0, node.time - node.callTime)
+      toolResults += 1
+      if (node.isError) toolErrors += 1
+      if (node.callTime !== null) {
+        toolCalls += 1
+        toolMs += Math.max(0, node.time - node.callTime)
+      }
       continue
     }
     if (node.kind !== 'assistant') continue
@@ -73,7 +76,29 @@ export function deriveStats(nodes: ConversationSnapshot['nodes']): WindowStats {
       decodeTokens += reading.outputTokens
     }
   }
-  return { turns: turns.size, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens }
+  return {
+    turns: turns.size,
+    steps,
+    turnMs: 0,
+    stepMs: 0,
+    llmMs,
+    toolMs,
+    toolCalls,
+    toolResults,
+    toolErrors,
+    llmRetries: 0,
+    retryDelayMs: 0,
+    completedTurns: 0,
+    errorTurns,
+    abortedTurns: 0,
+    blockedTurns: 0,
+    maxTokenTurns,
+    interruptedTurns: 0,
+    ttftMs,
+    ttftSteps,
+    decodeMs,
+    decodeTokens,
+  }
 }
 
 /**
@@ -222,6 +247,7 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
   if (stats.steps > 0) {
     groups.push(t('stats.counts', { turns: stats.turns, steps: stats.steps }))
     const durations: string[] = []
+    if (stats.turnMs > 0) durations.push(t('stats.totalDuration', { duration: formatDuration(stats.turnMs) }))
     if (stats.llmMs > 0) durations.push(t('stats.llm', { duration: formatDuration(stats.llmMs) }))
     if (stats.toolMs > 0) durations.push(t('stats.toolCall', { duration: formatDuration(stats.toolMs) }))
     if (durations.length > 0) groups.push(durations.join(' · '))
@@ -236,6 +262,20 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
     }
     if (speeds.length > 0) groups.push(speeds.join(' · '))
   }
+  const reliability: string[] = []
+  if (stats.llmRetries > 0) {
+    reliability.push(t('stats.retries', {
+      count: stats.llmRetries,
+      delay: formatDuration(stats.retryDelayMs),
+    }))
+  }
+  if (stats.toolErrors > 0) reliability.push(t('stats.toolErrors', { count: stats.toolErrors }))
+  if (stats.errorTurns > 0) reliability.push(t('stats.turnErrors', { count: stats.errorTurns }))
+  const interruptions = stats.abortedTurns + stats.interruptedTurns
+  if (interruptions > 0) reliability.push(t('stats.interruptions', { count: interruptions }))
+  if (stats.blockedTurns > 0) reliability.push(t('stats.blockedTurns', { count: stats.blockedTurns }))
+  if (stats.maxTokenTurns > 0) reliability.push(t('stats.maxTokenTurns', { count: stats.maxTokenTurns }))
+  if (reliability.length > 0) groups.push(reliability.join(' · '))
   // Context occupancy deliberately lives on the composer's ContextMeter ring,
   // not here — one home per fact.
   // Billing rides the durable projection, so these survive paging and
