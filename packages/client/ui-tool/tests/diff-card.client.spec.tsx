@@ -14,10 +14,10 @@ import type {
   ConversationSnapshot, RunningToolCall, SessionId, SessionListState, ToolResultNode, WorkspaceListState,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ToolCallView, ToolResultView } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SelectionTarget } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ChatFileDiffExpansion, SelectionTarget } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import { CHAT_DIFF_MAX_LINES, diffCardModel } from '../src/client/tool/models/diff-card-model.ts'
+import { diffCardModel } from '../src/client/tool/models/diff-card-model.ts'
 import { createChatStore } from '@deepseek-ai/dsh-client-ui-conversation/src/client/stores.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-conversation/src/client/skeleton/DetailsPanel.tsx'
@@ -120,21 +120,24 @@ describe('chat row diff body', () => {
     callId: 'c1', toolName: 'edit', block, openFile: vi.fn(), t,
   })
 
-  it('the expanded body is the applied diff, capped tighter than the panel', () => {
-    expect(CHAT_DIFF_MAX_LINES).toBeLessThan(16)
+  it('the expanded body compares the applied change in two columns', () => {
     const view = render(<GenericToolCard {...ownerProps(settled())} />)
     // Collapsed: the summary row (path) only, no diff body.
     expect(view.queryByText('hello fixture')).toBeNull()
     // The path link is not the expand control; the leading toggle is.
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
-    expect(view.container.querySelector('[data-diff]')).not.toBeNull()
-    expect(view.getByText('hello fixture')).toBeTruthy()
+    const block = view.container.querySelector('[data-side-by-side-diff]')
+    expect(block).not.toBeNull()
+    // The row is read across, not down: the prior line sits on the left of the
+    // line that replaced it, which is the whole point of the two panes.
+    expect(block?.querySelector('[data-side="old"]')?.textContent).toBe('hello')
+    expect(block?.querySelector('[data-side="new"]')?.textContent).toBe('hello fixture')
   })
 
   it('a running diff call expands to its intended change', () => {
     const view = render(<GenericToolCard {...ownerProps(running())} />)
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
-    expect(view.container.querySelector('[data-diff]')).not.toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
   })
 
   it('a non-diff call keeps the args-JSON text body', () => {
@@ -148,7 +151,7 @@ describe('chat row diff body', () => {
       }),
     }} />)
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     expect(view.getByText(/"foo"/)).toBeTruthy()
   })
 })
@@ -163,9 +166,18 @@ describe('FileMutationRow diff card', () => {
     currentAddress: undefined,
   })
 
-  const rowProps = (block: RunningToolCall | ToolResultNode, toolName = 'edit'): FileMutationRowProps => ({
+  /** The reader's inline-diff preference, as the row's injected seat sees it. */
+  const expansion = (mode: ChatFileDiffExpansion = 'none') =>
+    bindSnapshotSelector(createSnapshotStore<ChatFileDiffExpansion>(mode))
+
+  const rowProps = (
+    block: RunningToolCall | ToolResultNode,
+    toolName = 'edit',
+    mode: ChatFileDiffExpansion = 'none',
+  ): FileMutationRowProps => ({
     callId: 'c1', toolName, block, openFile: vi.fn(), cwd: '/w/app',
     sessionId: SID, useSessions: bindSnapshotSelector(list()),
+    useDiffExpansion: expansion(mode),
     t,
   } as unknown as FileMutationRowProps)
 
@@ -177,12 +189,44 @@ describe('FileMutationRow diff card', () => {
   it('collapses to the summary row; expanding reveals the applied diff card', () => {
     const view = render(<FileMutationRow {...rowProps(settled())} />)
     // The diff card is collapsed by default — not in the DOM until expanded.
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     expect(view.queryByText('hello fixture')).toBeNull()
     toggleRow(view)
-    expect(view.container.querySelector('[data-diff]')).not.toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
     expect(view.getByText('hello fixture')).toBeTruthy()
-    expect(view.getByText('复制')).toBeTruthy()
+  })
+
+  it('opens an edit on arrival under `all`, and never under the other modes', () => {
+    // The reader asked for every change up front, and an edit has a prior side
+    // to compare against, so this row arrives open rather than waiting for a click.
+    const all = render(<FileMutationRow {...rowProps(settled(), 'edit', 'all')} />)
+    expect(all.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
+    cleanup()
+    // `single` is the produced-files chip's mode; a row is one call among many
+    // in the flow, so only the explicit `all` opens one.
+    for (const mode of ['single', 'none'] as const) {
+      const view = render(<FileMutationRow {...rowProps(settled(), 'edit', mode)} />)
+      expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
+      cleanup()
+    }
+  })
+
+  it('leaves a create closed even under `all`', () => {
+    // A create's left column is nothing but padding: opening it spends the whole
+    // row on a wall with no comparison in it.
+    const view = render(<FileMutationRow {...rowProps(settled({
+      call: { name: 'write', argsRaw: '{"file_path":"notes/new.txt","content":"hello fixture\\n"}' },
+      callView: null,
+      resultView: {
+        card: 'diff',
+        title: 'Write notes/new.txt',
+        diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }],
+      },
+    }), 'write', 'all')} />)
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
+    // The reader's own toggle still outranks the seed from the first click.
+    toggleRow(view)
+    expect(view.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
   })
 
   it('the summary is a path link that opens the tool path through the host', () => {
@@ -202,9 +246,12 @@ describe('FileMutationRow diff card', () => {
       callView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
       resultView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
     }), 'write')} />)
-    // The footer counts live inside the collapsed diff card.
     toggleRow(view)
-    expect(view.getByText('└ +1 -0 · 1 file')).toBeTruthy()
+    const block = view.container.querySelector('[data-side-by-side-diff]')
+    // A create has no prior side, so the left column is padding across from the
+    // whole new file — the two panes still line up row for row.
+    expect(block?.querySelector('[data-side="old"]')?.textContent).toBe('')
+    expect(block?.querySelector('[data-side="new"]')?.textContent).toBe('hello fixture')
   })
 
   it('reflects the run state on its leading slot', () => {
@@ -218,9 +265,9 @@ describe('FileMutationRow diff card', () => {
   it('a mutation call with no diff view renders the summary row alone', () => {
     const view = render(<FileMutationRow {...rowProps(settled({ callView: null, resultView: null }))} />)
     // No diff material: expanding shows the args-JSON body, never a diff card.
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     toggleRow(view)
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
   })
 
   it('surfaces the result text when an errored mutation has no diff card', () => {
@@ -231,7 +278,7 @@ describe('FileMutationRow diff card', () => {
       isError: true, callView: null, resultView: null,
       content: [{ type: 'text', text: 'old_string not found in notes/demo.txt' }],
     }))} />)
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     expect(view.getByText('old_string not found in notes/demo.txt')).toBeTruthy()
   })
 

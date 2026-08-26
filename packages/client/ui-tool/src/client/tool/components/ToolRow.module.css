@@ -253,12 +253,13 @@
 
 /* The block-shaped expanded bodies: the code variant's run_code program
    through CodeBlock (shiki-highlighted TypeScript), a terminal card's command
-   output through TerminalBlock, a diff card through DiffBlock, a read card's
-   line-numbered window through ReadBlock, a search card's grouped matches or
-   path list through SearchBlock, and a web card's citation/source list through
-   WebBlock. All are drawn by the shared primitive, so only the row's
-   indentation is this file's concern — the margin also replaces each
-   primitive's own standalone vertical spacing with the flow's row rhythm. */
+   output through TerminalBlock, a diff card's two aligned columns through
+   SideBySideDiff, a read card's line-numbered window through ReadBlock, a
+   search card's grouped matches or path list through SearchBlock, and a web
+   card's citation/source list through WebBlock. All are drawn by the shared
+   primitive, so only the row's indentation is this file's concern — the margin
+   also replaces each primitive's own standalone vertical spacing with the
+   flow's row rhythm. */
 .codeBody,
 .terminalBody,
 .diffBody,
@@ -266,6 +267,16 @@
 .searchBody,
 .webBody {
   margin: 4px 0 4px 4px;
+}
+
+/* A file mutation is unbounded in a way the other cards are not — one edit can
+   rewrite hundreds of lines — and the two columns must stay aligned, so the
+   long body scrolls as one unit here rather than being cut short. The cap is
+   the flow's promise that no single row takes over the transcript; the details
+   panel remains the full-height reading surface. */
+.diffBody {
+  overflow-y: auto;
+  max-height: 320px;
 }
 
 /* The recovery footer for a capped search: the result text (its `Full … stored

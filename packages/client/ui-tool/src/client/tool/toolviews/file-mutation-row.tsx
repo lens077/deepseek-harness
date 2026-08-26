@@ -1,12 +1,13 @@
 // File-mutation toolview registrant: the keyed toolview hole for the `edit`
 // and `write` tools. The row composes the shared ToolRow (chrome, running
 // sweep, whole-row expand) and feeds it the applied diff as ToolRow's `diff`
-// card material, so the change renders through DiffBlock in the collapsed-by-
-// default expanded body — the same unified interaction every other card row
-// has. The summary stays a path link (the file-tool interaction) that opens
-// through the host; an errored mutation (write/edit return no diff on
-// `result.isError`) keeps the model-facing error text on ToolRow's Output
-// section, its first line in the collapsed summary.
+// card material, so the change renders as two aligned before/after columns in
+// the expanded body — the same unified interaction every other card row has.
+// The body opens on arrival only where the reader asked for that and there is a
+// prior side to compare against. The summary stays a path link (the file-tool
+// interaction) that opens through the host; an errored mutation (write/edit
+// return no diff on `result.isError`) keeps the model-facing error text on
+// ToolRow's Output section, its first line in the collapsed summary.
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
