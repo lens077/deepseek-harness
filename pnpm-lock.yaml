@@ -756,7 +756,7 @@ importers:
         version: link:packages/entry
       '@types/node':
         specifier: ^26.0.1
-        version: 26.1.2
+        version: 26.1.1
       tsx:
         specifier: ^4.20.6
         version: 4.22.4
@@ -1625,11 +1625,11 @@ importers:
   packages/client/runtime:
     dependencies:
       immer:
-        specifier: ^10.1.1
-        version: 10.2.0
+        specifier: ^11.1.15
+        version: 11.1.15
       zustand:
         specifier: ~4.4.7
-        version: 4.4.7(@types/react@18.3.31)(immer@10.2.0)(react@18.3.1)
+        version: 4.4.7(@types/react@18.3.31)(immer@11.1.15)(react@18.3.1)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -11775,8 +11775,8 @@ packages:
   '@types/node@25.9.3':
     resolution: {integrity: sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg==}
 
-  '@types/node@26.1.2':
-    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
+  '@types/node@26.1.1':
+    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
 
   '@types/picomatch@3.0.2':
     resolution: {integrity: sha512-n0i8TD3UDB7paoMMxA3Y65vUncFJXjcUf7lQY7YyKGl6031FNjfsLs6pdLFCy2GNFxItPJG8GvvpbZc2skH7WA==}
@@ -12977,8 +12977,8 @@ packages:
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
 
-  immer@10.2.0:
-    resolution: {integrity: sha512-d/+XTN3zfODyjr89gM3mPq1WNX2B8pYsu7eORitdwyA2sBubnTl3laYlBk4sXY5FUa5qTZGBDPJICVbvqzjlbw==}
+  immer@11.1.15:
+    resolution: {integrity: sha512-VrNANlmnWQnh5COXIIOQXM9oOJw7naGKlBT74ZOOR6lpVXc3gFEu9FJLDFcpCJ2j+NWr8TIwtWD//T6ZX6TKiQ==}
 
   import-meta-resolve@4.2.0:
     resolution: {integrity: sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg==}
@@ -16937,7 +16937,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/node@26.1.2':
+  '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
 
@@ -18293,7 +18293,7 @@ snapshots:
 
   immediate@3.0.6: {}
 
-  immer@10.2.0: {}
+  immer@11.1.15: {}
 
   import-meta-resolve@4.2.0: {}
 
@@ -20337,12 +20337,12 @@ snapshots:
 
   zod@4.4.3: {}
 
-  zustand@4.4.7(@types/react@18.3.31)(immer@10.2.0)(react@18.3.1):
+  zustand@4.4.7(@types/react@18.3.31)(immer@11.1.15)(react@18.3.1):
     dependencies:
       use-sync-external-store: 1.2.0(react@18.3.1)
     optionalDependencies:
       '@types/react': 18.3.31
-      immer: 10.2.0
+      immer: 11.1.15
       react: 18.3.1
 
   zwitch@2.0.4: {}
