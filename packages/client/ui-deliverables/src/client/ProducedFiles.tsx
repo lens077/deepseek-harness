@@ -6,8 +6,12 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import { hasPriorContent, SideBySideDiff } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {
+  ChatFileDiffExpansion, ChatFileDiffSegment, TurnTailOwnerProps,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { basename } from './turn-deliverables.ts'
 import type { NS } from './locales.ts'
 import css from './ProducedFiles.module.css'
@@ -50,10 +54,34 @@ export function fitProducedFiles(
 export interface ProducedFilesInjected {
   /** Whether the browser itself is connected over loopback. */
   isLoopback: boolean
+  /**
+   * This session's recorded change to one path, from the optional
+   * `chatFileDiffs` provider. An empty list means nothing to expand — either
+   * the provider is composed out or the session recorded no hunks for the
+   * path — and the chip keeps opening the file instead.
+   */
+  fileDiffs: (path: string) => readonly ChatFileDiffSegment[]
   hooks: {
     /** Current generation's Host description, bound by the slot renderer. */
     hostDescription: HostDescriptionSource
+    /**
+     * How much of this turn opens without being asked, from the same optional
+     * provider. Reactive, so changing the preference reaches a transcript
+     * already on screen.
+     */
+    diffExpansion: ObservableSnapshot<ChatFileDiffExpansion>
   }
+}
+
+/**
+ * Whether one path opens without being asked.
+ * @param expansion - the reader's preference.
+ * @param changedCount - how many files this turn changed.
+ * @returns the default open state for every path of this turn.
+ */
+export function expandsByDefault(expansion: ChatFileDiffExpansion, changedCount: number): boolean {
+  if (expansion === 'all') return true
+  return expansion === 'single' && changedCount === 1
 }
 
 /** Matched paths plus the opener, locale, and injected Host capability. */
@@ -71,12 +99,26 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
  * @returns The produced-files row.
  */
 export function ProducedFiles({
-  matched: paths, openFile, isLoopback, useHostDescription, t,
+  matched: paths, openFile, isLoopback, fileDiffs, useHostDescription, useDiffExpansion, t,
 }: ProducedFilesProps) {
   const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
   const canOpenPath = isLoopback && hostCanOpenPath
   const limit = Math.min(paths.length, SHOWN_LIMIT)
   const [shownCount, setShownCount] = useState(limit)
+  const expansion = useDiffExpansion(value => value)
+  // Only the reader's own toggles are stored. Everything else is derived from
+  // the live preference, so changing it in Settings reaches turns already on
+  // screen without disturbing a file the reader opened or closed by hand.
+  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  // A create stays closed whatever the mode: its left column is all padding, so
+  // opening it spends screens on a wall with no comparison in it.
+  const isOpen = (path: string): boolean =>
+    toggled.get(path)
+    ?? (expandsByDefault(expansion, paths.length) && hasPriorContent(fileDiffs(path)))
+  const opened = paths
+    .filter(path => isOpen(path))
+    .map(path => ({ path, segments: fileDiffs(path) }))
+    .filter(entry => entry.segments.length > 0)
   const rowRef = useRef<HTMLDivElement>(null)
   const chipProbes = useRef<Array<HTMLButtonElement | null>>([])
   const moreProbe = useRef<HTMLSpanElement>(null)
@@ -124,8 +166,19 @@ export function ProducedFiles({
             // The full path is the disambiguator when two turns produce files
             // that share a basename; the chip itself stays short.
             title={path}
+            aria-expanded={isOpen(path)}
             aria-label={t('produced.open', { name: path })}
-            onClick={() => { openFile(path) }}
+            // One control, two outcomes, decided by what exists: a recorded
+            // change expands here, and a file with none keeps the opener it
+            // has always had rather than becoming a dead click.
+            onClick={() => {
+              if (fileDiffs(path).length === 0) { openFile(path); return }
+              setToggled((current) => {
+                const next = new Map(current)
+                next.set(path, !isOpen(path))
+                return next
+              })
+            }}
           >
             {basename(path)}
           </button>
@@ -136,6 +189,26 @@ export function ProducedFiles({
         <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
           {t('produced.showInFolder')}
         </button>
+      )}
+      {opened.length > 0 && (
+        <div className={css.diff}>
+          {opened.map(entry => (
+            <div key={entry.path}>
+              <div className={css.diffHeader}>
+                {/* Its own copy, not the chip's: two controls with one accessible
+                    name and different outcomes is a defect, not a duplication. */}
+                <button
+                  type="button"
+                  className={css.openFile}
+                  onClick={() => { openFile(entry.path) }}
+                >
+                  {t('produced.openInEditor', { name: basename(entry.path) })}
+                </button>
+              </div>
+              <SideBySideDiff path={entry.path} segments={entry.segments} />
+            </div>
+          ))}
+        </div>
       )}
       <div className={css.measure} aria-hidden="true">
         {paths.slice(0, limit).map((path, index) => (
