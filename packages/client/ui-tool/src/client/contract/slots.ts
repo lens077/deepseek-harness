@@ -22,6 +22,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * function of what the turn already knows.
      */
     'tool.call.toolview': { kind: 'keyed'; scope: 'session'; owner: ToolCallOwnerProps }
+    /**
+     * Additive room under one call's row, for a surface that belongs to that
+     * call without owning how it renders. Unlike `tool.call.toolview` this is
+     * a list and never a takeover: entries draw after the row, in ascending
+     * `order`, and an empty seat costs the row nothing. Occupants receive the
+     * same {@link ToolCallOwnerProps} the view gets, so a contribution reads
+     * the call's own `block` — including its tool-private `meta` — rather than
+     * being told about it.
+     */
+    'tool.call.tail': { kind: 'list'; scope: 'session'; owner: ToolCallOwnerProps }
   }
 }
 
@@ -56,7 +66,7 @@ export type ToolHostDescriptionInjected = {
 
 /** Full props of the Tool call-tree renderer registered as a `tool-call` Chat Node. */
 export type ToolTreeProps = PropsRuntime<'conversation.chat.node', 'tool-call'>
-  & PropsRenderSlots<'tool.call.toolview'>
+  & PropsRenderSlots<'tool.call.toolview' | 'tool.call.tail'>
   & PropsLocale<'conversation'>
   & InjectFace<ToolHostDescriptionInjected>
 

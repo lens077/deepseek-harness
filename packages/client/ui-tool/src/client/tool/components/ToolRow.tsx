@@ -7,7 +7,7 @@
 // read, search, web) is expandable; the summary stays inline while open.
 // The expanded body — an IN/OUT gutter-labeled card (figma 1249:35657) for
 // text input/output, the run_code program through CodeBlock, or a card
-// primitive (TerminalBlock, DiffBlock, ReadBlock, SearchBlock, WebBlock) for a
+// primitive (TerminalBlock, SideBySideDiff, ReadBlock, SearchBlock, WebBlock) for a
 // call that declared that render intent — lives in a max-height scroll
 // container so a long payload scrolls internally instead of taking over the
 // message flow. Every card kind starts collapsed, so a run of tool calls stays
@@ -20,11 +20,11 @@
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  CodeBlock, DiffBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, StateDot, TerminalBlock, WebBlock,
+  CodeBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, SideBySideDiff, StateDot, TerminalBlock, WebBlock,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WebBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { CHAT_DIFF_MAX_LINES, type DiffCardModel } from '../models/diff-card-model.ts'
+import { type DiffCardModel } from '../models/diff-card-model.ts'
 import { CHAT_READ_MAX_LINES, type ReadCardModel } from '../models/read-card-model.ts'
 import { CHAT_SEARCH_MAX_LINES, type SearchCardModel } from '../models/search-card-model.ts'
 import { terminalBlockLabels, type TerminalCardModel } from '../models/terminal-card-model.ts'
@@ -69,6 +69,14 @@ export interface ToolRowProps {
    */
   diff?: DiffCardModel | null | undefined
   /**
+   * Whether this row's body starts open. Rows are collapsed by default — the
+   * flow has to stay scannable across many calls — so only a row whose owner
+   * knows the reader asked for its content up front passes true. It seeds the
+   * initial state and nothing more: the reader's own toggle outranks it from
+   * the first click.
+   */
+  initiallyExpanded?: boolean | undefined
+  /**
    * Read-card material for a call whose render intent is a read card (derived by
    * `readCardModel`); it replaces the text body with the file's line-numbered,
    * syntax-highlighted window when present.
@@ -99,6 +107,15 @@ export interface ToolRowProps {
    * over the expanded body. Absent = no affordance.
    */
   inspect?: (() => void) | undefined
+}
+
+/**
+ * The path a diff card's hunks agree on, drawn once as the block's header.
+ * @param diff - the derived diff-card material.
+ * @returns the first hunk's path; every hunk of one call carries the same one.
+ */
+function diffPath(diff: DiffCardModel): string {
+  return diff.card.diffs[0]?.path ?? ''
 }
 
 /** Leading-slot state substitution: the tool icon yields to the terminal state
@@ -145,8 +162,9 @@ export function ToolRow({
   filePath,
   onOpenFile,
   inspect,
+  initiallyExpanded,
 }: ToolRowProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initiallyExpanded === true)
   const terminalBody = terminal ?? null
   const diffBody = diff ?? null
   const readBody = read ?? null
@@ -192,7 +210,9 @@ export function ToolRow({
   // row keeps DisclosureRow's icon→chevron hover preview (its default) instead
   // of losing it with the icon.
   return (
-    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state}>
+    // `data-file` is the row's addressable identity for surfaces outside the
+    // transcript that navigate to a file's activity (the session file rail).
+    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state} data-file={filePath}>
       {status !== null && <span className={css.visuallyHidden}>{status}</span>}
       <DisclosureRow
         rowClassName={css.row}
@@ -244,7 +264,18 @@ export function ToolRow({
               />
             )
             : diffBody !== null
-              ? <DiffBlock {...diffBody.card} maxLines={CHAT_DIFF_MAX_LINES} className={css.diffBody} />
+              ? (
+                /* Two columns, not the stacked block: a mutation row is read by
+                   comparing the two sides, and stacking them leaves the right
+                   half of the row empty while the reader scans down for the
+                   matching line. Hunks carry no per-segment provenance here —
+                   the row is one call, and its header already says which. */
+                <SideBySideDiff
+                  path={diffPath(diffBody)}
+                  segments={diffBody.card.diffs}
+                  className={css.diffBody}
+                />
+              )
               : readBody !== null
                 ? <ReadBlock {...readBody} maxLines={CHAT_READ_MAX_LINES} className={css.readBody} />
                 : searchBody !== null
