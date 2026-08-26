@@ -605,17 +605,32 @@ describe('plugin registration', () => {
       .subscribe(() => { throw new Error('a static preference must never notify') })
     expect(() => { release() }).not.toThrow()
 
-    // With a provider present the face forwards its live sources instead.
-    const expansion = { getSnapshot: () => 'single', subscribe: () => () => {} }
+    // With a provider present the same source starts forwarding to it. The
+    // forwarding is what the wrapper is for: `chatFileDiffs` is optional AND
+    // composes after this plugin, so a face that captured the service at
+    // registration would be frozen on the absent default for the whole session.
+    let subscribed = 0
+    let released = 0
+    const expansion = {
+      getSnapshot: () => 'single',
+      subscribe: () => { subscribed += 1; return () => { released += 1 } },
+    }
     ctx.provide('chatFileDiffs', {
       expansion,
       forPath: () => [{ label: 'Turn 2 · edit', oldText: 'a', newText: 'b' }],
     } as never)
     const served = entry?.inject?.() as unknown as {
       fileDiffs: (path: string) => readonly unknown[]
-      hooks: { diffExpansion: unknown }
+      hooks: { diffExpansion: typeof hooks.diffExpansion }
     }
-    expect(served.hooks.diffExpansion).toBe(expansion)
+    // Stable across resolutions: the renderer binds this object once, so a new
+    // one per inject would resubscribe the whole transcript on every render.
+    expect(served.hooks.diffExpansion).toBe(hooks.diffExpansion)
+    expect(served.hooks.diffExpansion.getSnapshot()).toBe('single')
+    const stop = served.hooks.diffExpansion.subscribe(() => {})
+    expect(subscribed).toBe(1)
+    stop()
+    expect(released).toBe(1)
     expect(served.fileDiffs('out/report.md')).toHaveLength(1)
 
     // The prose face is live while the plugin is: a produced turn yields a
