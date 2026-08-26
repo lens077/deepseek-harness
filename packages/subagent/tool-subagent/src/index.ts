@@ -371,6 +371,16 @@ export function apply(ctx: Context, config: Config): void {
               ? `started subagent ${value.subagentId}`
               : outputValueText(value.output),
         }],
+        // The child session this call spawned, for surfaces that report what a
+        // delegated turn did. Nothing else in the parent log identifies it: a
+        // Session summary carries only `parentSessionId`, so without this the
+        // call and the child cannot be related after the fact. A local run's
+        // id IS its child session (see the subagent README); a remote one is a
+        // parent-scoped lifecycle id that simply matches no child. A
+        // background run has none to record — its child spawns inside the job.
+        presentationMeta: (_args, value) => (value.kind === 'background'
+          ? {}
+          : { childSessionId: value.kind === 'continuable' ? value.subagentId : value.runId }),
       },
       // Children never mutate the parent session; the one parent-owned write
       // (tasks.start) is a synchronous commutative insertion.
