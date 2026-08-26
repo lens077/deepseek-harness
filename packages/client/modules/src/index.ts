@@ -552,9 +552,22 @@ export class ClientModuleRegistry extends Service {
     }
     try {
       const body = await readFile(path)
+      // `no-cache` keeps every load revalidating, which the HMR flow depends on:
+      // the rev in the URL is only cache-busting, so a stale `?rev=` still has to
+      // reach the host to receive the current bytes. The entity tag hashes those
+      // bytes, so an unchanged revalidation settles as a bodyless 304 instead of
+      // re-sending the whole bundle, and a rebuild changes the tag and still
+      // serves 200.
+      const etag = `"${shortHash(body)}"`
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, { 'cache-control': 'no-cache', etag })
+        res.end()
+        return
+      }
       res.writeHead(200, {
         'content-type': isSourceMap ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8',
         'cache-control': 'no-cache',
+        etag,
       })
       res.end(body)
     } catch {

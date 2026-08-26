@@ -27,15 +27,15 @@ declare module '@deepseek-ai/cordis' {
      * waterfall is the Service Definition's redaction extension point. It ships NO rules
      * of its own: the
      * innermost `next()` passes the record through unchanged, and with no
-     * listener mounted records reach the backend as captured, so exported
-     * data is exactly as clean as the rules a deployment mounts. Listeners
+     * listener mounted records reach the backend as captured. A backend may
+     * impose an additional output floor after this seam. Listeners
      * stack by transforming `next()`'s return value; returning without
      * `next()` replaces everything beneath. Dispatched synchronously on the
      * capture hot path inside the coordinator's containment: a throwing
      * listener withholds that one record (fail-closed) and never reaches the
      * agent loop. Live capture dispatches at append time; on-demand capture
      * dispatches while reading the canonical log. Redaction applies to the
-     * exported copy only; the canonical session log is never rewritten.
+     * outbound copy only; the canonical session log is never rewritten.
      * @param record - the candidate record, already the coordinator's own deep
      *   copy; listeners return a (possibly new) record and must not mutate it.
      * @mode waterfall

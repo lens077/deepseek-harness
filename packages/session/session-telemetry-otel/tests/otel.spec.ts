@@ -141,7 +141,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
 
     const resource = first.body.resourceLogs[0]!.resource.attributes
     expect(resource).toContainEqual({ key: 'service.name', value: { stringValue: 'deepseek-harness' } })
-    expect(resource).toContainEqual({ key: 'user.id', value: { stringValue: getOrCreateAnonymousUserId() } })
+    expect(resource.some(attribute => attribute.key === 'user.id')).toBe(false)
 
     const records = allRecords(captures)
     const ledger = records.filter(r => r.scope === '@deepseek-ai/dsh-session-telemetry-otel')
@@ -151,15 +151,78 @@ describe('OpenTelemetrySessionBackend wire', () => {
     expect(start).toBeDefined()
     expect(start?.record.severityNumber).toBe(9)
     expect(BigInt(start!.record.timeUnixNano)).toBe(BigInt(session.events[0]!.time) * 1_000_000n)
-    expect(start?.record.attributes).toContainEqual({ key: 'session.cwd', value: { stringValue: '/tmp/w' } })
+    expect(start?.record.attributes?.some(attribute => attribute.key === 'session.cwd')).toBe(false)
+    expect(start?.record.attributes).toContainEqual({
+      key: 'dsh.telemetry.content_mode', value: { stringValue: 'metadata-only' },
+    })
 
     const end = ledger.find(r => r.record.attributes?.some(a => a.key === 'event.type' && a.value.stringValue === 'turn/end'))
     expect(end?.record.severityNumber).toBe(17)
     expect(end?.record.severityText).toBe('ERROR')
     expect(eventTypes(captures)).toContain('manual')
+    const wireBody = JSON.stringify(first.body)
+    expect(wireBody).not.toContain('/tmp/w')
+    expect(wireBody).not.toContain('boom')
+    expect(wireBody).not.toContain('direct')
 
     expect(ops).toHaveLength(1)
     expect(ops[0]!.record.attributes).toContainEqual({ key: 'telemetry.op', value: { stringValue: 'shutdown' } })
+  })
+
+  it('exports raw content without adding a stable user id after content opt-in', async () => {
+    const { url, captures } = await mockCollector()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
+      mode: SessionTelemetryMode.FULL,
+      captureContent: true,
+      exporter: { url },
+    })
+    ctx.sessionTelemetry.emit({
+      channel: 'ledger',
+      time: Date.now(),
+      severity: 'info',
+      attributes: { 'session.id': 'raw', 'event.type': 'manual', 'event.seq': 1, 'session.cwd': '/private/raw' },
+      body: { secret: 'explicit-content-opt-in' },
+    })
+    await fiber.dispose()
+
+    const resource = captures[0]!.body.resourceLogs[0]!.resource.attributes
+    expect(resource.some(attribute => attribute.key === 'user.id')).toBe(false)
+    expect(JSON.stringify(captures)).toContain('explicit-content-opt-in')
+    const manual = allRecords(captures).find(({ record }) =>
+      record.attributes?.some(attribute => attribute.key === 'event.type' && attribute.value.stringValue === 'manual'))
+    expect(manual?.record.attributes).toContainEqual({
+      key: 'dsh.telemetry.content_mode', value: { stringValue: 'full' },
+    })
+  })
+
+  it('adds a stable user id without enabling raw content after identity opt-in', async () => {
+    const { url, captures } = await mockCollector()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
+      mode: SessionTelemetryMode.FULL,
+      includeAnonymousUserId: true,
+      exporter: { url },
+    })
+    ctx.sessionTelemetry.emit({
+      channel: 'ledger',
+      time: Date.now(),
+      severity: 'info',
+      attributes: { 'session.id': 'identified', 'event.type': 'manual', 'event.seq': 1 },
+      body: { secret: 'identity-does-not-enable-content' },
+    })
+    await fiber.dispose()
+
+    const resource = captures[0]!.body.resourceLogs[0]!.resource.attributes
+    expect(resource).toContainEqual({ key: 'user.id', value: { stringValue: getOrCreateAnonymousUserId() } })
+    expect(JSON.stringify(captures)).not.toContain('identity-does-not-enable-content')
+    const manual = allRecords(captures).find(({ record }) =>
+      record.attributes?.some(attribute => attribute.key === 'event.type' && attribute.value.stringValue === 'manual'))
+    expect(manual?.record.attributes).toContainEqual({
+      key: 'dsh.telemetry.content_mode', value: { stringValue: 'metadata-only' },
+    })
   })
 
   it('drains records enqueued after a timer export began: dispose during an in-flight batch', async () => {
@@ -300,8 +363,8 @@ describe('OpenTelemetrySessionBackend wire', () => {
       record.attributes?.flatMap(attribute =>
         attribute.key === 'event.type' ? [attribute.value.stringValue] : []) ?? [])
     expect(types).toEqual(['turn/start', 'feedback/record', 'turn/end', 'feedback/record'])
-    expect(JSON.stringify(captures)).toContain('first report')
-    expect(JSON.stringify(captures)).toContain('second report')
+    expect(JSON.stringify(captures)).not.toContain('first report')
+    expect(JSON.stringify(captures)).not.toContain('second report')
     expect(allRecords(captures).some(({ scope }) => scope.endsWith('/ops'))).toBe(false)
   })
 
@@ -427,7 +490,11 @@ describe('OpenTelemetrySessionBackend config fails loud', () => {
     expectTypeOf<'FULL'>().not.toExtend<SessionTelemetryMode>()
     expectTypeOf<SessionTelemetryMode.FULL>().toExtend<SessionTelemetryMode>()
     expect(DEFAULT_TELEMETRY_MODE).toBe(SessionTelemetryMode.DISABLED)
-    expect(Config({}).mode).toBe(DEFAULT_TELEMETRY_MODE)
+    expect(Config({})).toMatchObject({
+      mode: DEFAULT_TELEMETRY_MODE,
+      captureContent: false,
+      includeAnonymousUserId: false,
+    })
   })
 
   it.each([

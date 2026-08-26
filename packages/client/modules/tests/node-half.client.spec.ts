@@ -1,5 +1,6 @@
 /** Node-half composition diagnostics for package metadata and built client bundles. */
 
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -79,6 +80,35 @@ function constructWithRoute(packageNames: string[]): { service: ClientModuleRegi
 /** Construct the node-half service over the enabled fixture entries. */
 function construct(packageNames: string[]): ClientModuleRegistry {
   return constructWithRoute(packageNames).service
+}
+
+/** The entity tag the plugin-bundle route derives from the bytes it serves. */
+function entityTag(content: string): string {
+  return `"${createHash('sha1').update(content).digest('hex').slice(0, 12)}"`
+}
+
+/** Drive one plugin-bundle request through the captured route. */
+async function requestBundle(
+  route: WebRoute,
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; headers: Record<string, string> | undefined; body: string }> {
+  let status = 0
+  let received: Record<string, string> | undefined
+  let body = ''
+  const response = {
+    writeHead(nextStatus: number, nextHeaders?: Record<string, string>) {
+      status = nextStatus
+      received = nextHeaders
+      return response
+    },
+    end(chunk?: Uint8Array) {
+      body = chunk === undefined ? '' : Buffer.from(chunk).toString('utf8')
+      return response
+    },
+  } as unknown as ServerResponse
+  await route.handler({ method: 'GET', url, headers } as unknown as IncomingMessage, response)
+  return { status, headers: received, body }
 }
 
 /** Execute the exact first inline script emitted by the Host boot rows. */
@@ -217,32 +247,55 @@ describe('client bundle activation', () => {
     const map = '{"version":3,"sources":["src/client/index.tsx"]}\n'
     writeFileSync(`${clientPath}.map`, map)
     const { route } = constructWithRoute([packageName])
-    let status = 0
-    let headers: Record<string, string> | undefined
-    let body = ''
-    const response = {
-      writeHead(nextStatus: number, nextHeaders?: Record<string, string>) {
-        status = nextStatus
-        headers = nextHeaders
-        return response
-      },
-      end(chunk?: Uint8Array) {
-        body = chunk === undefined ? '' : Buffer.from(chunk).toString('utf8')
-        return response
-      },
-    } as unknown as ServerResponse
 
-    await route.handler({
-      method: 'GET',
-      url: `/plugins/${packageName}/client.js.map`,
-    } as IncomingMessage, response)
+    const { status, headers, body } = await requestBundle(route, `/plugins/${packageName}/client.js.map`)
 
     expect(status).toBe(200)
     expect(headers).toEqual({
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-cache',
+      etag: entityTag(map),
     })
     expect(body).toBe(map)
+  })
+
+  it('answers a revalidation carrying the current entity tag with a bodyless 304', async () => {
+    const packageName = '@fixture/etag-match'
+    writeBuiltPackage(packageName, {})
+    const { route } = constructWithRoute([packageName])
+    const url = `/plugins/${packageName}/client.js`
+    const served = await requestBundle(route, url)
+    const etag = entityTag('module.exports = {}\n')
+    expect(served.headers?.etag).toBe(etag)
+
+    const revalidated = await requestBundle(route, url, { 'if-none-match': etag })
+
+    expect(revalidated.status).toBe(304)
+    expect(revalidated.body).toBe('')
+    expect(revalidated.headers).toEqual({ 'cache-control': 'no-cache', etag })
+  })
+
+  it('re-sends the bundle when the entity tag no longer matches the built bytes', async () => {
+    const packageName = '@fixture/etag-stale'
+    writeBuiltPackage(packageName, {})
+    const { route } = constructWithRoute([packageName])
+    const url = `/plugins/${packageName}/client.js`
+    const stale = await requestBundle(route, url, { 'if-none-match': '"000000000000"' })
+
+    expect(stale.status).toBe(200)
+    expect(stale.body).toBe('module.exports = {}\n')
+
+    // A rebuild changes the bytes, so the previously current tag stops matching
+    // and the next revalidation receives the new bundle instead of a 304.
+    const previous = entityTag('module.exports = {}\n')
+    expect(stale.headers?.etag).toBe(previous)
+    const rebuilt = 'module.exports = { v: 2 }\n'
+    writeFileSync(join(root!, 'node_modules', ...packageName.split('/'), 'lib', 'client.js'), rebuilt)
+    const served = await requestBundle(route, url, { 'if-none-match': previous })
+
+    expect(served.status).toBe(200)
+    expect(served.body).toBe(rebuilt)
+    expect(served.headers?.etag).toBe(entityTag(rebuilt))
   })
 })
 

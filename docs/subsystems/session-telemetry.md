@@ -2,7 +2,7 @@
 
 English | [中文](session-telemetry.zh.md)
 
-Outbound session reporting is split as a [capability seam](../capability-seams.md): the Service Definition and capture coordinator ([dsh-session-telemetry](../../packages/session/session-telemetry), `ctx.sessionTelemetry`) own the capture points, fixed chunk projection, `session-telemetry/record` redaction waterfall, handoff cursor, and minimal backend contract; the Service Provider a deployment loads ([dsh-session-telemetry-otel](../../packages/session/session-telemetry-otel)) is the OpenTelemetry JS SDK's log pipeline configured verbatim. It is one optional capability, not part of the agent-loop spine, and nothing here reaches a model request. The boundary axiom — the harness's aspect ends at `emit()`; batching, retry, queueing, and loss policy belong to the reporting SDK — and the rejected alternatives are pinned in the [revival Agent Note](../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.md); the capture points, cursor, and projection contracts live in the [Service Definition README](../../packages/session/session-telemetry/README.md).
+Outbound session reporting is split as a [capability seam](../capability-seams.md): the Service Definition and capture coordinator ([dsh-session-telemetry](../../packages/session/session-telemetry), `ctx.sessionTelemetry`) own the capture points, fixed chunk projection, `session-telemetry/record` redaction waterfall, handoff cursor, and minimal backend contract; the Service Provider a deployment loads ([dsh-session-telemetry-otel](../../packages/session/session-telemetry-otel)) prepares records through a metadata-only-by-default privacy boundary and then configures the OpenTelemetry JS SDK log pipeline. It is one optional capability, not part of the agent-loop spine, and nothing here reaches a model request. The boundary axiom — the harness's aspect ends at `emit()`; batching, retry, queueing, and loss policy belong to the reporting SDK — and the rejected alternatives are pinned in the [revival Agent Note](../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.md); the capture points, cursor, and projection contracts live in the [Service Definition README](../../packages/session/session-telemetry/README.md).
 
 Source: [`packages/session/session-telemetry/src/index.ts`](../../packages/session/session-telemetry/src/index.ts)
 
@@ -123,7 +123,13 @@ interface SessionTelemetrySink {
 
 ## The redact waterfall: `session-telemetry/record`
 
-Every record passes the `session-telemetry/record` [waterfall](../cordis-primer.md#cordis-waterfall-semantics) between projection and `emit()` ([event entry](#session-telemetryrecord--waterfall)). The seam ships NO rules of its own: with no listener mounted, records reach the backend exactly as captured, so exported data is precisely as clean as the rules a deployment mounts. Listeners stack by transforming `next()`'s return value; returning without `next()` replaces everything beneath; a throwing listener withholds that one record fail-closed inside the coordinator's containment. Redaction applies to the exported copy only — the canonical session log is never rewritten.
+Every record passes the `session-telemetry/record` [waterfall](../cordis-primer.md#cordis-waterfall-semantics) between projection and `emit()` ([event entry](#session-telemetryrecord--waterfall)). The seam ships NO rules of its own: with no listener mounted, records reach the backend exactly as captured. Listeners stack by transforming `next()`'s return value; returning without `next()` replaces everything beneath; a throwing listener withholds that one record fail-closed inside the coordinator's containment. Redaction applies to the outbound copy only — the canonical session log is never rewritten. A backend may impose an additional output floor after the waterfall.
+
+## The shipped privacy floor
+
+The OTel backend's `captureContent` defaults to `false`. Its closed allowlist retains identifier-shaped correlation fields, lineage, lifecycle boundaries, timing, token usage, provider/model/tool names, retry delay, and outcome/error classification. It removes opaque tool call ids, `session.cwd`, and all prompt, message, schema, tool payload, file, command, feedback, hook, todo, summary, and error-message content. Unknown event bodies become `{ redacted: true, originalBodyBytes }`, which makes future event types observable without making them an implicit content-export path. Records carry `dsh.telemetry.content_mode=metadata-only` and body size; no content hash leaves the process. Retained identifiers are syntax-bounded but not anonymous, so deployments for which topology or tenant naming is sensitive should keep telemetry disabled.
+
+Raw bodies require an independent `captureContent: true` opt-in. A persistent cross-process identity requires the separate `includeAnonymousUserId: true` opt-in; otherwise no Harness-home `user.id` is read or exported. These controls do not enable transport: `mode` still defaults to `DISABLED`, and local `sessionStats` observability remains available without a collector or cloud credentials. The shipped base composition exposes exact-`true` environment switches for both privacy opt-ins so arbitrary non-empty values cannot enable them accidentally.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -166,7 +172,7 @@ Source: [`packages/session/session-telemetry/src/index.ts`](../../packages/sessi
 
 #### `session-telemetry/record` — waterfall
 
-Transform one outbound record before it reaches the backend. This waterfall is the Service Definition's redaction extension point. It ships NO rules of its own: the innermost `next()` passes the record through unchanged, and with no listener mounted records reach the backend as captured, so exported data is exactly as clean as the rules a deployment mounts. Listeners stack by transforming `next()`'s return value; returning without `next()` replaces everything beneath. Dispatched synchronously on the capture hot path inside the coordinator's containment: a throwing listener withholds that one record (fail-closed) and never reaches the agent loop. Live capture dispatches at append time; on-demand capture dispatches while reading the canonical log. Redaction applies to the exported copy only; the canonical session log is never rewritten.
+Transform one outbound record before it reaches the backend. This waterfall is the Service Definition's redaction extension point. It ships NO rules of its own: the innermost `next()` passes the record through unchanged, and with no listener mounted records reach the backend as captured. A backend may impose an additional output floor after this seam. Listeners stack by transforming `next()`'s return value; returning without `next()` replaces everything beneath. Dispatched synchronously on the capture hot path inside the coordinator's containment: a throwing listener withholds that one record (fail-closed) and never reaches the agent loop. Live capture dispatches at append time; on-demand capture dispatches while reading the canonical log. Redaction applies to the outbound copy only; the canonical session log is never rewritten.
 
 ```ts cordis-catalog
 /**
@@ -174,15 +180,15 @@ Transform one outbound record before it reaches the backend. This waterfall is t
  * waterfall is the Service Definition's redaction extension point. It ships NO rules
  * of its own: the
  * innermost `next()` passes the record through unchanged, and with no
- * listener mounted records reach the backend as captured, so exported
- * data is exactly as clean as the rules a deployment mounts. Listeners
+ * listener mounted records reach the backend as captured. A backend may
+ * impose an additional output floor after this seam. Listeners
  * stack by transforming `next()`'s return value; returning without
  * `next()` replaces everything beneath. Dispatched synchronously on the
  * capture hot path inside the coordinator's containment: a throwing
  * listener withholds that one record (fail-closed) and never reaches the
  * agent loop. Live capture dispatches at append time; on-demand capture
  * dispatches while reading the canonical log. Redaction applies to the
- * exported copy only; the canonical session log is never rewritten.
+ * outbound copy only; the canonical session log is never rewritten.
  * @param record - the candidate record, already the coordinator's own deep
  *   copy; listeners return a (possibly new) record and must not mutate it.
  * @mode waterfall

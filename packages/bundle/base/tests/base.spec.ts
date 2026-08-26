@@ -32,9 +32,20 @@ describe('dsh-base bundle', () => {
     )
     expect(rows.length).toBeGreaterThan(50)
     expect(rows.some(row => row.id === 'agent-loop')).toBe(true)
-    expect(rows.find(row => row.id === 'session-telemetry-otel')?.config?.['mode']).toEqual({
+    const telemetry = rows.find(row => row.id === 'session-telemetry-otel')?.config
+    expect(telemetry?.['mode']).toEqual({
       __jsExpr: "process.env.DSH_TELEMETRY_MODE || 'DISABLED'",
     })
+    expect(telemetry?.['captureContent']).toEqual({
+      __jsExpr: "process.env.DSH_TELEMETRY_CAPTURE_CONTENT === 'true'",
+    })
+    expect(telemetry?.['includeAnonymousUserId']).toEqual({
+      __jsExpr: "process.env.DSH_TELEMETRY_INCLUDE_ANONYMOUS_USER_ID === 'true'",
+    })
+    const captureExpression = (telemetry?.['captureContent'] as { __jsExpr?: string }).__jsExpr
+    if (captureExpression === undefined) throw new Error('captureContent must use a !!js expression')
+    expect(Boolean(evaluate({ process: { env: { DSH_TELEMETRY_CAPTURE_CONTENT: 'true' } } }, captureExpression))).toBe(true)
+    expect(Boolean(evaluate({ process: { env: { DSH_TELEMETRY_CAPTURE_CONTENT: '1' } } }, captureExpression))).toBe(false)
     expect(rows.filter(row => row.id === 'subagent-codex')).toHaveLength(0)
     expect(rows.filter(row => row.id === 'subagent-claude-code')).toHaveLength(0)
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-codex')
