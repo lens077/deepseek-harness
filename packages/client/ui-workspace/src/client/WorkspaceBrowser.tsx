@@ -22,7 +22,7 @@ import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
 import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
-import { FLAT_SESSION_ORDER_KEY } from './stores.ts'
+import { FLAT_SESSION_ORDER_KEY, type CollapsedSessionCount } from './stores.ts'
 import { WorkspacePickFlow } from './WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
@@ -35,8 +35,11 @@ const EXPAND_SLIDE_MS = 300
 const SEARCH_DEBOUNCE_MS = 250
 /** `session.search` wire bound, measured in JavaScript UTF-16 code units. */
 const SEARCH_QUERY_MAX_CODE_UNITS = 500
-/** Session rows visible per Workspace before the local overflow control. */
-const COLLAPSED_SESSION_LIMIT = 5
+/** Estimate automatic rows from the session tree's available height. */
+function automaticSessionLimit(height: number, groupCount: number): number {
+  const chrome = groupCount * 42 + 24
+  return Math.max(5, Math.min(20, Math.floor((height - chrome) / 42 / Math.max(1, groupCount))))
+}
 
 /** Keep controlled input and RPC payload inside the session.search wire contract. */
 function sanitizeSearchQuery(value: string): string {
@@ -144,11 +147,13 @@ function nextSessionOrderAccount({
 }
 
 /** Grouping and ordering menu; own open state so it resets with the wide chrome. */
-function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
+function ViewOptionsMenu({ groupBy, orderBy, collapsedSessionCount, onGroupPick, onOrderPick, onCountPick, t }: {
   groupBy: 'workspace' | 'flat'
   orderBy: SessionOrderBy
+  collapsedSessionCount: CollapsedSessionCount
   onGroupPick: (mode: 'workspace' | 'flat') => void
   onOrderPick: (mode: SessionOrderBy) => void
+  onCountPick: (count: CollapsedSessionCount) => void
   t: WorkspaceBrowserProps['t']
 }) {
   const [open, setOpen] = useState(false)
@@ -164,11 +169,17 @@ function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
         { type: 'label' as const, id: 'order-by', text: t('orderBy.label') },
         { id: 'manual', label: t('orderBy.manual') },
         { id: 'updated', label: t('orderBy.updated') },
+        { type: 'separator' as const, id: 'count-separator' },
+        { type: 'label' as const, id: 'session-count', text: t('sessionCount.label') },
+        { id: 'count-auto', label: t('sessionCount.auto') },
+        ...Array.from({ length: 16 }, (_, index) => ({ id: `count-${index + 5}`, label: String(index + 5) })),
       ]}
-      selectedIds={[groupBy, orderBy]}
+      selectedIds={[groupBy, orderBy, `count-${collapsedSessionCount}`]}
       onSelect={(id) => {
         if (id === 'workspace' || id === 'flat') onGroupPick(id)
         else if (id === 'manual' || id === 'updated') onOrderPick(id)
+        else if (id === 'count-auto') onCountPick('auto')
+        else if (id.startsWith('count-')) onCountPick(Number(id.slice(6)))
         setOpen(false)
       }}
       align="end"
@@ -221,7 +232,9 @@ type SessionTreeProps = Pick<
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
-  /** Explicit persisted zero-or-five-session state by Workspace group. */
+  /** Persisted collapsed row count or automatic sizing. */
+  collapsedSessionCount: CollapsedSessionCount
+  /** Explicit persisted collapsed-or-expanded state by Workspace group. */
   groupExpansion: Readonly<Record<string, boolean>>
   /** Persist one Workspace group's zero-or-five-session state. */
   setGroupExpanded: (key: string, expanded: boolean) => void
@@ -251,13 +264,15 @@ type SessionTreeProps = Pick<
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
-  insertWorkspaceBefore, insertSessionBefore, orderBy,
+  insertWorkspaceBefore, insertSessionBefore, orderBy, collapsedSessionCount,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
+  const treeRef = useRef<HTMLDivElement | null>(null)
+  const [treeHeight, setTreeHeight] = useState(0)
   // Transient drag marker state; the selected mode owns the resulting order.
   const [drag, setDrag] = useState<DragState | null>(null)
   const sessionDropCommitted = useRef(false)
@@ -274,6 +289,13 @@ function SessionTree({
     if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
     setGroupExpanded(currentGroup, true)
   }, [current, currentGroup, setGroupExpanded, groupExpansion])
+  useEffect(() => {
+    const element = treeRef.current
+    if (element === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => { setTreeHeight(entries[0]?.contentRect.height ?? 0) })
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [])
   const expandedGroups = useMemo(
     () => Object.entries(groupExpansion).filter(([, expanded]) => expanded).map(([key]) => key),
     [groupExpansion],
@@ -329,6 +351,9 @@ function SessionTree({
     }),
     [list, orderedWorkspaces, archivedSessionIds, expandedGroups, sessionOrderByAccount],
   )
+  const collapsedLimit = collapsedSessionCount === 'auto'
+    ? automaticSessionLimit(treeHeight, groups.length)
+    : collapsedSessionCount
   const now = Date.now()
   const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
     if (sessionDropCommitted.current) return
@@ -383,7 +408,7 @@ function SessionTree({
     && workspaceDrag.over.half === 'before'
 
   return (
-    <div className={clsx(css.treeBody, css.wide)}>
+    <div className={clsx(css.treeBody, css.wide)} ref={treeRef}>
       {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
       <div
         className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
@@ -482,7 +507,7 @@ function SessionTree({
               />
               {(expandedSessionGroups.includes(group.key)
                 ? group.sessions
-                : group.sessions.slice(0, COLLAPSED_SESSION_LIMIT)
+                : group.sessions.slice(0, collapsedLimit)
               ).map((node) => {
               // Session drag never leaves its group. Ungrouped writes only the
               // browser-local account; real Workspaces may also write Host order.
@@ -524,7 +549,7 @@ function SessionTree({
                   />
                 )
               })}
-              {group.sessions.length > COLLAPSED_SESSION_LIMIT && (
+              {group.sessions.length > collapsedLimit && (
                 <button
                   type="button"
                   className={css.sessionOverflowButton}
@@ -533,7 +558,7 @@ function SessionTree({
                 >
                   {expandedSessionGroups.includes(group.key)
                     ? t('sessions.collapse')
-                    : t('sessions.expand', { n: group.sessions.length - COLLAPSED_SESSION_LIMIT })}
+                    : t('sessions.expand', { n: group.sessions.length - collapsedLimit })}
                 </button>
               )}
             </div>
@@ -774,6 +799,7 @@ export function WorkspaceBrowser({
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
   const groupBy = useStore(s => s.groupBy)
   const orderBy = useStore(s => s.orderBy)
+  const collapsedSessionCount = useStore(s => s.collapsedSessionCount)
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
@@ -1077,8 +1103,10 @@ export function WorkspaceBrowser({
             <ViewOptionsMenu
               groupBy={groupBy}
               orderBy={orderBy}
+              collapsedSessionCount={collapsedSessionCount}
               onGroupPick={(mode) => { actions.setGroupBy(mode) }}
               onOrderPick={(mode) => { actions.setOrderBy(mode) }}
+              onCountPick={(count) => { actions.setCollapsedSessionCount(count) }}
               t={t}
             />
           )}
@@ -1187,6 +1215,7 @@ export function WorkspaceBrowser({
                 insertWorkspaceBefore={insertWorkspaceBefore}
                 insertSessionBefore={insertSessionBefore}
                 orderBy={orderBy}
+                collapsedSessionCount={collapsedSessionCount}
                 home={home}
                 t={t}
                 onRenameRequest={(workspaceId, currentTitle) => {

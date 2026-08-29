@@ -13,10 +13,12 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { SessionCountSettingsRow } from './SessionCountSettingsRow.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
@@ -68,6 +70,7 @@ export function apply(ctx: ClientContext): void {
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
+  const workspaceViewStore = createWorkspaceViewStore()
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
@@ -114,12 +117,20 @@ export function apply(ctx: ClientContext): void {
     {
       name: 'sidebar.workspaces',
       children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
-      store: createWorkspaceViewStore(),
+      store: workspaceViewStore,
       inject: browserInjected,
       locale: NS,
     },
     WorkspaceBrowser,
   ))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'workspace-session-count',
+    order: 25,
+    store: workspaceViewStore,
+    inject: () => ({}),
+    locale: NS,
+  }, SessionCountSettingsRow))
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {
       name: 'conversation.hero.workspace',
