@@ -19,6 +19,7 @@ import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+import { QuestionNavigator, questionEntries } from './QuestionNavigator.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
@@ -157,7 +158,7 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, t,
+  fileMentions, questionNavigation: readQuestionNavigation, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -220,6 +221,18 @@ export function ChatView({
   const columnRef = useRef<HTMLDivElement | null>(null)
   const atBottomRef = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [highlightedQuestion, setHighlightedQuestion] = useState<string | null>(null)
+  const pendingQuestionMoveRef = useRef<'previous' | null>(null)
+  const questionNavigation = readQuestionNavigation?.() ?? {
+    previousShortcut: navigator.platform.toLocaleLowerCase().includes('mac') ? 'Meta+ArrowUp' : 'Ctrl+ArrowUp',
+    nextShortcut: navigator.platform.toLocaleLowerCase().includes('mac') ? 'Meta+ArrowDown' : 'Ctrl+ArrowDown',
+    focusPolicy: 'editable' as const,
+  }
+  const questions = useMemo(
+    () => questionEntries(order, nodeStore, t('chat.questions.image')),
+    [nodeStore, order, t],
+  )
   /** Last position delivered or written on the main thread. */
   const observedTopRef = useRef(0)
   /** Paging anchor: semantic row/position at click, updated by reader scrolls
@@ -396,6 +409,78 @@ export function ChatView({
     if (!loadingOlder) anchorRef.current = null
   }, [loadingOlder])
 
+  const jumpToQuestion = useCallback((index: number) => {
+    const local = listRef.current
+    const question = questions[index]
+    if (local === null || question === undefined) return
+    const row = anchorElement(local, question.key)
+    if (row === null) return
+    const scrollport = scrollerOf(local)
+    atBottomRef.current = false
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    row.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
+    observedTopRef.current = scrollport.scrollTop
+    setAtBottom(false)
+    setCurrentQuestion(index)
+    setHighlightedQuestion(question.key)
+    window.setTimeout(() => {
+      setHighlightedQuestion(current => current === question.key ? null : current)
+    }, 2_000)
+  }, [questions])
+
+  useEffect(() => {
+    const local = listRef.current
+    if (local === null || questions.length === 0) return
+    const scrollport = scrollerOf(local)
+    const updateCurrent = (): void => {
+      const top = scrollport.getBoundingClientRect().top + 8
+      let next = 0
+      questions.forEach((question, index) => {
+        const row = anchorElement(local, question.key)
+        if (row !== null && row.getBoundingClientRect().top <= top) next = index
+      })
+      setCurrentQuestion(next)
+    }
+    updateCurrent()
+    scrollport.addEventListener('scroll', updateCurrent, { passive: true })
+    return () => { scrollport.removeEventListener('scroll', updateCurrent) }
+  }, [questions])
+
+  useEffect(() => {
+    if (pendingQuestionMoveRef.current !== 'previous' || loadingOlder) return
+    pendingQuestionMoveRef.current = null
+    jumpToQuestion(0)
+  }, [jumpToQuestion, loadingOlder, questions.length])
+
+  useEffect(() => {
+    const shortcutOf = (event: KeyboardEvent): string => {
+      const modifiers = [event.metaKey && 'Meta', event.ctrlKey && 'Ctrl', event.shiftKey && 'Shift', event.altKey && 'Alt'].filter(Boolean)
+      const key = event.key.length === 1 ? event.key.toLocaleUpperCase() : event.key
+      return [...modifiers, key].join('+')
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target
+      const textInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+      const editable = textInput || (target instanceof HTMLElement && target.isContentEditable)
+      if (questionNavigation.focusPolicy === 'editable' && editable) return
+      if (questionNavigation.focusPolicy === 'text' && textInput) return
+      const shortcut = shortcutOf(event)
+      const previous = shortcut === questionNavigation.previousShortcut
+      const next = shortcut === questionNavigation.nextShortcut
+      if (!previous && !next) return
+      event.preventDefault()
+      if (previous) {
+        if (currentQuestion > 0) jumpToQuestion(currentQuestion - 1)
+        else if (hasMore && !loadingOlder) {
+          pendingQuestionMoveRef.current = 'previous'
+          loadOlder()
+        }
+      } else if (currentQuestion < questions.length - 1) jumpToQuestion(currentQuestion + 1)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [currentQuestion, hasMore, jumpToQuestion, loadOlder, loadingOlder, questionNavigation, questions.length])
+
   const loadOlderAnchored = (): void => {
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: the paging button renders inside the list tree. */
@@ -433,6 +518,7 @@ export function ChatView({
             <ChatNodeSeat
               key={nodeKey}
               nodeKey={nodeKey}
+              highlighted={highlightedQuestion === nodeKey}
               useSession={useSession}
               selectedCallId={selectedCallId}
               cwd={cwd}
@@ -460,8 +546,27 @@ export function ChatView({
             />
           ))}
         </div>
-        {!atBottom && (
-          <div className={css.toBottomSlot}>
+      </div>
+      <div className={css.navigationRail}>
+        <div className={css.navigationStack}>
+          <QuestionNavigator
+            questions={questions}
+            current={Math.min(currentQuestion, Math.max(0, questions.length - 1))}
+            loadingOlder={loadingOlder}
+            hasMore={hasMore}
+            onPrevious={() => {
+              if (currentQuestion > 0) jumpToQuestion(currentQuestion - 1)
+              else if (hasMore && !loadingOlder) {
+                pendingQuestionMoveRef.current = 'previous'
+                loadOlder()
+              }
+            }}
+            onNext={() => { jumpToQuestion(currentQuestion + 1) }}
+            onSelect={jumpToQuestion}
+            onLoadAll={() => { if (hasMore && !loadingOlder) loadOlder() }}
+            t={t}
+          />
+          {!atBottom && (
             <button
               type="button"
               className={css.toBottom}
@@ -474,8 +579,8 @@ export function ChatView({
             >
               <IconChevronDownOutline14 />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {fileOpenError !== null && (
         <FileOpenErrorDialog

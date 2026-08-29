@@ -53,6 +53,12 @@
    measurement/mount unit for a virtualizer without changing the column gap. */
 .flowItem {
   min-width: 0;
+  border-radius: 12px;
+  transition: background 240ms ease;
+}
+
+.flowItem[data-question-highlight] {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
 }
 
 /* A keyed renderer may intentionally decline its row after dispatch (the
@@ -151,37 +157,226 @@
   opacity: 0.6;
 }
 
-/* Back-to-bottom: zero-height sticky slot so the control does not extend
-   scrollHeight; the button translates up into the viewport. Under the
-   conversation host, clearance sits above the sticky composer stack. */
-.toBottomSlot {
-  position: sticky;
-  bottom: 16px;
-  /* Above the sticky composer (z-index 7) so the control stays clickable and
-     visible over the input card. */
+.navigationRail {
+  position: fixed;
+  top: 96px;
+  right: max(24px, calc((100vw - var(--dsh-chat-content-width)) / 2 - 76px));
+  bottom: calc(var(--dsh-composer-height, 152px) + 16px);
   z-index: 8;
-  height: 0;
-  display: flex;
-  justify-content: flex-end;
-  padding-right: max(0px, calc((100% - var(--dsh-chat-content-width)) / 2));
+  width: 44px;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-:global([data-conversation-scroll]) .toBottomSlot {
-  /* Clears the sticky composer stack (docks + input card + stats): the live
-     height rides --dsh-composer-height (ConversationRoot's seat observer) so
-     the control follows a growing textarea; the fallback covers the first
-     paint before the observer fires. */
-  bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+.navigationStack {
+  position: absolute;
+  top: max(0px, calc(50vh - 266px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.questionNavigator {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.questionCompact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 34px;
+  width: 32px;
+  padding: 8px 5px;
+  border: 0;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.questionMark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 4px;
+}
+
+.questionTick {
+  width: 12px;
+  height: 3px;
+  border-radius: 3px;
+  background: transparent;
+}
+
+.questionMark[data-current] .questionTick {
+  width: 18px;
+  background: rgb(103 158 254);
+}
+
+.questionDetail {
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  width: 230px;
+  height: 34px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  font: var(--dsw-font-xs-13);
+  line-height: 20px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.questionCompact:not([data-panel-open]):hover .questionDetail,
+.questionCompact:not([data-panel-open]):focus-visible .questionDetail {
+  opacity: 1;
+  transform: translateY(-50%);
+}
+
+.questionDetail:hover {
+  width: min(520px, calc(100vw - 96px));
+  height: auto;
+  min-height: 34px;
+  overflow: visible;
+  white-space: normal;
+  transition-delay: 2s;
+}
+
+.questionArrow {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 100px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  cursor: pointer;
+}
+
+.questionArrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.questionPanel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: min(360px, calc(100vw - 48px));
+  max-height: min(560px, calc(100vh - var(--dsh-composer-height, 152px) - 72px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.questionSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.questionSearch input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+}
+
+.questionList {
+  overflow-y: auto;
+}
+
+.questionRow {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.questionRow:hover,
+.questionRow[data-current] {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.questionNumber {
+  flex: 0 0 28px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.questionCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.questionCopy > span {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.questionCopy time {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+.questionLoadAll {
+  border: 0;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
 }
 
 .toBottom {
+  position: fixed;
+  right: max(24px, calc((100vw - var(--dsh-chat-content-width)) / 2 - 76px));
+  bottom: calc(var(--dsh-composer-height, 152px) + 16px);
   display: flex;
   align-items: center;
   justify-content: center;
   width: 34px;
   height: 34px;
-  margin-top: -34px;
   padding: 0;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 100px;
@@ -192,8 +387,58 @@
   pointer-events: auto;
 }
 
-.toBottom:hover {
+.toBottom:hover,
+.questionArrow:not(:disabled):hover,
+.questionCompact:hover {
   background: var(--dsw-alias-button-floating-hover);
+}
+
+@media (max-width: 760px) {
+  .navigationRail {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+    width: 44px;
+  }
+
+  .navigationStack {
+    position: static;
+  }
+
+  .questionCompact {
+    width: 42px;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 14px;
+    background: var(--dsw-alias-button-floating-fill);
+    box-shadow: var(--dsw-shadow-lv2);
+  }
+
+  .questionDetail {
+    display: none;
+  }
+
+  .toBottom {
+    position: static;
+  }
+
+  .questionPanel {
+    position: fixed;
+    z-index: 20;
+    right: 12px;
+    bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+    left: 12px;
+    width: auto;
+    max-height: 70vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flowItem {
+    transition: none;
+  }
 }
 
 /* Host open-path refusal: same dialog family as the workspace folder error. */

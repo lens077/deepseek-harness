@@ -869,6 +869,8 @@ export interface ChatViewInjected {
    * absent or the turn produced nothing worth linking.
    */
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /** Read the live global question-navigation shortcut preference. */
+  questionNavigation: () => import('../../submission-settings.ts').QuestionNavigationSettings
 }
 
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
