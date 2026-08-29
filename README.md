@@ -18,6 +18,26 @@ Expanding a produced file compares its content before and after — one segment 
 
 ![The inline side-by-side diff, removed lines left and added lines right, aligned row by row](docs/user/guide/session-file-diff.png)
 
+**Per-file line counts.** Every rail row states the size of its change beside the file name — added lines in green, removed in red, totalled across that file's recorded hunks. Merging a descendant session's changes recomputes the totals from the merged segments rather than carrying the pre-merge numbers forward.
+
+![The session file rail listing four changed files, each with its added and removed line totals](docs/user/guide/session-file-line-stats.png)
+
+**Question navigation.** A long conversation buries its own questions, and paged history means a visible-only index would omit the earliest ones. The Chat view derives a question index from finalized `user` Chat Nodes and drives it from a sticky control stack that shares the composer-height anchor with the back-to-bottom button: adjacent navigation, a compact marker for the current question, and a searchable full list. A jump aligns the target row to the top, respects reduced-motion preferences, and highlights the row for two seconds; moving before the loaded head requests the next older page before resolving the target, so paging keeps one authority. The feature adds no session events and does not change model-visible history.
+
+![The question history panel, with each question's text masked](docs/user/guide/question-navigation-panel.png)
+
+**Question shortcuts.** Navigation is bound to Command with the arrow keys on macOS and Control elsewhere. The General Settings row records arbitrary non-modifier keys, requires explicit confirmation for an unmodified single key, rejects a modifier alone, prevents a duplicate previous/next binding, and offers three focus policies; the default suppresses the shortcuts inside form controls and editable regions.
+
+![The question navigation shortcut settings row, with both bindings and the three focus policies](docs/user/guide/question-navigation-shortcuts.png)
+
+**Configurable Workspace session count.** A collapsed Workspace previously showed exactly five Sessions, which wastes height on a large display and hides too much context on a dense one. The count is now an integer from 5 through 20 or `auto`, still defaulting to five, and is reachable from both the Workspace view-options menu and General Settings. Automatic sizing observes the grouped tree height and estimates a per-group row budget after group-header chrome, clamped to the same range. Explicitly expanded groups still show every Session, and flat-list mode ignores the preference because it has no per-Workspace collapse control.
+
+![The General Settings row for the default number of sessions shown per collapsed workspace](docs/user/guide/workspace-session-count.png)
+
+**Terminal readiness.** The backend spawned bash with `PS1='dsh> '` and gated its fast settle on seeing that exact text, while the persistent-bash tool reassigned `PS1` to its own collision-resistant marker after startup — so the prompt was never matched and every command fell back to silence-based settling. Linux hid the cost behind its exact stdin probe; on macOS `isStdinWaiting` is a stub returning `false`, so every command there paid `idleSilenceMs + handoffGraceMs`. The prompt is now a per-session value that the spawn request declares, and a blank or multi-line prompt is rejected because neither can be matched against terminal output. Measured against a real bash PTY on darwin: 3506 ms per command before, 56 ms after.
+
+**Delegated child session ids.** A subagent tool call now records the child session it spawned. Nothing else in the parent log identifies it — a Session summary carries only `parentSessionId` — so without it a call and its child cannot be related after the fact, which is what lets the file rail attribute a descendant session's file work back to the call that delegated it.
+
 **Status.** A work in progress that tracks upstream. Branches here may contain unfinished work from several parallel efforts; nothing is promised stable, and changes are not upstreamed automatically. The MIT license and every upstream notice are inherited unchanged — see [LICENSE](LICENSE).
 
 ---
