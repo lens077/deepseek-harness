@@ -1,6 +1,6 @@
 # Agent Note: Web session file panel and inline side-by-side diffs
 
-Status: proposed
+Status: implemented
 
 English | [中文](2026-08-26-web-session-file-panel.zh.md)
 
@@ -8,7 +8,7 @@ English | [中文](2026-08-26-web-session-file-panel.zh.md)
 
 The Web client shows a session's file mutations only where they happened: one diff card per `edit`/`write` tool row, plus the closing turn's produced-file chips from [ui-deliverables](../../../../packages/client/ui-deliverables). Reviewing what a session did to the workspace therefore means scrolling the whole transcript and reconstructing the per-file story by hand, and a long session buries the answer under hundreds of steps. Nothing shows which files the agent is touching right now, and nothing collects one file's repeated edits into a single place. The existing diff surface — [`DiffBlock`](../../../../packages/client/ui-primitives/src/DiffBlock.tsx) — stacks the removed block above the added block, which reads well for one small hunk inside a message flow but not for comparing a file's before and after.
 
-## Proposal
+## Decision
 
 A **session file panel**: a left rail inside the conversation area that lists what this session read and changed, plus an inline side-by-side diff surface in the transcript that the rail navigates to. The rail is navigation and status; the diffs live in the transcript, where the full column width exists.
 
@@ -53,7 +53,7 @@ The panel shows **this session's accumulated changes to a file**, assembled from
 
 Two host-side facts fix this basis. Whole-file `before`/`after` exists only inside the host process: [`createSuccessResult`](../../../../packages/core/tools/src/index.ts) feeds the structured value to `render` and `presentationMeta` and then drops it, and [`ToolResult`](../../../../packages/core/tools/src/index.ts) carries only `content`, `isError`, and `meta` — the browser's [`ToolResultBlock`](../../../../packages/llm/llm/src/types.ts) is narrower still. And [`computeHunkDiffs`](../../../../packages/fs/tool-fs/src/diff.ts) discards `structuredPatch`'s line numbers, so hunks carry no anchor by which they could be sorted by file position or merged where they overlap. Chronological order with provenance labels is what the recorded data supports.
 
-### Scope: two cuts
+### What shipped, in two cuts
 
 The first cut is the two seats, the rail, the derivation, `SideBySideDiff`, and the transcript's inline diff, for the current session alone.
 
@@ -61,13 +61,11 @@ The derivation reaches the transcript as `chatFileDiffs`, an optional service de
 
 What the rail does on selection is the one place the first cut falls short of the design: it scrolls to the last tool row carrying the path as `data-file` rather than to the expanded chip. Driving the turn-tail expansion from outside the turn needs a channel neither package has, and the tool row already renders that file's change.
 
-The second cut extends the panel to **session-tree changes** — the union of this session's changes and those of every descendant subagent session. Subagent work is invisible to the local derivation by design: a child works in its own session and the parent log records only the delegation tool call and result ([tool-subagent](../../../../packages/subagent/tool-subagent/README.md)). The extension reads [`subagent.list`](../../../../packages/host/apiproxy/src/api/subagents.ts) and `subagent.history`, which serve live and cold children alike and carry render intents, recursing through `hasChildren` to the whole tree; keeps one row per file with each segment labelled by its source (`reviewer · Turn 3 · edit`); subscribes to each running child's event stream for live status; and expands a child's diff in place under the parent's delegation row rather than navigating away.
+The second cut extends the panel to **session-tree changes** — the union of this session's changes and those of every descendant subagent session. Subagent work is invisible to the local derivation by design: a child works in its own session and the parent log records only the delegation tool call and result ([tool-subagent](../../../../packages/subagent/tool-subagent/README.md)). The extension reads [`subagent.list`](../../../../packages/host/apiproxy/src/api/subagents.ts) and `subagent.history`, which serve live and cold children alike and carry render intents, recursing through `hasChildren` to the whole tree, and keeps one row per file with each segment labelled by its source (`reviewer · Turn 3 · edit`).
 
-History depth has one switch. Opening the panel loads the current session's most recent page and each first-level completed child's most recent page. A `Load all` control loads the current session's full history and recurses the whole subagent tree. Subscription to running children is not behind that switch — it serves live status, not history depth.
+History depth has one switch. Opening the panel loads the current session's most recent page and each first-level completed child's most recent page. A `Load all` control loads the current session's full history and recurses the whole subagent tree.
 
-The read, the merge, and the rail's use of both have landed. Live status is not a per-child subscription: `events.mux` is one aggregated stream the runtime owns exclusively and refuses a second consumer, and the signal worth reacting to is a child's last step rather than its every step — so the rail re-reads the tree when the catalog mirror's running-child count drops.
-
-The delegation-row expansion has not landed, and cannot from the browser as things stand. Placing a child's diff under the call that spawned it needs a delegation-call to child-session mapping, and none is reachable: `SessionSummary` and `SubagentListEntry` carry `parentSessionId` and no spawning call or turn, and the delegation tool declares no `presentationMeta`, so nothing machine-readable about the child reaches the session log. Closing it means recording the child session id in that tool's `presentationMeta` — a Host change that would serve only sessions recorded after it. Until then a descendant-only file appears in the rail with its segments in the merged model but has nowhere to draw them in the transcript, because the inline surface hangs off a turn's produced-file chips and such a file never appears in one.
+Live status is not a per-child subscription: `events.mux` is one aggregated stream the runtime owns exclusively and refuses a second consumer, and the signal worth reacting to is a child's last step rather than its every step — so the rail re-reads the tree when the catalog mirror's running-child count drops.
 
 ## Blast radius
 
@@ -81,6 +79,16 @@ The delegation-row expansion has not landed, and cannot from the browser as thin
 | Produced-file chips expand their diff | [ProducedFiles](../../../../packages/client/ui-deliverables/src/client/ProducedFiles.tsx) |
 | Browser roster entry | [web-app bundle patch](../../../../packages/bundle/web-app/cordis.patch.yml) |
 | Regenerated slot and config catalogs | [cordis-client-runner](../../../../packages/extensions/cordis-client-runner/src/client/slot-catalog.ts), [config catalog](../../../../docs/config-catalog.md) |
+
+## Verification
+
+The button renders left of the Chat tab, and the tab row's behavior with no `tabs.leading` occupant is byte-identical to what it was before the seat existed. The rail opens by default on first use, honors a persisted closed choice, and drags between its bounds. Changed lists every mutated file oldest-first with the running file spinning, states each file's added and removed line totals, and scrolls the transcript to that file's diff when a row is clicked. Read stays collapsed behind its count, admits only `read` locations, caps at twenty, and survives a turn boundary while clearing at full idle. A single-file turn shows its diff expanded; a multi-file turn shows all collapsed. A two-column diff pairs its lines level and scrolls both columns together, and each segment names its turn and tool. A session whose history is paged states that older changes are unloaded and offers `Load all`.
+
+## Deferred
+
+The delegation-row expansion has not landed: a descendant-only file appears in the rail with its segments in the merged model, but the transcript has nowhere to draw them, because the inline surface hangs off a turn's produced-file chips and such a file never appears in one.
+
+The blocker this note originally recorded is gone. Placing a child's diff under the call that spawned it needs a delegation-call to child-session mapping, and `SessionSummary` and `SubagentListEntry` still carry `parentSessionId` and no spawning call or turn — but the delegation tool now declares `presentationMeta` carrying `childSessionId`, so the parent log identifies the child for every session recorded after that change. No client reads it yet: the rail still reaches descendants through `subagent.list`. Sessions recorded before the change carry nothing, as expected.
 
 ## Alternatives considered
 
@@ -112,11 +120,7 @@ The delegation-row expansion has not landed, and cannot from the browser as thin
 
 **Loading the whole subagent tree eagerly while leaving the parent's history paged.** Rejected as an asymmetry that fails silently: a subagent's old changes would appear while the parent's own older changes stayed hidden, and the reader has no signal that anything is missing. One switch governs completeness for both.
 
-## Acceptance criteria
-
-The button renders left of the Chat tab, and the tab row's behavior with no `tabs.leading` occupant is byte-identical to today. The rail opens by default on first use, honors a persisted closed choice, and drags between its bounds. Changed lists every mutated file oldest-first with the running file spinning, and clicking a row scrolls the transcript to that file's diff. Read stays collapsed behind its count, admits only `read` locations, caps at twenty, and survives a turn boundary while clearing at full idle. A single-file turn shows its diff expanded; a multi-file turn shows all collapsed. A two-column diff pairs its lines level and scrolls both columns together, and each segment names its turn and tool. A session whose history is paged states that older changes are unloaded and offers `Load all`.
-
-## Risks
+## Consequences
 
 The tab-row render gate and the rail split are the two edits with regression reach: both sit in a shipped package's skeleton and every session renders through them. Each keeps the unoccupied tree exactly as it is today, and a test pins that.
 
@@ -124,8 +128,6 @@ The label budget estimates glyph width rather than measuring it, so an unusually
 
 The inline diff has no height cap: its height follows the change, as specified, so a whole-file create renders every line and a single-file turn expands it on arrival. `DiffBlock` caps a tool row at sixteen lines behind an expand control; if the reply tail proves too long in use, that cap is the precedent to copy.
 
-The first cut shows nothing for turns whose work was delegated, which is a large share of sessions in practice. This is understood and accepted as the price of splitting the work; the second cut removes it.
-
-Loading the full subagent tree and subscribing to every running child are both unbounded in the tree's width: a task with many concurrent children opens many paged fetch chains and many event subscriptions. The `Load all` gate bounds the fetches; the subscriptions are bounded only by how many children run at once.
+Loading the full subagent tree is unbounded in the tree's width: a task with many concurrent children opens many paged fetch chains. The `Load all` gate bounds them.
 
 Aggregating across a long session recomputes on every snapshot update, so the derivation must be memoized against the conversation snapshot rather than run per render.
