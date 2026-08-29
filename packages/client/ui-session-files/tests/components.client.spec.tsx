@@ -138,7 +138,7 @@ describe('SessionFilesRail', () => {
     const reveal = vi.fn()
     const { container } = render(<SessionFilesRail {...railProps(b, { reveal })} />)
     const rows = [...container.querySelectorAll('[class*="_file_"]')]
-    expect(rows.map(row => row.textContent)).toEqual(['old.ts', 'new.ts'])
+    expect(rows.map(row => row.textContent)).toEqual(['old.ts+1-1', 'new.ts+1-1'])
     expect(rows[1]?.getAttribute('aria-current')).toBe('true')
 
     fireEvent.click(rows[0] as HTMLElement)
@@ -221,7 +221,7 @@ describe('SessionFilesRail', () => {
     )
     const { container } = render(<SessionFilesRail {...railProps(b)} />)
     const rows = [...container.querySelectorAll('[class*="_file_"]')]
-    expect(rows.map(row => row.textContent)).toEqual(['local.ts', 'from-child.ts'])
+    expect(rows.map(row => row.textContent)).toEqual(['local.ts+1-1', 'from-child.ts+1-1'])
     // A descendant read that left pages behind says so through the same notice.
     expect(screen.getByText(zh['rail.partial'])).toBeTruthy()
   })

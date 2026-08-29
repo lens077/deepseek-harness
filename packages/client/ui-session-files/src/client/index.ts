@@ -34,7 +34,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 export {
   basename, changedPaths, defaultSelection, deriveSessionFiles, diffHunks, labelBudget,
-  readPaths, READ_LIMIT, segmentLabel, sessionFilesOf, truncateHead, turnResolver,
+  readPaths, READ_LIMIT, segmentLabel, segmentLineStats, sessionFilesOf, textLineCount, truncateHead, turnResolver,
 } from './session-files.ts'
 export type {
   SessionFileEntry, SessionFilesModel, SessionFileSegment,

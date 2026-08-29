@@ -117,6 +117,10 @@ export function SessionFilesRail({
                     onClick={() => { setChosen(entry.path); reveal(entry.path) }}
                   >
                     <span className={css.name}>{truncateHead(basename(entry.path), budget)}</span>
+                    <span className={css.stats} aria-label={`+${entry.additions} -${entry.deletions}`}>
+                      <span className={css.additions}>+{entry.additions}</span>
+                      <span className={css.deletions}>-{entry.deletions}</span>
+                    </span>
                     {entry.writing && (
                       <IconLoadingOutline16
                         size={12}

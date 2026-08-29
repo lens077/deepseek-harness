@@ -72,9 +72,27 @@
    truncation was tried first and rejected: it reorders a leading digit run, so
    `2026-08-25-notes.md` renders as `notes.md-2026-08-25`. */
 .name {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.stats {
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.additions {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.deletions {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .spinner {

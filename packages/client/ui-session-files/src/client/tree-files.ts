@@ -12,7 +12,7 @@
  */
 
 import {
-  changedPaths, diffHunks,
+  changedPaths, diffHunks, segmentLineStats,
   type SessionFileEntry, type SessionFileSegment, type SessionFilesModel,
 } from './session-files.ts'
 
@@ -88,6 +88,7 @@ export function mergeTreeChanges(
       merged.set(file.path, {
         entry: {
           path: file.path,
+          ...segmentLineStats(file.segments),
           firstSeq: file.firstSeq,
           lastSeq: file.lastSeq,
           segments: [],
@@ -103,9 +104,11 @@ export function mergeTreeChanges(
     ...model,
     changed: order.map((path) => {
       const held = merged.get(path) as { entry: SessionFileEntry; segments: SessionFileSegment[] }
+      const segments = [...held.segments].sort((left, right) => left.time - right.time)
       return {
         ...held.entry,
-        segments: [...held.segments].sort((left, right) => left.time - right.time),
+        ...segmentLineStats(segments),
+        segments,
       }
     }),
   }

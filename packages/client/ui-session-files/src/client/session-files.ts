@@ -57,6 +57,10 @@ export interface SessionFileSegment {
 /** One file this session changed, with every recorded change to it. */
 export interface SessionFileEntry {
   readonly path: string
+  /** Total added lines across the recorded hunks. */
+  readonly additions: number
+  /** Total removed lines across the recorded hunks. */
+  readonly deletions: number
   /** Seq of the first recorded change, which fixes this entry's place in the list. */
   readonly firstSeq: number
   /** Seq of the most recent recorded change, which picks the idle default selection. */
@@ -186,6 +190,24 @@ export function turnResolver(timeline: ConversationTimelineSnapshot): (seq: numb
   }
 }
 
+/** Count logical lines while avoiding a phantom line after a trailing newline. */
+export function textLineCount(text: string | null): number {
+  if (text === null || text === '') return 0
+  const endings = text.match(/\n/gu)?.length ?? 0
+  return endings + (text.endsWith('\n') ? 0 : 1)
+}
+
+/** Added and removed line totals across recorded hunks. */
+export function segmentLineStats(segments: readonly SessionFileSegment[]): { additions: number; deletions: number } {
+  let additions = 0
+  let deletions = 0
+  for (const segment of segments) {
+    additions += textLineCount(segment.newText)
+    deletions += textLineCount(segment.oldText)
+  }
+  return { additions, deletions }
+}
+
 /** Mutable accumulator for one path while the nodes are walked. */
 interface Accumulated {
   firstSeq: number
@@ -239,6 +261,7 @@ export function deriveSessionFiles(snapshot: ConversationSnapshot): SessionFiles
   const changed = [...accumulated.entries()]
     .map(([path, entry]) => ({
       path,
+      ...segmentLineStats(entry.segments),
       firstSeq: entry.firstSeq,
       lastSeq: entry.lastSeq,
       segments: entry.segments,
