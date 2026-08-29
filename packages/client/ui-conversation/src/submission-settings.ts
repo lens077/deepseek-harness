@@ -17,14 +17,20 @@ export type BusyEnterBehavior = typeof BUSY_ENTER_BEHAVIORS[number]
 /** Default preserves Enter-as-Queue for running conversations. */
 export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'queue'
 
+/** Where a question-navigation shortcut is suppressed: editable regions, text inputs only, or nowhere. */
 export type QuestionShortcutFocusPolicy = 'editable' | 'text' | 'always'
 
+/** Durable question-navigation preference: one binding per direction plus the focus policy. */
 export interface QuestionNavigationSettings {
+  /** Shortcut string for the previous question, in `Modifier+Key` form. */
   previousShortcut: string
+  /** Shortcut string for the next question, in `Modifier+Key` form. */
   nextShortcut: string
+  /** Focus condition under which both bindings are ignored. */
   focusPolicy: QuestionShortcutFocusPolicy
 }
 
+/** Non-macOS defaults; the policy substitutes Meta for Ctrl when the platform is a Mac. */
 export const DEFAULT_QUESTION_NAVIGATION_SETTINGS: QuestionNavigationSettings = {
   previousShortcut: 'Ctrl+ArrowUp',
   nextShortcut: 'Ctrl+ArrowDown',

@@ -190,14 +190,24 @@ export function turnResolver(timeline: ConversationTimelineSnapshot): (seq: numb
   }
 }
 
-/** Count logical lines while avoiding a phantom line after a trailing newline. */
+/**
+ * Count logical lines while avoiding a phantom line after a trailing newline.
+ *
+ * @param text Hunk side to measure; `null` and the empty string both count as zero.
+ * @returns Number of logical lines.
+ */
 export function textLineCount(text: string | null): number {
   if (text === null || text === '') return 0
   const endings = text.match(/\n/gu)?.length ?? 0
   return endings + (text.endsWith('\n') ? 0 : 1)
 }
 
-/** Added and removed line totals across recorded hunks. */
+/**
+ * Added and removed line totals across recorded hunks.
+ *
+ * @param segments Recorded changes for one file, in any order.
+ * @returns Added and removed line totals summed over every segment.
+ */
 export function segmentLineStats(segments: readonly SessionFileSegment[]): { additions: number; deletions: number } {
   let additions = 0
   let deletions = 0
