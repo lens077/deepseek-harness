@@ -1,0 +1,15 @@
+- text: Into the Unknown Preview
+- button "Choose workspace":
+  - img
+  - text: Choose workspace
+  - img
+- button "Start without a folder"
+- button "Standard mode":
+  - img
+  - text: Standard mode
+  - img
+- textbox "Choose workspace":
+  - /placeholder: Choose a workspace to start
+- button "Commands" [disabled]:
+  - img
+- button "Send message" [disabled]

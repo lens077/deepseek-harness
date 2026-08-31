@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-07-25-web-client-session-scope-and-provide-channel.zh.md)
 
-> Scope: the client Agent scope (actx) and targeted events, the client/host materialization parity model, the blank-session bit and reuse (`connectWorkspace`), the per-session provisioning channel (`sessions.provide`), and the host wire smalls that carry these capabilities (the summary `blank` column, the `host/session-added` frame field, and the `host/commands-changed` frame). The input state machine and the slash pipeline live in the [input machine note](2026-07-25-web-input-machine-and-slash-pipeline.md); the command business surfaces live in the [command surfaces note](2026-07-25-web-command-surfaces-and-assembly.md).
+> Scope: the client Agent scope (actx) and targeted events, the client/host materialization parity model, the blank-session bit and reuse (`connectWorkspace`), the per-session provisioning channel (`sessions.provide`), and the host wire smalls that carry these capabilities (the summary `blank` column, the `host/session-added` frame field, and the `host/commands-changed` frame). The input state machine and the slash pipeline live in the [input machine note](2026-07-25-web-input-machine-and-slash-pipeline.md); the command business surfaces live in the [command surfaces note](2026-07-25-web-command-surfaces-and-assembly.md). The [Ungrouped scratch-session decision](../feature/2026-09-01-ungrouped-scratch-session.md) partially supersedes only the claim that materialization requires a Workspace; Host-born identity, scope parity, and blank-session semantics remain authoritative here.
 
 ## Problem
 
@@ -24,8 +24,8 @@ Hard constraints: the host is the single source of truth; every registration goe
 Host-side `session.create(workspaceId)` produces Session + Agent + cwd in one piece (an atomic bundle, never split); the client side is the mirror of that birth — the instant a session row enters the list mirror, the client mints its Agent scope (actx + provide + the full input surface mounted):
 
 - Session identity is the host's true form from birth: the sessionId arrives via the `session.create` response / the `host/session-added` frame, and every client-side address (the scope tag, slot store keys, RPC addressing) uses that same id.
-- The materialization moment = the instant the user picks a Workspace (cwd settled): the client calls `session.create({workspaceId})` on the spot and receives the complete entity.
-- "New Session with no workspace picked" is a **pure view state** (a navigation position) corresponding to no session/scope entity; until the pick, the composer is locked whole (no slash, no plain text).
+- Materialization follows an explicit start target: picking a Workspace calls `session.create({workspaceId})`, while the scratch action calls `session.create({})` and accepts the Host default cwd. Both responses contain the complete entity.
+- "New Session with no target chosen" is a **pure view state** (a navigation position) corresponding to no session/scope entity; until either start action completes, the composer is locked whole (no slash, no plain text). An Ungrouped scratch Session is already materialized and therefore fully live.
 - A "blank session" is just an ordinary materialized session whose log is still empty; to every Agent-scope plugin on the host (goal/plan/skill/…) it is indistinguishable from any session, so slash/plan are all naturally live.
 
 ### Agent scope: the actx is the sole session carrier in the client-side cordis world

@@ -399,6 +399,19 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.insertBefore(wid('ghost'))).rejects.toThrow(/workspace-not-found: gone/)
   })
 
+  it('creates an addressable scratch Session without a Workspace target', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onCreate = () => Promise.resolve(ok({ sessionId: sid('scratch') }))
+
+    await expect(workspaces.createScratchSession()).resolves.toBe('scratch')
+    expect(api.callsOf('session.create')).toEqual([{}])
+    expect(sessions.binding(sid('scratch'))).toBeDefined()
+    expect(sessions.list.getSnapshot().current).toBeUndefined()
+  })
+
   it('targets New Session at explicit, current-session, then recent Workspaces and clears with none', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

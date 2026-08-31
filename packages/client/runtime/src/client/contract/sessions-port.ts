@@ -33,10 +33,10 @@ export interface SessionsPort {
   readonly list: ObservableSnapshot<SessionsPortList>
   /**
    * Create a session on the host.
-   * @param opts - target workspace.
+   * @param opts - optional target Workspace; omission creates an Ungrouped session at the Host default cwd.
    * @returns the new session id.
    */
-  create(opts: { workspaceId: WorkspaceId }): Promise<SessionId>
+  create(opts?: { workspaceId?: WorkspaceId }): Promise<SessionId>
   /**
    * Permanently delete a Session lineage subtree.
    * @param sessionId - cascade root.

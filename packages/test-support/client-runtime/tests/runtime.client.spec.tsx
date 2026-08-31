@@ -366,14 +366,20 @@ describe('workspaces', () => {
 
     runtime.workspaces.startSession('w1' as WorkspaceId)
     await expect(runtime.workspaces.connectWorkspace('w2' as WorkspaceId)).resolves.toBe('session-of-w2')
+    await expect(runtime.workspaces.createScratchSession()).resolves.toBe('scratch-session')
     expect(runtime.workspaces.calls).toEqual([
       { method: 'startSession', args: ['w1'] },
       { method: 'connectWorkspace', args: ['w2'] },
+      { method: 'createScratchSession', args: [] },
     ])
     const stub = vi.fn(() => Promise.resolve('other' as never))
+    const scratchStub = vi.fn(() => Promise.resolve('scratch-other' as never))
     runtime.workspaces.stub('connectWorkspace', stub)
+    runtime.workspaces.stub('createScratchSession', scratchStub)
     await expect(runtime.workspaces.connectWorkspace('w3' as WorkspaceId)).resolves.toBe('other')
+    await expect(runtime.workspaces.createScratchSession()).resolves.toBe('scratch-other')
     expect(stub).toHaveBeenCalledOnce()
+    expect(scratchStub).toHaveBeenCalledOnce()
     await runtime.dispose()
   })
 

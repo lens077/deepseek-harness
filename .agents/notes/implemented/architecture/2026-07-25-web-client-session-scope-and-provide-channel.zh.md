@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-25-web-client-session-scope-and-provide-channel.md) | 中文
 
-> 范围：client Agent scope（actx）与定向事件、client/host 实体化对等模型、空会话 blank 位与复用（`connectWorkspace`）、逐会话供数通道（`sessions.provide`），以及承载这些能力的 host wire 小件（summary `blank` 列、`host/session-added` 帧字段、`host/commands-changed` 帧）。输入状态机与 slash 管线见[输入状态机 note](2026-07-25-web-input-machine-and-slash-pipeline.zh.md)；命令业务面见[命令业务面 note](2026-07-25-web-command-surfaces-and-assembly.zh.md)。
+> 范围：client Agent scope（actx）与定向事件、client/host 实体化对等模型、空会话 blank 位与复用（`connectWorkspace`）、逐会话供数通道（`sessions.provide`），以及承载这些能力的 host wire 小件（summary `blank` 列、`host/session-added` 帧字段、`host/commands-changed` 帧）。输入状态机与 slash 管线见[输入状态机 note](2026-07-25-web-input-machine-and-slash-pipeline.zh.md)；命令业务面见[命令业务面 note](2026-07-25-web-command-surfaces-and-assembly.zh.md)。[Ungrouped scratch 会话决策](../feature/2026-09-01-ungrouped-scratch-session.zh.md)仅部分取代「实体化必须选定 Workspace」这一项；Host 实体身份、scope 对等与空会话语义仍以本文为准。
 
 ## 问题
 
@@ -24,8 +24,8 @@ web client 只有一张全局会话面：slot 全部从根上下文渲染，插�
 host 侧 `session.create(workspaceId)` 一体产出 Session + Agent + cwd（作为不可拆分的原子整体）；client 侧就是这次出生的镜像——会话行进入 list mirror 的瞬间，client 为它铸 Agent scope（actx + provide + 输入面全套挂上）：
 
 - 会话身份自出生即为 host 真身：sessionId 由 `session.create` 响应 / `host/session-added` 帧带来，client 侧一切寻址（scope tag、slot store 键、RPC 地址）用的都是同一个 id。
-- 实体化时点 = 用户选定 Workspace（cwd 确定）的瞬间：client 当场调 `session.create({workspaceId})`，拿到完整实体。
-- 「New Session 且未选 workspace」是**纯视图态**（一个导航位置），不对应任何会话/scope 实体；选定之前 composer 整体锁死（无 slash、无纯文本）。
+- 实体化由明确的开始目标触发：选择 Workspace 时调用 `session.create({workspaceId})`；scratch 操作则调用 `session.create({})` 并接受 Host 默认 cwd。两条响应都会返回完整实体。
+- 「New Session 且尚未选择目标」是**纯视图态**（一个导航位置），不对应任何会话/scope 实体；任一开始操作完成前，composer 整体锁死（无 slash、无纯文本）。Ungrouped scratch Session 已经实体化，因此输入能力完全可用。
 - 「空会话」就是一个日志还空着的普通实体化会话；对 host 上所有 Agent-scope 插件（goal/plan/skill（技能）/…）它与任何会话无异，slash/plan 天然全活。
 
 ### Agent scope：actx 是 client 侧 cordis 世界的唯一会话载体

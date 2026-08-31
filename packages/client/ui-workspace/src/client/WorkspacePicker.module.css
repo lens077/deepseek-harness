@@ -1,5 +1,34 @@
-/* The adoption error dialog's footer and message styles; the dialog itself is
- * the shared Modal (same figma dialog family as the browser's own dialogs). */
+/* The optional scratch action and adoption error dialog styles. */
+.scratch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scratch::before {
+  width: 1px;
+  height: 12px;
+  background: var(--dsw-alias-border-l2);
+  content: '';
+}
+
+.scratchAction {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.scratchError {
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .modalAction {
   min-width: 72px;
 }

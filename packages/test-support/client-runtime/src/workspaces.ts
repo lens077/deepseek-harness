@@ -62,6 +62,17 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Create a fresh Ungrouped scratch session (recorded).
+   * @returns the created session id.
+   */
+  async createScratchSession(): Promise<SessionId> {
+    this.calls.push({ method: 'createScratchSession', args: [] })
+    const stub = this.stubs.get('createScratchSession')
+    if (stub !== undefined) return await (stub() as Promise<SessionId>)
+    return 'scratch-session' as SessionId
+  }
+
+  /**
    * New-session flow (recorded; stubbed behavior runs when installed).
    * @param workspaceId - optional explicit workspace target.
    */

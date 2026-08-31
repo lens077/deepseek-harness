@@ -265,7 +265,7 @@ describe('conversation slot inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('routes workspace switching through the runtime owner, carrying the draft', async () => {
+  it('routes Workspace and scratch switching through the runtime owner, carrying the draft', async () => {
     const b = await bench()
     const resident = b.residentApi(ROOT)
     // Same-session connect (the picked workspace resolves to this session):
@@ -290,6 +290,18 @@ describe('conversation slot inject API', () => {
     })
     expect(state.getSnapshot().draft).toBe('')
     expect(b.inputApi(OTHER).state.getSnapshot().draft).toBe('carry me')
+
+    // Scratch creation uses the same owner choreography but asks the runtime
+    // for a target with no Workspace id.
+    const SCRATCH = 'scratch-1' as SessionId
+    await b.runtime.sessions.add({ id: SCRATCH }, { current: false })
+    actions.setDraft('carry to scratch')
+    b.runtime.workspaces.stub('createScratchSession', () => Promise.resolve(SCRATCH))
+    await resident.startScratchSession()
+    expect(b.runtime.workspaces.calls).toContainEqual({ method: 'createScratchSession', args: [] })
+    expect(b.runtime.sessions.calls).toContainEqual({ method: 'open', args: [SCRATCH] })
+    expect(state.getSnapshot().draft).toBe('')
+    expect(b.inputApi(SCRATCH).state.getSnapshot().draft).toBe('carry to scratch')
     await b.runtime.dispose()
   })
 

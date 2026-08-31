@@ -241,6 +241,31 @@ export function apply(ctx: Context): void {
     },
   }), 'ui-conversation: input standard-kit provider')
 
+  // Both hero start paths share draft/image transfer and navigate only after
+  // the runtime has made the target session synchronously addressable.
+  const openConnectedSession = async (
+    sessionId: SessionId | undefined,
+    connect: () => Promise<SessionId>,
+  ): Promise<void> => {
+    const nextId = await connect()
+    if (sessionId !== undefined && nextId !== sessionId) {
+      const from = inputHub.shell(sessionId)
+      const draft = from.snapshot.draft
+      const imageIds = from.snapshot.imageIds
+      const next = inputHub.shell(nextId)
+      if (imageIds.length === 0 || next.addImages(imageIds)) {
+        if (draft !== '') {
+          next.setDraft(draft)
+          from.setDraft('')
+        }
+        if (imageIds.length > 0) {
+          for (const id of imageIds) from.removeImage(id)
+        }
+      }
+    }
+    sessions.open(nextId)
+  }
+
   // Resident current-session-optional shell. It owns the stable Hero/composer
   // frame while strict session slots fill only their session-bound regions.
   slots.register({
@@ -271,25 +296,14 @@ export function apply(ctx: Context): void {
           subscribe: fn => slots.subscribe('conversation.session.rail', fn),
         },
       },
-      selectWorkspace: async (workspaceId) => {
-        const nextId = await workspaces.connectWorkspace(workspaceId)
-        if (sessionId !== undefined && nextId !== sessionId) {
-          const from = inputHub.shell(sessionId)
-          const draft = from.snapshot.draft
-          const imageIds = from.snapshot.imageIds
-          const next = inputHub.shell(nextId)
-          if (imageIds.length === 0 || next.addImages(imageIds)) {
-            if (draft !== '') {
-              next.setDraft(draft)
-              from.setDraft('')
-            }
-            if (imageIds.length > 0) {
-              for (const id of imageIds) from.removeImage(id)
-            }
-          }
-        }
-        sessions.open(nextId)
-      },
+      selectWorkspace: workspaceId => openConnectedSession(
+        sessionId,
+        () => workspaces.connectWorkspace(workspaceId),
+      ),
+      startScratchSession: () => openConnectedSession(
+        sessionId,
+        () => workspaces.createScratchSession(),
+      ),
     }),
   }, ConversationRoot)
 

@@ -10,7 +10,8 @@
 // across reload). Zero model calls: workspace.create/rename/archiveSession
 // are host RPCs with no model involvement, and the one session row the
 // flat/hover/menu/archive scenarios need comes from a seeded fixture (the
-// seeded-history seed reused verbatim — no new recording).
+// seeded-history seed reused verbatim — no new recording). The scratch flow
+// creates a real Ungrouped Session without sending a model request.
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join, sep } from 'node:path'
@@ -30,6 +31,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/workspace-management', i
 const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const MODE = webSnapshotMode()
 const BROWSER_EXPECTED = join(SNAPSHOT_DIR, 'directory-browser.expected.md')
+const SCRATCH_EXPECTED = join(SNAPSHOT_DIR, 'scratch-session-entry.expected.md')
 const SEED_ID = 'workspace-management-web-e2e'
 // Both waits exceed ui-primitives' 200ms POINTER_GRACE_MS. Keep them above
 // that value if the shared setting changes.
@@ -132,6 +134,27 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await browser?.close()
     await scaffold?.close()
   })
+
+  it('starts an Ungrouped Session without selecting a directory', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-scratch'))
+    const before = new Set(scaffold.ctx.sessions.list().map(session => session.id))
+    const entry = page.getByRole('button', { name: 'Start without a folder' })
+    await entry.waitFor({ timeout: 10_000 })
+    const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(SCRATCH_EXPECTED, snapshot, MODE)
+
+    await entry.click()
+    await expect.poll(() => page.locator('textarea').isEditable(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(
+      () => scaffold.ctx.sessions.list().find(session => !before.has(session.id)),
+      { timeout: 10_000 },
+    ).not.toBeUndefined()
+    const scratch = scaffold.ctx.sessions.list().find(session => !before.has(session.id))
+    if (scratch === undefined) throw new Error('scratch session was not materialized')
+    expect(scratch.header.cwd).toBe(scaffold.workspaceCwd)
+    expect(scaffold.ctx.workspaceRegistry.list().some(workspace => workspace.sessionIds.includes(scratch.id))).toBe(false)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
 
   it('adds two workspaces through the dialog, each on a folder it created', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-create'))
@@ -622,6 +645,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.warnings).toEqual([])
     // The directory-browser aria golden is this spec's one owned artifact;
     // the seed it reuses is owned (and inventory-guarded) by seeded-history.
-    await assertFixtureInventory(SNAPSHOT_DIR, ['.gitkeep', 'directory-browser.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      '.gitkeep', 'directory-browser.expected.md', 'scratch-session-entry.expected.md',
+    ])
   })
 })

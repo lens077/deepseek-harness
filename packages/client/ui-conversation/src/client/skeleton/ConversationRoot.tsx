@@ -14,7 +14,7 @@ export type ConversationRootProps = ConversationSlotProps
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, useRailSeat,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  renderSlot, renderSlotChain, selectWorkspace, startScratchSession, t,
 }: ConversationRootProps) {
   const railOccupied = useRailSeat(entries => entries.length > 0)
   const openState = useSession(s => s.openState)
@@ -118,21 +118,23 @@ export function ConversationRoot({
             setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
           })
         },
+        onStartScratch: async () => {
+          await startScratchSession()
+          setPendingWorkspaceId(undefined)
+        },
         onClose: () => { setPickerOpen(false) },
       })}
       {renderSlot('conversation.hero.agentPreset', {})}
     </div>
   )
 
-  // The placeholder chip ("Choose workspace") and the Workspace-trigger input travel
-  // together: no workspace picked yet (cold start, no session at all), or a
-  // blank session whose workspace vanished (deleted from the sidebar). The
-  // bar is ONE session-maybe slot rendered unconditionally — inert is a prop,
-  // not a different tree, so the textarea DOM survives the transition.
-  const inert = sessionId === undefined || (hero && chipTitle === undefined)
-  // A raised block is the same inert posture with the blocker's own reason:
-  // one disabled textarea, never a second tree. The no-workspace state wins
-  // when both hold — picking a workspace is the earlier prerequisite.
+  // The bar is one session-maybe slot rendered unconditionally: only the pure
+  // no-session view is inert. A materialized blank session stays live whether
+  // a Workspace owns it or it belongs to Ungrouped, so the textarea DOM and
+  // draft machine survive either start path.
+  const inert = sessionId === undefined
+  // A raised block uses the same disabled textarea with the blocker's reason,
+  // while retaining the one model-selection control that can clear it.
   const blocked = !inert && composerBlock !== undefined
   const inputBar = renderSlot('conversation.composer.bar', {
     variant: hero ? 'hero' : 'composer',

@@ -624,6 +624,11 @@ export interface ConversationInjected {
    */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /**
+   * Create and open a fresh Ungrouped session at the Host default cwd. When a
+   * blank session is already current, carry its draft to the new session.
+   */
+  startScratchSession: () => Promise<void>
+  /**
    * Framework-bound sources. `composerBlock` is this session's block when a
    * plugin raised one; the reason is the blocker's own localized copy, which
    * the root renders as the inert composer's placeholder. `railSeat` is the
@@ -694,8 +699,8 @@ export interface ComposerBarOwnerProps {
    */
   blocked?: { readonly reason: string }
   /**
-   * Inert no-workspace state: the bar locks message actions while preserving
-   * its normal DOM so the Workspace pick transitions in place.
+   * Inert no-session state: the bar locks message actions while preserving its
+   * normal DOM until Workspace selection or scratch creation materializes one.
    */
   disabled?: boolean
   /** Whether the shared Workspace picker menu is expanded, regardless of which trigger opened it. */
@@ -996,5 +1001,7 @@ export interface EmptyWorkspaceOwnerProps {
   /** Currently active workspace (renders a trailing check in the picker list). */
   selectedId?: WorkspaceId | undefined
   onPick: (workspaceId: WorkspaceId) => void
+  /** Materialize a session without selecting a Workspace. */
+  onStartScratch: () => Promise<void>
   onClose: () => void
 }

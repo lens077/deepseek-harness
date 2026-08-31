@@ -22,6 +22,11 @@ import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
 
+/** Normalize an unknown UI-operation rejection for localized error copy. */
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
+}
+
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
   /** The standard locale seat, forwarded by whichever slot entry hosts the flow. */
@@ -128,7 +133,7 @@ export function WorkspacePickFlow({
       setFlowOpen(false)
       onPick(workspace.workspaceId)
     }).catch((reason: unknown) => {
-      setModalError(reason instanceof Error ? reason.message : String(reason))
+      setModalError(errorMessage(reason))
       setFlowOpen(false)
       setErrorOpen(true)
     })
@@ -225,27 +230,70 @@ export function WorkspacePickFlow({
 export function WorkspacePicker({
   open,
   anchorRef,
+  useSessions,
   useWorkspaces,
   selectedId,
   onPick,
+  onStartScratch,
   onClose,
   createWorkspace,
   useDirectoryFlow,
   renderSlot,
   t,
 }: WorkspacePickerProps) {
+  const currentSessionId = useSessions(state => state.current)
+  const [startingScratch, setStartingScratch] = useState(false)
+  const [scratchError, setScratchError] = useState<string | null>(null)
+  // The secondary action is available before materialization and while a blank
+  // Workspace session is selected. Once the current blank is already
+  // Ungrouped, repeating the same action would only mint an invisible shell.
+  const scratchAvailable = currentSessionId === undefined || selectedId !== undefined
+  const startScratch = (): void => {
+    onClose()
+    setStartingScratch(true)
+    setScratchError(null)
+    void onStartScratch().then(
+      () => { setStartingScratch(false) },
+      (reason: unknown) => {
+        setStartingScratch(false)
+        setScratchError(errorMessage(reason))
+      },
+    )
+  }
+
   return (
-    <WorkspacePickFlow
-      t={t}
-      open={open}
-      anchorRef={anchorRef}
-      useWorkspaces={useWorkspaces}
-      createWorkspace={createWorkspace}
-      useDirectoryFlow={useDirectoryFlow}
-      renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}
-      selectedId={selectedId}
-      onPick={onPick}
-      onClose={onClose}
-    />
+    <>
+      {scratchAvailable && (
+        <div className={css.scratch}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={css.scratchAction}
+            disabled={startingScratch}
+            aria-busy={startingScratch}
+            onClick={startScratch}
+          >
+            {t(startingScratch ? 'scratch.starting' : 'scratch.start')}
+          </Button>
+          {scratchError !== null && (
+            <span className={css.scratchError} role="alert" title={t('scratch.failed', { message: scratchError })}>
+              {t('scratch.failed', { message: scratchError })}
+            </span>
+          )}
+        </div>
+      )}
+      <WorkspacePickFlow
+        t={t}
+        open={open}
+        anchorRef={anchorRef}
+        useWorkspaces={useWorkspaces}
+        createWorkspace={createWorkspace}
+        useDirectoryFlow={useDirectoryFlow}
+        renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}
+        selectedId={selectedId}
+        onPick={onPick}
+        onClose={onClose}
+      />
+    </>
   )
 }

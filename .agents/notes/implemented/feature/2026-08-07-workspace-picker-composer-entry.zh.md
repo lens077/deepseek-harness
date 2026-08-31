@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-[Session scope 决策](../architecture/2026-07-25-web-client-session-scope-and-provide-channel.zh.md)会在 Workspace 存在前保留同一个常驻编辑器，但 textarea 处于禁用状态，只有较小的 Workspace chip 能打开选择器。用户首次点击最显眼、也最熟悉的输入区域时，界面不会响应，尽管同一界面已有继续操作的入口。
+[Session scope 决策](../architecture/2026-07-25-web-client-session-scope-and-provide-channel.zh.md)会在 Session 存在前保留同一个常驻编辑器，但 textarea 处于禁用状态，只有较小的 Workspace chip 能打开选择器。用户首次点击最显眼、也最熟悉的输入区域时，界面不会响应，尽管同一界面已有继续操作的入口。
 
 ## 决策
 
-新会话尚未归属任何 Workspace 时，整张输入卡片都可通过鼠标点击激活现有的 `conversation.hero.workspace` 选择器——点击处理器归卡片所有，其禁用控件放行指针事件，因此整个胶囊是同一个目标；只读的常驻 textarea 也可经 Enter 或 Space 激活。`aria-haspopup="menu"` 和 `aria-expanded` 在共享选择器菜单挂载时描述其展开状态。全新安装没有 Workspace 行时，选择器会立即转交目录对话框并清除自身的展开状态；该对话框使用自己的可访问性语义。虚线 l4 描边（SVG dash ring，因为原生 `dashed` 的间距不可调）配合 hover 时的 business 蓝，把卡片标记为选择入口。卡片会拦下 `pointerdown`，使已打开选择器的外点关闭无法与点击的重新打开竞态——先关后开会让 chip 的展开回显闪动。消息提交、命令、权限、模型及其他 Session 作用域控件会保持锁定，直到用户选择 Workspace 并创建或重新连接真实 Session。
+尚无 Session 时，整张输入卡片都可通过鼠标点击激活现有的 `conversation.hero.workspace` 选择器——点击处理器归卡片所有，其禁用控件放行指针事件，因此整个胶囊是同一个目标；只读的常驻 textarea 也可经 Enter 或 Space 激活。`aria-haspopup="menu"` 和 `aria-expanded` 在共享选择器菜单挂载时描述其展开状态。全新安装没有 Workspace 行时，选择器会立即转交目录对话框并清除自身的展开状态；该对话框使用自己的可访问性语义。虚线 l4 描边（SVG dash ring，因为原生 `dashed` 的间距不可调）配合 hover 时的 business 蓝，把卡片标记为选择入口。卡片会拦下 `pointerdown`，使已打开选择器的外点关闭无法与点击的重新打开竞态——先关后开会让 chip 的展开回显闪动。消息提交、命令、权限、模型及其他 Session 作用域控件会保持锁定，直到用户选择 Workspace 或通过 [Ungrouped scratch 操作](2026-09-01-ungrouped-scratch-session.zh.md)创建真实 Session。scratch 决策仅部分取代「选择 Workspace 是唯一实体化路径」这一前提。
 
 Workspace 选择继续使用现有 owner 和流程。`ConversationRoot` 打开选择器，`WorkspacePicker` 列出或创建 Workspace；Session 到达后，同一个 textarea DOM 节点变为可编辑状态。
 

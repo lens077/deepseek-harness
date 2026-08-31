@@ -21,6 +21,11 @@ export interface IWorkspaces {
    */
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
   /**
+   * Create a fresh Ungrouped session at the Host default cwd. The caller owns navigation.
+   * @returns the created session id, already addressable through the Sessions object layer.
+   */
+  createScratchSession(): Promise<SessionId>
+  /**
    * The New Session flow: connect the explicit, current-Session, or recent
    * Workspace and open the resulting session; failures surface on the session
    * list state.

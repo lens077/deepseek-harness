@@ -116,6 +116,16 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Create a fresh session without a Workspace account. The Host assigns its
+   * default cwd, and the caller opens the already-addressable Session after any
+   * draft hand-off.
+   * @returns the created Ungrouped session id.
+   */
+  createScratchSession(): Promise<SessionId> {
+    return this.sessions.create()
+  }
+
+  /**
    * Follow the first complete Workspace/Session baseline and select a default
    * session exactly once. A restored current session wins; otherwise the most
    * recent Workspace is connected (reusing or creating its blank session).
