@@ -50,9 +50,17 @@ Expanding a produced file compares its content before and after — one segment 
 
 ![A model row's advanced fold with Image input set to Text and images and Reasoning set to Selectable levels](docs/user/guide/providers-model-capabilities.png)
 
+In context, on a custom provider's editor card — the fold sits under the row it configures, so the model, its capacities, and its capability claims are read and saved together:
+
+![The Acme Gateway editor card with the acme-vision-think row expanded, showing both selects and the level checkboxes under the capacities](docs/user/guide/providers-model-editor.png)
+
 **Settings section glyphs.** Every section a plugin contributes to Settings used to share the General gear, so the vision bundle's page and Conversation layout were told apart by label alone. The shell now maps its known section ids to their own glyph — an eye for `vision-toolkit`, a side panel for `conversation-layout` — and keeps the gear for ids it does not know.
 
 ![The Settings navigation: General, Models, Plugins, Agent presets, Vision tools, and Conversation layout, each with its own glyph](docs/user/guide/settings-sections-nav.png)
+
+**How the screenshots are made.** Every picture above is a real screen from this fork's own build, never a mock-up. To keep personal sessions and keys out of them, a second `dsh web` is started from the checkout's source against an isolated home (`DSH_HOME=/private/tmp/dsh-demo-home`, port 3099): its profile lists only the base bundle, the web app, and the vision bundle, and its `settings.yaml` declares a fictitious `acme-gateway` provider with an `acme-vision-think` model — no API key, no sessions, no workspace. Playwright drives Firefox at device scale 2 in the light theme, once per language, and clicks through the same path a user would: Settings → Models → Edit → Customized settings → Advanced. The Models-page pictures were then verified as a round trip rather than a rendering: checking two more levels and saving through the card rewrote the isolated `settings.yaml` with `off: null` and `minimal: minimal`, and the server's `llm.models` reply listed all seven levels for that model. The fixture provider and the fork's own product chrome are the only content, so nothing needs masking; the demo server, browser sessions, home directory, and temporary files are removed afterwards, and the personal `~/.dsh` and port 3080 are never touched. Any regression in the pictured behavior shows up in `pnpm run test:gui` (the component and shell suites) and in `DSH_SNAPSHOT=replay pnpm run test:web` (the assembled browser).
+
+**Repository.** This fork lives at [github.com/lens077/deepseek-harness](https://github.com/lens077/deepseek-harness); its `main` tracks upstream `main` and adds the features above on top. File problems with the fork's additions as issues on the fork; upstream behavior, releases, plugin discovery, and the Discord community remain upstream's, linked below. Everything here — upstream code and the fork's additions alike — is under the [MIT license](LICENSE), and third-party licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 **Status.** A work in progress that tracks upstream. Branches here may contain unfinished work from several parallel efforts; nothing is promised stable, and changes are not upstreamed automatically. The MIT license and every upstream notice are inherited unchanged — see [LICENSE](LICENSE).
 
@@ -110,6 +118,6 @@ For agents, follow [AGENTS.md](AGENTS.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — the upstream license, which this fork's additions inherit unchanged.
 
 Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

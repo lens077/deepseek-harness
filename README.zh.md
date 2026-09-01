@@ -46,13 +46,21 @@
 
 ![两个会话批量删除后的弹窗：空闲会话已删除，运行中会话的拒绝原因已显示，只有它仍处于选中状态](docs/user/guide/session-delete-partial-failure.png)
 
-**手动录入模型的视觉与推理能力。** 在模型页手动添加的模型——比已安装 pi-ai 目录更新的版本，或公司网关上的模型——在 `settings.yaml` 另行声明之前一律是纯文本、不推理的：粘贴图片会退化成一个文件引用，模型选择器也不提供任何思考档位。现在该行的**高级**折叠把两者与容量放在一起编辑。**图片输入**在跟随目录默认、文本 + 图片、仅文本之间选择；**推理**在跟随目录默认、不推理、以及勾选 pi-ai 七个档位的自定义集合之间选择，每个档位按规范的发送名称写入。控件无法表达的手写值会如实显示并保留，只剩 `off` 的字典在写入前即被拒绝，改写发送名称与 `compat` 开关仍留在 `settings.yaml` 中。详见[配置模型](docs/user/guide/providers.zh.md#图片输入)。
+**手动录入模型的视觉与推理能力。** 在模型页手动添加的模型——比已安装 pi-ai 目录更新的版本，或公司网关上的模型——在 `settings.yaml` 另行声明之前一律是纯文本、不推理的：粘贴图片会退化成一个文件引用，模型选择器也不提供任何思考档位。现在该行的**高级**折叠把两者与容量放在一起编辑。**图片输入**在跟随目录默认、文本 + 图片、仅文本之间选择；**推理**在跟随目录默认、不推理、以及勾选 pi-ai 七个档位的自定义集合之间选择，每个档位按规范的发送名称写入。控件无法表达的手写值会如实显示并保留，只剩 `off` 的字典在写入前即被拒绝，改写发送名称与 `compat` 开关仍留在 `settings.yaml` 中。详见[配置模型](docs/user/guide/providers.zh.md#image-input)。
 
 ![模型行的高级折叠：图片输入设为"文本 + 图片"，推理设为"自定义可选档位"](docs/user/guide/providers-model-capabilities.zh.png)
+
+放回自定义提供方的编辑卡片里看：折叠就在它所配置的那一行下面，模型、容量与能力声明一起读取、一起保存：
+
+![Acme Gateway 编辑卡片，acme-vision-think 行已展开，容量下方是两个下拉框与档位复选框](docs/user/guide/providers-model-editor.zh.png)
 
 **设置分区图标。** 插件贡献到设置面板的每个分区此前都共用"通用设置"的齿轮，视觉工具箱页与对话布局只能靠文字区分。外壳现在把已知分区 id 映射到各自的图标——`vision-toolkit` 是眼睛，`conversation-layout` 是侧栏面板——未知 id 仍沿用齿轮。
 
 ![设置导航：通用设置、模型、插件、Agent 预设、视觉工具、对话布局，各有自己的图标](docs/user/guide/settings-sections-nav.zh.png)
+
+**截图是怎么拍的。** 上面每一张图都是这个 fork 自己构建出来的真实界面，不是效果图。为了不把个人会话和密钥拍进去，会从 checkout 的源码另起一个 `dsh web`，指向一个隔离的家目录（`DSH_HOME=/private/tmp/dsh-demo-home`，3099 端口）：它的 profile 只列出基础 bundle、Web 应用和视觉 bundle，`settings.yaml` 只声明一个虚构的 `acme-gateway` 提供方和一个 `acme-vision-think` 模型——没有 API 密钥、没有会话、没有工作区。Playwright 以设备缩放 2、浅色主题驱动 Firefox，每种语言各跑一遍，并沿用户真实的路径点击：设置 → 模型 → 编辑 → 自定义设置 → 高级。模型页的图随后按一次往返而非一次渲染来核验：再勾选两个档位并通过卡片保存，隔离的 `settings.yaml` 被改写为带 `off: null` 与 `minimal: minimal`，服务端 `llm.models` 的回复也为该模型列出了全部七个档位。画面里只有虚构提供方和 fork 自己的产品外壳，因此无需打码；演示服务、浏览器会话、家目录和临时文件事后全部删除，个人的 `~/.dsh` 与 3080 端口自始至终不被触碰。图中行为一旦回退，会在 `pnpm run test:gui`（组件与外壳测试）和 `DSH_SNAPSHOT=replay pnpm run test:web`（组装后的浏览器）中暴露。
+
+**仓库。** 这个 fork 位于 [github.com/lens077/deepseek-harness](https://github.com/lens077/deepseek-harness)；其 `main` 跟随上游 `main`，并在其上叠加上述功能。fork 新增部分的问题请提到 fork 的 issues；上游行为、发布、插件发现与 Discord 社区仍归上游，见下文链接。这里的一切——上游代码与 fork 的新增——都采用 [MIT 许可证](LICENSE)，第三方许可证在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中披露。
 
 **状态。** 跟随上游的进行中工作。这里的分支可能包含若干条并行工作的半成品；不承诺任何东西稳定，改动也不会自动回流上游。MIT 许可证与全部上游声明原样继承——见 [LICENSE](LICENSE)。
 
@@ -131,6 +139,6 @@ pnpm dsh web
 
 ## 许可证
 
-[MIT](LICENSE)
+[MIT](LICENSE)——即上游的许可证，这个 fork 的新增部分原样继承。
 
 第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

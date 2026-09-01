@@ -30,7 +30,7 @@
 
 ## 验证
 
-`provider-form.client.spec.tsx` 通过真实卡片驱动下拉框与复选框：以适配器字段值写入 `input` 与 `reasoningEfforts`，把两者恢复为缺席，如实显示手写列表，并在字典只剩 `off` 时阻止应用。`model-capabilities.client.spec.ts` 固定分类、档位切换与每一种拒绝。`settings-root.client.spec.tsx` 断言两个新 id 各画各的图标，未知 id 仍画齿轮。[配置模型](../../../../docs/user/guide/providers.zh.md#图片输入)中的截图取自构建后的 Web UI。
+`provider-form.client.spec.tsx` 通过真实卡片驱动下拉框与复选框：以适配器字段值写入 `input` 与 `reasoningEfforts`，把两者恢复为缺席，如实显示手写列表，并在字典只剩 `off` 时阻止应用。`model-capabilities.client.spec.ts` 固定分类、档位切换与每一种拒绝。`settings-root.client.spec.tsx` 断言两个新 id 各画各的图标，未知 id 仍画齿轮。[配置模型](../../../../docs/user/guide/providers.zh.md#image-input)中的截图取自构建后的 Web UI。
 
 ## 后果
 

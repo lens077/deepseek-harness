@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-02-model-row-capability-fields.md
 2026-09-02-model-row-capability-fields.md: 212d7602c46bd82d37dc2e1f27fab66511957662
-2026-09-02-model-row-capability-fields.zh.md: 57d89155698a3f977ef1e1dcbb638da16330b18a
+2026-09-02-model-row-capability-fields.zh.md: 78f4167712284a2bab569f5bae61288779e5c0db
