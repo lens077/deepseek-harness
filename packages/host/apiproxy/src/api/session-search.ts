@@ -1,6 +1,15 @@
 /** Maximum number of sessions returned by one sidebar search. */
 export const SESSION_SEARCH_RESULT_LIMIT = 20
 
+/**
+ * Maximum number of questions returned by one within-session search.
+ *
+ * Larger than the cross-session limit because these hits are rows in one
+ * session's own list rather than separate sessions to choose between, and a
+ * truncated page costs the reader a narrower query.
+ */
+export const SESSION_QUESTION_RESULT_LIMIT = 50
+
 /** Maximum snippet length in Unicode code points. */
 export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 

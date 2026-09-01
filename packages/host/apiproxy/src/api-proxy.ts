@@ -42,7 +42,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
   ModelCatalogFailure, ModelProviderGroup,
-  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
+  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock,
+  SessionQuestionItem, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
@@ -57,6 +58,7 @@ import {
 } from './session-export.ts'
 import type { SessionRawArtifact } from '@deepseek-ai/dsh-session-persistence'
 import {
+  SESSION_QUESTION_RESULT_LIMIT,
   SESSION_SEARCH_RESULT_LIMIT,
   SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
   truncateUnicodeCodePoints,
@@ -2099,6 +2101,80 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return err(request, {
             code: 'internal',
             message: `session search failed: ${String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async searchQuestions(request, signal) {
+        const { sessionId, query } = request.payload
+        const cancelled = () => err<{ items: SessionQuestionItem[]; complete: boolean }>(request, {
+          code: 'cancelled',
+          message: 'question search was aborted',
+          details: {},
+        })
+        if (isAborted(signal)) return cancelled()
+        const sessionQuery = ctx.get('sessionQuery')
+        if (sessionQuery === undefined) {
+          return err(request, {
+            code: 'internal',
+            message: 'question search is unavailable: this deployment does not mount @deepseek-ai/dsh-session-query',
+            details: {},
+          })
+        }
+        try {
+          // Reading the session the same way `history` does is what authorizes
+          // this search: an id the caller may not read throws SessionNotFound
+          // here, before any query reaches the index.
+          await historySourceFor(sessionId)
+          if (isAborted(signal)) return cancelled()
+          const page = await sessionQuery.searchEvents({
+            sessionId,
+            query,
+            filters: [
+              { kind: 'type', values: ['user/message'] },
+              { kind: 'surface', values: ['current'] },
+            ],
+            limit: SESSION_QUESTION_RESULT_LIMIT,
+          }, { signal })
+          if (isAborted(signal)) return cancelled()
+          const items: SessionQuestionItem[] = []
+          for (const hit of page.items) {
+            // The provider is asked for this session's current questions; drop
+            // anything else rather than presenting it as one of them.
+            if (
+              hit.sessionId !== sessionId
+              || hit.surface !== 'current'
+              || hit.type !== 'user/message'
+            ) continue
+            items.push({
+              seq: hit.seq,
+              time: hit.time,
+              snippet: truncateUnicodeCodePoints(hit.snippet, SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS),
+            })
+          }
+          if (items.length > SESSION_QUESTION_RESULT_LIMIT) {
+            throw new Error(
+              `question search provider returned ${items.length} items; maximum is ${SESSION_QUESTION_RESULT_LIMIT}`,
+            )
+          }
+          // A continuation cursor means the index held matches this page does
+          // not carry, which the client must disclose rather than present the
+          // page as the whole answer.
+          return ok(request, { items, complete: page.nextCursor === undefined })
+        } catch (error: unknown) {
+          if (
+            isAborted(signal)
+            || (error instanceof SessionQueryError && error.code === 'SESSION_QUERY_ABORTED')
+          ) return cancelled()
+          if (error instanceof SessionNotFound) {
+            return err(request, { code: 'session-not-found', message: error.message, details: { sessionId } })
+          }
+          // XXX: Redact provider details before exposing this gateway beyond
+          // its current single-user local deployment.
+          return err(request, {
+            code: 'internal',
+            message: `question search failed: ${String(error)}`,
             details: {},
           })
         }

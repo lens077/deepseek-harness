@@ -5,7 +5,7 @@ import { createScope, scopeOf, SessionProvideChannel } from '@deepseek-ai/dsh-cl
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   AgentContext, ConversationSnapshot, ISessions, ObservableSnapshot, ProjectionsFace, SessionFace, SessionId,
-  SessionListState, SessionProvideDescriptor, SessionSearchResultItem, SessionSummary, SnapshotStore,
+  SessionListState, SessionProvideDescriptor, SessionQuestionResultItem, SessionSearchResultItem, SessionSummary, SnapshotStore,
   SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 // The double reports the wire schema's own search bound, like the production
@@ -186,7 +186,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork' | 'delete' | 'directories' | 'replaceDirectories'
+      | 'clear' | 'search' | 'searchQuestions' | 'fork' | 'delete' | 'directories' | 'replaceDirectories'
     args: unknown[]
   }[] = []
 
@@ -195,6 +195,12 @@ export class TestSessions implements ISessions {
 
   /** Replaceable search behavior (see {@link TestSessions.stubSearch}). */
   private searchStub: ((query: string, signal: AbortSignal) => { items: SessionSearchResultItem[]; hasMore: boolean }) | undefined
+
+  /** Replaceable question-search behavior (see {@link TestSessions.stubSearchQuestions}). */
+  private searchQuestionsStub: ((sessionId: SessionId, query: string, signal: AbortSignal) => {
+    items: SessionQuestionResultItem[]
+    complete: boolean
+  }) | undefined
 
   /**
    * @param stabilize - the owning runtime's act wrapper.
@@ -478,6 +484,40 @@ export class TestSessions implements ISessions {
   search(query: string, signal: AbortSignal): ReturnType<ISessions['search']> {
     this.calls.push({ method: 'search', args: [query, signal] })
     return Promise.resolve({ ok: true, value: this.searchStub?.(query, signal) ?? { items: [], hasMore: false } })
+  }
+
+  /**
+   * Replace the within-session question page (the call is still recorded).
+   * @param impl - question hits for a query, as the Host would rank them.
+   */
+  stubSearchQuestions(
+    impl: (sessionId: SessionId, query: string, signal: AbortSignal) => {
+      items: SessionQuestionResultItem[]
+      complete: boolean
+    },
+  ): void {
+    this.searchQuestionsStub = impl
+  }
+
+  /**
+   * Whole-session question search (recorded). The default answers a complete
+   * empty page, so a scenario asserting hits declares them through
+   * {@link TestSessions.stubSearchQuestions}.
+   * @param sessionId - the session whose questions are searched.
+   * @param query - non-blank literal phrase.
+   * @param signal - cancellation for a superseded search (recorded and forwarded).
+   * @returns the stubbed or empty result page.
+   */
+  searchQuestions(
+    sessionId: SessionId,
+    query: string,
+    signal: AbortSignal,
+  ): ReturnType<ISessions['searchQuestions']> {
+    this.calls.push({ method: 'searchQuestions', args: [sessionId, query, signal] })
+    return Promise.resolve({
+      ok: true,
+      value: this.searchQuestionsStub?.(sessionId, query, signal) ?? { items: [], complete: true },
+    })
   }
 
   /**

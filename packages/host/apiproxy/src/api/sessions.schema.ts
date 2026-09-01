@@ -12,12 +12,14 @@ import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import type {
   HistoryEntry, ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
-  ModelReasoningEffort, ModelSelection, SessionDirectories, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionSummary,
+  ModelReasoningEffort, ModelSelection, SessionDirectories, SessionListMetadata, SessionProjectionsBlock, SessionQuestionItem,
+  SessionSearchItem, SessionSummary,
 } from './sessions.ts'
 import type { ToolEventView } from './events.ts'
 import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { WorkspaceId } from './workspace.ts'
 import {
+  SESSION_QUESTION_RESULT_LIMIT,
   SESSION_SEARCH_RESULT_LIMIT,
   SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
   truncateUnicodeCodePoints,
@@ -97,6 +99,32 @@ export const sessionSearchValueSchema = z.object({
   items: z.array(sessionSearchItemSchema).max(SESSION_SEARCH_RESULT_LIMIT),
   hasMore: z.boolean(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.search'>>>
+
+/** session.searchQuestions request payload. */
+export const sessionSearchQuestionsRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  query: z.string().trim().min(1).max(SESSION_SEARCH_QUERY_MAX_CHARS)
+    .refine(query => !query.includes('\0'), { message: 'search query must not contain NUL' }),
+}) satisfies z.ZodType<Wire<RequestPayload<'session.searchQuestions'>>>
+
+/** One session.searchQuestions result. */
+export const sessionQuestionItemSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  time: z.number().int().nonnegative(),
+  snippet: z.string().refine(
+    snippet => truncateUnicodeCodePoints(
+      snippet,
+      SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
+    ) === snippet,
+    { message: `search snippet must contain at most ${SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS} Unicode code points` },
+  ),
+}) satisfies z.ZodType<Wire<SessionQuestionItem>>
+
+/** session.searchQuestions response value. */
+export const sessionSearchQuestionsValueSchema = z.object({
+  items: z.array(sessionQuestionItemSchema).max(SESSION_QUESTION_RESULT_LIMIT),
+  complete: z.boolean(),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.searchQuestions'>>>
 
 /** session.create request payload (at most one of workspaceId / cwd). */
 export const sessionCreateRequestSchema = z.object({

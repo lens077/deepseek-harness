@@ -102,6 +102,52 @@ describe('apply wiring', () => {
     await b.runtime.dispose()
   })
 
+  it('gives the chat view a session-wide question search, not the loaded window', async () => {
+    const b = await bench()
+    b.runtime.sessions.stubSearchQuestions((_sessionId, _query, _signal) => ({
+      items: [{ seq: 4, time: 1_004, snippet: 'a question the window never loaded' }],
+      complete: false,
+    }))
+    const chatView = renderEntryOf(b.slots, 'conversation.view') as {
+      inject: (sessionId: SessionId, actions: unknown) => { searchQuestions?: unknown }
+    }
+    const injected = chatView.inject(ROOT, { select: vi.fn() })
+    const searchQuestions = injected.searchQuestions as (
+      query: string, signal?: AbortSignal,
+    ) => Promise<{ hits: unknown[]; complete: boolean }>
+    expect(searchQuestions).toBeTypeOf('function')
+
+    const page = await searchQuestions('question')
+
+    // The host answered for the whole session, and its partial flag survives:
+    // the navigator can only disclose an incomplete page if it is told.
+    expect(page).toEqual({
+      hits: [{ seq: 4, time: 1_004, snippet: 'a question the window never loaded' }],
+      complete: false,
+    })
+    const call = b.runtime.sessions.calls.at(-1)
+    expect(call?.method).toBe('searchQuestions')
+    expect(call?.args.slice(0, 2)).toEqual([ROOT, 'question'])
+    await b.runtime.dispose()
+  })
+
+  it('surfaces a rejected question search instead of folding it into no matches', async () => {
+    const b = await bench()
+    b.runtime.sessions.searchQuestions = () => Promise.resolve({
+      ok: false, error: { code: 'internal', message: 'index unavailable', details: {} },
+    }) as ReturnType<typeof b.runtime.sessions.searchQuestions>
+    const chatView = renderEntryOf(b.slots, 'conversation.view') as {
+      inject: (sessionId: SessionId, actions: unknown) => { searchQuestions?: unknown }
+    }
+    const injected = chatView.inject(ROOT, { select: vi.fn() })
+    const searchQuestions = injected.searchQuestions as (query: string) => Promise<unknown>
+
+    // A failed search must reject: an empty page would read as "nothing
+    // matches", which is the defect this whole path exists to remove.
+    await expect(searchQuestions('question')).rejects.toThrow('index unavailable')
+    await b.runtime.dispose()
+  })
+
   it('leaves per-Tool rows to the ui-tool plugin', async () => {
     const b = await bench()
     // The actual toolview declaration activates every registrant. The

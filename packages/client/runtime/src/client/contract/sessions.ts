@@ -13,7 +13,7 @@ import type {
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { HostObservable, SessionMaybeProvideInfo } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentContext } from '../agents/scope.ts'
-import type { SessionSearchResultItem } from '../sessions/manager.ts'
+import type { SessionQuestionResultItem, SessionSearchResultItem } from '../sessions/manager.ts'
 import type {
   SessionBinding, SessionListState, SessionProvideDescriptor,
 } from '../sessions/service.ts'
@@ -84,6 +84,22 @@ export interface ISessions {
     query: string,
     signal: AbortSignal,
   ): Promise<RpcResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>>
+  /**
+   * Search one session's own questions across its whole log, not just the
+   * events the conversation window has loaded.
+   *
+   * `complete` reports whether the returned hits are every match: a consumer
+   * may say "no question matches" only when a complete page came back empty.
+   * @param sessionId - the session whose questions are searched.
+   * @param query - non-blank literal phrase.
+   * @param signal - cancellation for a superseded search.
+   * @returns bounded question hits, or a business/transport error.
+   */
+  searchQuestions(
+    sessionId: SessionId,
+    query: string,
+    signal: AbortSignal,
+  ): Promise<RpcResult<{ items: SessionQuestionResultItem[]; complete: boolean }>>
   /**
    * Fork a session from a completed-turn prefix of the source; on resolution
    * the child is in the list store and `open()` can target it.

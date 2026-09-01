@@ -38,11 +38,11 @@ The request was for a new host interface returning only question text. Before de
 
 So no new service method was added. Under `packages/AGENTS.md` ("Require evidence for public choices", and the inverse smell of a public method with one caller) a new method would have needed evidence that the existing one cannot serve this consumer, and it can. The gap was never the capability — it was that `searchEvents` has no wire exposure, so no browser consumer could reach it.
 
-### The wire remains unbuilt, and the honesty guarantee does not depend on it
+### The honesty guarantee does not depend on the wire
 
-Exposing `searchEvents` requires `rpc-map.ts`, `sessions.ts`, `sessions.schema.ts`, `fetch/handler.ts`, `fetch/client.ts`, and `api-proxy.ts`. All six were carrying another agent's uncommitted work in this tree. Committing them would have folded unrelated in-progress edits into this change, since `git add <path>` cannot select part of a file.
+`ChatViewInjected.searchQuestions` is optional, and its absence is not a degraded silent state — it is the `window-only` state, which tells the reader in as many words that only loaded questions were searched. **The view cannot claim a session-wide negative without a session-wide search, whether or not the transport exists.**
 
-The scope was therefore narrowed deliberately: this change ships the contract, the client consumption, and the honesty guarantee; the wire binding is the remaining step. `ChatViewInjected.searchQuestions` is optional, and its absence is not a degraded silent state — it is the `window-only` state, which tells the reader in as many words that only loaded questions were searched. **The view cannot claim a session-wide negative without a session-wide search, whether or not the transport exists.**
+This change shipped the contract, the client consumption, and that guarantee while the six wire files were carrying another agent's uncommitted work, since `git add <path>` cannot select part of a file. The transport landed separately once those files settled — see [wiring the question index](2026-09-14-question-search-wire.md) — and the optional prop is what let the two arrive in either order.
 
 Reusing the cross-session `session.search` was rejected on the merits, not only on the file conflict: its request payload is `{ query }` with no session id, and its result is `{ sessionId, snippet }` with no `seq`. It cannot scope to a session and cannot address a jump.
 
@@ -94,9 +94,9 @@ Search had been reachable only by opening the panel from the tick strip, which m
 
 - The navigator can no longer report a session-wide negative it did not verify. Nine component tests pin the state distinctions.
 - `QuestionNavigator` props changed: `onLoadAll` and `loadingOlder` are gone; `onSelectSeq` and optional `searchQuestions` replace them.
-- Until the wire lands, the shipped GUI runs in `window-only`: search results come from the loaded window and say so. This is a visible, honest limitation, not a silent one.
+- A deployment that composes no `searchQuestions` runs in `window-only`: search results come from the loaded window and say so. This is a visible, honest limitation, not a silent one.
 - `.questionLoadAll` is left without a renderer; the CSS rule is dead and removed with the navigator's visual pass.
 
 ## Follow-up
 
-Bind `searchQuestions` in `apply.ts` to a `session.searchQuestions` wire operation over `sessionQuery.searchEvents`, filtered to `type: ['user/message']` and `surface: ['current']`, with `truncateUnicodeCodePoints` applied at the wire boundary and zod validation on both payload and value. The `nextCursor` returned by `searchEvents` maps to `complete: false`. No session-query change is needed.
+The wire binding this note deferred has landed as described, with no change to this design: [wiring the question index](2026-09-14-question-search-wire.md).

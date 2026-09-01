@@ -41,6 +41,15 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
           },
         }
       },
+      async searchQuestions(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: { items: [{ seq: 2, time: 1_002, snippet: 'fixture question' }], complete: true },
+          },
+        }
+      },
       async create(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { sessionId: 's-new' as never } } }
       },

@@ -33,7 +33,7 @@ import { createScope, scopeOf as scopeTagOf } from '../agents/scope.ts'
 import type { ConversationRuntime } from './conversation-assembler.ts'
 import { SessionManager } from './manager.ts'
 import type { SessionRemotes } from './remotes.ts'
-import type { SessionListPhase, SessionSearchResultItem, SubagentCatalogSnapshot } from './manager.ts'
+import type { SessionListPhase, SessionQuestionResultItem, SessionSearchResultItem, SubagentCatalogSnapshot } from './manager.ts'
 import type { PendingInteractionStatus } from './pending.ts'
 import { SessionProvideChannel } from './provide.ts'
 import type { Session } from './session.ts'
@@ -456,6 +456,22 @@ export class SessionRuntime implements ISessions {
     signal: AbortSignal,
   ): Promise<RpcResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>> {
     return this.manager.search(query, signal)
+  }
+
+  /**
+   * Search one session's questions across its whole log, not just the loaded
+   * conversation window.
+   * @param sessionId - the session whose questions are searched.
+   * @param query - non-blank literal phrase.
+   * @param signal - cancellation for a superseded search.
+   * @returns bounded question hits or a business/transport error.
+   */
+  searchQuestions(
+    sessionId: SessionId,
+    query: string,
+    signal: AbortSignal,
+  ): Promise<RpcResult<{ items: SessionQuestionResultItem[]; complete: boolean }>> {
+    return this.manager.searchQuestions(sessionId, query, signal)
   }
 
   /**

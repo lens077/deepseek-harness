@@ -39,6 +39,18 @@ export interface SessionSearchResultItem {
   snippet: string
 }
 
+/**
+ * Request-local question hit inside one session.
+ *
+ * `seq` addresses the matching user message, which is the coordinate the
+ * conversation window pages on.
+ */
+export interface SessionQuestionResultItem {
+  seq: number
+  time: number
+  snippet: string
+}
+
 /** Immutable session-list snapshot for useSessionList. */
 export interface SessionListSnapshot {
   items: readonly SessionListEntry[]
@@ -537,6 +549,25 @@ export class SessionManager {
   ): Promise<RpcResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>> {
     try {
       return (await this.api.sessions.search({ query }, signal)).result
+    } catch (error: unknown) {
+      return transportError(error)
+    }
+  }
+
+  /**
+   * Search one session's questions across its whole log.
+   * @param sessionId - the session whose questions are searched.
+   * @param query - non-blank literal phrase.
+   * @param signal - cancellation for superseded UI queries.
+   * @returns the Host result or a folded transport error.
+   */
+  async searchQuestions(
+    sessionId: SessionId,
+    query: string,
+    signal: AbortSignal,
+  ): Promise<RpcResult<{ items: SessionQuestionResultItem[]; complete: boolean }>> {
+    try {
+      return (await this.api.sessions.searchQuestions({ sessionId, query }, signal)).result
     } catch (error: unknown) {
       return transportError(error)
     }

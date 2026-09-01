@@ -28,6 +28,7 @@ import {
   sessionPromptRequestSchema,
   sessionRenameRequestSchema,
   sessionReplaceDirectoriesRequestSchema,
+  sessionSearchQuestionsRequestSchema,
   sessionSearchRequestSchema,
   sessionSelectModelRequestSchema,
   sessionUpdateQueueRequestSchema,
@@ -96,6 +97,10 @@ type UnaryRoutes = {
 const UNARY_ROUTES: UnaryRoutes = {
   'session.list': { schema: sessionListRequestSchema, invoke: (api, r) => api.sessions.list(r) },
   'session.search': { schema: sessionSearchRequestSchema, invoke: (api, r, signal) => api.sessions.search(r, signal) },
+  'session.searchQuestions': {
+    schema: sessionSearchQuestionsRequestSchema,
+    invoke: (api, r, signal) => api.sessions.searchQuestions(r, signal),
+  },
   'session.create': { schema: sessionCreateRequestSchema, invoke: (api, r) => api.sessions.create(r) },
   'session.history': { schema: sessionHistoryRequestSchema, invoke: (api, r) => api.sessions.history(r) },
   'session.models': { schema: sessionModelsRequestSchema, invoke: (api, r) => api.sessions.models(r) },

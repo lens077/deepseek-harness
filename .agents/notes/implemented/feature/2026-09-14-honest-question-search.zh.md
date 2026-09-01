@@ -38,11 +38,11 @@ onLoadAll={() => { if (hasMore && !loadingOlder) loadOlder() }}
 
 因此**没有新增任何服务方法**。按 `packages/AGENTS.md`（"Require evidence for public choices"，以及"公开方法只有一个内部调用者"这一反向气味），新增方法需要证据表明既有方法无法服务此消费者，而它能。缺口从来不在能力本身——而在于 `searchEvents` 没有 wire 出口，浏览器侧的消费者够不到它。
 
-### wire 尚未接通，而诚实性保证不依赖它
+### 诚实性保证不依赖 wire
 
-暴露 `searchEvents` 需要改动 `rpc-map.ts`、`sessions.ts`、`sessions.schema.ts`、`fetch/handler.ts`、`fetch/client.ts` 与 `api-proxy.ts`。在本工作树中这六个文件都承载着另一个 agent 未提交的改动。提交它们会把无关的在途编辑一并卷入本次变更，因为 `git add <路径>` 无法只选取文件的一部分。
+`ChatViewInjected.searchQuestions` 是可选的，而它的缺席**不是一个被降级的静默状态**——它就是 `window-only` 状态，会明确告诉读者只搜索了已加载的提问。**无论传输层是否存在，视图都不能在没有全会话搜索的情况下断言全会话的否定结论。**
 
-因此范围被**有意收窄**：本次变更交付契约、客户端消费与诚实性保证；wire 绑定是剩余的一步。`ChatViewInjected.searchQuestions` 是可选的，而它的缺席**不是一个被降级的静默状态**——它就是 `window-only` 状态，会明确告诉读者只搜索了已加载的提问。**无论传输层是否存在，视图都不能在没有全会话搜索的情况下断言全会话的否定结论。**
+本次变更在那六个 wire 文件仍承载着另一个 agent 未提交工作时，就交付了契约、客户端消费与该保证，因为 `git add <路径>` 无法只选取文件的一部分。传输层在这些文件落定后单独落地——见[接通提问索引](2026-09-14-question-search-wire.zh.md)——而正是这个可选 prop 让两者能以任意顺序抵达。
 
 复用跨会话的 `session.search` 是基于实质理由否决的，而不只是因为文件冲突：它的请求载荷是 `{ query }`，没有会话 id；结果是 `{ sessionId, snippet }`，没有 `seq`。它既不能限定会话，也无法定址跳转。
 
@@ -94,9 +94,9 @@ onLoadAll={() => { if (hasMore && !loadingOlder) loadOlder() }}
 
 - 导航器不再能报告一个它未曾验证的全会话否定结论。九条组件测试钉住这些状态区分。
 - `QuestionNavigator` 的 props 发生变化：`onLoadAll` 与 `loadingOlder` 移除，由 `onSelectSeq` 与可选的 `searchQuestions` 取代。
-- 在 wire 落地前，已发布的 GUI 运行在 `window-only`：搜索结果来自已加载窗口，并如实说明。这是一个**可见且诚实**的限制，而非静默的限制。
+- 未组合 `searchQuestions` 的部署运行在 `window-only`：搜索结果来自已加载窗口，并如实说明。这是一个**可见且诚实**的限制，而非静默的限制。
 - `.questionLoadAll` 失去渲染方；该 CSS 规则已成死规则，随导航器的视觉整理一并移除。
 
 ## 后续工作
 
-在 `apply.ts` 中把 `searchQuestions` 绑定到一条基于 `sessionQuery.searchEvents` 的 `session.searchQuestions` wire 操作，过滤条件为 `type: ['user/message']` 与 `surface: ['current']`，在 wire 边界应用 `truncateUnicodeCodePoints`，并对载荷与返回值双向做 zod 校验。`searchEvents` 返回的 `nextCursor` 映射为 `complete: false`。session-query 无需改动。
+本记录推迟的 wire 绑定已按所述落地，本设计未作任何改动：[接通提问索引](2026-09-14-question-search-wire.zh.md)。

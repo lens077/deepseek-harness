@@ -37,7 +37,7 @@ import type {
   ToolCallView, ToolEventView, ToolResultView, WorkspaceId, WorkspaceView,
 } from './api.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { AbstractApiClient, RpcId, SESSION_SEARCH_RESULT_LIMIT } from './api.ts'
+import { AbstractApiClient, RpcId, SESSION_QUESTION_RESULT_LIMIT, SESSION_SEARCH_RESULT_LIMIT } from './api.ts'
 import { randomUuid } from './random-uuid.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 
@@ -2401,6 +2401,51 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           hasMore: matches.length > SESSION_SEARCH_RESULT_LIMIT,
         })
       },
+      searchQuestions: (request, signal) => {
+        const { sessionId } = request.payload
+        if (signal.aborted) {
+          return err(request, {
+            code: 'cancelled',
+            message: 'fixture question search was aborted',
+            details: {},
+          })
+        }
+        const log = logs.get(sessionId)
+        if (log === undefined) {
+          return err(request, {
+            code: 'session-not-found',
+            message: `no session ${sessionId}`,
+            details: { sessionId },
+          })
+        }
+        const query = searchTokenSpans(request.payload.query).tokens.map(token => token.value)
+        const current = new Set(foldSurface(log).nodes)
+        const matches = log.flatMap((event): FixtureSearchCandidate[] => {
+          if (!current.has(event.seq) || event.type !== 'user/message') return []
+          const eventText = searchEventText(event)
+          const document = searchTokenSpans(eventText)
+          const match = phraseMatch(document.tokens, query)
+          if (match.count === 0) return []
+          return [{
+            sessionId,
+            seq: event.seq,
+            time: event.time,
+            text: document.text,
+            matchCount: match.count,
+            matchStart: match.start,
+            matchEnd: match.end,
+            documentLength: Array.from(eventText).length,
+          }]
+        }).sort(compareSearchCandidates)
+        return ok(request, {
+          items: matches.slice(0, SESSION_QUESTION_RESULT_LIMIT).map(match => ({
+            seq: match.seq,
+            time: match.time,
+            snippet: searchSnippet(match.text, match.matchStart, match.matchEnd),
+          })),
+          complete: matches.length <= SESSION_QUESTION_RESULT_LIMIT,
+        })
+      },
       create: async (request) => {
         const workspace = request.payload.workspaceId === undefined
           ? undefined
@@ -3383,6 +3428,7 @@ export class FixtureApiClient extends AbstractApiClient {
     switch (method) {
       case 'session.list': return this.api.sessions.list(request)
       case 'session.search': return this.api.sessions.search(request, signal)
+      case 'session.searchQuestions': return this.api.sessions.searchQuestions(request, signal)
       case 'session.create': return this.api.sessions.create(request)
       case 'session.history': return this.api.sessions.history(request)
       case 'session.models': return this.api.sessions.models(request)

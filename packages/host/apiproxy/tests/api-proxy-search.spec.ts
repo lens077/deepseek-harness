@@ -14,6 +14,8 @@ import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import {
   SessionQueryError,
+  type SessionEventSearchHit,
+  type SessionEventSearchRequest,
   type SessionSearchHit,
   type SessionSearchRequest,
 } from '@deepseek-ai/dsh-session-query'
@@ -876,5 +878,172 @@ describe('session.search', () => {
     if (failed.result.ok) throw new Error('unreachable')
     expect(failed.result.error.code).toBe('internal')
     expect(failed.result.error.message).toContain('database unavailable')
+  })
+})
+
+describe('session.searchQuestions', () => {
+  function questionRequest(
+    sessionId: string,
+    query: string,
+  ): RpcRequest<{ sessionId: SessionId; query: string }> {
+    return { rpcId: RpcId(`questions-${query}`), payload: { sessionId: sid(sessionId), query } }
+  }
+
+  function questionHit(seq: number, snippet: string): SessionEventSearchHit {
+    return {
+      sessionId: sid('live'),
+      seq,
+      type: 'user/message',
+      time: 1_000 + seq,
+      surface: 'current',
+      snippet,
+    }
+  }
+
+  async function liveContext(): Promise<Context> {
+    const ctx = await baseContext()
+    const live = ctx.sessions.create(sid('live'), { meta: header('live', '/live') })
+    live.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'a question' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    return ctx
+  }
+
+  it('asks the index for this session\'s current questions and reports a complete page', async () => {
+    const ctx = await liveContext()
+    const searchEvents = vi.fn((
+      _request: SessionEventSearchRequest,
+      _exec?: { signal?: AbortSignal },
+    ) => Promise.resolve({
+      items: [questionHit(2, 'the earlier question'), questionHit(9, 'a later question')],
+      header: header('live', '/live'),
+    }))
+    ctx.provide('sessionQuery', { searchEvents } as never)
+    const api = createApiProxy(ctx, defaults)
+    const signal = new AbortController().signal
+
+    const response = await api.sessions.searchQuestions(questionRequest('live', 'question'), signal)
+
+    expect(response.result).toEqual({
+      ok: true,
+      value: {
+        items: [
+          { seq: 2, time: 1_002, snippet: 'the earlier question' },
+          { seq: 9, time: 1_009, snippet: 'a later question' },
+        ],
+        complete: true,
+      },
+    })
+    const [providerRequest, exec] = searchEvents.mock.calls[0] as unknown as [
+      SessionEventSearchRequest,
+      { signal: AbortSignal },
+    ]
+    expect(providerRequest).toEqual({
+      sessionId: 'live',
+      query: 'question',
+      filters: [
+        { kind: 'type', values: ['user/message'] },
+        { kind: 'surface', values: ['current'] },
+      ],
+      limit: 50,
+    })
+    expect(exec.signal).toBe(signal)
+  })
+
+  it('reports an incomplete page when the index holds more matches', async () => {
+    const ctx = await liveContext()
+    ctx.provide('sessionQuery', {
+      searchEvents: () => Promise.resolve({
+        items: [questionHit(1, 'one of many')],
+        header: header('live', '/live'),
+        nextCursor: 'page-2',
+      }),
+    } as never)
+    const api = createApiProxy(ctx, defaults)
+
+    const response = await api.sessions.searchQuestions(
+      questionRequest('live', 'many'),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({ ok: true, value: { complete: false } })
+  })
+
+  it('drops hits the provider returned outside this session\'s current questions', async () => {
+    const ctx = await liveContext()
+    ctx.provide('sessionQuery', {
+      searchEvents: () => Promise.resolve({
+        items: [
+          { ...questionHit(1, 'from another session'), sessionId: sid('other') },
+          { ...questionHit(2, 'an assistant reply'), type: 'assistant/message' as const },
+          { ...questionHit(3, 'a compacted question'), surface: 'compacted' as const },
+          questionHit(4, 'the only admissible question'),
+        ],
+        header: header('live', '/live'),
+      }),
+    } as never)
+    const api = createApiProxy(ctx, defaults)
+
+    const response = await api.sessions.searchQuestions(
+      questionRequest('live', 'question'),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({
+      ok: true,
+      value: { items: [{ seq: 4, snippet: 'the only admissible question' }] },
+    })
+  })
+
+  it('refuses a session the caller cannot read, before reaching the index', async () => {
+    const ctx = await baseContext()
+    const searchEvents = vi.fn()
+    ctx.provide('sessionPersistence', {
+      list: () => Promise.resolve([]),
+      locate: () => undefined,
+    } as never)
+    ctx.provide('sessionQuery', { searchEvents } as never)
+    const api = createApiProxy(ctx, defaults)
+
+    const response = await api.sessions.searchQuestions(
+      questionRequest('absent', 'question'),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({ ok: false, error: { code: 'session-not-found' } })
+    expect(searchEvents).not.toHaveBeenCalled()
+  })
+
+  it('reports an unmounted index rather than an empty result', async () => {
+    const ctx = await liveContext()
+    const api = createApiProxy(ctx, defaults)
+
+    const response = await api.sessions.searchQuestions(
+      questionRequest('live', 'question'),
+      new AbortController().signal,
+    )
+
+    expect(response.result.ok).toBe(false)
+    if (response.result.ok) throw new Error('unreachable')
+    expect(response.result.error.code).toBe('internal')
+    expect(response.result.error.message).toContain('does not mount')
+  })
+
+  it('maps an aborted provider to cancelled rather than to no matches', async () => {
+    const ctx = await liveContext()
+    ctx.provide('sessionQuery', {
+      searchEvents: () => Promise.reject(
+        new SessionQueryError('aborted', 'SESSION_QUERY_ABORTED'),
+      ),
+    } as never)
+    const api = createApiProxy(ctx, defaults)
+
+    const response = await api.sessions.searchQuestions(
+      questionRequest('live', 'question'),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
   })
 })

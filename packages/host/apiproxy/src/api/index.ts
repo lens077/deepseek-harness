@@ -45,7 +45,7 @@ export interface ApiProxy {
 export type {
   HistoryEntry, ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
   ModelReasoningEffort, ModelSelection, PromptContentPart, QueueAction, SessionDirectories, SessionModels,
-  SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionsApi, SessionSummary,
+  SessionListMetadata, SessionProjectionsBlock, SessionQuestionItem, SessionSearchItem, SessionsApi, SessionSummary,
 } from './sessions.ts'
 export type { DirectoryEntry, DirectoryListing, HostApi } from './host.ts'
 export type {
@@ -90,6 +90,7 @@ export {
 
 // ---- Fixed session-search product bounds ----
 export {
+  SESSION_QUESTION_RESULT_LIMIT,
   SESSION_SEARCH_RESULT_LIMIT,
   SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
 } from './session-search.ts'

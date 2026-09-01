@@ -240,6 +240,21 @@ export interface SessionSearchItem {
   snippet: string
 }
 
+/**
+ * One question that matched inside a single session.
+ *
+ * `seq` is the coordinate the conversation window pages on, so a hit outside
+ * the loaded window names how far back the client must page to reach it.
+ */
+export interface SessionQuestionItem {
+  /** Seq of the matching `user/message` event within its session. */
+  seq: number
+  /** Unix epoch milliseconds of the matching user message. */
+  time: number
+  /** Plain-text excerpt of the question, never a full message body. */
+  snippet: string
+}
+
 /** Session-domain unary methods (the map keys session.* of RpcMethodMap). */
 export interface SessionsApi {
   /** Lists persisted sessions (updatedAt descending). v1 returns everything; cursor is a reserved seat, unimplemented. */
@@ -254,6 +269,19 @@ export interface SessionsApi {
     request: RpcRequest<{ query: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ items: SessionSearchItem[]; hasMore: boolean }>>
+
+  /**
+   * Searches the current user questions of one session, whose whole log is
+   * searched rather than the window the client has loaded.
+   *
+   * `complete` is the honesty bit: it is false when the host stopped at its
+   * page limit, so a client may report "no question matches" only when a
+   * complete page came back empty.
+   */
+  searchQuestions(
+    request: RpcRequest<{ sessionId: SessionId; query: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ items: SessionQuestionItem[]; complete: boolean }>>
 
   /**
    * Creates a real session and its idle agent. At most one of `workspaceId` /

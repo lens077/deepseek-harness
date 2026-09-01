@@ -491,6 +491,15 @@ export function apply(ctx: Context): void {
           return workspaces.openPath(resolveWorkspacePath(cwd, path))
         },
         loadOlder: () => { void scoped.loadOlder() },
+        // The whole-session question index. Its presence is what lets the
+        // navigator answer for the session rather than for the loaded window;
+        // a rejection stays a rejection, because the view must tell a failed
+        // search apart from one that found nothing.
+        searchQuestions: async (query, signal) => {
+          const result = await sessions.searchQuestions(sessionId, query, signal ?? new AbortController().signal)
+          if (!result.ok) throw new Error(result.error.message)
+          return { hits: result.value.items, complete: result.value.complete }
+        },
         loadImage: attachment => conversation.resolveImage(sessionId, attachment),
         // Unregistered 'trajectory' id is safe: the tab ring falls back to
         // the first view, and the untouched inspect target stays inert.
