@@ -162,7 +162,7 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, actions, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, turnFiles, turnFilesAvailable, questionNavigation: readQuestionNavigation, t,
+  fileMentions, turnFiles, turnFilesAvailable, questionNavigation: readQuestionNavigation, searchQuestions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -456,6 +456,39 @@ export function ChatView({
     if (index !== -1) jumpToQuestion(index)
   }, [jumpToQuestion, questions])
 
+  /**
+   * A search hit outside the loaded window: page back until the window covers
+   * its seq, then jump. Requested seq and window state are recorded so the
+   * effect below can resume paging after each page settles, which keeps this
+   * on the existing paging path instead of opening a second scroll mechanism.
+   */
+  const [pendingSeq, setPendingSeq] = useState<number | null>(null)
+  const jumpToQuestionSeq = useCallback((seq: number) => {
+    const index = questions.findIndex(question => question.node.seq === seq)
+    if (index !== -1) {
+      jumpToQuestion(index)
+      return
+    }
+    setPendingSeq(seq)
+  }, [jumpToQuestion, questions])
+
+  useEffect(() => {
+    if (pendingSeq === null) return
+    const index = questions.findIndex(question => question.node.seq === pendingSeq)
+    if (index !== -1) {
+      setPendingSeq(null)
+      jumpToQuestion(index)
+      return
+    }
+    // Give up rather than page forever once the session has no earlier events:
+    // the hit cannot be reached, and silently spinning would be its own lie.
+    if (!hasMore) {
+      setPendingSeq(null)
+      return
+    }
+    if (!loadingOlder) loadOlder()
+  }, [hasMore, jumpToQuestion, loadOlder, loadingOlder, pendingSeq, questions])
+
   useEffect(() => {
     const local = listRef.current
     if (local === null || questions.length === 0) return
@@ -661,6 +694,9 @@ export function ChatView({
               }
             }}
             onNext={() => { jumpToQuestion(currentQuestion + 1) }}
+            onSelect={jumpToQuestion}
+            onSelectSeq={jumpToQuestionSeq}
+            searchQuestions={searchQuestions}
             t={t}
           />
           {!atBottom && (

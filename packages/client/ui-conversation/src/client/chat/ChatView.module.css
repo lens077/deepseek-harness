@@ -354,6 +354,134 @@
   cursor: default;
 }
 
+.questionPanel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: min(360px, calc(100vw - 48px));
+  max-height: min(560px, calc(100vh - var(--dsh-composer-height, 152px) - 72px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.questionSearch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.questionSearch input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+}
+
+/*
+ * `min-height: 0` lets the list actually scroll inside the capped-height panel.
+ * Without it a long result set refuses to shrink below its content and the
+ * flex column takes the space out of its siblings instead.
+ */
+.questionList {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.questionRow {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.questionRow:hover,
+.questionRow[data-current] {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+/*
+ * `min-width` rather than a fixed basis: the loaded window grows by whole
+ * pages with no cap, so a reader who pages far enough back reaches ordinals
+ * wider than two digits. Reserving 28px keeps the common case aligned while
+ * letting a longer number take the room it needs instead of colliding.
+ */
+.questionNumber {
+  flex: 0 0 auto;
+  min-width: 28px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.questionCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.questionCopy > span {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.questionCopy time {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+/*
+ * Says when the result set is partial. It reads as prose rather than a warning
+ * banner: an incomplete answer is a normal state of a paged search, not a fault.
+ */
+.questionSearchNotice {
+  /* Never shrink: this line says the results are incomplete, so a crowded
+     panel must take space from the list rather than from the disclaimer. */
+  flex: none;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+}
+
+/* Matches the arrow buttons: searching is a peer of stepping through questions. */
+.questionSearchEntry {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 100px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  cursor: pointer;
+}
+
+.questionSearchEntry[data-panel-open] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .toBottom {
   position: fixed;
   right: max(24px, calc((100vw - var(--dsh-chat-content-width)) / 2 - 76px));
@@ -374,6 +502,7 @@
 }
 
 .toBottom:hover,
+.questionSearchEntry:hover,
 .questionArrow:not(:disabled):hover {
   background: var(--dsw-alias-button-floating-hover);
 }

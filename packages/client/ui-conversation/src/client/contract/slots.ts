@@ -18,6 +18,7 @@ import type {
   ComposerKeyboard, DraftAttachmentId, EditSelection, InputActions, InputNotice, InputState,
 } from '../input/contract.ts'
 import type { createChatStore } from '../stores.ts'
+import type { SearchQuestions } from './question-search.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
@@ -930,6 +931,15 @@ export interface ChatViewInjected {
    */
   openFile: (path: string) => Promise<void>
   loadOlder: () => void
+  /**
+   * Search the whole session's questions through the host's question index,
+   * rather than filtering the loaded window.
+   *
+   * Undefined while no host-backed search is composed in. That absence is
+   * meaningful to the view: it may then show matches from the loaded window
+   * but must not report their absence as "no question matches".
+   */
+  searchQuestions?: SearchQuestions | undefined
   /** Resolve a session-authorized historical image for inline display. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   /** Hand a call off to the trajectory view: write the one-shot inspect target and switch tabs. */

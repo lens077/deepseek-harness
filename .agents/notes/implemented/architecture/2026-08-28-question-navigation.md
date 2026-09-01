@@ -14,6 +14,8 @@ The Chat view derives a question index from finalized `user` Chat Nodes and keep
 
 The current question is the last user row at or above the transcript reading edge. A jump aligns the target row to the top, respects reduced-motion preferences, and applies a two-second visual highlight. Moving before the loaded head requests the next older page before resolving the target; opening the full list continues to expose the existing history paging action rather than introducing a second session data path.
 
+The searchable list named here searched only the loaded window, so it answered "no match" for questions held in earlier pages. [Honest question search](../feature/2026-09-14-honest-question-search.md) supersedes that half of this decision: search is a whole-session host query with its own standing entry, and the paging action it relied on is gone. The navigation, current-question, and shortcut decisions below are unaffected.
+
 Question-navigation shortcuts use the conversation settings namespace. Platform defaults use Command with arrow keys on macOS and Control elsewhere. The General Settings row records arbitrary non-modifier keys, requires explicit confirmation for unmodified single keys, rejects a modifier alone, prevents duplicate previous/next bindings, and offers three focus policies. The default policy suppresses shortcuts in form controls and editable regions.
 
 ## Verification
