@@ -32,7 +32,14 @@ Provider ID 是永久的，因为请求、已保存会话、模型默认值和�
 
 手动输入的模型在自己声明之前一律按纯文本对待，因为没有任何环节能去询问端点接受哪些模态。给这类模型附加图片，会在发送前就被拒绝，并点名该模型。
 
-因此自定义提供方下的视觉模型需要加一行。表单没有对应字段；请在 `$DSH_HOME/settings.yaml` 中给该模型加上 `input`：
+因此自定义提供方下的视觉模型需要一处声明，推理模型也一样：不声明，模型选择器就不会为它提供任何推理档位。两者都在模型目录中该行的**高级**折叠里，与容量并列：
+
+![模型行的高级折叠：上下文窗口、最大输出 token、设为"文本 + 图片"的图片输入、设为"自定义可选档位"的推理，以及七个档位复选框](providers-model-capabilities.zh.png)
+
+- **图片输入**：*跟随目录默认*保留已安装目录记录的模态（手动录入的模型即纯文本）；*文本 + 图片*写入 `input: [text, image]`；*仅文本*写入 `input: [text]`，用于收窄网关并不提供图片能力的目录模型。手写的、下拉框无法表达的列表会显示为*按 settings.yaml 所写*，在被其他选项替换前保持原样。
+- **推理**：*跟随目录默认*保留目录的能力；*不推理*写入 `reasoningEfforts: false`，用于从网关无法服务的目录模型上剥离推理；*自定义可选档位*写入勾选档位组成的字典，每个档位按原名发送（`high: high`）。切换到它时默认勾选 `low`、`medium`、`high`，且字典必须保留至少一个 `off` 以外的档位。改写发送名称（`max: ultra`）与下文的 `compat` 开关仍在 `settings.yaml` 中；复选框会保留在那里找到的名称。
+
+两者在 `$DSH_HOME/settings.yaml` 中也各是一行，表单写入的正是它们：
 
 ```yaml
 llm-pi-ai:
@@ -45,6 +52,10 @@ llm-pi-ai:
         - id: legacy-chat
         - id: vision-preview
           input: [text, image]
+          reasoningEfforts:
+            low: low
+            medium: medium
+            high: high
 ```
 
 `input` 接受 `text` 和 `image`，且只作用于该模型，因此一条路由可以同时服务两类模型。省略它——或写成空列表，两者同义——则保留已安装目录为该模型记录的模态；目录未描述的模型则回退到该路由的 `defaultInput`。
@@ -129,7 +140,8 @@ llm-pi-ai:
 - **密钥与地址都正确，网关却拒绝每一个请求**：它的请求形状与 OpenAI 不同。先在路由上设 `compat.supportsDeveloperRole: false` 与 `compat.maxTokensField: max_tokens`。
 - **只有推理模型失败**：pi-ai 把它们的系统提示词以 `developer` 角色发出，而网关拒绝该角色。设 `compat.supportsDeveloperRole: false`。
 - **某个 compat 开关因没有值而被拒绝**：冒号后什么都没写。给它一个值，或删掉该键以沿用已安装 catalog 的值。
-- **图片在发送前被拒绝**：该模型未声明图片模态。请给自定义提供方的模型加上 `input: [text, image]`；DeepSeek 自身的 chat-completions 路由是纯文本的，且无法通过配置改变。
+- **图片在发送前被拒绝，或粘贴图片只插入了一个文件引用**：该模型未声明图片模态。把该行的**图片输入**设为*文本 + 图片*（`input: [text, image]`）；DeepSeek 自身的 chat-completions 路由是纯文本的，且无法通过配置改变。
+- **模型选择器不为手动录入的模型提供推理档位**：该行未声明 `reasoningEfforts`。把它的**推理**设为*自定义可选档位*，并勾选端点实际提供的档位。
 - **提供方拒绝了带图片的请求**：该模型声明了其端点实际并不提供的图片能力。请从授予它图片能力的那个列表中移除 `image`——可能是模型的 `input`，也可能是路由的 `defaultInput`——然后开启新会话：附加的图片会留在会话日志里，因此在会话离开它之前，同一个请求会不断重复。
 
 ## 进阶配置

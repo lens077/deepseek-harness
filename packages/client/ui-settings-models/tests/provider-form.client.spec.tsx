@@ -33,6 +33,11 @@ const PiAiConfig = Schema.object({
       name: Schema.string(),
       contextWindow: Schema.number(),
       maxTokens: Schema.number(),
+      input: Schema.array(Schema.union(['text', 'image'])),
+      reasoningEfforts: Schema.union([
+        Schema.const(false),
+        Schema.dict(Schema.union([Schema.string(), Schema.const(null)])),
+      ]),
     })),
     reasoning: Schema.union(['off', 'high']),
   })),
@@ -215,6 +220,118 @@ describe('model list editing', () => {
       expectedRevision: 3,
       ops: [{ op: 'set', path: ['providers', 'openai', 'models'], value: [{ id: 'acme-large', contextWindow: 65_536 }] }],
     })
+  })
+
+  it('declares image input and reasoning levels through the advanced fold', async () => {
+    const { mutate } = await mountSection()
+    openEditor('openai')
+
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'vision-think' } })
+    expandModel(1)
+    const input = screen.getByLabelText<HTMLSelectElement>(`${en.modelInput} 1`)
+    const reasoning = screen.getByLabelText<HTMLSelectElement>(`${en.modelReasoning} 1`)
+    // A hand-entered row starts on the catalog defaults, with no level row.
+    expect(input.value).toBe('inherit')
+    expect(reasoning.value).toBe('inherit')
+    expect(screen.queryByLabelText(`${en.modelReasoningLevels} 1`)).toBeNull()
+
+    fireEvent.change(input, { target: { value: 'multimodal' } })
+    fireEvent.change(reasoning, { target: { value: 'levels' } })
+    // Custom levels open on the common trio; checking adds a canonical
+    // spelling, `off` is written valueless, and unchecking removes the key.
+    expect(screen.getByLabelText<HTMLInputElement>('High 1').checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('Max 1').checked).toBe(false)
+    fireEvent.click(screen.getByLabelText('Max 1'))
+    fireEvent.click(screen.getByLabelText('Off 1'))
+    fireEvent.click(screen.getByLabelText('Low 1'))
+    // Re-choosing custom levels keeps the dict rather than resetting it.
+    fireEvent.change(reasoning, { target: { value: 'levels' } })
+    expect(screen.getByLabelText<HTMLInputElement>('Max 1').checked).toBe(true)
+
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{
+      id: 'vision-think',
+      input: ['text', 'image'],
+      reasoningEfforts: { medium: 'medium', high: 'high', max: 'max', off: null },
+    }])
+  })
+
+  it('writes text-only and non-reasoning as their own values, and inherit as absence', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        openai: {
+          baseURL: 'https://proxy.example/v1',
+          models: [{ id: 'm', input: ['text', 'image'], reasoningEfforts: { high: 'high' } }],
+        },
+      },
+    })
+    openEditor('openai')
+    expandModel(1)
+    const input = screen.getByLabelText<HTMLSelectElement>(`${en.modelInput} 1`)
+    const reasoning = screen.getByLabelText<HTMLSelectElement>(`${en.modelReasoning} 1`)
+    expect(input.value).toBe('multimodal')
+    expect(reasoning.value).toBe('levels')
+
+    fireEvent.change(input, { target: { value: 'text' } })
+    fireEvent.change(reasoning, { target: { value: 'none' } })
+    expect(screen.queryByLabelText(`${en.modelReasoningLevels} 1`)).toBeNull()
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'm', input: ['text'], reasoningEfforts: false }])
+  })
+
+  it('returns both fields to the catalog default by dropping them', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        openai: {
+          baseURL: 'https://proxy.example/v1',
+          models: [{ id: 'm', input: ['text'], reasoningEfforts: false }],
+        },
+      },
+    })
+    openEditor('openai')
+    expandModel(1)
+    const input = screen.getByLabelText<HTMLSelectElement>(`${en.modelInput} 1`)
+    const reasoning = screen.getByLabelText<HTMLSelectElement>(`${en.modelReasoning} 1`)
+    expect(input.value).toBe('text')
+    expect(reasoning.value).toBe('none')
+
+    fireEvent.change(input, { target: { value: 'inherit' } })
+    fireEvent.change(reasoning, { target: { value: 'inherit' } })
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'm' }])
+  })
+
+  it('shows a hand-written modality list as such and refuses a dict offering nothing', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        openai: {
+          baseURL: 'https://proxy.example/v1',
+          models: [{ id: 'm', input: ['image'], reasoningEfforts: { off: null } }],
+        },
+      },
+    })
+    openEditor('openai')
+    expandModel(1)
+    // The select names the value it cannot express instead of rewriting it.
+    const input = screen.getByLabelText<HTMLSelectElement>(`${en.modelInput} 1`)
+    expect(input.value).toBe('custom')
+    expect(screen.getByText(en.modelInputCustom)).toBeTruthy()
+    // Re-selecting the display-only entry changes nothing.
+    fireEvent.change(input, { target: { value: 'custom' } })
+    expect(input.value).toBe('custom')
+    // Only the known modalities pass, but `off` alone offers no level to pick.
+    expect(screen.getByText(`${en.model} 1: ${en.modelReasoningInvalid}`)).toBeTruthy()
+    expect(buttonNamed(en.apply).disabled).toBe(true)
+    fireEvent.click(screen.getByLabelText('High 1'))
+    expect(screen.queryByText(`${en.model} 1: ${en.modelReasoningInvalid}`)).toBeNull()
+    // Picking a real choice replaces the hand-written list.
+    fireEvent.change(input, { target: { value: 'multimodal' } })
+    expect(screen.queryByText(en.modelInputCustom)).toBeNull()
+    expect(mutate).not.toHaveBeenCalled()
   })
 
   it('names a duplicate model id in the edit flow too', async () => {

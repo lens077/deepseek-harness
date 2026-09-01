@@ -22,6 +22,10 @@ import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
 import { messageOf } from './store.ts'
 import type { en } from './locales.ts'
+import {
+  THINKING_LEVELS, defaultLevels, inputChoice, inputValue, offeredLevels, reasoningChoice, withLevel,
+} from './model-capabilities.ts'
+import type { InputChoice, ReasoningChoice, ThinkingLevel } from './model-capabilities.ts'
 import styles from './ModelsSection.module.css'
 
 /**
@@ -132,6 +136,25 @@ const CAPACITY_HINT: Readonly<Record<CapacityField, string>> = {
   maxTokens: '32K',
 }
 
+/** The image-input choices in the order the select lists them. */
+const INPUT_CHOICES: readonly { value: Exclude<InputChoice, 'custom'>; copy: keyof typeof en }[] = [
+  { value: 'inherit', copy: 'modelInputInherit' },
+  { value: 'multimodal', copy: 'modelInputMultimodal' },
+  { value: 'text', copy: 'modelInputText' },
+]
+
+/** The reasoning choices in the order the select lists them. */
+const REASONING_CHOICES: readonly { value: ReasoningChoice; copy: keyof typeof en }[] = [
+  { value: 'inherit', copy: 'modelReasoningInherit' },
+  { value: 'none', copy: 'modelReasoningNone' },
+  { value: 'levels', copy: 'modelReasoningLevels' },
+]
+
+/** A level as the model selector spells it: the pi-ai id, capitalized. */
+function levelName(level: ThinkingLevel): string {
+  return `${level.charAt(0).toUpperCase()}${level.slice(1)}`
+}
+
 /**
  * Spell a stored count for a field that may be unset. The spelling itself is
  * {@link formatCapacity}, shared with the DeepSeek catalog editor so both
@@ -164,8 +187,9 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
-  // Rows carry an id and a name; capacities are the exception, so they stay
-  // folded until asked for rather than crowding every row with four inputs.
+  // Rows carry an id and a name; capacities and capability fields are the
+  // exception, so they stay folded until asked for rather than crowding every
+  // row with six inputs.
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
   // Capacities are edited as text, so a field's keystrokes are held here rather
   // than re-derived from the parsed count on every change — that would rewrite
@@ -186,6 +210,27 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   /** What a capacity field shows: the buffer while typing, else the stored count. */
   const capacityText = (model: ModelDraft, index: number, field: CapacityField): string =>
     editing.get(bufferKey(index, field)) ?? capacitySpelling(numberOf(model, field))
+
+  const chooseInput = (index: number, choice: string): void => {
+    // `custom` is what the select shows for a hand-written list, never a
+    // choice to make: re-selecting it leaves the list as written.
+    if (choice !== 'inherit' && choice !== 'multimodal' && choice !== 'text') return
+    patch(index, { input: inputValue(choice) })
+  }
+
+  const chooseReasoning = (model: ModelDraft, index: number, choice: string): void => {
+    if (choice === 'inherit') patch(index, { reasoningEfforts: undefined })
+    else if (choice === 'none') patch(index, { reasoningEfforts: false })
+    // The select offers nothing else; switching to custom levels from a dict
+    // already there keeps it.
+    else if (reasoningChoice(model['reasoningEfforts']) !== 'levels') {
+      patch(index, { reasoningEfforts: defaultLevels() })
+    }
+  }
+
+  const toggleLevel = (model: ModelDraft, index: number, level: ThinkingLevel, offered: boolean): void => {
+    patch(index, { reasoningEfforts: withLevel(model['reasoningEfforts'], level, offered) })
+  }
 
   /** Drop one row's entries and shift the rows after it down, in one pass. */
   const reindexOnRemove = (
@@ -210,7 +255,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     })
   }
 
-  const patch = (index: number, next: Record<string, string | number | undefined>): void => {
+  const patch = (index: number, next: Record<string, unknown>): void => {
     onChange(models.map((model, at) => {
       if (at !== index) return model
       // Rebuilt rather than spread over: an emptied optional field has to leave
@@ -429,6 +474,58 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                     onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
                   />
                 </label>
+                <label className={styles['modelField']}>
+                  <span className={styles['modelFieldLabel']}>{t('modelInput')}</span>
+                  <select
+                    className={`${styles['input']} ${styles['selectInput']}`}
+                    value={inputChoice(model['input'])}
+                    aria-label={`${t('modelInput')} ${index + 1}`}
+                    disabled={disabled}
+                    onChange={(event) => { chooseInput(index, event.target.value) }}
+                  >
+                    {INPUT_CHOICES.map(choice => (
+                      <option key={choice.value} value={choice.value}>{t(choice.copy)}</option>
+                    ))}
+                    {inputChoice(model['input']) === 'custom'
+                      ? <option value="custom" disabled>{t('modelInputCustom')}</option>
+                      : null}
+                  </select>
+                </label>
+                <label className={styles['modelField']}>
+                  <span className={styles['modelFieldLabel']}>{t('modelReasoning')}</span>
+                  <select
+                    className={`${styles['input']} ${styles['selectInput']}`}
+                    value={reasoningChoice(model['reasoningEfforts'])}
+                    aria-label={`${t('modelReasoning')} ${index + 1}`}
+                    disabled={disabled}
+                    onChange={(event) => { chooseReasoning(model, index, event.target.value) }}
+                  >
+                    {REASONING_CHOICES.map(choice => (
+                      <option key={choice.value} value={choice.value}>{t(choice.copy)}</option>
+                    ))}
+                  </select>
+                </label>
+                {reasoningChoice(model['reasoningEfforts']) === 'levels'
+                  ? (
+                    <fieldset className={styles['modelLevels']} aria-label={`${t('modelReasoningLevels')} ${index + 1}`}>
+                      <div className={styles['modelLevelRow']}>
+                        {THINKING_LEVELS.map(level => (
+                          <label key={level} className={styles['modelLevel']}>
+                            <input
+                              type="checkbox"
+                              checked={offeredLevels(model['reasoningEfforts']).includes(level)}
+                              aria-label={`${levelName(level)} ${index + 1}`}
+                              disabled={disabled}
+                              onChange={(event) => { toggleLevel(model, index, level, event.target.checked) }}
+                            />
+                            {levelName(level)}
+                          </label>
+                        ))}
+                      </div>
+                      <p className={styles['modelLevelHint']}>{t('modelReasoningLevelsHint')}</p>
+                    </fieldset>
+                  )
+                  : null}
               </div>
             )
             : null}

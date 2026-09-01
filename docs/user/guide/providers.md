@@ -32,7 +32,14 @@ Under **Model catalog**, choose **Fetch available models** to query the base URL
 
 A model you enter by hand is treated as text-only until it says otherwise, because nothing can ask an endpoint which modalities it accepts. Attaching an image to such a model is refused before it is sent, naming the model.
 
-A vision model on a custom provider therefore needs one line. The form has no field for it; add `input` to the model in `$DSH_HOME/settings.yaml`:
+A vision model on a custom provider therefore needs one declaration, and so does a thinking model: without one the model picker offers it no reasoning levels. Both live behind the row's **Advanced** disclosure in the model list, beside the capacities:
+
+![A model row's advanced fold: context window, max output tokens, the Image input select set to Text and images, the Reasoning select set to Selectable levels, and the seven level checkboxes](providers-model-capabilities.png)
+
+- **Image input** — *Catalog default* keeps whatever the installed catalog records (text-only for a hand-entered model); *Text and images* writes `input: [text, image]`; *Text only* writes `input: [text]`, which is how a catalog model whose gateway does not serve images is narrowed. A list written by hand that the select cannot express is shown *as written in settings.yaml* and left alone until another choice replaces it.
+- **Reasoning** — *Catalog default* keeps the catalog's capability; *Non-reasoning model* writes `reasoningEfforts: false`, which strips reasoning from a catalog model the gateway cannot serve; *Selectable levels* writes a dict of the checked levels, each sent under its own name (`high: high`). Switching to it starts with `low`, `medium`, and `high` checked, and a dict must keep at least one level besides `off`. A renamed wire spelling (`max: ultra`) and the `compat` switches below stay in `settings.yaml`; the checkboxes preserve a spelling they find there.
+
+Both are also one line in `$DSH_HOME/settings.yaml`, which is what the form writes:
 
 ```yaml
 llm-pi-ai:
@@ -45,6 +52,10 @@ llm-pi-ai:
         - id: legacy-chat
         - id: vision-preview
           input: [text, image]
+          reasoningEfforts:
+            low: low
+            medium: medium
+            high: high
 ```
 
 `input` accepts `text` and `image`, and applies to that model alone, so one route can serve both kinds. Omitting it — or writing an empty list, which means the same thing — keeps whatever the installed catalog records for that model, and falls back to the route's `defaultInput` for a model the catalog does not describe.
@@ -129,7 +140,8 @@ If a saved default names a provider that was deleted, the composer displays **Se
 - **The gateway refuses every request although the key and URL are right** — Its request shape differs from OpenAI's. Start with `compat.supportsDeveloperRole: false` and `compat.maxTokensField: max_tokens` on the route.
 - **Only reasoning models fail** — pi-ai sends their system prompt as the `developer` role, which the gateway rejects. Set `compat.supportsDeveloperRole: false`.
 - **A compat switch is refused as having no value** — A key written with nothing after the colon. Give it a value, or remove the key to keep the installed catalog's.
-- **An image is refused before sending** — The model declares no image modality. Give a custom provider's model `input: [text, image]`; DeepSeek's own chat-completions route is text-only and cannot be configured otherwise.
+- **An image is refused before sending, or pasting one inserts a file reference instead** — The model declares no image modality. Set the row's **Image input** to *Text and images* (`input: [text, image]`); DeepSeek's own chat-completions route is text-only and cannot be configured otherwise.
+- **The model picker offers no reasoning levels for a hand-entered model** — The row declares no `reasoningEfforts`. Set its **Reasoning** to *Selectable levels* and check the levels the endpoint serves.
 - **The provider rejects a request carrying an image** — The model declares images its endpoint does not actually serve. Remove `image` from whichever list granted it — the model's `input`, or the route's `defaultInput` — then start a new session: the attached image stays in the session log, so the same request repeats until the session moves off it.
 
 ## Advanced configuration

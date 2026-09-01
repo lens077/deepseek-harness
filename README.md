@@ -38,6 +38,22 @@ Expanding a produced file compares its content before and after — one segment 
 
 **Delegated child session ids.** A subagent tool call now records the child session it spawned. Nothing else in the parent log identifies it — a Session summary carries only `parentSessionId` — so without it a call and its child cannot be related after the fact. No client reads it yet — the file rail still reaches descendants through the child catalog — but it removes the one blocker that kept a descendant's diff from being drawn under the call that delegated it.
 
+**Deleting a session you have opened.** Permanent deletion retires a live Session only through the exact Agent handle the gateway owns. The shared Agent resolver that generic verbs use — history, models, prompt — resumed a cold session but kept only the Agent and dropped its handle, so every session opened from the sidebar was live yet undisposable, and its deletion failed with `agent-busy` naming the session as its own blocker, on that attempt and every later one. The resolver now hands each resumed handle to the owning gateway, and a lifecycle that ends on its own releases its handle on `agent/disposed`. Opening a session and then deleting it works:
+
+![The delete confirmation over an open session; confirming removes the session and its persisted log](docs/user/guide/session-delete-opened.png)
+
+**Batch deletion survives one rejection.** Selected roots were deleted in sequence and the first failure aborted the rest, stranding every later session behind an unrelated error. Each root now runs independently; the dialog reports the first reason and keeps only the still-undeleted roots selected for a retry. Here an idle session and a running one were selected together: the idle one is gone, the running one refuses with `agent-busy` and stays selected.
+
+![The delete dialog after a two-session batch: the idle session was deleted, the running session's rejection is shown, and only it remains selected](docs/user/guide/session-delete-partial-failure.png)
+
+**Vision and reasoning for hand-entered models.** A model added on the Models page — a release newer than the installed pi-ai catalog, or one on a company gateway — was text-only and non-reasoning until `settings.yaml` said otherwise: pasting an image fell back to a file reference, and the model picker offered no thinking levels. The row's **Advanced** fold now edits both alongside the capacities. **Image input** chooses between the catalog default, text and images, and text only; **Reasoning** chooses between the catalog default, a non-reasoning model, and a checked set of pi-ai's seven levels, each written under its canonical wire spelling. Hand-written values the controls cannot express are shown as such and preserved, a dict that offers no level besides `off` is refused before any write, and a renamed spelling or `compat` switch still lives in `settings.yaml`. Details in [Configure models](docs/user/guide/providers.md#image-input).
+
+![A model row's advanced fold with Image input set to Text and images and Reasoning set to Selectable levels](docs/user/guide/providers-model-capabilities.png)
+
+**Settings section glyphs.** Every section a plugin contributes to Settings used to share the General gear, so the vision bundle's page and Conversation layout were told apart by label alone. The shell now maps its known section ids to their own glyph — an eye for `vision-toolkit`, a side panel for `conversation-layout` — and keeps the gear for ids it does not know.
+
+![The Settings navigation: General, Models, Plugins, Agent presets, Vision tools, and Conversation layout, each with its own glyph](docs/user/guide/settings-sections-nav.png)
+
 **Status.** A work in progress that tracks upstream. Branches here may contain unfinished work from several parallel efforts; nothing is promised stable, and changes are not upstreamed automatically. The MIT license and every upstream notice are inherited unchanged — see [LICENSE](LICENSE).
 
 ---
