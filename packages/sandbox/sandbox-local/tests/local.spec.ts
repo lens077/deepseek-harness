@@ -21,8 +21,8 @@ import {
 import type { Config } from '@deepseek-ai/dsh-sandbox-local'
 import { bwrapProfileArgs, landlockProfileArgs, seatbeltProfileArgs } from '../src/profiles.ts'
 
-const RO: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws' }
-const WW: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: '/ws' }
+const RO: SandboxPolicy = { mode: 'read-only', workspaceRoots: ['/ws'] }
+const WW: SandboxPolicy = { mode: 'workspace-write', workspaceRoots: ['/ws'] }
 
 async function setup(config: Config = {}, internals: LocalSandboxProvider['internals'] = {}) {
   const ctx = new Context()
@@ -99,7 +99,7 @@ describe('profile dialects', () => {
   })
 
   it('seatbelt workspace-write dedups a workspace root that already IS the temp dir', () => {
-    const profile = seatbeltProfileArgs({ mode: 'workspace-write', workspaceRoot: tmpdir() })[1] as string
+    const profile = seatbeltProfileArgs({ mode: 'workspace-write', workspaceRoots: [tmpdir()] })[1] as string
     const grant = `(subpath "${realpathSync(tmpdir())}")`
     expect(profile).toContain(grant)
     expect(profile.split(grant)).toHaveLength(2)

@@ -86,4 +86,4 @@ The system is event-driven rather than watch-driven. Edits are not visible at th
 
 ## Deferred
 
-Bash-derived path reporting, recursive startup scans, file watchers, lowercase defaults, `.claude/CLAUDE.md`, `.claude/rules/*.md`, import directives, ACP `additionalDirectories`, trust acknowledgements, and model-generated summaries are deferred. Project-directory `.local.` overlays now load by default (the [default local overlay](2026-07-21-local-instruction-overlay.md) owns that decision); a user-global overlay, directory rule systems, and imports still need their own precedence and trust designs.
+Bash-derived path reporting, recursive startup scans, file watchers, lowercase defaults, `.claude/CLAUDE.md`, `.claude/rules/*.md`, import directives, instruction discovery from ACP `additionalDirectories`, trust acknowledgements, and model-generated summaries are deferred. Project-directory `.local.` overlays now load by default (the [default local overlay](2026-07-21-local-instruction-overlay.md) owns that decision); a user-global overlay, directory rule systems, and imports still need their own precedence and trust designs.

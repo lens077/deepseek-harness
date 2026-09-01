@@ -506,12 +506,12 @@ describe('per-call sandbox policy resolution', () => {
     Object.assign(agent.session.header, { cwd: sessionCwd })
     const result = await call(ctx, 'pwsh', { command: 'Write-Output hi', description: 'say hi' }, agent)
     expect(result.isError).toBe(false)
-    // The policy's workspace root is the session cwd canonicalized by the
+    // The policy's primary workspace root is the session cwd canonicalized by the
     // policy service (realpath + resolve), NEVER the web server's launch dir;
     // the calling session's identity rides along for backend per-session state.
     expect(bash.requests[0]?.sandboxPolicy).toEqual({
       mode: 'read-only',
-      workspaceRoot: resolvePath(realpathSync.native(sessionCwd)),
+      workspaceRoots: [resolvePath(realpathSync.native(sessionCwd))],
       sessionId: 'policy-session',
     })
   })
@@ -521,7 +521,7 @@ describe('per-call sandbox policy resolution', () => {
     await call(ctx, 'pwsh', { command: 'Write-Output hi', description: 'say hi' })
     expect(bash.requests[0]?.sandboxPolicy).toEqual({
       mode: 'read-only',
-      workspaceRoot: resolvePath(realpathSync.native(process.cwd())),
+      workspaceRoots: [resolvePath(realpathSync.native(process.cwd()))],
     })
 
     // The base FakeBash advertises no sandboxMode, so the tool must not stamp

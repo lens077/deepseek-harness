@@ -86,4 +86,4 @@ shell 命令不会触发发现。本地 bash 调用会启动全新的 shell，�
 
 ## 延后事项
 
-从 bash 派生路径报告、递归启动扫描、文件监视器、小写默认名称、`.claude/CLAUDE.md`、`.claude/rules/*.md`、导入指令、ACP `additionalDirectories`、信任确认和模型生成摘要均延后处理。项目目录中的 `.local.` 覆盖层现已默认加载（[默认本地覆盖层记录](2026-07-21-local-instruction-overlay.zh.md)负责说明该决策）；用户全局覆盖层、目录规则系统和导入仍需要各自的优先级与信任设计。
+从 bash 派生路径报告、递归启动扫描、文件监视器、小写默认名称、`.claude/CLAUDE.md`、`.claude/rules/*.md`、导入指令、从 ACP `additionalDirectories` 发现指令、信任确认和模型生成摘要均延后处理。项目目录中的 `.local.` 覆盖层现已默认加载（[默认本地覆盖层记录](2026-07-21-local-instruction-overlay.zh.md)负责说明该决策）；用户全局覆盖层、目录规则系统和导入仍需要各自的优先级与信任设计。

@@ -3,7 +3,7 @@
 // List data never enters zustand; React connects via subscribe/getListSnapshot.
 
 import type {
-  IApiClient, HostFrame, MuxFrame, RpcError, RpcRequest, RpcResult, SessionId,
+  IApiClient, HostFrame, MuxFrame, RpcError, RpcRequest, RpcResult, SessionDirectories, SessionId,
   SessionSummary, SubagentAddress, SubagentCatalog, JobView, WorkspaceId,
 } from '@deepseek-ai/dsh-api-remotes/client'
 // Value import from the inline-safe wire layer (not the connection plugin):
@@ -614,6 +614,32 @@ export class SessionManager {
           ...(source?.cwd !== undefined ? { cwd: source.cwd } : {}),
         } })
       }
+      return result
+    } catch (error) {
+      return transportError(error)
+    }
+  }
+
+  /** Read one session's canonical primary and additional directory state. */
+  async directories(sessionId: SessionId): Promise<RpcResult<SessionDirectories>> {
+    try {
+      const { result } = await this.api.sessions.directories({ sessionId })
+      return result
+    } catch (error) {
+      return transportError(error)
+    }
+  }
+
+  /** Replace one session's complete additional directory list. */
+  async replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): Promise<RpcResult<SessionDirectories>> {
+    try {
+      const { result } = await this.api.sessions.replaceDirectories({
+        sessionId,
+        additionalDirectories: [...additionalDirectories],
+      })
       return result
     } catch (error) {
       return transportError(error)

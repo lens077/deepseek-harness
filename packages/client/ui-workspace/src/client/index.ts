@@ -3,9 +3,10 @@
  * the sidebar shell's `sidebar.workspaces` hole (the whole browsing region),
  * and WorkspacePicker fills the conversation hero's picker hole
  * (`conversation.hero.workspace` — both hero forms). Both read real Host
- * Workspaces through the global useWorkspaces hook, and each declares its
- * own `single` directory-flow child hole for the composed picker package's
- * client half (see the contract module doc). Export discipline:
+ * Workspaces through the global useWorkspaces hook. The picker declares its
+ * Workspace directory-flow child; the browser declares Workspace and Session
+ * directory-flow children for a composed picker package (see the contract
+ * module doc). Export discipline:
  * packages/client/AGENTS.md.
  */
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -69,7 +70,11 @@ export function apply(ctx: ClientContext): void {
 
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
   // source identity): true while the surface's directory-flow hole is filled.
-  const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
+  const flowSource = (hole:
+    | 'sidebar.workspaces.directoryFlow'
+    | 'sidebar.workspaces.sessionDirectoryFlow'
+    | 'conversation.hero.workspace.directoryFlow',
+  ): HostObservable<boolean> => ({
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
@@ -80,6 +85,7 @@ export function apply(ctx: ClientContext): void {
   // reaches the component through the reserved `hooks` compartment.
   const sessionSelection = createSessionSelectionStore().create()
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
+  const sessionDirectoryFlowSource = flowSource('sidebar.workspaces.sessionDirectoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
@@ -96,6 +102,9 @@ export function apply(ctx: ClientContext): void {
       const result = await session.rename(title)
       if (!result.ok) throw new Error(result.error.message)
     },
+    sessionDirectories: sessionId => ctx.sessions.directories(sessionId),
+    replaceSessionDirectories: (sessionId, additionalDirectories) =>
+      ctx.sessions.replaceDirectories(sessionId, additionalDirectories),
     forkSession: (sessionId, placement) => {
       ctx.sessions.fork({ sessionId, increaseTitle: true, placement })
         .then((childId) => { ctx.sessions.open(childId) })
@@ -124,6 +133,7 @@ export function apply(ctx: ClientContext): void {
     clearSessionSelection: () => { sessionSelection.actions.clearSelection() },
     hooks: {
       directoryFlow: browserFlowSource,
+      sessionDirectoryFlow: sessionDirectoryFlowSource,
       hostDescription,
       sessionSelection: {
         getSnapshot: () => sessionSelection.getSnapshot(),
@@ -140,7 +150,10 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
-      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
+      children: {
+        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.sessionDirectoryFlow': { kind: 'single', scope: 'root' },
+      },
       store: workspaceViewStore,
       inject: browserInjected,
       locale: NS,

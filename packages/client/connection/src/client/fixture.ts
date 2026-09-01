@@ -1627,6 +1627,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     session.sessionId,
     { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
   ]))
+  const additionalDirectories = new Map<SessionId, string[]>()
   const attachments = new Map<string, { attachment: ImageAttachmentRef; data: string }>([[
     String(FIXTURE_IMAGE_REF.attachmentId),
     { attachment: FIXTURE_IMAGE_REF, data: FIXTURE_IMAGE_DATA },
@@ -2490,6 +2491,31 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const appended = logOf(sessionId).at(-1) as SessionEvent
         return ok(request, { title: normalized, seq: appended.seq })
       },
+      directories: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const summary = summaryOf(request.payload.sessionId) as SessionSummary
+        return ok(request, {
+          primaryDirectory: summary.cwd ?? '/tmp/fixture',
+          additionalDirectories: [...(additionalDirectories.get(request.payload.sessionId) ?? [])],
+        })
+      },
+      replaceDirectories: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const summary = summaryOf(request.payload.sessionId) as SessionSummary
+        const accepted = [...new Set(request.payload.additionalDirectories)]
+          .filter(path => path !== summary.cwd)
+        additionalDirectories.set(request.payload.sessionId, accepted)
+        append(request.payload.sessionId, {
+          type: 'session/directories',
+          data: { additionalDirectories: accepted },
+        })
+        return ok(request, {
+          primaryDirectory: summary.cwd ?? '/tmp/fixture',
+          additionalDirectories: [...accepted],
+        })
+      },
       fork: (request) => {
         const { sessionId, atSeq } = request.payload
         const source = summaryOf(sessionId)
@@ -2562,7 +2588,10 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           const candidate = sessions[index]
           if (candidate !== undefined && deleted.has(candidate.sessionId)) sessions.splice(index, 1)
         }
-        for (const id of deletedSessionIds) logs.delete(id)
+        for (const id of deletedSessionIds) {
+          logs.delete(id)
+          additionalDirectories.delete(id)
+        }
         for (const workspace of workspaces) {
           workspace.sessionIds = workspace.sessionIds.filter(id => !deleted.has(id))
         }
@@ -3359,6 +3388,8 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.models': return this.api.sessions.models(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
+      case 'session.directories': return this.api.sessions.directories(request)
+      case 'session.replaceDirectories': return this.api.sessions.replaceDirectories(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.delete': return this.api.sessions.delete(request)
       case 'session.prompt': return this.api.sessions.prompt(request)

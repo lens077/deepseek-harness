@@ -35,14 +35,15 @@ import {
 } from '@agentclientprotocol/sdk'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
+import { AdditionalDirectoryError, canonicalAdditionalDirectories, resolveWorkspaceRoot } from '@deepseek-ai/dsh-sandbox-policy'
 // Side-effect type import: declaration-merges the approval waterfall answered below.
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { AcpContentError, admitAcpPrompt, assistantBlockToAcp, supportsAcpImagePrompts } from './content.ts'
 import { turnEndToStopReason } from './codec.ts'
 
 export const name = 'acp'
-/** The bridge creates and owns agents; every other concern is carried by the agent composition. */
-export const inject = ['agents']
+/** The bridge creates agents and records ACP effective roots through the shared policy owner. */
+export const inject = ['agents', 'sandboxPolicy']
 
 /**
  * The single continuable-subagent teardown the bridge needs. Declared
@@ -296,6 +297,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
           agentInfo: { name: 'deepseek-harness-acp', version: '0.0.1' },
           agentCapabilities: {
             promptCapabilities: { image: imagePromptEnabled, audio: false, embeddedContext: false },
+            sessionCapabilities: { additionalDirectories: {} },
           },
           authMethods: [],
         }
@@ -308,6 +310,16 @@ export function apply(ctx: Context, config: AcpConfig): void {
       async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
         assertOpen()
         validateSessionParams(params)
+        let additionalDirectories: readonly string[]
+        try {
+          additionalDirectories = canonicalAdditionalDirectories(
+            resolveWorkspaceRoot(params.cwd),
+            params.additionalDirectories ?? [],
+          )
+        } catch (error: unknown) {
+          if (error instanceof AdditionalDirectoryError) throw invalidParams(error.message)
+          throw error
+        }
         const sessionId = SessionId(randomUUID())
         // No preset composition: the ACP bundle keeps the model-facing rows in
         // the host plane, so this agent reads them from the global layer. A
@@ -317,6 +329,16 @@ export function apply(ctx: Context, config: AcpConfig): void {
           sessionId,
           meta: { cwd: params.cwd },
           agentOptions: agentOptions(config),
+          ...additionalDirectories.length === 0 ? {} : {
+            setup: (agentCtx: Context) => {
+              const agent = agentCtx.agent
+              if (agent === undefined) throw new Error('ACP agent setup has no owning agent')
+              ctx.sandboxPolicy.setAdditionalDirectories(agent.session, additionalDirectories)
+            },
+          },
+        }).catch((error: unknown) => {
+          if (error instanceof AdditionalDirectoryError) throw invalidParams(error.message)
+          throw error
         })
         /* v8 ignore next 4 -- a real stdio close can race an in-flight create. */
         if (closed) {
@@ -535,11 +557,11 @@ function agentOptions(config: AcpConfig): { provider?: string; model?: string } 
   }
 }
 
-/** Reject session features outside the automation contract. */
+/** Reject invalid roots and session features outside the automation contract. */
 function validateSessionParams(params: NewSessionRequest): void {
   if (!isAbsolute(params.cwd)) throw invalidParams(`cwd must be an absolute path: ${params.cwd}`)
-  if (params.additionalDirectories !== undefined && params.additionalDirectories.length > 0) {
-    throw invalidParams('additionalDirectories is not supported')
+  for (const path of params.additionalDirectories ?? []) {
+    if (!isAbsolute(path)) throw invalidParams(`additionalDirectories entries must be absolute paths: ${path}`)
   }
   if (params.mcpServers.length > 0) throw invalidParams('mcpServers is not supported')
 }

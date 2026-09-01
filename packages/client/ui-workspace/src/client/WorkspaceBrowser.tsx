@@ -19,7 +19,7 @@ import {
   IconProjectAddOutline16, IconSearchOutline16, IconTrashOutline16, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
+  SessionDirectories, SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
@@ -424,6 +424,8 @@ type SessionTreeProps = Pick<
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
+  /** Open the browser-owned session-directory manager. */
+  onSessionDirectories: (sessionId: SessionNode['id']) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
   onSessionArchive: (sessionId: SessionNode['id']) => void
   /** Open the browser-owned context menu for the effective selection. */
@@ -448,7 +450,7 @@ type SessionTreeProps = Pick<
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
-  onSessionContextMenu, onSessionDelete, renderSelectionActions,
+  onSessionContextMenu, onSessionDelete, onSessionDirectories, renderSelectionActions,
   insertWorkspaceBefore, insertSessionBefore, orderBy, collapsedSessionCount,
   groupExpansion, setGroupExpanded, multiSelect, selection, setSelection, clearSelection,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
@@ -763,6 +765,7 @@ function SessionTree({
                       onContextMenu: onSessionContextMenu,
                       onRename: onSessionRename,
                       onFork: forkSession,
+                      onDirectories: onSessionDirectories,
                       onArchive: onSessionArchive,
                       onDelete: onSessionDelete,
                       isSelected: rowSelection.isSelected,
@@ -799,7 +802,7 @@ function SessionTree({
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
   useSessions, open, forkSession, onSessionRename, onSessionArchive,
-  onSessionContextMenu, onSessionDelete, archivedSessionIds,
+  onSessionContextMenu, onSessionDelete, onSessionDirectories, archivedSessionIds,
   orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
   multiSelect, selection, setSelection, clearSelection, t,
 }: Pick<
@@ -808,6 +811,7 @@ function FlatList({
   | 'open'
   | 'forkSession'
   | 'onSessionRename'
+  | 'onSessionDirectories'
   | 'onSessionArchive'
   | 'onSessionContextMenu'
   | 'onSessionDelete'
@@ -911,6 +915,7 @@ function FlatList({
               onContextMenu={onSessionContextMenu}
               onRename={onSessionRename}
               onFork={forkSession}
+              onDirectories={onSessionDirectories}
               onArchive={onSessionArchive}
               onDelete={onSessionDelete}
               flat
@@ -1112,6 +1117,8 @@ export function WorkspaceBrowser({
   startSession,
   open,
   renameSession,
+  sessionDirectories,
+  replaceSessionDirectories,
   forkSession,
   renameWorkspace,
   deleteWorkspace,
@@ -1128,6 +1135,7 @@ export function WorkspaceBrowser({
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
+  useSessionDirectoryFlow,
   useHostDescription,
   useSessionSelection,
   setSessionSelection,
@@ -1143,6 +1151,7 @@ export function WorkspaceBrowser({
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
+  const sessionDirectoryFlowAvailable = useSessionDirectoryFlow(occupied => occupied)
   const groupBy = useStore(s => s.groupBy)
   const orderBy = useStore(s => s.orderBy)
   const multiSelect = useStore(s => s.multiSelect)
@@ -1340,6 +1349,59 @@ export function WorkspaceBrowser({
     setSessionRenameTarget({ sessionId, currentTitle })
     setSessionRenameDraft(currentTitle)
     setSessionRenameError(null)
+  }
+
+  // Session directories are a whole-list Host setting. Modal state always
+  // adopts the latest RPC result, so canonicalization and duplicate removal
+  // never have to be reimplemented in presentation code.
+  const [directoriesTarget, setDirectoriesTarget] = useState<SessionId | null>(null)
+  const [directoriesState, setDirectoriesState] = useState<SessionDirectories | null>(null)
+  const [directoriesLoading, setDirectoriesLoading] = useState(false)
+  const [directoriesBusy, setDirectoriesBusy] = useState(false)
+  const [directoryPickerOpen, setDirectoryPickerOpen] = useState(false)
+  const [directoriesError, setDirectoriesError] = useState<string | null>(null)
+  const directoriesRequest = useRef(0)
+  const onSessionDirectories = (sessionId: SessionId) => {
+    const request = ++directoriesRequest.current
+    setDirectoriesTarget(sessionId)
+    setDirectoriesState(null)
+    setDirectoriesLoading(true)
+    setDirectoriesBusy(false)
+    setDirectoryPickerOpen(false)
+    setDirectoriesError(null)
+    sessionDirectories(sessionId).then((state) => {
+      if (directoriesRequest.current !== request) return
+      setDirectoriesState(state)
+      setDirectoriesLoading(false)
+    }).catch((reason: unknown) => {
+      if (directoriesRequest.current !== request) return
+      setDirectoriesError(reason instanceof Error ? reason.message : String(reason))
+      setDirectoriesLoading(false)
+    })
+  }
+  const closeSessionDirectories = () => {
+    if (directoriesBusy || directoryPickerOpen) return
+    directoriesRequest.current++
+    setDirectoriesTarget(null)
+    setDirectoriesState(null)
+    setDirectoriesError(null)
+  }
+  const commitSessionDirectories = (next: readonly string[], closePicker = false) => {
+    if (directoriesTarget === null) return
+    const request = ++directoriesRequest.current
+    setDirectoriesBusy(true)
+    setDirectoriesError(null)
+    replaceSessionDirectories(directoriesTarget, next).then((state) => {
+      if (directoriesRequest.current !== request) return
+      setDirectoriesState(state)
+      setDirectoriesBusy(false)
+      if (closePicker) setDirectoryPickerOpen(false)
+    }).catch((reason: unknown) => {
+      if (directoriesRequest.current !== request) return
+      setDirectoriesError(reason instanceof Error ? reason.message : String(reason))
+      setDirectoriesBusy(false)
+      if (closePicker) setDirectoryPickerOpen(false)
+    })
   }
 
   // Archive is dialog-free: not destructive (the log and the accounting slot
@@ -1783,7 +1845,8 @@ export function WorkspaceBrowser({
             ? (
               <FlatList
                 useSessions={useSessions} open={open} forkSession={forkSession}
-                onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
+                onSessionRename={onSessionRename} onSessionDirectories={onSessionDirectories}
+                onSessionArchive={onSessionArchive}
                 onSessionContextMenu={onSessionContextMenu}
                 onSessionDelete={sessionId => { requestSessionDelete([sessionId]) }}
                 archivedSessionIds={archivedSessionIds}
@@ -1803,6 +1866,7 @@ export function WorkspaceBrowser({
               <SessionTree
                 useSessions={useSessions}
                 onSessionRename={onSessionRename}
+                onSessionDirectories={onSessionDirectories}
                 onSessionArchive={onSessionArchive}
                 onSessionContextMenu={onSessionContextMenu}
                 onSessionDelete={sessionId => { requestSessionDelete([sessionId]) }}
@@ -1840,6 +1904,90 @@ export function WorkspaceBrowser({
               />
             ))}
       </div>
+
+      <Modal
+        open={directoriesTarget !== null}
+        onClose={closeSessionDirectories}
+        closeLabel={t('close')}
+        dismissable={!directoriesBusy && !directoryPickerOpen}
+        title={t('directories.title')}
+        description={t('directories.description')}
+        footer={(
+          <Button
+            variant="outline"
+            disabled={directoriesBusy || directoryPickerOpen}
+            onClick={closeSessionDirectories}
+          >
+            {t('close')}
+          </Button>
+        )}
+      >
+        {directoriesLoading && (
+          <div className={css.directoriesStatus} role="status">{t('directories.loading')}</div>
+        )}
+        {directoriesState !== null && (
+          <div className={css.directoriesBody}>
+            <section className={css.directorySection}>
+              <div className={css.directoryLabel}>{t('directories.primary')}</div>
+              <code className={css.directoryPath} title={directoriesState.primaryDirectory}>
+                {directoriesState.primaryDirectory}
+              </code>
+            </section>
+            <section className={css.directorySection}>
+              <div className={css.directoryLabel}>{t('directories.additional')}</div>
+              {directoriesState.additionalDirectories.length === 0
+                ? <div className={css.directoriesEmpty}>{t('directories.empty')}</div>
+                : (
+                  <div className={css.directoryList}>
+                    {directoriesState.additionalDirectories.map(path => (
+                      <div className={css.directoryRow} key={path}>
+                        <code className={css.directoryPath} title={path}>{path}</code>
+                        <button
+                          type="button"
+                          className={css.directoryRemove}
+                          aria-label={t('directories.remove.aria', { path })}
+                          disabled={directoriesBusy}
+                          onClick={() => {
+                            commitSessionDirectories(
+                              directoriesState.additionalDirectories.filter(candidate => candidate !== path),
+                            )
+                          }}
+                        >
+                          {t('directories.remove')}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </section>
+            <div className={css.directoriesTiming}>{t('directories.timing')}</div>
+            {sessionDirectoryFlowAvailable && (
+              <Button
+                variant="primary"
+                disabled={directoriesBusy}
+                onClick={() => { setDirectoryPickerOpen(true) }}
+              >
+                {t('directories.add')}
+              </Button>
+            )}
+          </div>
+        )}
+        {directoriesError !== null && <div className={css.renameError} role="alert">{directoriesError}</div>}
+        {renderSlot('sidebar.workspaces.sessionDirectoryFlow', {
+          open: directoryPickerOpen,
+          busy: directoriesBusy,
+          title: t('directories.picker.title'),
+          onPicked: (path) => {
+            if (directoriesState === null) return
+            commitSessionDirectories([...directoriesState.additionalDirectories, path], true)
+          },
+          onCancel: () => { setDirectoryPickerOpen(false) },
+          onError: (message) => {
+            setDirectoryPickerOpen(false)
+            setDirectoriesError(message)
+          },
+        })}
+      </Modal>
 
       <Modal
         open={renameTarget !== null}

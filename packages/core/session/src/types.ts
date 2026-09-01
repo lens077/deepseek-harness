@@ -302,6 +302,14 @@ export interface SessionEventMap {
   /** Whole-list snapshot; latest write wins on replay. Log-only UI state; never derived history. */
   'todo/write': { todos: TodoItem[] }
   /**
+   * Complete canonical additional-directory list for this session. The primary
+   * working directory remains {@link SessionHeader.cwd}; the latest snapshot
+   * only extends the session's writable-root set. Absence means no additional
+   * directories. This event is log-only but required for reconstruction because
+   * sandbox policy projects the effective roots into model-visible context.
+   */
+  'session/directories': { additionalDirectories: string[] }
+  /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.
    */

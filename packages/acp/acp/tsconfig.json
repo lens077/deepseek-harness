@@ -24,6 +24,9 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../sandbox/sandbox-policy"
+    },
+    {
       "path": "../../interaction/user-approval"
     },
     {

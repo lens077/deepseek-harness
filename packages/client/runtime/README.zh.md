@@ -28,6 +28,8 @@ Workspace 和 Session 列表各自具有单调的 `pending` → `ready` 基线�
 
 `SessionRuntime.delete(sessionId)` 会从一元响应或 `host/session-deleted` 应用完整的已提交后代优先 id 列表。`SessionManager` 会在进程生命周期内 tombstone 这些 id，移除其摘要、实例、待处理交互、投影、后台任务、目录、地址与 selection，过滤过期列表响应，并忽略迟到的 Host 或 mux 帧。`host/session-removed` 仍是可逆的进程内 detach，绝不会建立删除 tombstone。
 
+`SessionRuntime.directories(sessionId)` 和 `replaceDirectories(sessionId, additionalDirectories)` 公开 Host 的权威会话级根目录列表，而不会把它折叠进 Workspace 状态。替换成功后会返回规范化的完整列表；呈现归属方采用该响应，而不会保留请求时的路径拼写。主要 cwd 保持不可变且始终位于首位。
+
 SlotRegistry 分别为 renderer 提供 `useSessions` 与 `useWorkspaces` 的裸 observable；ui-renderer 创建钩子。Workspace 业务状态不会进入 `SessionListState` 或条目 store。
 
 `abbreviateHomePath` 是 Web Workspace 悬停卡片与 Tool 摘要使用的仅展示 POSIX 家目录缩写；Windows 盘符或 UNC 路径保持原样，缺失、空或文件系统根的 home 不改写路径。

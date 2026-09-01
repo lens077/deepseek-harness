@@ -1,3 +1,5 @@
+import { realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
@@ -24,6 +26,7 @@ describe('automation-only ACP bridge', () => {
       agentInfo: { name: 'deepseek-harness-acp', version: '0.0.1' },
       agentCapabilities: {
         promptCapabilities: { image: false, audio: false, embeddedContext: false },
+        sessionCapabilities: { additionalDirectories: {} },
       },
       authMethods: [],
     })
@@ -164,7 +167,7 @@ describe('automation-only ACP bridge', () => {
     expect(harness.adapter.requests[0]?.system).toContain(`Automation persona for mock in ${process.cwd()}.`)
   })
 
-  it('requires one absolute workspace and no MCP servers', async () => {
+  it('accepts absolute additional directories and rejects unsupported MCP servers', async () => {
     harness = await makeBridgeHarness()
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
 
@@ -172,18 +175,21 @@ describe('automation-only ACP bridge', () => {
     await expect(harness.client.newSession({
       cwd: process.cwd(),
       mcpServers: [],
-      additionalDirectories: ['/tmp/other'],
-    })).rejects.toThrow(/additionalDirectories/)
+      additionalDirectories: ['relative'],
+    })).rejects.toThrow(/absolute path/)
     await expect(harness.client.newSession({
       cwd: process.cwd(),
       mcpServers: [{ name: 'fs', command: 'node', args: [], env: [] }],
     })).rejects.toThrow(/mcpServers/)
 
-    await expect(harness.client.newSession({
+    const created = await harness.client.newSession({
       cwd: process.cwd(),
       mcpServers: [],
-      additionalDirectories: [],
-    })).resolves.toHaveProperty('sessionId')
+      additionalDirectories: [tmpdir()],
+    })
+    const session = harness.ctx.agents.get(SessionId(created.sessionId))?.session
+    expect(session?.events.findLast(event => event.type === 'session/directories')?.data)
+      .toEqual({ additionalDirectories: [realpathSync.native(tmpdir())] })
   })
 
   it('rejects empty and unadvertised image prompts before a turn starts', async () => {

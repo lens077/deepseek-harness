@@ -337,7 +337,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       const policy = approvedMode === undefined
         ? standingPolicy
         : { ...(standingPolicy as SandboxExecutionPolicy), mode: approvedMode }
-      const workdir = resolveWorkdir(args.workdir, exec, standingPolicy?.workspaceRoot)
+      const workdir = resolveWorkdir(args.workdir, exec, standingPolicy?.workspaceRoots[0])
       const dshEnv = ctx.shellEnv.collect(exec)
       const request = {
         command: args.command,

@@ -1,5 +1,6 @@
 /** Package-owned session-event invariants for sandbox policy. @module @deepseek-ai/dsh-sandbox-policy/invariant */
 
+import { isAbsolute, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
@@ -14,23 +15,41 @@ export const inject = ['invariants']
 
 /* jscpd:ignore-start -- package companions share replay and dispatch plumbing */
 /** Validate the package-owned event fields and ignore unrelated events. */
-function validateEvent(event: SessionEvent, fail: InvariantFailure): void {
+function validateEvent(session: Session, fallbackRoot: string, event: SessionEvent, fail: InvariantFailure): void {
   if (event.type === 'sandbox/mode' && !SANDBOX_MODES.includes(event.data.mode)) {
     fail(`sandbox/mode carries unknown mode ${JSON.stringify(event.data.mode)}`)
+    return
+  }
+  if (event.type !== 'session/directories') return
+  const value: unknown = event.data.additionalDirectories
+  if (!Array.isArray(value) || !value.every(path => typeof path === 'string' && isAbsolute(path))) {
+    fail('session/directories must carry only absolute path strings')
+    return
+  }
+  // Replay validates the durable spelling only; it never probes whether the
+  // roots still exist or follows a symlink whose target may have changed.
+  const primary = resolve(session.header.cwd ?? fallbackRoot)
+  const canonical = value.map(path => resolve(path))
+  if (canonical.some((path, index) => path !== value[index])) {
+    fail('session/directories must carry canonical path identities')
+    return
+  }
+  if (new Set([primary, ...canonical]).size !== canonical.length + 1) {
+    fail('session/directories must exclude the primary cwd and duplicate directory identities')
   }
 }
 
-/** Install validation for loaded and newly appended sandbox modes. */
+/** Install validation for loaded and newly appended sandbox modes and directories. */
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   for (const session of ctx.sessions.list()) {
-    for (const event of session.events) validateEvent(event, fail)
+    for (const event of session.events) validateEvent(session, ctx.sandboxPolicy.workspaceRoot, event, fail)
   }
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName !== 'session/event') return
-    const event = (args as [Session, SessionEvent])[1]
-    validateEvent(event, fail)
+    const [session, event] = args as [Session, SessionEvent]
+    validateEvent(session, ctx.sandboxPolicy.workspaceRoot, event, fail)
   }, { global: true })
-}, { inject: ['sessions'] })
+}, { inject: ['sessions', 'sandboxPolicy'] })
 /* jscpd:ignore-end */
 
 /**

@@ -21,15 +21,15 @@ Both fields are optional so another agent/request listener may supply the target
 
 | Method | Behavior |
 |---|---|
-| `initialize` | Negotiates the supported version. Image prompts are advertised only when a durable attachment store is mounted and the configured exact provider/model resolves with explicit image input; audio and embedded context stay false. No session, editor, terminal, filesystem, or MCP capability is advertised. |
+| `initialize` | Negotiates the supported version. Image prompts are advertised only when a durable attachment store is mounted and the configured exact provider/model resolves with explicit image input; audio and embedded context stay false. `sessionCapabilities.additionalDirectories` is advertised; editor, terminal, filesystem, and MCP capabilities are not. |
 | `authenticate` | No-op because the server advertises no authentication methods. |
-| `session/new` | Creates a fresh agent with an absolute primary `cwd`; empty `additionalDirectories` and `mcpServers` are accepted, non-empty values reject. |
+| `session/new` | Creates a fresh agent with an absolute primary `cwd`. Absolute, existing `additionalDirectories` are canonicalized; a non-empty effective list is recorded as the initial whole-list session snapshot before Agent publication, while absence represents an empty list; non-empty `mcpServers` reject. |
 | `session/prompt` | Preserves ordered text and supported inline image blocks, renders resource links as bracketed textual references, and rejects audio, embedded resources, malformed/empty input, or an image when capability was not advertised. It validates the whole image batch and rechecks the session's latest exact route before any save, commits every image before the user event, permits one in-flight request per session, and waits for admission plus, once queued, whole-Agent idle and ordered output delivery. Normal quiescence reports `end_turn`; explicit ACP cancellation, disposal, or a prompt whose admission was discarded (a turnless slot) reports `cancelled`. |
 | `session/cancel` | Marks and aborts any in-progress admission without cancelling or waiting for unrelated Agent work; once this prompt has entered the Agent inbox, it cancels the addressed Agent and waits for the owned interval to quiesce. No late user message is published and the prompt settles as `cancelled`. With no in-flight prompt it cancels autonomous work; unknown ids are no-ops. |
 | `session/update` | Emits one `agent_message_chunk` per non-empty text or image block in a committed `assistant/message`, preserving order. Images are re-read and integrity-verified before inline base64 delivery. Raw deltas and non-message events are omitted. |
 | `session/request_permission` | Offers one-shot allow/reject choices for bridge-owned approval requests carrying a tool call id. Clients may answer automatically. |
 
-One connection may own several sessions. The bridge keys records by branded session id and checks exact agent identity before routing events or permission requests. Each session has an independent prompt slot, workspace, cancellation path, and disposer.
+One connection may own several sessions. The bridge keys records by branded session id and checks exact agent identity before routing events or permission requests. Each session has an independent prompt slot, primary cwd plus additional-root set, cancellation path, and disposer.
 
 Committed-message output intentionally trades token-by-token latency for a clean automation result. Uncommitted provider chunks and retry attempts cannot leak partial text or images; reasoning and tool activity remain in the session log for observability through other interfaces. Per-session delivery is serialized because attachment reads are asynchronous, and a missing or corrupt committed image fails the prompt response instead of emitting a placeholder.
 
@@ -59,6 +59,20 @@ Prompt tokens and image charges are data-dependent and remain in that session's 
 
 Append-only; the new user message follows the reusable request prefix and does not invalidate prior cache entries.
 
+### Initial session directories
+
+#### What the model sees
+
+The sandbox-policy owner renders the canonical primary cwd and every accepted additional directory in the runtime-context snapshot. ACP metadata itself remains absent from the request.
+
+#### Token effect
+
+The root list contributes one bounded context message on the first request and changes only when another session-level writer replaces it.
+
+#### KV Cache effect
+
+The initial snapshot is part of the first request prefix; a later replacement appends a superseding runtime-context snapshot after retained history.
+
 ### Permission decisions
 
 #### What the model sees
@@ -76,6 +90,6 @@ Append-only through the owning tool result.
 ## Known Limitations and Deferred Work
 
 - **Fresh sessions only** — load, list, resume, delete, and fork are unsupported.
-- **Raster images and one workspace only** — image prompts require a durable store plus an exact route that declares image input; only PNG, JPEG, WebP, and GIF are accepted. Audio, embedded resources, non-empty additional directories, and MCP servers reject; resource links flatten to textual references rather than fetched content.
+- **Raster images and no MCP servers** — image prompts require a durable store plus an exact route that declares image input; only PNG, JPEG, WebP, and GIF are accepted. Audio, embedded resources, and non-empty MCP servers reject; resource links flatten to textual references rather than fetched content.
 - **Committed answers only** — live progress, reasoning, tool activity, plans, titles, and usage stay off the wire.
 - **Connection-owned lifetime** — one connection releases all of its sessions; per-session close is not implemented.

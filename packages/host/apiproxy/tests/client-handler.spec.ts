@@ -53,6 +53,8 @@ function scriptedApi(overrides: {
         selected: { provider: r.payload.provider, model: r.payload.model },
       }),
       rename: r => ok(r, { title: 'renamed', seq: 0 }),
+      directories: r => ok(r, { primaryDirectory: '/ws', additionalDirectories: [] }),
+      replaceDirectories: r => ok(r, { primaryDirectory: '/ws', additionalDirectories: r.payload.additionalDirectories }),
       fork: r => ok(r, { sessionId: sid('s-fork') }),
       delete: r => ok(r, { deletedSessionIds: [r.payload.sessionId] }),
       prompt: r => ok(r, { accepted: true as const }),

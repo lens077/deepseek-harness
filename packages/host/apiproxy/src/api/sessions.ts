@@ -171,6 +171,14 @@ export interface SessionModels {
   failures: ModelCatalogFailure[]
 }
 
+/** Canonical effective directory state for one session. */
+export interface SessionDirectories {
+  /** Immutable primary cwd and relative-path base. */
+  primaryDirectory: string
+  /** Complete ordered list extending workspace-write mutation roots. */
+  additionalDirectories: string[]
+}
+
 /** A client-requested mutation of one still-pending queue item. */
 export type QueueAction =
   | { kind: 'edit'; content: ContentBlock[] }
@@ -315,6 +323,21 @@ export interface SessionsApi {
    */
   rename(request: RpcRequest<{ sessionId: SessionId; title: string }>):
   Promise<RpcResponse<{ title: string; seq: number }>>
+
+  /**
+   * Reads the canonical primary cwd and latest durable additional-directory
+   * snapshot. Reading a cold Session may attach its idle Agent, matching other
+   * mutable session settings.
+   */
+  directories(request: RpcRequest<{ sessionId: SessionId }>): Promise<RpcResponse<SessionDirectories>>
+
+  /**
+   * Replaces the complete additional-directory list after host-side absolute,
+   * existence, directory-kind, canonical-identity, and duplicate validation.
+   * The primary cwd never changes and no Workspace record is created.
+   */
+  replaceDirectories(request: RpcRequest<{ sessionId: SessionId; additionalDirectories: string[] }>):
+  Promise<RpcResponse<SessionDirectories>>
 
   /**
    * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.

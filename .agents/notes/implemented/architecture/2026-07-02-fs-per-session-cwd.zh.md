@@ -20,7 +20,7 @@ ACP（Agent Client Protocol）桥接层为每个会话提供独立的工作区�
 
 - `FileSystem.resolve` 接受 `resolve(path: string, opts?: { cwd?: string; signal?: AbortSignal }): Promise<FsTarget>`。`opts.cwd` 是相对 `path` 解析时的基准目录；绝对 `path` 忽略它；省略 `opts.cwd` 则使用后端自身的默认值。后端执行 I/O 时，`opts.signal` 可以取消解析。options 对象把调用方拥有的两个解析控制项放在一起，避免位置参数继续增长。
 - `dsh-fs-local.resolve` 使用 `resolveLocalTarget(opts?.cwd ?? this.config.cwd, path)`。`config.cwd` 仍作为调用方未提供会话 cwd 时的默认值。
-- `dsh-tool-fs` 的 `read`/`write`/`edit` 通过共享的 `sessionCwd(exec, requestedPath)` 辅助函数（`exec.agent?.session.header.cwd`，与 bash 的 `resolveWorkdir` 对应）获取会话 cwd，并传给 `resolve`。只要任一值中的父目录段可能跨越符号链接，该辅助函数就使用原生 realpath 语义，否则保留普通拼写；沙箱化 mutation 复用完整策略的 `workspaceRoot`；非 agent／无 header 的调用方得到 `undefined`，后端因此应用其默认值。
+- `dsh-tool-fs` 的 `read`/`write`/`edit` 通过共享的 `sessionCwd(exec, requestedPath)` 辅助函数（`exec.agent?.session.header.cwd`，与 bash 的 `resolveWorkdir` 对应）获取会话 cwd，并传给 `resolve`。只要任一值中的父目录段可能跨越符号链接，该辅助函数就使用原生 realpath 语义，否则保留普通拼写；沙箱化 mutation 复用完整策略的主要 `workspaceRoots[0]`；非 agent／无 header 的调用方得到 `undefined`，后端因此应用其默认值。
 
 ## 曾考虑的替代方案
 

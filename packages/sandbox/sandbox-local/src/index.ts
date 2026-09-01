@@ -6,10 +6,10 @@
  * than returning the original argv.
  *
  * The windows-acl rung additionally owns the write grants: the write SID is
- * the per-WORKSPACE identity derived from the canonical workspace path
- * (`workspaceWriteSid`), while every live session receives a RANDOM private
- * temp directory and its own derived capability (`tempWriteSid`). The
- * workspace-root ACE materializes once per workspace per server lifetime
+ * the exact canonical workspace-root-set identity
+ * (`workspaceRootsWriteSid`), while every live session receives a RANDOM
+ * private temp directory and its own derived capability (`tempWriteSid`). The
+ * root-set ACEs materialize once per set per server lifetime
  * and STANDS (the cross-session reuse cache — the exact-ACE skip makes
  * every later provision O(1) instead of re-propagating the tree per
  * session); the private-temp ACEs are revoked on dispose. The runner
@@ -34,10 +34,10 @@ import {
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { assertNever } from '@deepseek-ai/dsh-llm'
-import { SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProvider, SandboxUnavailableError, workspaceWritableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import { AclWriteGrant, assertTempRootOutsideWorkspace, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
+import { AclWriteGrant, assertTempRootOutsideWorkspace, tempWriteSid, workspaceRootsWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
 import { bwrapProfileArgs, landlockProfileArgs, seatbeltProfileArgs } from './profiles.ts'
 
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -66,7 +66,7 @@ export interface Config {
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
 function defaultProbeBwrap(timeoutMs: number): boolean {
-  const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
+  const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoots: ['/'] }), '--', 'true'], {
     timeout: timeoutMs,
     stdio: 'ignore',
   })
@@ -83,7 +83,7 @@ function defaultProbeBwrap(timeoutMs: number): boolean {
  * every macOS; if it ever disappears, this probe is what fails closed.
  */
 function defaultProbeSeatbelt(seatbeltExec: string, timeoutMs: number): boolean {
-  const probe = spawnSync(seatbeltExec, [...seatbeltProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
+  const probe = spawnSync(seatbeltExec, [...seatbeltProfileArgs({ mode: 'read-only', workspaceRoots: ['/'] }), '--', 'true'], {
     timeout: timeoutMs,
     stdio: 'ignore',
   })
@@ -346,9 +346,9 @@ export class LocalSandboxProvider extends SandboxProvider {
   /**
    * The windows-acl runner argv for one policy. With a calling session (the
    * policy's `sessionId`) under workspace-write, the grants are materialized
-   * once per provider lifetime — the standing workspace-root grant per
-   * workspace and a revocable, RANDOM private-temp capability per live
-   * session/workspace pair. The runner receives `--write-sid` plus
+   * once per provider lifetime — one standing grant for the exact root set
+   * and a revocable, RANDOM private-temp capability per live
+   * session/root-set pair. The runner receives `--write-sid` plus
    * `--temp-write-sid` and grants nothing itself. Agentless workspace-write
    * calls pass the ambient temp ROOT and no SID flags: the runner creates and
    * removes a random private child directory for that one invocation.
@@ -356,50 +356,47 @@ export class LocalSandboxProvider extends SandboxProvider {
    * @returns the runner invocation.
    */
   private windowsAclRunnerArgv(policy: SandboxPolicy): string[] {
+    const roots = policy.mode === 'workspace-write' ? workspaceWritableRoots(policy) : [...policy.workspaceRoots]
+    const rootArgs = roots.flatMap(root => ['--workspace', root])
     const sessionId = policy.sessionId
     if (sessionId === undefined || policy.mode === 'read-only') {
       return [
         ...this.windowsAclRunnerInvocation(),
-        '--workspace', policy.workspaceRoot,
+        ...rootArgs,
         '--temp', tmpdir(),
         '--mode', policy.mode,
       ]
     }
-    const temp = this.materializeAclGrant(sessionId, policy.workspaceRoot)
+    const temp = this.materializeAclGrant(sessionId, roots)
     return [
       ...this.windowsAclRunnerInvocation(),
-      '--workspace', policy.workspaceRoot,
+      ...rootArgs,
       '--temp', temp.dir,
       '--mode', policy.mode,
-      '--write-sid', workspaceWriteSid(policy.workspaceRoot),
+      '--write-sid', workspaceRootsWriteSid(roots),
       '--temp-write-sid', temp.writeSid,
     ]
   }
 
   /**
-   * Materialize one workspace-write policy's ACEs once per provider
-   * lifetime. The workspace SID and standing root grant are shared by the
-   * workspace. The temp directory is random and carries a distinct SID, so
-   * another session on the same workspace cannot use the shared workspace
-   * SID to enter it. A fresh provider always chooses a new path; crash
-   * residue therefore cannot collide with or authorize a resumed session.
-   * Fail-closed: a half-materialized temp grant is revoked and its directory
-   * removed before the error propagates.
+   * Materialize one workspace-write policy's standing ACEs once per canonical
+   * root set and one revocable private-temp capability per live session/root-set
+   * pair. A set-specific SID prevents standing grants from different root sets
+   * from unioning when their roots overlap.
    * @param sessionId - the policy's calling-session identity.
-   * @param workspaceRoot - the resolved policy root.
+   * @param workspaceRoots - canonical explicit roots in policy order.
    * @returns the pair's private temp directory and write capability.
    */
-  private materializeAclGrant(sessionId: SessionId, workspaceRoot: string): AclTempCapability {
-    assertTempRootOutsideWorkspace(workspaceRoot, tmpdir())
-    const writeSid = workspaceWriteSid(workspaceRoot)
-    if (!this.workspaceGrants.has(workspaceRoot)) {
+  private materializeAclGrant(sessionId: SessionId, workspaceRoots: readonly string[]): AclTempCapability {
+    for (const root of workspaceRoots) assertTempRootOutsideWorkspace(root, tmpdir())
+    const writeSid = workspaceRootsWriteSid(workspaceRoots)
+    if (!this.workspaceGrants.has(writeSid)) {
       const grant = AclWriteGrant.create(writeSid)
       try {
-        grant.add(workspaceRoot, true)
+        for (const root of workspaceRoots) grant.add(root, true)
       } catch (error) {
-        // Free the SID; a standing ACE (if the apply succeeded before a
-        // post-apply throw) is the intended end state, not an error
-        // artifact — nothing to revoke.
+        // Free the SID; any already-applied standing ACE is inert unless an
+        // identical complete root set is provisioned again.
         try {
           grant.dispose()
         } catch (cleanupError) {
@@ -407,9 +404,9 @@ export class LocalSandboxProvider extends SandboxProvider {
         }
         throw error
       }
-      this.workspaceGrants.set(workspaceRoot, grant)
+      this.workspaceGrants.set(writeSid, grant)
     }
-    const key = JSON.stringify([String(sessionId), workspaceRoot])
+    const key = JSON.stringify([String(sessionId), writeSid])
     const existing = this.tempCapabilities.get(key)
     if (existing !== undefined) return existing
     const tempDir = mkdtempSync(join(tmpdir(), 'dsh-'))

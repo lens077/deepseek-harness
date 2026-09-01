@@ -154,6 +154,13 @@ export class FakeApiClient implements IApiClient {
     selectModel: (payload: { provider: string; model: string }) =>
       this.record('session.selectModel', payload, this.onSelectModel(payload)),
     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
+    directories: (payload: unknown) => this.record('session.directories', payload, Promise.resolve(ok({
+      primaryDirectory: '/f/ws', additionalDirectories: [],
+    }))),
+    replaceDirectories: (payload: { additionalDirectories: string[] }) =>
+      this.record('session.replaceDirectories', payload, Promise.resolve(ok({
+        primaryDirectory: '/f/ws', additionalDirectories: payload.additionalDirectories,
+      }))),
     fork: (payload: unknown) => this.record('session.fork', payload, this.onFork(payload)),
     delete: (payload: { sessionId: SessionId }) => this.record('session.delete', payload, this.onDelete(payload)),
     prompt: (payload: unknown) => this.record('session.prompt', payload, this.onPrompt(payload)),

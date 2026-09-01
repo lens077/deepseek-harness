@@ -179,13 +179,14 @@ export class TestSessions implements ISessions {
    */
   readonly currentProvideInfo: HostObservable<SessionMaybeProvideInfo>
   private readonly records = new Map<SessionId, SessionRecord>()
+  private readonly additionalDirectories = new Map<SessionId, string[]>()
   /** The production provide channel (roster, materialization rules, current projection) — no test-side mirror. */
   private readonly channel: SessionProvideChannel
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork' | 'delete'
+      | 'clear' | 'search' | 'fork' | 'delete' | 'directories' | 'replaceDirectories'
     args: unknown[]
   }[] = []
 
@@ -303,6 +304,7 @@ export class TestSessions implements ISessions {
   async remove(id: string): Promise<void> {
     const record = this.require(id)
     this.records.delete(id as SessionId)
+    this.additionalDirectories.delete(id as SessionId)
     await this.stabilize(async () => {
       this.list.update((draft) => {
         draft.ids = draft.ids.filter(existing => existing !== id)
@@ -484,6 +486,29 @@ export class TestSessions implements ISessions {
    * @param opts - source session id, optional cut anchor, and client title policy.
    * @returns the source id (no child record is created).
    */
+  directories(sessionId: SessionId): ReturnType<ISessions['directories']> {
+    const summary = this.require(sessionId).summary
+    this.calls.push({ method: 'directories', args: [sessionId] })
+    return Promise.resolve({
+      primaryDirectory: summary.cwd ?? '/',
+      additionalDirectories: [...(this.additionalDirectories.get(sessionId) ?? [])],
+    })
+  }
+
+  replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): ReturnType<ISessions['replaceDirectories']> {
+    const summary = this.require(sessionId).summary
+    const accepted = [...new Set(additionalDirectories)].filter(path => path !== summary.cwd)
+    this.additionalDirectories.set(sessionId, accepted)
+    this.calls.push({ method: 'replaceDirectories', args: [sessionId, additionalDirectories] })
+    return Promise.resolve({
+      primaryDirectory: summary.cwd ?? '/',
+      additionalDirectories: [...accepted],
+    })
+  }
+
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)

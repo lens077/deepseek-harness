@@ -24,7 +24,7 @@
 | `sandbox_permissions` | string enum | 仅当已挂载 sandbox 执行器时才会公开（`ctx.shell.sandboxMode` 已定义）。用于对刚被 sandbox 拒绝的命令做一次性重试的更宽 sandbox 模式——取刚好足够的最窄更宽模式，要求 `justification` 并在执行**之前**经 `ctx.approval` 获得用户批准。未拓宽或无法获批的请求 fail-closed，不运行任何内容。 |
 | `justification` | string | 必须与 `sandbox_permissions` 一同提供：用一句话向用户解释为何正是这条命令需要更宽的访问。 |
 
-`command`、`workdir` 与 `timeoutMs` 在执行前经 `ctx.shell.resolve()` 按执行器配置默认值解析。workdir 默认值在工具层于 `resolve()` 之前从调用 agent 的 `session.header.cwd` 取得——每次会话的 cwd 必须来自 `exec.agent`，因为 N 个会话共享一个执行器；仅当没有会话 cwd 时执行器才回退到自己的配置 / `process.cwd()`。
+`command`、`workdir` 与 `timeoutMs` 在执行前经 `ctx.shell.resolve()` 按执行器配置默认值解析。workdir 默认值在工具层于 `resolve()` 之前确定：存在常驻沙箱策略时使用规范化的 `workspaceRoots[0]`，否则使用调用 agent 的 `session.header.cwd`。逐会话基准必须来自 `exec.agent`，因为 N 个会话共享一个执行器；仅当两者都不可用时执行器才回退到自己的配置 / `process.cwd()`。附加根目录只扩展写入权限，绝不改变相对 workdir 的解析基准。
 
 ### Managed shell environment
 
@@ -123,4 +123,4 @@ ack 是固定短行；任务输出按读取有界。
 - **Windows 沙箱下的语言模式与 named-pipe 捕获** — 在 [Windows ACL 沙箱](../../sandbox/sandbox-windows-acl/README.zh.md) 下，read-only pwsh 会以 ConstrainedLanguage 启动，因为临时目录写入被拒绝，导致 PowerShell 的 AppLocker 探针失败并按 fail-closed 处理：`Add-Type`、非核心 .NET 静态调用（`[System.IO.*]::`、`[math]::`）、COM 对象与反射都会以“only core types”错误失败，且该模式无法从内部解除。workspace-write 的私有临时目录使探针得以完成，因此除非主机策略另有规定，否则它保持 FullLanguage。两种受限模式都拒绝 named-pipe 打开，因此受限命令内的管道 stdio spawn 以 EPERM 失败。工具描述把这两个约定教给模型；后端 README 负责完整的限制说明。
 - **无持久 shell** — 每次调用都启动全新的 `pwsh -Command`；持久 shell 对应物是 [`@deepseek-ai/dsh-tool-pwsh-persistent`](../tool-pwsh-persistent/README.zh.md)，它在 Windows（ConPTY）以及装有 pwsh 的 POSIX 主机上跨调用保持一个 owner 作用域的 pwsh 存活。
 - **PowerShell 方言约定** — 模型必须写 PowerShell（原生路径、`$env:` 变量），而不是 bash；没有方言翻译。
-- **会话 cwd 身份不做规范化** — workdir 基座直接取会话头 cwd 原值，不同于 bash 工具经 sandbox-root 规范化的身份。在隔离执行器下，策略的工作区根**会**被规范化（由共享的策略服务完成），因此当原始会话 cwd 与其规范化形态不同时，workdir 与隔离根可能不一致——这一 parity 差距留待共享 shell 工具基座提取时解决。
+- **附加根目录不会重定向相对 workdir**：`workspaceRoots[0]` 仍是规范化的工作目录基准；要从附加目录启动，调用方必须传入绝对 `workdir`。

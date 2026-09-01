@@ -6,14 +6,14 @@ English | [中文](README.zh.md)
 
 Its plugin config is the local backend config unchanged: `cwd` remains the relative-path resolution default, and `diffBasisMaxBytes` bounds the optional overwrite contextual-diff basis.
 
-Loading it INSTEAD OF `dsh-fs-local`, together with a [`ctx.sandboxPolicy`](../../sandbox/sandbox-policy/README.md), is the whole swap; the model-facing tools (`dsh-tool-fs`) are untouched. The tool layer resolves the calling session's mode and cwd into the SAME per-call policy bash receives, so the two families never confine to different roots.
+Loading it INSTEAD OF `dsh-fs-local`, together with a [`ctx.sandboxPolicy`](../../sandbox/sandbox-policy/README.md), is the whole swap; the model-facing tools (`dsh-tool-fs`) are untouched. The tool layer resolves the calling session's mode, primary cwd, and additional directories into the SAME per-call policy bash receives, so the two families never confine to different roots.
 
 ## The fence
 
-The per-call policy carries the effective mode (session override or escalation grant) together with the calling session's immutable cwd root, falling back to deployment policy only for calls without one:
+The per-call policy carries the effective mode (session override or escalation grant) together with the calling session's ordered roots. The immutable cwd remains first; durable additional directories follow. Only calls without a session cwd use the deployment fallback:
 
 - `read-only` — denies every mutation with the structured `FS_SANDBOX_DENIED`.
-- `workspace-write` — allows a mutation only when the target canonicalizes under a writable root: the workspace root plus the platform temp areas (`/tmp`, `os.tmpdir()`), the SAME set the Seatbelt profile grants, derived from the one [`writableRoots`](../../sandbox/README.md) function so the fs fence and the bash runner cannot drift. Canonical spellings use a lexical fast path; an identity-based ancestor fallback recognizes alias-equivalent roots such as Windows long names and 8.3 names without treating unrelated prefixes as contained. The target is re-canonicalized immediately before delegating, so an ancestor symlink swapped since the tool resolved it is caught.
+- `workspace-write` — allows a mutation only when the target canonicalizes under a writable root: every explicit session root plus the platform temp areas (`/tmp`, `os.tmpdir()`), the SAME set the Seatbelt profile grants, derived from the one [`writableRoots`](../../sandbox/README.md) function so the fs fence and the bash runner cannot drift. Canonical spellings use a lexical fast path; an identity-based ancestor fallback recognizes alias-equivalent roots such as Windows long names and 8.3 names without treating unrelated prefixes as contained. The target is re-canonicalized immediately before delegating, so an ancestor symlink swapped since the tool resolved it is caught.
 - `danger-full-access` — delegates unfenced.
 
 ## Threat model: a policy fence, not a kernel boundary
@@ -41,5 +41,5 @@ A standing-policy change appends an owner-rendered superseding runtime-context s
 ## Known Limitations and Deferred Work
 
 - **A policy fence, not a kernel boundary** — the check is trusted code over a model-controlled path, so the residual resolve-to-syscall TOCTOU is narrowed (by the in-place re-canonicalization) but not eliminated; adversarial host processes are out of scope. Kernel-grade isolation of untrusted code stays `ctx.shell`'s.
-- **Fence-vs-runner parity is derived from one owner** — the writable set comes from `writableRoots`, shared with the Seatbelt profile; a runner profile that defines its writable set elsewhere would drift.
+- **Fence-vs-runner parity is derived from one owner** — the writable set comes from `writableRoots`, shared with the Seatbelt, bwrap, and Landlock profiles; a runner profile that defines its writable set elsewhere would drift.
 - **Requires `ctx.sandboxPolicy`** — tools use it to resolve each session policy and the backend uses it for agentless-call fallbacks; the backend does not confine without it composed.

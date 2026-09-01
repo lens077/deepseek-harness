@@ -22,6 +22,7 @@ import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionSearchCursor } from '@deepseek-ai/dsh-session-query'
+import { AdditionalDirectoryError } from '@deepseek-ai/dsh-sandbox-policy'
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import type { SubagentListEntry as CatalogSubagentListEntry } from '@deepseek-ai/dsh-subagent'
 import { isUserInvocable } from '@deepseek-ai/dsh-skill'
@@ -2282,6 +2283,41 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return err(request, {
             code: 'internal',
             message: `failed to rename session "${sessionId}": ${String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async directories(request) {
+        const { sessionId } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        const session = found.agent.session
+        return ok(request, {
+          primaryDirectory: ctx.sandboxPolicy.resolve({ session }).workspaceRoots[0],
+          additionalDirectories: [...ctx.sandboxPolicy.additionalDirectoriesOf(session)],
+        })
+      },
+
+      async replaceDirectories(request) {
+        const { sessionId, additionalDirectories } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        try {
+          const accepted = ctx.sandboxPolicy.setAdditionalDirectories(found.agent.session, additionalDirectories)
+          const primaryDirectory = ctx.sandboxPolicy.resolve({ session: found.agent.session }).workspaceRoots[0]
+          return ok(request, { primaryDirectory, additionalDirectories: [...accepted] })
+        } catch (error: unknown) {
+          if (error instanceof AdditionalDirectoryError) {
+            return err(request, {
+              code: 'directory-invalid',
+              message: error.message,
+              details: { path: error.path, reason: error.code },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: `failed to replace directories for session "${sessionId}": ${String(error)}`,
             details: {},
           })
         }

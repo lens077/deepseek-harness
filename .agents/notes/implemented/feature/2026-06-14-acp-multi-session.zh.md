@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-ACP 桥接层将活跃会话存储在 `Map<SessionId, SessionRecord>` 中。agent 作用域的回调使用 `ownedRecord`：在正向 map 中查找 `agent.session.id`，且仅当该记录拥有精确的 agent 对象时才接纳它，使外部的同 id 对象无法冒领会话。一条记录拥有其 agent、精确的释放器，以及可选的进行中提示词和最终结算它的持久轮次号。会话 header 拥有其 cwd；桥接层不保留平行的工作区或客户端能力状态。
+ACP 桥接层将活跃会话存储在 `Map<SessionId, SessionRecord>` 中。agent 作用域的回调使用 `ownedRecord`：在正向 map 中查找 `agent.session.id`，且仅当该记录拥有精确的 agent 对象时才接纳它，使外部的同 id 对象无法冒领会话。一条记录拥有其 agent、精确的释放器，以及可选的进行中提示词和最终结算它的持久轮次号。会话 header 拥有主要 cwd，会话日志拥有附加目录状态；桥接层不保留平行的工作区或客户端能力状态。
 
 每个 `session/event` 回调在发送或结算任何内容之前，先解析出所属记录。每个会话独立允许一个进行中的提示词。提示词捕获自己源自用户消息的 `turn/start`，并仅在匹配的 `turn/end` 到达时结算；注入轮次、插件或 goal 的自主轮次，以及来自已取消的前一轮次的迟到 end 都不能 resolve 它。`session/cancel` 定位到一条记录，只调用该 agent 的队列感知取消路径。
 
@@ -26,9 +26,9 @@ ACP 桥接层将活跃会话存储在 `Map<SessionId, SessionRecord>` 中。agen
 
 [ACP v1 明确允许一个连接上存在多个并发会话](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/get-started/architecture.mdx#L16-L24)，每个新会话都携带自己的主 `cwd`。本桥实现该会话级多路复用，其中包括[按会话 cwd 决策](../architecture/2026-07-02-fs-per-session-cwd.zh.md)所记录的不同主工作区；它不会为每个会话创建一个 agent 子进程。
 
-一个会话内部的多根项目是另一项可选能力：ACP 把[有效根目录定义为主 `cwd` 加 `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367)。自动化桥接层不公布任何多根能力，并拒绝非空的 `additionalDirectories`；如[包约定](../../../../packages/acp/acp/README.zh.md#protocol-contract)所记录，每个全新会话恰好有一个工作区。
+一个会话内部的多根项目是另一项可选能力：ACP 把[有效根目录定义为主 `cwd` 加 `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367)。自动化桥接层公布 `sessionCapabilities.additionalDirectories`；`session/new` 接受绝对且现有的目录，对照主要 cwd 和先前条目规范化并按顺序去除标识别名，再把非空已接受列表记录为持久 `session/directories` 快照；没有该事件则表示空列表。主要 cwd 仍是相对路径基准；验证与强制执行细节由[会话附加目录决策](2026-08-18-session-additional-directories.zh.md)负责。
 
-[标准传输是每个 stdio 连接一个 agent 子进程](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/transports.mdx#L17-L42)；多个连接因此需要多个子进程或自定义传输，而本决策保证的是一个连接内部存在多个会话。在该连接内，`ctx.sandboxPolicy` 把每个会话的 `cwd` 解析为其自己的 `workspace-write` 根目录，因此共享的 bash 和文件系统服务可以服务并发项目而不授予跨项目写入。这不会添加 ACP `additionalDirectories`；它只是从已经支持的「每会话一个主根目录」路径中移除了进程级根目录限制。
+[标准传输是每个 stdio 连接一个 agent 子进程](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/transports.mdx#L17-L42)；多个连接因此需要多个子进程或自定义传输，而本决策保证的是一个连接内部存在多个会话。在该连接内，`ctx.sandboxPolicy` 把每个会话的主要 cwd 加持久附加目录快照解析为各自的有序 `workspace-write` 根目录集合。共享的 bash 和文件系统服务因此保持会话隔离；只有客户端有意把同一个规范目录授予多个会话时，根目录才会重叠。
 
 ## 曾考虑的替代方案
 

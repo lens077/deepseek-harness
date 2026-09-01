@@ -2,11 +2,11 @@
 
 English | [中文](README.zh.md)
 
-The single owner of sandbox-policy resolution: the deployment's default [`SandboxMode`](../sandbox/README.md) and fallback root, plus each session's durable mode override and immutable workspace root. Every enforcing capability receives one resolved mode-and-root policy per call; before each request, the model receives the current policy without a separate capability inventory.
+The single owner of sandbox-policy resolution: the deployment's default [`SandboxMode`](../sandbox/README.md) and fallback root, plus each session's durable mode override, immutable primary cwd, and durable additional-directory snapshot. Every enforcing capability receives one resolved mode-and-roots policy per call; before each request, the model receives the same ordered roots without a separate capability inventory.
 
 ## Why a shared home
 
-Filesystem tools, one-shot bash commands, and terminal sessions may enforce the same mode vocabulary in different combinations. If each resolved its own `mode` + `workspaceRoot`, they could drift into a split world, exactly what [the sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) warns against. Each enforcing backend consumes the complete owner-resolved policy, while the current context describes only what that policy means for any available operation the DSH file sandbox enforces. The [cross-family fs sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.md) records the shared-policy decision.
+Filesystem tools, one-shot bash commands, and terminal sessions may enforce the same mode vocabulary in different combinations. If each resolved its own `mode` + `workspaceRoots`, they could drift into a split world, exactly what [the sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) warns against. Each enforcing backend consumes the complete owner-resolved policy, while the current context describes only what that policy means for any available operation the DSH file sandbox enforces. The [cross-family fs sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.md) records the shared-policy decision.
 
 ## Config
 
@@ -15,18 +15,19 @@ Filesystem tools, one-shot bash commands, and terminal sessions may enforce the 
 
 ## API
 
-- `ctx.sandboxPolicy.resolve({ session?, mode? })` — resolves one complete per-call policy. An explicit approved mode outranks the session's last `sandbox/mode` event, which outranks `defaultMode`; the session's immutable `cwd` is canonicalized with filesystem semantics before becoming `workspaceRoot`, otherwise the configured fallback applies. Canonicalization precedes lexical normalization so `symlink/..` agrees with process working-directory resolution.
-- `ctx.sandboxPolicy.defaultMode` / `ctx.sandboxPolicy.workspaceRoot` — the deployment default and fallback root used by `resolve()`.
-- `sandbox:policy` — a request-time cache-safe context contribution derived directly from `resolve({ session })`. It states the mode's capability-neutral file-effect contract and the canonical session workspace under `workspace-write`; tool owners retain operation-specific denial and escalation guidance.
-- `effectiveSandboxMode(events)` — the pure fold of a session's `sandbox/mode` events (the last switch wins, or `undefined`), used inside `resolve()`.
-- `setSandboxMode(session, mode)` — THE write path for a per-session override: appends exactly one `sandbox/mode` event. The switch IS its event; nothing mutates the mode out of band.
+- `ctx.sandboxPolicy.resolve({ session?, mode? })` — resolves one complete per-call policy. An explicit approved mode outranks the session's last `sandbox/mode` event, which outranks `defaultMode`; `workspaceRoots[0]` is the canonical immutable session cwd or configured fallback, and later roots come from the latest `session/directories` snapshot. Canonicalization precedes lexical normalization so `symlink/..` agrees with process working-directory resolution.
+- `ctx.sandboxPolicy.defaultMode` / `ctx.sandboxPolicy.workspaceRoot` — the deployment default and fallback primary root used by `resolve()`.
+- `ctx.sandboxPolicy.additionalDirectoriesOf(session)` / `setAdditionalDirectories(session, directories)` — read or atomically replace the durable additional-root list. The write path accepts existing absolute directories, stores filesystem-canonical identities, removes duplicates and primary aliases, retains explicit ancestor/descendant roots, and appends one whole-list `session/directories` event.
+- `sandbox:policy` — a request-time cache-safe context contribution derived directly from `resolve({ session })`. It states the mode's capability-neutral file-effect contract and every canonical session root under `workspace-write`; tool owners retain operation-specific denial and escalation guidance.
+- `effectiveSandboxMode(events)` / `effectiveAdditionalDirectories(events)` — pure latest-write-wins folds for `sandbox/mode` and `session/directories` events.
+- `setSandboxMode(session, mode)` — the write path for a per-session mode override; it appends exactly one `sandbox/mode` event.
 - `SANDBOX_MODES` — every mode, for option advertisement and runtime validation.
 
-The optional `./invariant` companion rejects a forged durable `sandbox/mode` event whose value falls outside that closed vocabulary; Session and its companion own the surrounding storage and core execution-enclosure rules. The agent loop logs the assembled full runtime-context snapshot as a sourced `user/message`, so exact policy input remains reconstructable without an in-memory “last told” mirror.
+The optional `./invariant` companion rejects a forged durable `sandbox/mode` event outside the closed vocabulary and a `session/directories` snapshot with non-absolute, non-canonical, duplicate, or primary-alias entries. Replay validation never requires a recorded directory to still exist; Session and its companion own the surrounding storage and core execution-enclosure rules. The agent loop logs the assembled full runtime-context snapshot as a sourced `user/message`, so exact policy input remains reconstructable without an in-memory “last told” mirror.
 
 ## The per-session store
 
-A runtime switch is one log-only `sandbox/mode` event on the session it applies to. `effective = explicit grant ?? fold(events) ?? deployment default`, so an override survives restart by replay and two sessions never see each other's state. Workspace identity does not need another event: the immutable `SessionHeader.cwd` recorded at creation is the root for every call in that session. The event stays log-only; before the next request, the owner contributes the current fact to the full runtime-context snapshot.
+A runtime mode switch is one log-only `sandbox/mode` event on the session it applies to. `effective mode = explicit grant ?? fold(events) ?? deployment default`, so an override survives restart by replay and two sessions never see each other's state. `SessionHeader.cwd` remains the immutable primary root; a required, non-ignorable `session/directories` event replaces the complete additional-root list, with absence meaning empty. Both event folds contribute to the full runtime-context snapshot before the next request.
 
 ## Model Experience
 
@@ -45,7 +46,7 @@ Current DSH file policy: read-only. Any available operation enforced by the DSH 
 ##### Workspace-write
 
 ```markdown
-Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: "<workspace root>". Some platform temporary areas may also be writable.
+Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under these session workspace roots: ["<primary root>","<additional root>",...]. The first root is the primary working directory; later roots are additional directories. Some platform temporary areas may also be writable.
 ```
 
 ##### Danger-full-access
@@ -56,7 +57,7 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 
 #### Token effect
 
-One concise durable context message on the first request and each effective policy change; unchanged requests add nothing. `workspace-write` carries only the canonical session workspace path; platform-specific temporary paths are summarized without adding host-dependent bytes.
+One concise durable context message on the first request and each effective policy change; unchanged requests add nothing. `workspace-write` carries the ordered canonical session roots, so replacing additional directories changes the next snapshot; platform-specific temporary paths remain summarized.
 
 #### KV Cache effect
 
@@ -64,6 +65,6 @@ The stable system prompt remains byte-identical across mode changes. A changed f
 
 ## Known Limitations and Deferred Work
 
-- **One primary workspace root per session** — policy resolves `SessionHeader.cwd`; extra writable roots are not part of `SandboxExecutionPolicy`.
+- **Running processes capture their roots** — replacing additional directories affects future policy resolutions and process launches; an already-running confined process keeps the roots captured at spawn until it exits.
 - **File-effect modes only** — `SandboxMode` governs file effects; network and process policy are outside its vocabulary, so no knob here restricts them.
 - **Temporary areas are deliberately summarized** — enforcing backends grant different platform temporary areas, which are selected after policy resolution and therefore cannot be enumerated truthfully in the current context.

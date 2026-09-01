@@ -20,7 +20,7 @@ Thread the caller's session cwd into path resolution, exactly as `dsh-tool-bash`
 
 - `FileSystem.resolve` accepts `resolve(path: string, opts?: { cwd?: string; signal?: AbortSignal }): Promise<FsTarget>`. `opts.cwd` is the base a RELATIVE `path` resolves against; an absolute `path` ignores it; omitting `opts.cwd` uses the backend's own default. `opts.signal` cancels resolution when the backend performs I/O. The options object keeps both caller-owned resolution controls together without positional growth.
 - `dsh-fs-local.resolve` uses `resolveLocalTarget(opts?.cwd ?? this.config.cwd, path)`. `config.cwd` stays the default for a caller that supplies no session cwd.
-- `dsh-tool-fs`'s `read`/`write`/`edit` derive the session cwd through a shared `sessionCwd(exec, requestedPath)` helper (`exec.agent?.session.header.cwd`, mirroring bash's `resolveWorkdir`) and pass it to `resolve`. The helper uses native realpath semantics when a parent segment in either value could cross a symlink while retaining ordinary spellings otherwise; a sandboxed mutation reuses the complete policy's `workspaceRoot`; a non-agent / headerless caller yields `undefined`, so the backend applies its default.
+- `dsh-tool-fs`'s `read`/`write`/`edit` derive the session cwd through a shared `sessionCwd(exec, requestedPath)` helper (`exec.agent?.session.header.cwd`, mirroring bash's `resolveWorkdir`) and pass it to `resolve`. The helper uses native realpath semantics when a parent segment in either value could cross a symlink while retaining ordinary spellings otherwise; a sandboxed mutation reuses the complete policy's primary `workspaceRoots[0]`; a non-agent / headerless caller yields `undefined`, so the backend applies its default.
 
 ## Alternatives considered
 

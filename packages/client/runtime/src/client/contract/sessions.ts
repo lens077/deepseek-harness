@@ -9,7 +9,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  RpcResult, SessionId, SubagentAddress,
+  RpcResult, SessionDirectories, SessionId, SubagentAddress,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { HostObservable, SessionMaybeProvideInfo } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentContext } from '../agents/scope.ts'
@@ -103,6 +103,19 @@ export interface ISessions {
    * @returns complete child-first committed ids.
    */
   delete(sessionId: SessionId): Promise<readonly SessionId[]>
+  /**
+   * Read one session's immutable primary cwd and latest additional roots.
+   * @param sessionId - session to inspect.
+   * @returns canonical directory state.
+   */
+  directories(sessionId: SessionId): Promise<SessionDirectories>
+  /**
+   * Replace one session's complete additional-root list.
+   * @param sessionId - session to mutate.
+   * @param additionalDirectories - complete caller-visible list.
+   * @returns canonical directory state accepted by the Host.
+   */
+  replaceDirectories(sessionId: SessionId, additionalDirectories: readonly string[]): Promise<SessionDirectories>
   /**
    * Register a per-session standard-props provider (hooks become `use<Name>`
    * selector hooks on the render side; props spread verbatim).

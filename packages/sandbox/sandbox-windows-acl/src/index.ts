@@ -11,7 +11,7 @@
  * and LOCAL are absent from both lists — see the seam's dual-list contract
  * in `packages/sandbox/sandbox-local` and the package README's Modes section
  * for the complete boundary). The write SID is the per-WORKSPACE identity
- * ({@link workspaceWriteSid}): deterministic from the canonical workspace
+ * ({@link workspaceRootsWriteSid}): deterministic from the canonical workspace
  * path, so the workspace-root ACE materializes once per workspace per
  * machine and every later provision hits the exact-ACE skip — the
  * grant-reuse story the per-session random SID paid a full tree propagation
@@ -55,7 +55,7 @@ import * as abi from './win32-abi.ts'
 export { quoteArg } from './spawn.ts'
 export { AclWriteGrant } from './grant.ts'
 export { assertTempRootOutsideWorkspace } from './path-boundary.ts'
-export { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
+export { tempWriteSid, workspaceRootsWriteSid } from './workspace-sid.ts'
 export { Win32Error } from './errors.ts'
 
 /** Construction options: the workspace/temp allowlists and their distinct SID identities. */
@@ -71,7 +71,7 @@ export interface AclSandboxOptions {
   /**
    * The write SID forming the workspace-write allowlist: REQUIRED under
    * workspace-write, ignored (and must be absent) under read-only. Callers
-   * derive it from the workspace via {@link workspaceWriteSid} — the identity
+   * derive it from the workspace via {@link workspaceRootsWriteSid} — the identity
    * is per workspace, not per sandbox instance, so the workspace-root ACE
    * outlives every instance and later provisions hit the exact-ACE skip.
    */
@@ -191,7 +191,7 @@ export class AclSandbox {
     this.writeSid = options.writeSid
     this.tempWriteSid = options.tempWriteSid
     if (this.mode === 'workspace-write' && this.writeSid === undefined) {
-      throw new Error('AclSandbox workspace-write requires a write SID — derive it from the workspace via workspaceWriteSid()')
+      throw new Error('AclSandbox workspace-write requires a write SID — derive it from the workspace via workspaceRootsWriteSid()')
     }
     if (this.mode === 'workspace-write' && this.tempDirOption === undefined) {
       throw new Error('AclSandbox workspace-write requires an explicit private temp directory or null')

@@ -32,6 +32,8 @@ Settings 分节中的 `reasoningEffort` 在 agent-default-model 插件配置中�
 
 会话标题与其他所有领域一样搭乘这对通用投影机制——历史尾页的 `projections` 块外加 `title` 键下的 `session/projection` 帧。标题不会加入 `session.list`；冷会话在其中仍只有元数据，直到打开或恢复操作附加其日志。`session.rename` 接受用户显式标题（冷会话先恢复），委托给 `ctx.sessionTitle.rename`——被接受的 `session/title` 事件将标题钉住、不再被自动生成覆盖——并返回规范化后的标题及其事件 seq，让 client 在推送帧到达前就结算自己的 `title` 投影格；规范化后为空的标题返回 `title-invalid`。
 
+`session.directories` 返回不可变且规范化的主要 cwd，以及最新的持久附加目录快照。`session.replaceDirectories` 会验证绝对且现有的目录，规范化标识，移除重复项和主要目录别名，保留显式的祖先／后代根目录，并提交一条完整列表形式的 `session/directories` 事件；验证失败返回 `directory-invalid`，其中包含出错路径和稳定原因。附加目录绝不会创建 Workspace 记录，也不会改变相对路径解析；已提交的替换只影响后续策略解析和进程启动。
+
 `session.fork` 将可选事件锚点映射到该锚点处或其后的首个 `turn/end`，使消息操作可包含该消息所在的完整轮次。锚点省略或超过末尾时，选择最后一个已完成轮次；若锚点已在日志中，而其所在轮次仍开放，则返回 `fork-unavailable`，不会向较早位置裁剪。发布后的子会话会先继承源会话的种子历史、cwd、日志中最新的 `ModelSelection` 及谱系，再加入源 Workspace。如果附加到 Workspace 失败，`workspace-attach-failed` 会携带已发布的子会话 id，供客户端对账。[SessionStore fork 决策](../../../.agents/notes/implemented/feature/2026-06-30-session-store-fork-api.zh.md)记录了为何锚点要映射到该 `turn/end`。
 
 `session.delete` 会永久移除目标 Session 及其所有传递 fork 或 subagent 后代，并返回完整的已提交后代优先 id 列表。网关只能退役自身拥有的空闲普通 Agent handle；存在运行中或由其他组件拥有的实时目标时，会在删除前返回 `agent-busy`。这份所有权涵盖共享 Agent 解析器为通用动词执行的隐式冷恢复，因此仅被读取操作带上线的 Session 仍可删除；自行结束的生命周期会随 `agent/disposed` 释放其 handle。`host/session-deleted` 会发布同一份已提交列表，`host/session-removed` 则继续只表示进程内 detach。

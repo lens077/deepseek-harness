@@ -26,6 +26,8 @@ Workspace and Session lists have independent monotone `pending` → `ready` base
 
 `SessionRuntime.delete(sessionId)` applies the complete committed child-first id list from either its unary response or `host/session-deleted`. `SessionManager` tombstones those ids for the process lifetime, removes their summaries, instances, pending interactions, projections, jobs, catalogs, addresses, and selection, filters stale list responses, and ignores late Host or mux frames. `host/session-removed` remains a reversible process-local detach and never creates a deletion tombstone.
 
+`SessionRuntime.directories(sessionId)` and `replaceDirectories(sessionId, additionalDirectories)` expose the Host's authoritative session-level root list without folding it into Workspace state. A successful replacement returns the canonical complete list; presentation owners adopt that response rather than retaining requested spellings. The primary cwd stays immutable and first.
+
 SlotRegistry gives the renderer separate bare observables for `useSessions` and `useWorkspaces`; ui-renderer creates the hooks. Workspace business state does not enter `SessionListState` or an entry store.
 
 `abbreviateHomePath` is the display-only POSIX home abbreviation used by Web Workspace hover cards and Tool summaries; a Windows drive or UNC path stays verbatim, and a missing, empty, or filesystem-root home leaves the path unchanged.

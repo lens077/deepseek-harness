@@ -14,7 +14,7 @@ The shipped terminal and browser surfaces exposed the same coding tools under di
 
 A genuinely fresh session pins `permission/preset: workspace-write`, `sandbox/mode: workspace-write`, and `approval/policy: ask` before execution. Existing and resumed sessions retain their logged permission, and changing the General-settings default affects only sessions created afterward. The browser keeps its Access picker, answerable approval cards, and risk confirmation for Full access. The TUI gains the existing `/permission` command because the shared Permission service activates its command child there.
 
-The mode governs file effects only. Sandboxed bash and filesystem mutations admit the session workspace and platform temporary roots; reads, network access, and process visibility remain outside this policy. If no platform runner can enforce a confined bash call, execution fails closed instead of falling through to an unrestricted command.
+The mode governs file effects only. Sandboxed bash and filesystem mutations admit the session's ordered workspace roots and platform temporary roots; reads, network access, and process visibility remain outside this policy. If no platform runner can enforce a confined bash call, execution fails closed instead of falling through to an unrestricted command.
 
 ## Testing
 
@@ -30,6 +30,6 @@ The keyless shipped-TUI pseudo-terminal smoke boots the real Loader tree, reads 
 
 ## Consequences
 
-Fresh sessions can modify the active workspace and temporary roots without extra prompts, while an attempted mutation elsewhere is denied before it reaches the target. Full access remains available by explicit selection, and browser selection retains its acknowledgement dialog. Stored user defaults and logged session permissions are not rewritten.
+Fresh sessions can modify the active session workspace roots and temporary roots without extra prompts, while an attempted mutation elsewhere is denied before it reaches the target. Full access remains available by explicit selection, and browser selection retains its acknowledgement dialog. Stored user defaults and logged session permissions are not rewritten.
 
 The browser-backed headless entry inherits the Web composition and therefore the same default. The TUI's missing approval answerer is a deliberate limitation of this change: automatic wider retries fail closed there instead of displaying a permission question.

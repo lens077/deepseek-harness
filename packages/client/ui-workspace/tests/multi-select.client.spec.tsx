@@ -65,6 +65,10 @@ function mountRows(names: readonly string[], overrides: Partial<WorkspaceBrowser
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
     renameSession: vi.fn(async () => {}),
+    sessionDirectories: vi.fn(async () => ({ primaryDirectory: '/projects/alpha', additionalDirectories: [] })),
+    replaceSessionDirectories: vi.fn(async (_sessionId, additionalDirectories) => ({
+      primaryDirectory: '/projects/alpha', additionalDirectories: [...additionalDirectories],
+    })),
     forkSession: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
@@ -79,6 +83,7 @@ function mountRows(names: readonly string[], overrides: Partial<WorkspaceBrowser
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
+    useSessionDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostDescription: selector => selector(undefined),
     useSessionSelection: bindSnapshotSelector(selection),
     setSessionSelection: (next) => { selection.actions.setSelection(next) },

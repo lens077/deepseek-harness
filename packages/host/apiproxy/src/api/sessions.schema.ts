@@ -12,7 +12,7 @@ import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import type {
   HistoryEntry, ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
-  ModelReasoningEffort, ModelSelection, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionSummary,
+  ModelReasoningEffort, ModelSelection, SessionDirectories, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionSummary,
 } from './sessions.ts'
 import type { ToolEventView } from './events.ts'
 import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -126,6 +126,27 @@ export const sessionRenameValueSchema = z.object({
   title: z.string().min(1),
   seq: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.rename'>>>
+
+/** session.directories request payload. */
+export const sessionDirectoriesRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'session.directories'>>>
+
+/** Canonical primary and additional directory state returned by both directory methods. */
+export const sessionDirectoriesValueSchema = z.object({
+  primaryDirectory: z.string().min(1),
+  additionalDirectories: z.array(z.string().min(1)),
+}) satisfies z.ZodType<Wire<SessionDirectories>>
+
+/** session.replaceDirectories request payload: one whole-list replacement. */
+export const sessionReplaceDirectoriesRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  additionalDirectories: z.array(z.string()),
+}) satisfies z.ZodType<Wire<RequestPayload<'session.replaceDirectories'>>>
+
+/** session.replaceDirectories returns the same canonical state as session.directories. */
+export const sessionReplaceDirectoriesValueSchema: z.ZodType<Wire<ResponseValue<'session.replaceDirectories'>>> =
+  sessionDirectoriesValueSchema
 
 /** session.fork request payload (atSeq anchors the completed-turn cut; placement picks the child's display slot). */
 export const sessionForkRequestSchema = z.object({

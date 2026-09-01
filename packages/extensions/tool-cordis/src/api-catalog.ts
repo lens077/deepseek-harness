@@ -1150,7 +1150,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'sandboxPolicy',
     summary: 'The sandbox-policy service (`ctx.sandboxPolicy`).',
-    description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log and immutable cwd travel together to every enforcing capability.',
+    description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback primary root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log, immutable cwd, and directory snapshot travel together to every enforcing capability.',
     methods: [
       {
         signature: 'readonly defaultMode: SandboxMode',
@@ -1164,9 +1164,21 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd remains the primary workspace root; the latest `session/directories` snapshot extends only the writable allowlist. The configured root is the fallback for agentless calls and sessions without a cwd.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
-        returns: 'the fully resolved per-call mode and absolute workspace root.',
+        returns: 'the fully resolved per-call mode and ordered canonical roots.',
+      },
+      {
+        signature: 'additionalDirectoriesOf(session: Session): readonly string[]',
+        description: 'Read the session\'s durable additional-directory list.',
+        parameters: [{ name: 'session', description: 'session whose log supplies the latest snapshot.' }],
+        returns: 'the immutable canonical list, empty without a snapshot.',
+      },
+      {
+        signature: 'setAdditionalDirectories(session: Session, directories: readonly string[]): readonly string[]',
+        description: 'Replace one session\'s additional writable directories. Paths must be absolute existing directories; aliases of the primary root or an earlier entry are removed before the whole-list event commits.',
+        parameters: [{ name: 'session', description: 'owning session.' }, { name: 'directories', description: 'complete requested additional-directory list.' }],
+        returns: 'the committed canonical list.',
       },
       {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
@@ -4180,7 +4192,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoots: SandboxWorkspaceRoots;\n    sessionId?: SessionId;\n}',
   },
   {
     name: 'SandboxMode',
@@ -4193,6 +4205,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SandboxWorkspaceRoots',
+    declaration: 'export type SandboxWorkspaceRoots = readonly [\n    primary: string,\n    ...additional: string[]\n];',
   },
   {
     name: 'SaveImageAttachment',
@@ -4260,7 +4276,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'session/directories\': {\n        additionalDirectories: string[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
   },
   {
     name: 'SessionEventMetadataFilter',

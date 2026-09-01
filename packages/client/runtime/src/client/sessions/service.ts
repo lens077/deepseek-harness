@@ -16,7 +16,7 @@
  */
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {
-  IApiClient, RpcError, RpcResult, SessionId, SubagentAddress, JobView, WorkspaceId,
+  IApiClient, RpcError, RpcResult, SessionDirectories, SessionId, SubagentAddress, JobView, WorkspaceId,
 } from '@deepseek-ai/dsh-api-remotes/client'
 // Value import from the inline-safe wire layer (not the connection plugin):
 // plugin-to-plugin value imports are a bundle purity error.
@@ -559,6 +559,23 @@ export class SessionRuntime implements ISessions {
     if (!result.ok) throw new SessionDeleteError(result.error, sessionId)
     this.projectList()
     return result.value.deletedSessionIds
+  }
+
+  /** Read one session's canonical directory state. */
+  async directories(sessionId: SessionId): Promise<SessionDirectories> {
+    const result = await this.manager.directories(sessionId)
+    if (!result.ok) throw new Error(`session directories failed: ${result.error.code}: ${result.error.message}`)
+    return result.value
+  }
+
+  /** Replace one session's complete additional-directory list. */
+  async replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): Promise<SessionDirectories> {
+    const result = await this.manager.replaceDirectories(sessionId, additionalDirectories)
+    if (!result.ok) throw new Error(`session directory update failed: ${result.error.code}: ${result.error.message}`)
+    return result.value
   }
 
   /**

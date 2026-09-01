@@ -145,15 +145,17 @@ function pwshDescription(backgroundEnabled: boolean, escalationModes: readonly S
 }
 
 /**
- * Resolve an explicit workdir first, making a relative one session-workspace-relative;
- * otherwise use the session header cwd and leave executor defaulting as the fallback.
+ * Resolve an explicit workdir first, making a relative one primary-workspace-relative;
+ * otherwise use the canonical policy primary and then the raw session cwd.
  */
-function resolveWorkdir(modelWorkdir: string | undefined, exec: { agent?: Agent }): string | undefined {
-  const headerCwd = exec.agent?.session.header.cwd
-  if (modelWorkdir === undefined) return headerCwd
-  if (headerCwd !== undefined && !isAbsolute(modelWorkdir)) {
-    return resolvePath(headerCwd, modelWorkdir)
-  }
+function resolveWorkdir(
+  modelWorkdir: string | undefined,
+  exec: { agent?: Agent },
+  primaryWorkspaceRoot?: string,
+): string | undefined {
+  const base = primaryWorkspaceRoot ?? exec.agent?.session.header.cwd
+  if (modelWorkdir === undefined) return base
+  if (base !== undefined && !isAbsolute(modelWorkdir)) return resolvePath(base, modelWorkdir)
   return modelWorkdir
 }
 
@@ -355,7 +357,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       const policy = approvedMode === undefined
         ? standingPolicy
         : { ...(standingPolicy as SandboxExecutionPolicy), mode: approvedMode }
-      const workdir = resolveWorkdir(args.workdir, exec)
+      const workdir = resolveWorkdir(args.workdir, exec, standingPolicy?.workspaceRoots[0])
       const request = {
         command: args.command,
         ...workdir !== undefined ? { workdir } : {},

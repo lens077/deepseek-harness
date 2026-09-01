@@ -22,12 +22,14 @@ import {
   sessionAttachmentValueSchema,
   sessionCreateValueSchema,
   sessionDeleteValueSchema,
+  sessionDirectoriesValueSchema,
   sessionForkValueSchema,
   sessionHistoryValueSchema,
   sessionListValueSchema,
   sessionModelsValueSchema,
   sessionPromptValueSchema,
   sessionRenameValueSchema,
+  sessionReplaceDirectoriesValueSchema,
   sessionSearchValueSchema,
   sessionSelectModelValueSchema,
   sessionUpdateQueueValueSchema,
@@ -97,6 +99,8 @@ export interface IApiClient {
     models(payload: RequestPayload<'session.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.models'>>>
     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
+    directories(payload: RequestPayload<'session.directories'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.directories'>>>
+    replaceDirectories(payload: RequestPayload<'session.replaceDirectories'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.replaceDirectories'>>>
     fork(payload: RequestPayload<'session.fork'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.fork'>>>
     prompt(payload: RequestPayload<'session.prompt'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.prompt'>>>
     attachment(payload: RequestPayload<'session.attachment'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.attachment'>>>
@@ -185,6 +189,8 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'session.models': sessionModelsValueSchema,
   'session.selectModel': sessionSelectModelValueSchema,
   'session.rename': sessionRenameValueSchema,
+  'session.directories': sessionDirectoriesValueSchema,
+  'session.replaceDirectories': sessionReplaceDirectoriesValueSchema,
   'session.fork': sessionForkValueSchema,
   'session.prompt': sessionPromptValueSchema,
   'session.attachment': sessionAttachmentValueSchema,
@@ -429,6 +435,8 @@ export abstract class AbstractApiClient implements IApiClient {
     models: (payload, signal) => this.callUnary('session.models', payload, signal),
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
+    directories: (payload, signal) => this.callUnary('session.directories', payload, signal),
+    replaceDirectories: (payload, signal) => this.callUnary('session.replaceDirectories', payload, signal),
     fork: (payload, signal) => this.callUnary('session.fork', payload, signal),
     prompt: (payload, signal) => this.callUnary('session.prompt', payload, signal),
     attachment: (payload, signal) => this.callUnary('session.attachment', payload, signal),

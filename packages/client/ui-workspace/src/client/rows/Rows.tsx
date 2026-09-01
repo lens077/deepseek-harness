@@ -9,7 +9,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
-  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
+  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconFolderOpenOutline16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -471,6 +471,7 @@ export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, t 
  * @param props.onOpen - open a session by id, carrying the gesture's modifiers.
  * @param props.onRename - open the session rename dialog (id + current title).
  * @param props.onFork - fork a session at its last completed turn into the picked display slot.
+ * @param props.onDirectories - open the session-directory manager.
  * @param props.onArchive - archive a session by id.
  * @param props.drag - optional draggable-row wiring.
  * @param props.flat - omit the empty status slot in the hierarchy-free flat list.
@@ -481,7 +482,7 @@ export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, t 
  * @returns the session row.
  */
 export function SessionNodeItem({
-  node, currentId, now, onOpen, onContextMenu, onRename, onFork, onArchive, onDelete,
+  node, currentId, now, onOpen, onContextMenu, onRename, onFork, onDirectories, onArchive, onDelete,
   drag, flat = false, branch, multiSelected = false, multiLead = false, t,
 }: {
   node: SessionNode
@@ -498,6 +499,8 @@ export function SessionNodeItem({
   onRename: (id: SessionNode['id'], currentTitle: string) => void
   /** Fork a session at its last completed turn into the picked display slot (row menu actions). */
   onFork: (id: SessionNode['id'], placement: 'sibling' | 'nested') => void
+  /** Open the browser-owned directory manager; absent where no manager is composed in. */
+  onDirectories?: ((id: SessionNode['id']) => void) | undefined
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
   /** Request permanent deletion for this Session lineage. */
@@ -525,12 +528,19 @@ export function SessionNodeItem({
   // touches the session log, so it is not styled as destructive and needs no
   // confirmation dialog.
   const sessionMenuItems = [
-    { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
-    { id: 'fork', label: t('menu.forkSibling'), icon: <IconBranchOutline16 /> },
-    { id: 'fork-nested', label: t('menu.forkNested'), icon: <IconBranchOutline16 /> },
-    // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
-    { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
-    { id: 'delete', label: t('menu.deleteSession'), icon: <IconTrashOutline16 />, danger: true },
+    ...row.blank ? [] : [
+      { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
+      { id: 'fork', label: t('menu.forkSibling'), icon: <IconBranchOutline16 /> },
+      { id: 'fork-nested', label: t('menu.forkNested'), icon: <IconBranchOutline16 /> },
+    ],
+    ...onDirectories === undefined
+      ? []
+      : [{ id: 'directories', label: t('menu.sessionDirectories'), icon: <IconFolderOpenOutline16 /> }],
+    ...row.blank ? [] : [
+      // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
+      { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
+      { id: 'delete', label: t('menu.deleteSession'), icon: <IconTrashOutline16 />, danger: true },
+    ],
   ]
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
@@ -608,11 +618,12 @@ export function SessionNodeItem({
         <span className={css.branchCount}>{node.children.length}</span>
       )}
       {/* A blank New Session row is a provisional placeholder: nothing has
-          happened in it yet, so a "now" timestamp and the row verbs
-          (rename/fork/archive) would all act on content that does not
-          exist — both trailing cells stay off until the first prompt. */}
+          happened in it yet, so a "now" timestamp and the content verbs
+          (rename/fork/archive) would act on content that does not exist —
+          only the session-level directory policy can be set before the
+          first prompt. */}
       {!row.blank && <span className={css.time}>{timeLabel(row.updatedAt, now, t)}</span>}
-      {!row.blank && (
+      {(!row.blank || onDirectories !== undefined) && (
         <span className={css.rowActions}>
           <Menu
             open={menuOpen}
@@ -623,6 +634,7 @@ export function SessionNodeItem({
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id, 'sibling')
               if (id === 'fork-nested') onFork(node.id, 'nested')
+              if (id === 'directories') onDirectories?.(node.id)
               if (id === 'archive') onArchive(node.id)
               if (id === 'delete') onDelete(node.id)
             }}
@@ -665,6 +677,7 @@ export interface SessionRowContext {
   onContextMenu: (id: SessionNode['id'], event: RowContextMenuEvent) => void
   onRename: (id: SessionNode['id'], currentTitle: string) => void
   onFork: (id: SessionNode['id'], placement: 'sibling' | 'nested') => void
+  onDirectories?: ((id: SessionNode['id']) => void) | undefined
   onArchive: (id: SessionNode['id']) => void
   onDelete: (id: SessionNode['id']) => void
   isSelected: (id: SessionNode['id']) => boolean
@@ -703,6 +716,7 @@ export function SessionBranch({ node, row, drag, collapsedBranches, onToggleBran
         onContextMenu={row.onContextMenu}
         onRename={row.onRename}
         onFork={row.onFork}
+        onDirectories={row.onDirectories}
         onArchive={row.onArchive}
         onDelete={row.onDelete}
         drag={drag}

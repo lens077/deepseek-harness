@@ -90,7 +90,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:348`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:355`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:384`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:416`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -547,7 +547,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:53`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:321`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -561,7 +561,7 @@ Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/
 'request/header': { header: EpochHeader; reason: RequestHeaderReason }
 ```
 
-Source: [`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:316`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -606,6 +606,23 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 
 ### `session/*`
 
+<a id="sessiondirectories--log-only"></a>
+
+#### `session/directories` — log-only
+
+```ts persistence-catalog
+/**
+ * Complete canonical additional-directory list for this session. The primary
+ * working directory remains {@link SessionHeader.cwd}; the latest snapshot
+ * only extends the session's writable-root set. Absence means no additional
+ * directories. This event is log-only but required for reconstruction because
+ * sandbox policy projects the effective roots into model-visible context.
+ */
+'session/directories': { additionalDirectories: string[] }
+```
+
+Source: [`packages/core/session/src/types.ts:311`](../packages/core/session/src/types.ts)
+
 <a id="sessionend-seed--log-only"></a>
 
 #### `session/end-seed` — log-only
@@ -636,7 +653,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/end-seed': Record<string, never>
 ```
 
-Source: [`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:344`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 

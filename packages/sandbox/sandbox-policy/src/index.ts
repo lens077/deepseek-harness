@@ -1,8 +1,8 @@
 /**
  * The sandbox POLICY home (`ctx.sandboxPolicy`): the single owner of the
  * deployment's sandbox fallbacks plus per-session resolution: the file-effect
- * {@link SandboxMode}, the `workspace-write` root, and the override kit (the
- * `sandbox/mode` event, its fold, and its write path, from `./session-mode.ts`).
+ * {@link SandboxMode}, the ordered `workspace-write` roots, and the durable
+ * mode/directory event folds.
  * Before each agent request, the owner also contributes the resolved policy to
  * the cache-safe runtime-context snapshot. The agent loop logs that snapshot as
  * model history, so replay reconstructs the same mode and root the enforcing
@@ -18,21 +18,28 @@
  * @module @deepseek-ai/dsh-sandbox-policy
  */
 
-import { resolve as resolvePath } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
-import { canonicalPath, type SandboxExecutionPolicy, type SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { SandboxExecutionPolicy, SandboxMode, SandboxWorkspaceRoots } from '@deepseek-ai/dsh-sandbox'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import {
+  effectiveAdditionalDirectories,
+  resolveWorkspaceRoot,
+  setAdditionalDirectories as commitAdditionalDirectories,
+} from './session-directories.ts'
 import { effectiveSandboxMode } from './session-mode.ts'
 
+export {
+  AdditionalDirectoryError,
+  canonicalAdditionalDirectories,
+  effectiveAdditionalDirectories,
+  resolveWorkspaceRoot,
+  setAdditionalDirectories,
+} from './session-directories.ts'
+export type { AdditionalDirectoryErrorCode } from './session-directories.ts'
 export { SANDBOX_MODES, effectiveSandboxMode, setSandboxMode } from './session-mode.ts'
-
-/** Resolve filesystem identity before lexical normalization can erase symlink-sensitive components. */
-function resolveWorkspaceRoot(path: string): string {
-  return resolvePath(canonicalPath(path))
-}
 
 /** Render the policy without claiming which capabilities are mounted. */
 function renderPolicyContext(policy: SandboxExecutionPolicy): string {
@@ -40,7 +47,7 @@ function renderPolicyContext(policy: SandboxExecutionPolicy): string {
     case 'read-only':
       return 'Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.'
     case 'workspace-write':
-      return `Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${JSON.stringify(policy.workspaceRoot)}. Some platform temporary areas may also be writable.`
+      return `Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under these session workspace roots: ${JSON.stringify(policy.workspaceRoots)}. The first root is the primary working directory; later roots are additional directories. Some platform temporary areas may also be writable.`
     case 'danger-full-access':
       return 'Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.'
     /* v8 ignore next 4 -- SandboxMode is a typed same-process closed union; this branch is only the static exhaustiveness guard. */
@@ -76,7 +83,7 @@ export interface Config {
 
 /** Inputs that select the sandbox policy for one capability call. */
 export interface SandboxPolicyRequest {
-  /** Calling session; its immutable cwd becomes the workspace boundary. */
+  /** Calling session; its cwd and directory snapshot become the workspace roots. */
   session?: Session
   /** Explicit approved mode override, which outranks session policy. */
   mode?: SandboxMode
@@ -84,9 +91,10 @@ export interface SandboxPolicyRequest {
 
 /**
  * The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment
- * default mode, fallback workspace root, and current request-time policy
- * section. Tool layers call {@link resolve} for each execution so a session's
- * mode log and immutable cwd travel together to every enforcing capability.
+ * default mode, fallback primary root, and current request-time policy section.
+ * Tool layers call {@link resolve} for each execution so a session's mode log,
+ * immutable cwd, and directory snapshot travel together to every enforcing
+ * capability.
  */
 export class SandboxPolicyService extends Service {
   // Inline schema call: the config catalog walks `static Config` statically.
@@ -126,19 +134,50 @@ export class SandboxPolicyService extends Service {
   /**
    * Resolve the complete policy for one capability call. An approved explicit
    * mode outranks the session's last `sandbox/mode` event, which outranks the
-   * deployment default. A session cwd is its workspace-write boundary; the
-   * configured root is the fallback for agentless calls and sessions without a
-   * cwd.
+   * deployment default. A session cwd remains the primary workspace root; the
+   * latest `session/directories` snapshot extends only the writable allowlist.
+   * The configured root is the fallback for agentless calls and sessions
+   * without a cwd.
    * @param request - optional session and approved mode override.
-   * @returns the fully resolved per-call mode and absolute workspace root.
+   * @returns the fully resolved per-call mode and ordered canonical roots.
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
+    const primary = resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot)
+    // Additional roots are already canonical durable values. Replaying them must
+    // not consult a symlink target that may have changed since the event commit.
+    const additional = new Set(
+      session === undefined ? [] : effectiveAdditionalDirectories(session.events),
+    )
+    additional.delete(primary)
+    const workspaceRoots: SandboxWorkspaceRoots = [primary, ...additional]
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
-      workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
+      workspaceRoots,
       ...session === undefined ? {} : { sessionId: session.id },
     }
+  }
+
+  /**
+   * Read the session's durable additional-directory list.
+   * @param session - session whose log supplies the latest snapshot.
+   * @returns the immutable canonical list, empty without a snapshot.
+   */
+  additionalDirectoriesOf(session: Session): readonly string[] {
+    return effectiveAdditionalDirectories(session.events)
+  }
+
+  /**
+   * Replace one session's additional writable directories. Paths must be
+   * absolute existing directories; aliases of the primary root or an earlier
+   * entry are removed before the whole-list event commits.
+   * @param session - owning session.
+   * @param directories - complete requested additional-directory list.
+   * @returns the committed canonical list.
+   */
+  setAdditionalDirectories(session: Session, directories: readonly string[]): readonly string[] {
+    const primary = resolveWorkspaceRoot(session.header.cwd ?? this.workspaceRoot)
+    return commitAdditionalDirectories(session, primary, directories)
   }
 
   /**
