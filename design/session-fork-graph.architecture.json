@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DSH 会话图 · 分叉双模式设计",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "mode-sibling",
+        "label": "模式① 平级副本（现状）",
+        "focus": [
+          "menu",
+          "rpc",
+          "src",
+          "sib"
+        ],
+        "note": "现状默认：复制当前对话到同工作区顶层，标题 +(N)，自动打开新标签。"
+      },
+      {
+        "id": "mode-nested",
+        "label": "模式② 嵌套子会话（新增）",
+        "focus": [
+          "menu",
+          "rpc",
+          "src",
+          "childA",
+          "childB"
+        ],
+        "note": "源会话变为可展开父节点；子会话继承前缀，挂在其下，可多分支并行实验。"
+      },
+      {
+        "id": "facts",
+        "label": "持久层事实",
+        "focus": [
+          "rpc",
+          "log",
+          "header",
+          "ledger"
+        ],
+        "note": "两种模式共用种子与谱系；唯一分歧是账本槽位：顶层槽位 vs 父会话子槽位。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "menu",
+      "type": "frontend",
+      "label": "分叉菜单",
+      "sublabel": "会话右键 · 两个选项",
+      "tag": "UI",
+      "pos": [
+        40,
+        84
+      ],
+      "size": [
+        210,
+        68
+      ]
+    },
+    {
+      "id": "rpc",
+      "type": "backend",
+      "label": "session.fork",
+      "sublabel": "placement: sibling | nested",
+      "tag": "RPC",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        210,
+        72
+      ]
+    },
+    {
+      "id": "src",
+      "type": "backend",
+      "label": "源会话",
+      "sublabel": "例：Todo 工具调研与设计",
+      "tag": "分叉源",
+      "pos": [
+        430,
+        84
+      ],
+      "size": [
+        230,
+        68
+      ]
+    },
+    {
+      "id": "sib",
+      "type": "backend",
+      "label": "平级副本会话",
+      "sublabel": "例：Todo 工具调研与设计 (1)",
+      "tag": "① 顶层槽位",
+      "pos": [
+        830,
+        84
+      ],
+      "size": [
+        230,
+        68
+      ]
+    },
+    {
+      "id": "childA",
+      "type": "backend",
+      "label": "嵌套子会话 A",
+      "sublabel": "例：方案A · 本地优先",
+      "tag": "② 子槽位",
+      "pos": [
+        455,
+        260
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "childB",
+      "type": "backend",
+      "label": "嵌套子会话 B",
+      "sublabel": "例：方案B · AI 整理",
+      "pos": [
+        665,
+        260
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "sub",
+      "type": "external",
+      "label": "子代理会话",
+      "sublabel": "origin=subagent",
+      "pos": [
+        875,
+        260
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "log",
+      "type": "database",
+      "label": "会话日志",
+      "sublabel": "seed = 完成轮次前缀",
+      "pos": [
+        40,
+        440
+      ],
+      "size": [
+        210,
+        64
+      ]
+    },
+    {
+      "id": "header",
+      "type": "database",
+      "label": "SessionHeader",
+      "sublabel": "parentSession · cwd · 模型",
+      "pos": [
+        300,
+        440
+      ],
+      "size": [
+        230,
+        64
+      ]
+    },
+    {
+      "id": "ledger",
+      "type": "database",
+      "label": "Workspace 账本",
+      "sublabel": "sessionIds + 子槽位（新增）",
+      "pos": [
+        580,
+        440
+      ],
+      "size": [
+        250,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "工作区 ToDo · 真实目录（realpath）",
+      "wraps": [
+        "src",
+        "sib",
+        "childA",
+        "childB",
+        "sub"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "security-group",
+      "label": "会话容器",
+      "wraps": [
+        "childA",
+        "childB",
+        "sub"
+      ],
+      "pad": 22
+    },
+    {
+      "kind": "region",
+      "label": "持久层 · 会话图的事实",
+      "wraps": [
+        "log",
+        "header",
+        "ledger"
+      ],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "id": "pick-mode",
+      "from": "menu",
+      "to": "rpc",
+      "label": "选 ① 平级 / ② 嵌套",
+      "variant": "emphasis",
+      "labelDy": 24
+    },
+    {
+      "id": "run-on-source",
+      "from": "rpc",
+      "to": "src",
+      "label": "对源执行 · atSeq 定切点",
+      "variant": "emphasis"
+    },
+    {
+      "id": "fork-sibling",
+      "from": "src",
+      "to": "sib",
+      "label": "① 平级副本 · 标题+(N)"
+    },
+    {
+      "id": "fork-nested",
+      "from": "src",
+      "to": "childA",
+      "label": "② 嵌套子会话",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24,
+      "labelDx": -40
+    },
+    {
+      "id": "fork-nested-more",
+      "from": "src",
+      "to": "childB",
+      "label": "② 可多分支",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "subagent-precedent",
+      "from": "src",
+      "to": "sub",
+      "label": "既有先例 · 默认折叠",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "write-seed",
+      "from": "rpc",
+      "to": "log",
+      "label": "写种子",
+      "labelDy": 24,
+      "labelDx": -30
+    },
+    {
+      "id": "write-lineage",
+      "from": "rpc",
+      "to": "header",
+      "label": "写谱系"
+    },
+    {
+      "id": "write-slot",
+      "from": "rpc",
+      "to": "ledger",
+      "label": "写槽位 ① 顶层 / ② 子槽",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "两种分叉模式",
+      "items": [
+        "① 平级副本（现状默认）：复制当前对话，同工作区顶层新行，自动打开新标签",
+        "② 嵌套子会话（新增）：源会话变为父节点，子会话继承前缀并挂在其下",
+        "两种模式共用 session.fork：atSeq 切点、种子复制、cwd/模型继承完全一致"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "会话容器 ≠ Workspace",
+      "items": [
+        "DSH 工作区绑定真实目录：realpath 唯一性 + header.cwd 相等校验",
+        "嵌套是组织关系：记在工作区账本的子槽位，不建物理目录、不改子会话 cwd",
+        "谱系 parentSession 两种模式都已记录，今天只是未投影到侧边栏"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "已有地基与增量",
+      "items": [
+        "parentSession 谱系与 seed 前缀复制已在 host 实现",
+        "子代理目录已证明「会话下挂子节点」的交互可行",
+        "增量只有三件事：placement 参数 + 账本子槽位 + 侧边栏树投影"
+      ]
+    }
+  ]
+}
