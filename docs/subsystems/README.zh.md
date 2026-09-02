@@ -22,6 +22,7 @@
 | [feedback.md](feedback.zh.md) | 绑定生命周期的逐消息反馈记录、乐观版本、伴随记录持久化与 Host Remote 契约 |
 | [session-title.md](session-title.zh.md) | 持久标题快照、被引用的来源消息 seq 与异步提供方约定 |
 | [session-inbox.md](session-inbox.zh.md) | 用户持久的已读/已处理/延后/置顶标记、查看时间、待办与 `sessionInbox` Remote 契约 |
+| [project-todos.md](project-todos.zh.md) | 从配置的根目录与已注册工作区扫描出的项目级待办文档，以及 `projectTodos` Remote 契约 |
 | [session-reference.md](session-reference.zh.md) | 结构化跨会话引用：`SessionReferenceInput`/`Candidate`、prepared 消息上下文、稳定错误分类 |
 | [system-prompt.md](system-prompt.zh.md) | 逐次组装的上下文、工具提供方结果、提示词段落与协作式组装 |
 | [tools.md](tools.zh.md) | `ToolDefinition` 完整字段、schema DSL、`ToolExecution`/`ToolResult`、工具展示 UI 类型，以及受保护的执行流水线 |

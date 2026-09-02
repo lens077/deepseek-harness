@@ -414,6 +414,38 @@ export function deriveArchived(
   return rows
 }
 
+/** Where one session sits inside a group's rows: its top-level row and the branch rows above it. */
+export interface SessionPlace {
+  /** Index of the top-level row that holds the session (the session itself, or its outermost ancestor). */
+  index: number
+  /** Nested-fork ancestors from the top-level row down to the direct parent; empty for a top-level session. */
+  ancestors: readonly SessionId[]
+}
+
+/**
+ * Locate a session among a group's rows, descending nested-fork branches.
+ * Every hiding mechanism the tree has (the overflow cut, a folded branch) is
+ * addressed by one of the two fields, so a reveal needs nothing else.
+ * @param rows - the group's top-level rows in render order.
+ * @param id - the session to find.
+ * @returns its place, or `undefined` when no row in the group is the session.
+ */
+export function locateSession(rows: readonly SessionNode[], id: SessionId): SessionPlace | undefined {
+  const descend = (node: SessionNode, ancestors: readonly SessionId[]): readonly SessionId[] | undefined => {
+    if (node.id === id) return ancestors
+    for (const child of node.children) {
+      const found = descend(child, [...ancestors, node.id])
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  for (const [index, node] of rows.entries()) {
+    const ancestors = descend(node, [])
+    if (ancestors !== undefined) return { index, ancestors }
+  }
+  return undefined
+}
+
 /** Relative-time bucket of a session row's trailing label. */
 export type RelativeTimeUnit = 'now' | 'minutes' | 'hours' | 'days' | 'months' | 'years'
 

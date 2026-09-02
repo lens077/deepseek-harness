@@ -105,6 +105,7 @@
     "@deepseek-ai/dsh-message-feedback": "workspace:^",
     "@deepseek-ai/dsh-session-digest": "workspace:^",
     "@deepseek-ai/dsh-session-inbox": "workspace:^",
+    "@deepseek-ai/dsh-project-todos": "workspace:^",
     "@deepseek-ai/dsh-session-projection-cache": "workspace:^",
     "@deepseek-ai/dsh-session-reference": "workspace:^",
     "@deepseek-ai/dsh-session-log-export": "workspace:^",

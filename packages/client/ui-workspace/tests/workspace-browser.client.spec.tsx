@@ -16,6 +16,12 @@ import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear(); createWorkspaceViewStore().create().actions.setOrderBy('manual') })
+// jsdom implements no scrollIntoView; the tree calls it on a revealed row.
+const scrollIntoView = vi.fn()
+beforeEach(() => {
+  scrollIntoView.mockClear()
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: scrollIntoView })
+})
 
 // The seat's key domain is workspace ∪ common; the stub mirrors the real
 // lookup chain (namespace, then common vocabulary, then the key).
@@ -475,6 +481,77 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByText('b')).toBeTruthy()
     fireEvent.click(screen.getByText('alpha'))
     expect(screen.queryByText('b')).toBeNull()
+  })
+
+  describe('revealing a session opened from outside the tree', () => {
+    it('reopens a group the user folded and scrolls the row into view', () => {
+      const first = sessionState([summary('a', 2), summary('b', 1)], { current: sid('a') })
+      const b = mount({
+        useSessions: hook(first),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['a', 'b'])])),
+      })
+      fireEvent.click(screen.getByText('alpha'))
+      expect(screen.queryByText('b')).toBeNull()
+      rerender(b, { useSessions: hook({ ...first, current: sid('b') }) })
+      const row = screen.getByText('b').closest('[role="treeitem"]') as HTMLElement
+      expect(row.getAttribute('aria-selected')).toBe('true')
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+      expect(scrollIntoView.mock.instances).toEqual([row])
+    })
+
+    it('lifts the overflow cut when the opened row sits past it', () => {
+      const names = ['s1', 's2', 's3', 's4', 's5', 's6', 's7']
+      const items = names.map((name, index) => summary(name, names.length - index))
+      const first = sessionState(items, { current: sid('s1') })
+      const b = mount({
+        useSessions: hook(first),
+        useWorkspaces: hook(workspaceState([workspace('alpha', names)])),
+      })
+      act(() => { b.store.actions.setCollapsedSessionCount(5) })
+      rerender(b, {})
+      expect(screen.queryByText('s7')).toBeNull()
+      rerender(b, { useSessions: hook({ ...first, current: sid('s7') }) })
+      expect(screen.getByText('s7')).toBeTruthy()
+      expect(screen.getByRole('button', { name: '收起' })).toBeTruthy()
+    })
+
+    it('unfolds the branch above an opened nested child', () => {
+      const nested = { ...workspace('alpha', ['parent', 'child']), nestedUnder: { child: sid('parent') } }
+      const first = sessionState([
+        summary('parent', 2),
+        summary('child', 1, { parentId: sid('parent') }),
+      ], { current: sid('parent') })
+      const b = mount({ useSessions: hook(first), useWorkspaces: hook(workspaceState([nested])) })
+      fireEvent.click(screen.getByRole('button', { name: '1 个子会话' }))
+      expect(screen.queryByText('child')).toBeNull()
+      rerender(b, { useSessions: hook({ ...first, current: sid('child') }) })
+      expect(screen.getByText('child')).toBeTruthy()
+    })
+
+    it('leaves a fold alone when the restored session arrives with the list', () => {
+      const pending = sessionState([summary('a', 2), summary('b', 1)], { phase: 'pending' })
+      const b = mount({
+        useSessions: hook(pending),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['a', 'b'])])),
+      })
+      act(() => { b.store.actions.setGroupExpanded('alpha', false) })
+      rerender(b, { useSessions: hook({ ...pending, phase: 'ready', current: sid('b') }) })
+      expect(screen.queryByText('b')).toBeNull()
+    })
+
+    it('moves the multi-selection onto the opened session', () => {
+      const first = sessionState([summary('a', 2), summary('b', 1)], { current: sid('a') })
+      const b = mount({
+        useSessions: hook(first),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['a', 'b'])])),
+      })
+      fireEvent.click(screen.getByText('a').closest('[role="treeitem"]') as HTMLElement)
+      expect(b.selection.getSnapshot().selected).toEqual([sid('a')])
+      rerender(b, { useSessions: hook({ ...first, current: sid('b') }) })
+      expect(b.selection.getSnapshot()).toEqual({ selected: [sid('b')], anchor: sid('b'), lead: sid('b') })
+      const rows = screen.getAllByRole('treeitem').slice(1)
+      expect(rows.map(row => row.getAttribute('aria-selected'))).toEqual(['false', 'true'])
+    })
   })
 
   it('shows only the current blank session as the localized New Session, excluded from search', () => {

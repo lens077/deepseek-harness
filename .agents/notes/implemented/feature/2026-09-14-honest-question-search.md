@@ -76,7 +76,7 @@ The bound is enforced where the complete result is known, per `packages/AGENTS.m
 
 Search had been reachable only by opening the panel from the tick strip, which made it a mode discovered by exploration. It is now a standing button beside the navigation arrows, visible without hover, as the request specified. On this line the strip itself is gone — [the rail reduced to stepping](2026-09-02-question-rail-reduced-to-stepping.md) removed every surface that redrew the question index and named a standing entry button as the way to bring search back — so the entry is the rail's third and only other control, and the panel it opens lists questions only on request.
 
-`onLoadAll` and `chat.questions.loadAll` were removed rather than repaired. Its honest form — page the entire session into the browser, with progress and cancellation — is the memory cost the design rejects, and with a whole-session search it buys nothing: the reader wanted to find a question, not to load every question.
+`onLoadAll` and `chat.questions.loadAll` were removed rather than repaired at the time: a whole-session search finds a question without loading every question. An explicit whole-history load later returned as a separate operation for reading, not finding — see [the question panel offers to load the whole history](2026-09-18-question-panel-load-all-history.md).
 
 ## Alternatives considered
 
@@ -95,7 +95,7 @@ Search had been reachable only by opening the panel from the tick strip, which m
 - The navigator can no longer report a session-wide negative it did not verify. Nine component tests pin the state distinctions.
 - `QuestionNavigator` props changed: `onLoadAll` and `loadingOlder` are gone; `onSelectSeq` and optional `searchQuestions` replace them.
 - A deployment that composes no `searchQuestions` runs in `window-only`: search results come from the loaded window and say so. This is a visible, honest limitation, not a silent one.
-- `.questionLoadAll` is left without a renderer; the CSS rule is dead and removed with the navigator's visual pass.
+- `.questionLoadAll` was left without a renderer until the explicit whole-history load reused it ([note](2026-09-18-question-panel-load-all-history.md)).
 
 ## Follow-up
 

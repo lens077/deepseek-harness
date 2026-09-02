@@ -232,6 +232,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns the user\'s seen/handled/snooze/pin marks, review time, and todos over the domain facility, publishes every change as one snapshot event, and serves the Host unary Remote contract without entering Session history.',
   },
   {
+    key: 'projectTodos',
+    pkg: 'project-todos',
+    title: 'Project todo document scan',
+    mode: 'core',
+    note: 'Scans configured roots and registered workspaces for todo documents, publishes every differing scan as one snapshot event, and serves the Host unary Remote contract over read-only files it never writes.',
+  },
+  {
     key: 'messageFeedback',
     pkg: 'message-feedback',
     title: 'Lifecycle-bound message feedback',

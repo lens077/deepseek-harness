@@ -1135,6 +1135,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'projectTodos',
+    summary: 'Scanner service.',
+    description: 'Scanner service. Scans are serialized; a request landing during a scan queues exactly one more, so a burst of file events yields one rescan.',
+    methods: [
+      {
+        signature: '@Remote(\'get\') get(): ProjectTodosSnapshot',
+        description: 'Read the last scan result.',
+        parameters: [],
+        returns: 'the complete snapshot; empty before the first scan finishes.',
+      },
+      {
+        signature: '@Remote(\'rescan\') rescan(): Promise<ProjectTodosSnapshot>',
+        description: 'Scan again now, ahead of any pending file-event rescan.',
+        parameters: [],
+        returns: 'the fresh snapshot.',
+      },
+      {
+        signature: '@Remote(\'readDocument\') async readDocument(request: ProjectTodoReadRequest): Promise<ProjectTodoReadResult>',
+        description: 'Read the text of one document the current snapshot lists. Any other path is refused: the snapshot is the whole set of files a browser may read through this service.',
+        parameters: [{ name: 'request', description: 'the listed document path.' }],
+        returns: 'the document, or an explicit refusal or read failure.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -2719,6 +2744,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; their messages already obey the immutable creation contract.' }],
   },
   {
+    name: 'project-todos/changed',
+    mode: 'emit',
+    signature: '\'project-todos/changed\'(snapshot: ProjectTodosSnapshot): void',
+    summary: 'A scan finished with a result that differs from the previous one: a document changed, appeared, or disappeared, or the settings moved.',
+    description: 'A scan finished with a result that differs from the previous one: a document changed, appeared, or disappeared, or the settings moved. The payload is the complete snapshot, the same value `get` serves.',
+    parameters: [{ name: 'snapshot', description: 'the complete scan result.' }],
+  },
+  {
     name: 'session-inbox/changed',
     mode: 'emit',
     signature: '\'session-inbox/changed\'(snapshot: InboxSnapshot): void',
@@ -4057,6 +4090,70 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionSnapshot',
     declaration: 'export interface ProjectionSnapshot {\n    asOfSeq: number;\n    values: Partial<SessionProjectionMap>;\n}',
+  },
+  {
+    name: 'ProjectTodoDocument',
+    declaration: 'export interface ProjectTodoDocument {\n    readonly path: string;\n    readonly text: string;\n    readonly mtime: number;\n}',
+  },
+  {
+    name: 'ProjectTodoFile',
+    declaration: 'export interface ProjectTodoFile {\n    readonly path: string;\n    readonly relativePath: string;\n    readonly mtime: number;\n    readonly size: number;\n    readonly items: readonly ProjectTodoItem[];\n    readonly open: number;\n    readonly done: number;\n    readonly truncated: boolean;\n}',
+  },
+  {
+    name: 'ProjectTodoItem',
+    declaration: 'export interface ProjectTodoItem {\n    readonly line: number;\n    readonly text: string;\n    readonly status: ProjectTodoStatus;\n    readonly checkbox: boolean;\n    readonly depth: number;\n    readonly section: string | null;\n}',
+  },
+  {
+    name: 'ProjectTodoNotListed',
+    declaration: 'export interface ProjectTodoNotListed {\n    readonly code: \'not-listed\';\n    readonly path: string;\n}',
+  },
+  {
+    name: 'ProjectTodoProject',
+    declaration: 'export interface ProjectTodoProject {\n    readonly path: string;\n    readonly name: string;\n    readonly sources: readonly ProjectTodoSource[];\n    readonly files: readonly ProjectTodoFile[];\n    readonly open: number;\n    readonly done: number;\n}',
+  },
+  {
+    name: 'ProjectTodoReadFailed',
+    declaration: 'export interface ProjectTodoReadFailed {\n    readonly code: \'read-failed\';\n    readonly path: string;\n    readonly message: string;\n}',
+  },
+  {
+    name: 'ProjectTodoReadFailure',
+    declaration: 'export type ProjectTodoReadFailure = ProjectTodoNotListed | ProjectTodoReadFailed;',
+  },
+  {
+    name: 'ProjectTodoReadRequest',
+    declaration: 'export interface ProjectTodoReadRequest {\n    readonly path: string;\n}',
+  },
+  {
+    name: 'ProjectTodoReadResult',
+    declaration: 'export type ProjectTodoReadResult = ProjectTodoSuccess<ProjectTodoDocument> | ProjectTodoRejected<ProjectTodoReadFailure>;',
+  },
+  {
+    name: 'ProjectTodoRejected',
+    declaration: 'export interface ProjectTodoRejected<E extends ProjectTodoReadFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'ProjectTodoSource',
+    declaration: 'export type ProjectTodoSource = \'root\' | \'workspace\';',
+  },
+  {
+    name: 'ProjectTodosSettings',
+    declaration: 'export interface ProjectTodosSettings {\n    readonly roots: string[];\n    readonly files: string[];\n    readonly includeWorkspaces: boolean;\n}',
+  },
+  {
+    name: 'ProjectTodosSnapshot',
+    declaration: 'export interface ProjectTodosSnapshot {\n    readonly scannedAt: number | null;\n    readonly settings: ProjectTodosSettings;\n    readonly candidates: number;\n    readonly projects: readonly ProjectTodoProject[];\n    readonly warnings: readonly ProjectTodoWarning[];\n}',
+  },
+  {
+    name: 'ProjectTodoStatus',
+    declaration: 'export type ProjectTodoStatus = \'open\' | \'done\';',
+  },
+  {
+    name: 'ProjectTodoSuccess',
+    declaration: 'export interface ProjectTodoSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
+    name: 'ProjectTodoWarning',
+    declaration: 'export interface ProjectTodoWarning {\n    readonly path: string;\n    readonly message: string;\n}',
   },
   {
     name: 'PromptAssembly',

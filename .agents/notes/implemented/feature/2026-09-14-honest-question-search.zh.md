@@ -76,7 +76,7 @@ onLoadAll={() => { if (hasMore && !loadingOlder) loadOlder() }}
 
 此前搜索只能通过从刻度条打开面板抵达，这使它成为一个靠探索才能发现的模式。现在它是导航箭头旁的常驻按钮，无需 hover 即可见，符合需求的明确要求。在这条线上刻度条本身已不存在——[轨道精简为步进](2026-09-02-question-rail-reduced-to-stepping.zh.md)删除了所有重绘提问索引的表面，并点名常驻入口按钮是把搜索带回来的方式——因此这个入口是轨道上除箭头外唯一的控件，它打开的面板只在被请求时列出提问。
 
-`onLoadAll` 与 `chat.questions.loadAll` 是被移除而非修复的。它诚实的形态——带进度与可中断地把整个会话翻入浏览器——正是本设计拒绝的内存代价；而在有了全会话搜索之后它一无所值：读者想要的是找到某个提问，而不是加载全部提问。
+`onLoadAll` 与 `chat.questions.loadAll` 当时是被移除而非修复的：有了全会话搜索，找到某个提问不需要加载全部提问。后来一个明确的全历史加载作为独立操作回归——为了阅读，而非查找——见[提问面板提供加载全部历史](2026-09-18-question-panel-load-all-history.zh.md)。
 
 ## 备选方案
 
@@ -95,7 +95,7 @@ onLoadAll={() => { if (hasMore && !loadingOlder) loadOlder() }}
 - 导航器不再能报告一个它未曾验证的全会话否定结论。九条组件测试钉住这些状态区分。
 - `QuestionNavigator` 的 props 发生变化：`onLoadAll` 与 `loadingOlder` 移除，由 `onSelectSeq` 与可选的 `searchQuestions` 取代。
 - 未组合 `searchQuestions` 的部署运行在 `window-only`：搜索结果来自已加载窗口，并如实说明。这是一个**可见且诚实**的限制，而非静默的限制。
-- `.questionLoadAll` 失去渲染方；该 CSS 规则已成死规则，随导航器的视觉整理一并移除。
+- `.questionLoadAll` 一度失去渲染方，直到明确的全历史加载重新使用它（[笔记](2026-09-18-question-panel-load-all-history.zh.md)）。
 
 ## 后续工作
 

@@ -28,16 +28,20 @@ function formatTime(time: number): string {
 const SEARCH_DEBOUNCE_MS = 200
 
 export function QuestionNavigator({
-  questions, current, hasMore, onPrevious, onNext, onSelect, onSelectSeq, searchQuestions, t,
+  questions, current, hasMore, loadingAll, onPrevious, onNext, onSelect, onSelectSeq, onLoadAll, searchQuestions, t,
 }: {
   questions: QuestionEntry[]
   current: number
   hasMore: boolean
+  /** Whether a load-all request is still paging earlier history in. */
+  loadingAll: boolean
   onPrevious: () => void
   onNext: () => void
   onSelect: (index: number) => void
   /** Jump to a question addressed by seq, paging the window back when it sits outside. */
   onSelectSeq: (seq: number) => void
+  /** Page the whole session in, so the list and the stepping arrows cover every question. */
+  onLoadAll: () => void
   /**
    * Whole-session question search. Absent when no host search is composed in,
    * which is what forces the panel to admit it filtered only the window.
@@ -137,6 +141,14 @@ export function QuestionNavigator({
           </label>
           {notice !== null && (
             <p className={css.questionSearchNotice} role="status" aria-live="polite">{notice}</p>
+          )}
+          {/* The remedy sits beside the admission: while earlier pages are
+              unloaded, one press pages the whole session in, after which the
+              list and the stepping arrows cover every question. */}
+          {(hasMore || loadingAll) && (
+            <button type="button" className={css.questionLoadAll} disabled={loadingAll} onClick={onLoadAll}>
+              {loadingAll ? t('chat.questions.loadingAll') : t('chat.questions.loadAll')}
+            </button>
           )}
           <div className={css.questionList} aria-busy={searching || undefined}>
             {rows.map(row => (

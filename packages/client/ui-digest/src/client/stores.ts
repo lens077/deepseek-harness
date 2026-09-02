@@ -9,8 +9,8 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InboxWindow } from './select.ts'
 
-/** The panel's three surfaces. */
-export type InboxTab = 'inbox' | 'todos' | 'timeline'
+/** The panel's four surfaces. */
+export type InboxTab = 'inbox' | 'todos' | 'projects' | 'timeline'
 
 /** Inbox viewing state persisted across surface remounts and reloads. */
 type InboxViewState = {

@@ -1,7 +1,8 @@
 /**
  * The inbox surface over the center column: what needs the user across every
  * workspace, sectioned by why — waiting for a reply, failed, finished and
- * unread, seen but not dealt with, running — plus the todo and timeline tabs.
+ * unread, seen but not dealt with, running — plus the todo, project todo,
+ * and timeline tabs.
  *
  * The session list supplies every card's content (the digest projection rides
  * each row) and the durable inbox supplies the user's marks; the panel joins
@@ -18,6 +19,7 @@ import { InboxCard, type InboxCardActions } from './InboxCard.tsx'
 import type { BriefLabels, InboxItem, InboxSectionKey, InboxWindow } from './select.ts'
 import { questionSeqOf, renderBrief, selectInbox, selectTimeline, selectTodos, startOfDay } from './select.ts'
 import type { InboxTab } from './stores.ts'
+import { ProjectTodos, type ProjectTodosActions } from './ProjectTodos.tsx'
 import { Timeline } from './Timeline.tsx'
 import { TodoList } from './TodoList.tsx'
 import css from './DigestPanel.module.css'
@@ -30,7 +32,7 @@ const CLOCK_MS = 60_000
 /** Longest question kept in an automatically worded todo. */
 const TODO_QUESTION_CHARS = 120
 
-const TABS: readonly InboxTab[] = ['inbox', 'todos', 'timeline']
+const TABS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
 const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
 const SECTION_KEYS: readonly InboxSectionKey[] = ['pinned', 'needsYou', 'failed', 'unread', 'seen', 'running', 'handled']
 
@@ -53,9 +55,10 @@ function isEditable(target: EventTarget | null): boolean {
  */
 export function DigestPanel(props: DigestPanelProps) {
   const {
-    useStore, actions, useSessions, useWorkspaces, useInbox, t,
+    useStore, actions, useSessions, useWorkspaces, useInbox, useProjects, t,
     ensureInbox, openSession, openQuestion, continueSession, copyText,
     setHandled, snooze, setPinned, markReviewed, addTodo, updateTodo, removeTodo,
+    ensureProjects, rescanProjects, readProjectDocument, openProject, openPath,
   } = props
   const open = useStore(s => s.open)
   const tab = useStore(s => s.tab)
@@ -69,6 +72,7 @@ export function DigestPanel(props: DigestPanelProps) {
   const inboxStatus = useInbox(v => v.status)
   const inboxError = useInbox(v => v.error)
   const inbox = useInbox(v => v.snapshot)
+  const projectsView = useProjects(v => v)
 
   const [now, setNow] = useState(() => Date.now())
   const [focus, setFocus] = useState(0)
@@ -81,6 +85,12 @@ export function DigestPanel(props: DigestPanelProps) {
     const timer = globalThis.setInterval(() => { setNow(Date.now()) }, CLOCK_MS)
     return () => { globalThis.clearInterval(timer) }
   }, [open, ensureInbox])
+
+  // The scan is read the first time the tab shows, never for a user who
+  // keeps to the inbox.
+  useEffect(() => {
+    if (open && tab === 'projects') void ensureProjects()
+  }, [open, tab, ensureProjects])
 
   useEffect(() => {
     if (notice === null) return
@@ -136,6 +146,23 @@ export function DigestPanel(props: DigestPanelProps) {
       void snooze(item.sessionId, startOfDay(Date.now()) + DAY_MS + SNOOZE_HOUR * 3_600_000)
     },
   }), [actions, openSession, continueSession, setHandled, addTodo, setPinned, snooze, t])
+
+  const projectActions = useMemo<ProjectTodosActions>(() => ({
+    rescan: () => { void rescanProjects() },
+    openProject: async (project, file) => {
+      const result = await openProject(project.path, t('projects.sessionPrefill', { file: file.relativePath }))
+      if (result.ok) {
+        actions.close()
+        return null
+      }
+      return t('projects.openFailed', { message: result.error.message })
+    },
+    openPath: async (path) => {
+      const result = await openPath(path)
+      return result.ok ? null : t('projects.openFailed', { message: result.error.message })
+    },
+    readDocument: readProjectDocument,
+  }), [rescanProjects, openProject, openPath, readProjectDocument, actions, t])
 
   const focusCard = useCallback((index: number, item: InboxItem) => {
     setFocus(index)
@@ -248,6 +275,9 @@ export function DigestPanel(props: DigestPanelProps) {
               )}
               {key === 'todos' && todos.some(row => row.todo.status === 'open') && (
                 <span className={css.tabCount}>{todos.filter(row => row.todo.status === 'open').length}</span>
+              )}
+              {key === 'projects' && projectsView.snapshot.projects.length > 0 && (
+                <span className={css.tabCount}>{projectsView.snapshot.projects.reduce((sum, project) => sum + project.open, 0)}</span>
               )}
             </button>
           ))}
@@ -399,6 +429,9 @@ export function DigestPanel(props: DigestPanelProps) {
               markHandled: (id) => { void setHandled(id, true) },
             }}
           />
+        )}
+        {tab === 'projects' && (
+          <ProjectTodos view={projectsView} t={t} actions={projectActions} />
         )}
         {tab === 'timeline' && (
           <Timeline days={timeline} now={now} t={t} openQuestion={openAt} />

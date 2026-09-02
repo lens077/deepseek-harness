@@ -39,10 +39,12 @@ function renderNavigator(overrides: Partial<Parameters<typeof QuestionNavigator>
     questions: QUESTIONS,
     current: 0,
     hasMore: false,
+    loadingAll: false,
     onPrevious: vi.fn(),
     onNext: vi.fn(),
     onSelect: vi.fn(),
     onSelectSeq: vi.fn(),
+    onLoadAll: vi.fn(),
     t,
     ...overrides,
   }
@@ -93,6 +95,30 @@ describe('question search entry', () => {
     fireEvent.click(searchEntry())
     expect(screen.getAllByRole('button').filter(b => b.getAttribute('title') !== null)).toHaveLength(3)
     expect(screen.getByRole('status').textContent).toBe(zh['chat.questions.windowOnlyIdle'])
+  })
+
+  it('offers to load the whole session beside the partial-window notice, and only then', () => {
+    const { props } = renderNavigator({ hasMore: true })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.loadAll'] }))
+    expect(props.onLoadAll).toHaveBeenCalledOnce()
+    cleanup()
+    renderNavigator({ hasMore: false })
+    fireEvent.click(searchEntry())
+    expect(screen.queryByRole('button', { name: zh['chat.questions.loadAll'] })).toBeNull()
+  })
+
+  it('shows the load-all request as busy until the last page lands', () => {
+    renderNavigator({ hasMore: true, loadingAll: true })
+    fireEvent.click(searchEntry())
+    const busy = screen.getByRole('button', { name: zh['chat.questions.loadingAll'] })
+    expect((busy as HTMLButtonElement).disabled).toBe(true)
+    cleanup()
+    // The final page clears hasMore before the request settles: the busy
+    // label stays until the loop itself reports completion.
+    renderNavigator({ hasMore: false, loadingAll: true })
+    fireEvent.click(searchEntry())
+    expect(screen.getByRole('button', { name: zh['chat.questions.loadingAll'] })).toBeTruthy()
   })
 })
 

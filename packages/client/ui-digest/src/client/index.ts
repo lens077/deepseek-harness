@@ -14,6 +14,11 @@
  * "finished while I was away" into a durable fact instead of a green dot that
  * vanishes on refresh.
  *
+ * The panel's fourth tab lists project-level todo documents (`TODO.md` and
+ * friends) the Host scans across the configured roots and every registered
+ * workspace; the same plugin contributes the settings page that names those
+ * roots and file patterns.
+ *
  * @module @deepseek-ai/dsh-client-ui-digest
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -26,12 +31,18 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: pulls ui-renderer's optional documentBadge Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: pulls ui-settings' Context merge (ctx.settingsScope) and the settings.section slot.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls ui-workspace's optional sessionTodos seat.
 import type { SessionTodos } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionDigestView } from '@deepseek-ai/dsh-session-digest/client'
-import type { DigestNavEntryInjected, DigestPanelInjected } from './contract/slots.ts'
-import { InboxController } from './controller.ts'
+import type { ProjectTodosSettings } from '@deepseek-ai/dsh-project-todos/types'
+import type { DigestNavEntryInjected, DigestPanelInjected, ProjectSettingsInjected } from './contract/slots.ts'
+import { InboxController, type InboxActionResult } from './controller.ts'
+import { ProjectTodosController } from './projects-controller.ts'
+import { PROJECT_TODOS_SETTINGS_NAMESPACE, ProjectSettingsPolicy } from './project-settings.ts'
+import { ProjectSettingsSection } from './ProjectSettingsSection.tsx'
 import { DigestNavEntry } from './DigestNavEntry.tsx'
 import { DigestPanel } from './DigestPanel.tsx'
 import { createDigestStore } from './stores.ts'
@@ -39,8 +50,13 @@ import { questionSeqOf, selectInbox } from './select.ts'
 import { en, NS, zh, type DigestKey } from './locales.ts'
 
 export type { DigestKey } from './locales.ts'
-export type { DigestNavEntryInjected, DigestNavEntryProps, DigestPanelInjected, DigestPanelProps } from './contract/slots.ts'
+export type {
+  DigestNavEntryInjected, DigestNavEntryProps, DigestPanelInjected, DigestPanelProps,
+  ProjectSettingsInjected, ProjectSettingsSectionProps,
+} from './contract/slots.ts'
 export type { InboxActionResult, InboxRemote, InboxView } from './controller.ts'
+export type { ProjectDocumentResult, ProjectTodosRemote, ProjectTodosView } from './projects-controller.ts'
+export type { ProjectSettingsView } from './project-settings.ts'
 export { createDigestStore } from './stores.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -51,7 +67,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Services required by the inbox plugin. */
-export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.sessionInbox']
+export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.sessionInbox', 'remote.projectTodos']
 
 /** Longest question kept in an automatically worded todo. */
 const TODO_QUESTION_CHARS = 120
@@ -77,6 +93,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-digest: dictionaries')
 
   const store = createDigestStore()
+  const translate = ctx.locale.bind(NS)
   const controller = new InboxController(ctx.remote.sessionInbox)
   ctx.effect(() => () => { controller.dispose() }, 'ui-digest: inbox controller')
 
@@ -85,6 +102,68 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.remote.$on('session-inbox/changed', (snapshot) => { controller.receive(snapshot) }), 'ui-digest: inbox push')
   ctx.on('connection/reset', () => { void controller.refresh() })
   void controller.ensure()
+
+  // Project todo documents: the Host scans and pushes; the tab reads on first
+  // show, so nothing is fetched for a user who never opens it.
+  const projects = new ProjectTodosController(ctx.remote.projectTodos)
+  ctx.effect(() => () => { projects.dispose() }, 'ui-digest: project todos controller')
+  ctx.effect(() => ctx.remote.$on('project-todos/changed', (snapshot) => { projects.receive(snapshot) }), 'ui-digest: project todos push')
+  ctx.on('connection/reset', () => {
+    if (projects.getSnapshot().status !== 'cold') void projects.refresh()
+  })
+
+  /** Describe one thrown runtime failure as an action result. */
+  const failure = (error: unknown): InboxActionResult => ({
+    ok: false,
+    error: { code: 'runtime', message: error instanceof Error ? error.message : String(error) },
+  })
+  /** Register the directory as a workspace (idempotent), open a session there, and prefill its composer. */
+  const openProject = async (path: string, text: string | null): Promise<InboxActionResult> => {
+    try {
+      const workspace = await ctx.workspaces.create({ path })
+      const sessionId = await ctx.workspaces.connectWorkspace(workspace.workspaceId)
+      ctx.sessions.open(sessionId)
+      if (text !== null) {
+        const scope = ctx.sessions.scope(sessionId)
+        const conversation = ctx.get('conversation')
+        if (scope !== undefined && conversation !== undefined) conversation.input.for(scope).setDraft(text)
+      }
+      return { ok: true }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+  const openPath = async (path: string): Promise<InboxActionResult> => {
+    try {
+      await ctx.workspaces.openPath(path)
+      return { ok: true }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  // The scan settings page. It rides the settings scope service, so a
+  // composition without the settings surface simply has no page.
+  ctx.inject(['settingsScope'], (settingsCtx) => {
+    const policy = new ProjectSettingsPolicy(
+      settingsCtx.settingsScope.bind<ProjectTodosSettings>({ namespace: PROJECT_TODOS_SETTINGS_NAMESPACE }),
+    )
+    settingsCtx.slots.inject('settings.section', () => settingsCtx.slots.register({
+      name: 'settings.section',
+      id: 'project-todos',
+      // Below the shipped sections and the conversation-layout page (40).
+      order: 45,
+      locale: NS,
+      label: () => translate('settings.nav'),
+      inject: (): ProjectSettingsInjected => ({
+        hooks: { projectSettings: policy.view },
+        setRoots: roots => policy.setRoots(roots),
+        setFiles: files => policy.setFiles(files),
+        setIncludeWorkspaces: include => policy.setIncludeWorkspaces(include),
+        pickDirectory: () => ctx.workspaces.pickDirectory(),
+      }),
+    }, ProjectSettingsSection))
+  })
 
   // Seen mark: the current session's newest landed seq is what the user has
   // on screen. The controller skips the call when the mark already covers it.
@@ -126,7 +205,6 @@ export function apply(ctx: ClientContext): void {
 
   // The session browser's menus add todos through this seat; the wording
   // follows what the inbox card would write, and the panel opens on the list.
-  const translate = ctx.locale.bind(NS)
   ctx.provide('sessionTodos', {
     add: (sessionIds) => {
       const list = ctx.sessions.list.getSnapshot()
@@ -177,8 +255,13 @@ export function apply(ctx: ClientContext): void {
     inject: (actions): DigestPanelInjected => {
       viewActions = actions
       return {
-        hooks: { inbox: controller },
+        hooks: { inbox: controller, projects },
         ensureInbox: () => controller.ensure(),
+        ensureProjects: () => projects.ensure(),
+        rescanProjects: () => projects.rescan(),
+        readProjectDocument: path => projects.readDocument(path),
+        openProject,
+        openPath,
         openSession: (id) => { ctx.sessions.open(id) },
         openQuestion,
         continueSession,

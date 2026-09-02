@@ -3,7 +3,7 @@ import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  deriveArchived, deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
+  deriveArchived, deriveFlat, deriveGroups, deriveSearchResults, locateSession, workspaceLabel, relativeTime,
   UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -63,6 +63,11 @@ describe('deriveGroups', () => {
     expect(groups[0]!.sessionCount).toBe(5)
     // The flat list stays hierarchy-free.
     expect(deriveFlat(sessions, noArchive).every(row => row.children.length === 0)).toBe(true)
+    // A reveal reads the top-level row and the branch rows above the target.
+    expect(locateSession(rows, sid('parent'))).toEqual({ index: 0, ancestors: [] })
+    expect(locateSession(rows, sid('grand'))).toEqual({ index: 0, ancestors: [sid('parent'), sid('childA')] })
+    expect(locateSession(rows, sid('orphan'))).toEqual({ index: 1, ancestors: [] })
+    expect(locateSession(rows, sid('missing'))).toBeUndefined()
   })
 
   it('renders every member of a malformed placement cycle instead of dropping the branch', () => {

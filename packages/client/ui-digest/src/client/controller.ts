@@ -8,7 +8,6 @@
  */
 
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   InboxAddTodoRequest,
@@ -18,6 +17,7 @@ import type {
   InboxTodoResult,
   InboxTodoStatus,
 } from '@deepseek-ai/dsh-session-inbox/types'
+import { SnapshotController } from './snapshot-controller.ts'
 
 /**
  * The Remote calls this controller needs. The generated face wraps every
@@ -87,24 +87,14 @@ function describe(code: string): string {
  * Per-client inbox object layer. One instance backs the sidebar badge, the
  * panel, and the seen-marking subscription.
  */
-export class InboxController implements HostObservable<InboxView> {
-  private view = INITIAL_VIEW
-  private readonly listeners = new Set<() => void>()
+export class InboxController extends SnapshotController<InboxView> {
   private loadPromise: Promise<InboxActionResult> | null = null
-  private disposed = false
 
   /**
    * @param remote - the sessionInbox Remote namespace.
    */
-  constructor(private readonly remote: InboxRemote) {}
-
-  /** Return the cached immutable view. */
-  getSnapshot = (): InboxView => this.view
-
-  /** Subscribe to view replacement. */
-  subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
+  constructor(private readonly remote: InboxRemote) {
+    super(INITIAL_VIEW)
   }
 
   /**
@@ -112,7 +102,7 @@ export class InboxController implements HostObservable<InboxView> {
    * @returns the settled load result, shared by concurrent callers.
    */
   ensure(): Promise<InboxActionResult> {
-    if (this.view.status === 'ready') return Promise.resolve(OK)
+    if (this.getSnapshot().status === 'ready') return Promise.resolve(OK)
     return this.refresh()
   }
 
@@ -124,11 +114,11 @@ export class InboxController implements HostObservable<InboxView> {
   refresh(): Promise<InboxActionResult> {
     if (this.disposed) return Promise.resolve(DISPOSED)
     if (this.loadPromise !== null) return this.loadPromise
-    this.publish({ status: 'loading', snapshot: this.view.snapshot, error: null })
+    this.publish({ status: 'loading', snapshot: this.getSnapshot().snapshot, error: null })
     const pending = this.remote.get().then((carried) => {
       if (this.disposed) return DISPOSED
       if (!carried.ok) {
-        this.publish({ status: 'error', snapshot: this.view.snapshot, error: carried.error.message })
+        this.publish({ status: 'error', snapshot: this.getSnapshot().snapshot, error: carried.error.message })
         return { ok: false, error: { code: carried.error.code, message: carried.error.message } }
       }
       this.receive(carried.value)
@@ -156,7 +146,7 @@ export class InboxController implements HostObservable<InboxView> {
    * @returns the settled result.
    */
   markSeen(sessionId: SessionId, seq: number): Promise<InboxActionResult> {
-    const known = this.view.snapshot.sessions.find(row => row.sessionId === sessionId)
+    const known = this.getSnapshot().snapshot.sessions.find(row => row.sessionId === sessionId)
     if (known !== undefined && known.lastSeenSeq !== null && known.lastSeenSeq >= seq) return Promise.resolve(OK)
     return this.apply(() => this.remote.markSeen({ sessionId, seq }))
   }
@@ -227,12 +217,6 @@ export class InboxController implements HostObservable<InboxView> {
     return this.apply(() => this.remote.removeTodo({ id }))
   }
 
-  /** Stop publishing; every later action reports `disposed`. */
-  dispose(): void {
-    this.disposed = true
-    this.listeners.clear()
-  }
-
   /** Run one snapshot-returning Remote call and adopt its reply. */
   private async apply(call: () => Promise<RemoteResult<InboxSnapshot>>): Promise<InboxActionResult> {
     if (this.disposed) return DISPOSED
@@ -253,10 +237,5 @@ export class InboxController implements HostObservable<InboxView> {
     if (!result.ok) return { ok: false, error: { code: result.error.code, message: describe(result.error.code) } }
     this.receive(result.value)
     return OK
-  }
-
-  private publish(view: InboxView): void {
-    this.view = Object.freeze(view)
-    for (const listener of this.listeners) listener()
   }
 }

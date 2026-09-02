@@ -2084,6 +2084,86 @@
       "doc": "docs/subsystems/session-inbox.md",
       "symbol": "InboxSnoozeResult",
       "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoStatus",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoItem",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoFile",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoSource",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoProject",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoWarning",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodosSettings",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodosSnapshot",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoReadRequest",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoDocument",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoNotListed",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoReadFailed",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoReadFailure",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoSuccess",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoRejected",
+      "source": "packages/todo/project-todos/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/project-todos.md",
+      "symbol": "ProjectTodoReadResult",
+      "source": "packages/todo/project-todos/src/types.ts"
     }
   ]
 }

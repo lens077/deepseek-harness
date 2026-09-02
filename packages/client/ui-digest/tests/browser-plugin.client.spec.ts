@@ -14,12 +14,13 @@ import { SlotTestRuntime, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
 import type { InboxSnapshot } from '@deepseek-ai/dsh-session-inbox/types'
+import type { ProjectTodosSnapshot } from '@deepseek-ai/dsh-project-todos/types'
 import { apply, inject } from '../src/client/index.ts'
-import type { DigestNavEntryInjected, DigestPanelInjected } from '../src/client/contract/slots.ts'
+import type { DigestNavEntryInjected, DigestPanelInjected, ProjectSettingsInjected } from '../src/client/contract/slots.ts'
 import { apply as applyNode } from '../src/index.ts'
 import * as DigestInvariant from '../src/invariant.ts'
 import { en, NS, zh } from '../src/client/locales.ts'
-import { digest, inbox, mark } from './fixtures.client.ts'
+import { digest, inbox, mark, project, projectFile, projectItem, projectsSnapshot } from './fixtures.client.ts'
 
 let runtime: SlotTestRuntime | undefined
 
@@ -63,16 +64,38 @@ async function bench(initial: InboxSnapshot = inbox()) {
     addTodo: business('addTodo'),
     updateTodo: business('updateTodo'),
   }
+  let projects: ProjectTodosSnapshot = projectsSnapshot({ projects: [project('/tmp/root/alpha', [projectFile('/tmp/root/alpha/TODO.md', [projectItem('ship')])])] })
+  const projectTodos = {
+    get: (request?: unknown) => {
+      calls.push({ method: 'projects.get', request })
+      return carried(projects)
+    },
+    rescan: (request?: unknown) => {
+      calls.push({ method: 'projects.rescan', request })
+      return carried(projects)
+    },
+    readDocument: (request: { path: string }) => {
+      calls.push({ method: 'projects.readDocument', request })
+      return carried({ ok: true as const, value: { path: request.path, text: '- [ ] ship', mtime: 1 } })
+    },
+  }
   // The double carries no generated namespaces; the plugin reads
   // `ctx.remote.sessionInbox` off the provided object, so attach it there and
   // satisfy the `remote.sessionInbox` service edge separately.
-  Object.assign(remote, { sessionInbox })
+  Object.assign(remote, { sessionInbox, projectTodos })
   ctx.provide('remote.sessionInbox', sessionInbox as never)
+  ctx.provide('remote.projectTodos', projectTodos as never)
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
-  ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  const settingsScope = stubSettingsScope<{ roots: string[]; files: string[]; includeWorkspaces: boolean }>()
+  const bound: { namespace: string }[] = []
+  ctx.provide('settingsScope', { bind: (spec: { namespace: string }) => {
+    bound.push(spec)
+    return settingsScope.scope
+  } } as never)
   await runtime.root.declare({
     'sidebar.nav.entry': { kind: 'list', scope: 'root' },
     'center.overlay': { kind: 'list', scope: 'root' },
+    'settings.section': { kind: 'list', scope: 'root' },
   }, () => null)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   ctx.locale.setLocale('zh')
@@ -87,6 +110,11 @@ async function bench(initial: InboxSnapshot = inbox()) {
     if (entry === undefined) throw new Error('nav entry missing')
     return (entry.inject as unknown as () => DigestNavEntryInjected)()
   }
+  const settings = (): ProjectSettingsInjected => {
+    const entry = ctx.slots.entries('settings.section').find(e => e.options.id === 'project-todos')
+    if (entry === undefined) throw new Error('settings entry missing')
+    return (entry.inject as unknown as () => ProjectSettingsInjected)()
+  }
   return {
     ctx,
     runtime,
@@ -95,26 +123,110 @@ async function bench(initial: InboxSnapshot = inbox()) {
     feature,
     panel,
     nav,
+    settings,
+    settingsScope,
+    bound,
     setSnapshot: (next: InboxSnapshot) => { snapshot = next },
+    setProjects: (next: ProjectTodosSnapshot) => { projects = next },
   }
 }
 
 describe('ui-digest browser half', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.sessionInbox'])
+    expect(inject).toEqual(['slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.sessionInbox', 'remote.projectTodos'])
   })
 
   it('registers both seats, reads the inbox once, and fiber teardown removes them (HMR safety)', async () => {
     const b = await bench()
     expect(entryIds(b.ctx, 'sidebar.nav.entry')).toContain('digest')
     expect(entryIds(b.ctx, 'center.overlay')).toContain('digest')
+    expect(entryIds(b.ctx, 'settings.section')).toContain('project-todos')
     await b.runtime.flush()
+    // The project scan is not read until the tab shows.
     expect(b.calls.map(call => call.method)).toEqual(['get'])
     expect(b.nav().hooks.inbox).toBe(b.panel().hooks.inbox)
     expect(b.panel().hooks.inbox.getSnapshot().status).toBe('ready')
     await b.feature.dispose()
     expect(entryIds(b.ctx, 'sidebar.nav.entry')).not.toContain('digest')
     expect(entryIds(b.ctx, 'center.overlay')).not.toContain('digest')
+    expect(entryIds(b.ctx, 'settings.section')).not.toContain('project-todos')
+  })
+
+  it('reads the project scan on demand, adopts pushes, and re-reads after a reset only once warm', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    b.ctx.emit('connection/reset')
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method.startsWith('projects.'))).toEqual([])
+    const face = b.panel()
+    await face.ensureProjects()
+    expect(face.hooks.projects.getSnapshot().snapshot.projects.map(p => p.name)).toEqual(['alpha'])
+    const pushed = projectsSnapshot({ projects: [] })
+    b.remote.$dispatch('project-todos/changed', [pushed])
+    expect(face.hooks.projects.getSnapshot().snapshot).toBe(pushed)
+    b.ctx.emit('connection/reset')
+    await b.runtime.flush()
+    await face.rescanProjects()
+    await expect(face.readProjectDocument('/tmp/root/alpha/TODO.md')).resolves.toMatchObject({ ok: true, value: { text: '- [ ] ship' } })
+    expect(b.calls.filter(call => call.method.startsWith('projects.')).map(call => call.method))
+      .toEqual(['projects.get', 'projects.get', 'projects.rescan', 'projects.readDocument'])
+  })
+
+  it('opens a project by registering the workspace, connecting a session, and prefilling the composer', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const setDraft = vi.fn()
+    b.runtime.workspaces.stub('create', (input: unknown) => Promise.resolve({ workspaceId: 'w1', path: (input as { path: string }).path }))
+    await b.runtime.sessions.add({ id: 'session-of-w1', summary: { title: 'One' } })
+    const face = b.panel()
+    // Without the composer seat the session still opens; the draft is simply not set.
+    await expect(face.openProject('/tmp/root/alpha', 'read TODO.md')).resolves.toEqual({ ok: true })
+    expect(b.runtime.workspaces.calls.map(call => call.method)).toEqual(['create', 'connectWorkspace'])
+    expect(b.runtime.sessions.calls.at(-1)).toEqual({ method: 'open', args: ['session-of-w1'] })
+    b.ctx.provide('conversation', { input: { for: () => ({ setDraft }) } } as never)
+    await expect(face.openProject('/tmp/root/alpha', 'read TODO.md')).resolves.toEqual({ ok: true })
+    expect(setDraft).toHaveBeenCalledWith('read TODO.md')
+    // No text, no draft; a failing create reports the reason.
+    await expect(face.openProject('/tmp/root/alpha', null)).resolves.toEqual({ ok: true })
+    expect(setDraft).toHaveBeenCalledTimes(1)
+    b.runtime.workspaces.stub('create', () => Promise.reject(new Error('missing dir')))
+    await expect(face.openProject('/nowhere', 'x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'missing dir' } })
+    b.runtime.workspaces.stub('create', vi.fn().mockRejectedValue('plain'))
+    await expect(face.openProject('/nowhere', 'x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'plain' } })
+  })
+
+  it('opens paths through the host opener and reports its failure', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const face = b.panel()
+    await expect(face.openPath('/tmp/root/alpha/TODO.md')).resolves.toEqual({ ok: true })
+    expect(b.runtime.workspaces.calls.at(-1)).toEqual({ method: 'openPath', args: ['/tmp/root/alpha/TODO.md'] })
+    b.runtime.workspaces.stub('openPath', () => Promise.reject(new Error('no opener')))
+    await expect(face.openPath('/x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'no opener' } })
+  })
+
+  it('binds the scan settings page to the project-todos namespace and routes its writes', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    expect(b.bound).toContainEqual({ namespace: 'project-todos' })
+    const face = b.settings()
+    expect(face.hooks.projectSettings.getSnapshot().status).toBe('loading')
+    b.settingsScope.publish({ status: 'ready', writable: true, value: { roots: ['/a'], files: ['TODO.md'], includeWorkspaces: false } })
+    expect(face.hooks.projectSettings.getSnapshot()).toEqual({ status: 'ready', writable: true, roots: ['/a'], files: ['TODO.md'], includeWorkspaces: false })
+    await face.setRoots(['/a', ' /b ', '', '/a'])
+    await face.setFiles(['TODO.md', 'notes/TODO.md'])
+    await face.setIncludeWorkspaces(true)
+    // The locale plugin shares the stub scope; only this page's writes are asserted.
+    expect(b.settingsScope.set.mock.calls.filter(call => call[0] !== 'preference')).toEqual([
+      ['roots', ['/a', '/b']], ['files', ['TODO.md', 'notes/TODO.md']], ['includeWorkspaces', true],
+    ])
+    b.runtime.workspaces.stub('pickDirectory', () => Promise.resolve('/picked'))
+    await expect(face.pickDirectory()).resolves.toBe('/picked')
+    const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'project-todos')
+    b.ctx.locale.setLocale('zh')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(zh['settings.nav'])
+    b.ctx.locale.setLocale('en')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(en['settings.nav'])
   })
 
   it('adopts pushed snapshots and re-reads after a connection reset', async () => {

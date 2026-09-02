@@ -23,7 +23,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
-import { deriveArchived, deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
+import { deriveArchived, deriveFlat, deriveGroups, deriveSearchResults, locateSession, UNGROUPED_KEY } from './tree.ts'
 import {
   ArchivedSessionItem, ProjectRowItem, SearchResultItem, SessionBranch, SessionNodeItem,
   type RowActivationEvent, type RowContextMenuEvent,
@@ -563,6 +563,61 @@ function SessionTree({
     clearSelection,
     open,
   })
+  // Reveal a session opened from outside the tree (the inbox, a todo, a
+  // search hit, a fork): it may sit in a group the user folded, past the
+  // overflow cut, or inside a folded branch, and a hidden current row leaves
+  // the highlight on some other session. Only a change of `current` after the
+  // list is ready counts: the restored selection on load keeps the folds.
+  const revealedCurrent = useRef<SessionId | undefined | null>(null)
+  const [pendingReveal, setPendingReveal] = useState<SessionId | undefined>(undefined)
+  useEffect(() => {
+    if (list.phase !== 'ready') return
+    const previous = revealedCurrent.current
+    revealedCurrent.current = current
+    if (previous === null || previous === current || current === undefined) return
+    setPendingReveal(current)
+  }, [list.phase, current])
+  // The reveal unfolds one layer per render — a folded group derives no rows,
+  // so the cut and the branches can only be read once it is open — and ends
+  // by scrolling to the row. Every unfold is guarded, so a row the tree cannot
+  // show settles without looping.
+  useEffect(() => {
+    if (pendingReveal === undefined) return
+    if (pendingReveal !== current || currentGroup === undefined) {
+      setPendingReveal(undefined)
+      return
+    }
+    if (visibleSessionIds.includes(pendingReveal)) {
+      setPendingReveal(undefined)
+      for (const row of treeRef.current?.querySelectorAll<HTMLElement>('[data-session-id]') ?? []) {
+        if (row.dataset['sessionId'] !== pendingReveal) continue
+        row.scrollIntoView({ block: 'nearest' })
+        return
+      }
+      return
+    }
+    const group = groups.find(candidate => candidate.key === currentGroup)
+    if (group === undefined) {
+      setPendingReveal(undefined)
+      return
+    }
+    if (!group.expanded) {
+      setGroupExpanded(currentGroup, true)
+      return
+    }
+    const place = locateSession(group.sessions, pendingReveal)
+    if (place === undefined) {
+      setPendingReveal(undefined)
+      return
+    }
+    if (place.index >= collapsedLimit) {
+      setExpandedSessionGroups(keys => keys.includes(currentGroup) ? keys : [...keys, currentGroup])
+    }
+    const folded = new Set<string>(place.ancestors)
+    if (collapsedBranches.some(id => folded.has(id))) {
+      setCollapsedBranches(keys => keys.filter(id => !folded.has(id)))
+    }
+  }, [pendingReveal, current, currentGroup, groups, collapsedLimit, collapsedBranches, visibleSessionIds, setGroupExpanded])
   const now = Date.now()
   const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
     if (sessionDropCommitted.current) return
@@ -1174,6 +1229,24 @@ export function WorkspaceBrowser({
     if ((multiSelect && groupBy !== 'archived') || selection.selected.length === 0) return
     clearSessionSelection()
   }, [multiSelect, groupBy, selection.selected.length, clearSessionSelection])
+  // A session opened from outside the rows (the inbox, a todo, a fork) takes
+  // the selection with it, exactly as a plain click on its row would: a
+  // selection left on the previously clicked row would keep that row in the
+  // stronger accent while another session is open. Only a change of `current`
+  // after the list is ready counts; the restored session on load is not a
+  // gesture and gets no selection.
+  const currentSessionId = useSessions(state => state.current)
+  const sessionPhase = useSessions(state => state.phase)
+  const selectedCurrent = useRef<SessionId | undefined | null>(null)
+  useEffect(() => {
+    if (sessionPhase !== 'ready') return
+    const previous = selectedCurrent.current
+    selectedCurrent.current = currentSessionId
+    if (previous === null || previous === currentSessionId || currentSessionId === undefined) return
+    if (!multiSelect || groupBy === 'archived') return
+    if (selection.selected.length === 1 && selection.selected[0] === currentSessionId) return
+    setSessionSelection({ selected: [currentSessionId], anchor: currentSessionId, lead: currentSessionId })
+  }, [sessionPhase, currentSessionId, multiSelect, groupBy, selection.selected, setSessionSelection])
   const promotedBlank = useRef<{ sessionId: SessionId; accountKey: string } | undefined>(undefined)
   useEffect(() => {
     if (currentBlankSessionId === undefined || currentBlankAccount === undefined) {
@@ -1458,16 +1531,16 @@ export function WorkspaceBrowser({
     return {
       place: target === undefined
         ? {
-            label: t('selection.createWorkspace'),
-            run: async () => {
-              const workspace = await createWorkspace({ path: cwd })
-              await setSessionMembership(workspace.workspaceId, sessionIds, true)
-            },
-          }
-        : {
-            label: t('selection.join', { name: target.title }),
-            run: async () => { await setSessionMembership(target.workspaceId, sessionIds, true) },
+          label: t('selection.createWorkspace'),
+          run: async () => {
+            const workspace = await createWorkspace({ path: cwd })
+            await setSessionMembership(workspace.workspaceId, sessionIds, true)
           },
+        }
+        : {
+          label: t('selection.join', { name: target.title }),
+          run: async () => { await setSessionMembership(target.workspaceId, sessionIds, true) },
+        },
     }
   }
   const runSessionAction = (sessionIds: readonly SessionId[], operation: () => Promise<void>) => {
@@ -1553,7 +1626,7 @@ export function WorkspaceBrowser({
     setContextMenu({ x: event.clientX, y: event.clientY, sessionIds })
   }
   const renderSelectionActions = (sessionIds: readonly SessionId[], workspaceId?: WorkspaceId): ReactNode => {
-    const placement = selectionPlacement(sessionIds)
+    const { place } = selectionPlacement(sessionIds)
     return (
       <SelectionActionBar
         count={sessionIds.length}
@@ -1564,10 +1637,10 @@ export function WorkspaceBrowser({
         {...workspaceId === undefined ? {} : {
           onRemove: () => { removeSessions(workspaceId, sessionIds) },
         }}
-        {...placement.place === undefined ? {} : {
+        {...place === undefined ? {} : {
           placement: {
-            label: placement.place.label,
-            run: () => { placeSessions(sessionIds, placement.place!.run) },
+            label: place.label,
+            run: () => { placeSessions(sessionIds, place.run) },
           },
         }}
         onClear={clearSessionSelection}
@@ -1621,31 +1694,31 @@ export function WorkspaceBrowser({
   const contextMenuItems = contextMenu === null
     ? []
     : [
-        ...todosAvailable()
-          ? [{ id: 'todo', label: t('menu.addTodo'), icon: <IconChecklistOutline14 size={16} /> }]
-          : [],
-        {
-          id: 'archive',
-          label: t('selection.archive'),
-          icon: <IconArchiveOutline20 size={16} />,
-        },
-        ...contextPlacement.sourceWorkspaceId === undefined
-          ? []
-          : [{ id: 'remove', label: t('selection.remove') }],
-        ...contextPlacement.place === undefined
-          ? []
-          : [{
-              id: 'place',
-              label: contextPlacement.place.label,
-              icon: <IconProjectAddOutline16 size={16} />,
-            }],
-        {
-          id: 'delete',
-          label: t('menu.deleteSession'),
-          icon: <IconTrashOutline16 />,
-          danger: true,
-        },
-      ]
+      ...todosAvailable()
+        ? [{ id: 'todo', label: t('menu.addTodo'), icon: <IconChecklistOutline14 size={16} /> }]
+        : [],
+      {
+        id: 'archive',
+        label: t('selection.archive'),
+        icon: <IconArchiveOutline20 size={16} />,
+      },
+      ...contextPlacement.sourceWorkspaceId === undefined
+        ? []
+        : [{ id: 'remove', label: t('selection.remove') }],
+      ...contextPlacement.place === undefined
+        ? []
+        : [{
+          id: 'place',
+          label: contextPlacement.place.label,
+          icon: <IconProjectAddOutline16 size={16} />,
+        }],
+      {
+        id: 'delete',
+        label: t('menu.deleteSession'),
+        icon: <IconTrashOutline16 />,
+        danger: true,
+      },
+    ]
 
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
@@ -1819,90 +1892,90 @@ export function WorkspaceBrowser({
               pendingIds={unarchivePendingIds}
               error={unarchiveError}
               onUnarchive={onSessionUnarchive}
-              onDelete={sessionId => { requestSessionDelete([sessionId]) }}
+              onDelete={(sessionId) => { requestSessionDelete([sessionId]) }}
               t={t}
             />
           )
           : normalizedQuery !== ''
             ? (
               <SearchResults
-              useSessions={useSessions}
-              open={open}
-              workspaces={workspaces}
-              archivedSessionIds={archivedSessionIds}
-              query={normalizedQuery}
-              remote={remoteSearch}
-              resultLimit={searchResultLimit}
-              multiSelect={multiSelect}
-              selection={selection}
-              setSelection={setSessionSelection}
-              clearSelection={clearSessionSelection}
-              onSessionContextMenu={onSessionContextMenu}
-              t={t}
-            />
-          )
-          : groupBy === 'flat'
-            ? (
-              <FlatList
-                useSessions={useSessions} open={open} forkSession={forkSession}
-                onSessionRename={onSessionRename} onSessionDirectories={onSessionDirectories}
-                onSessionArchive={onSessionArchive}
-                onSessionContextMenu={onSessionContextMenu}
-                onSessionDelete={sessionId => { requestSessionDelete([sessionId]) }}
+                useSessions={useSessions}
+                open={open}
+                workspaces={workspaces}
                 archivedSessionIds={archivedSessionIds}
-                orderBy={orderBy}
-                sessionOrderByAccount={sessionOrderByAccount}
-                sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
-                syncSessionOrderAccount={actions.syncSessionOrderAccount}
-                setSessionOrder={actions.setSessionOrder}
+                query={normalizedQuery}
+                remote={remoteSearch}
+                resultLimit={searchResultLimit}
                 multiSelect={multiSelect}
                 selection={selection}
                 setSelection={setSessionSelection}
                 clearSelection={clearSessionSelection}
+                onSessionContextMenu={onSessionContextMenu}
                 t={t}
               />
             )
-            : (
-              <SessionTree
-                useSessions={useSessions}
-                onSessionRename={onSessionRename}
-                onSessionDirectories={onSessionDirectories}
-                onSessionArchive={onSessionArchive}
-                onSessionContextMenu={onSessionContextMenu}
-                onSessionDelete={sessionId => { requestSessionDelete([sessionId]) }}
-                renderSelectionActions={renderSelectionActions}
-                forkSession={forkSession}
-                workspaces={workspaces}
-                groupExpansion={groupExpansion}
-                setGroupExpanded={actions.setGroupExpanded}
-                sessionOrderByAccount={sessionOrderByAccount}
-                sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
-                syncSessionOrderAccount={actions.syncSessionOrderAccount}
-                setSessionOrder={actions.setSessionOrder}
-                archivedSessionIds={archivedSessionIds}
-                startSession={startSession}
-                open={open}
-                insertWorkspaceBefore={insertWorkspaceBefore}
-                insertSessionBefore={insertSessionBefore}
-                orderBy={orderBy}
-                collapsedSessionCount={collapsedSessionCount}
-                multiSelect={multiSelect}
-                selection={selection}
-                setSelection={setSessionSelection}
-                clearSelection={clearSessionSelection}
-                home={home}
-                t={t}
-                onRenameRequest={(workspaceId, currentTitle) => {
-                  setRenameTarget({ workspaceId, currentTitle })
-                  setRenameDraft(currentTitle)
-                  setRenameError(null)
-                }}
-                onDeleteRequest={(workspaceId, title) => {
-                  setDeleteTarget({ workspaceId, title })
-                  setDeleteError(null)
-                }}
-              />
-            ))}
+            : groupBy === 'flat'
+              ? (
+                <FlatList
+                  useSessions={useSessions} open={open} forkSession={forkSession}
+                  onSessionRename={onSessionRename} onSessionDirectories={onSessionDirectories}
+                  onSessionArchive={onSessionArchive}
+                  onSessionContextMenu={onSessionContextMenu}
+                  onSessionDelete={(sessionId) => { requestSessionDelete([sessionId]) }}
+                  archivedSessionIds={archivedSessionIds}
+                  orderBy={orderBy}
+                  sessionOrderByAccount={sessionOrderByAccount}
+                  sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
+                  syncSessionOrderAccount={actions.syncSessionOrderAccount}
+                  setSessionOrder={actions.setSessionOrder}
+                  multiSelect={multiSelect}
+                  selection={selection}
+                  setSelection={setSessionSelection}
+                  clearSelection={clearSessionSelection}
+                  t={t}
+                />
+              )
+              : (
+                <SessionTree
+                  useSessions={useSessions}
+                  onSessionRename={onSessionRename}
+                  onSessionDirectories={onSessionDirectories}
+                  onSessionArchive={onSessionArchive}
+                  onSessionContextMenu={onSessionContextMenu}
+                  onSessionDelete={(sessionId) => { requestSessionDelete([sessionId]) }}
+                  renderSelectionActions={renderSelectionActions}
+                  forkSession={forkSession}
+                  workspaces={workspaces}
+                  groupExpansion={groupExpansion}
+                  setGroupExpanded={actions.setGroupExpanded}
+                  sessionOrderByAccount={sessionOrderByAccount}
+                  sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
+                  syncSessionOrderAccount={actions.syncSessionOrderAccount}
+                  setSessionOrder={actions.setSessionOrder}
+                  archivedSessionIds={archivedSessionIds}
+                  startSession={startSession}
+                  open={open}
+                  insertWorkspaceBefore={insertWorkspaceBefore}
+                  insertSessionBefore={insertSessionBefore}
+                  orderBy={orderBy}
+                  collapsedSessionCount={collapsedSessionCount}
+                  multiSelect={multiSelect}
+                  selection={selection}
+                  setSelection={setSessionSelection}
+                  clearSelection={clearSessionSelection}
+                  home={home}
+                  t={t}
+                  onRenameRequest={(workspaceId, currentTitle) => {
+                    setRenameTarget({ workspaceId, currentTitle })
+                    setRenameDraft(currentTitle)
+                    setRenameError(null)
+                  }}
+                  onDeleteRequest={(workspaceId, title) => {
+                    setDeleteTarget({ workspaceId, title })
+                    setDeleteError(null)
+                  }}
+                />
+              ))}
       </div>
 
       <Modal

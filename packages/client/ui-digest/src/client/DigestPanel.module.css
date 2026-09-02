@@ -94,11 +94,17 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* A size container so every card can measure the visible height (100cqh)
+   and cap itself against it: a long reply then scrolls inside its card
+   instead of stretching the whole row past the bottom edge. Size
+   containment is safe here because the flex column, not the content, sizes
+   this box. */
 .body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 16px 20px 24px;
+  container-type: size;
 }
 
 .section + .section {
@@ -143,6 +149,25 @@
   background: var(--dsw-alias-bg-layer-1);
   text-align: left;
   overflow: hidden;
+  /* Never taller than the body's visible height less the section label
+     above the grid, so a card's action row is always on screen. */
+  box-sizing: border-box;
+  max-height: calc(100cqh - 36px);
+}
+
+/* The scrolling middle of a card, between the pinned head and actions. It
+   scrolls on the layer-1 card surface, so its thumb takes the l2 elevation
+   tokens (see ui-theme styles/scrollbar.css). */
+.cardBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .success {
@@ -154,6 +179,7 @@
 }
 
 .cardHead {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -511,7 +537,10 @@
   text-overflow: ellipsis;
 }
 
+/* Pinned below the scrolling body; `flex: none` keeps the row from being
+   squeezed when the body has more to show than the card can hold. */
 .cardActions {
+  flex: none;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -724,4 +753,151 @@
 
 .currentMark {
   color: var(--dsw-alias-brand-primary);
+}
+
+/* Project todos tab: one section per project directory, one block per todo
+   document, items read straight from the file. */
+.projectsTab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.projectsBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.projectWarning {
+  font-size: 12px;
+  color: var(--dsw-alias-state-warn-primary);
+  cursor: help;
+}
+
+.projectName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.projectTag {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.projectDone {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.projectPath {
+  margin: -6px 0 8px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  word-break: break-all;
+}
+
+.projectFile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.projectFile + .projectFile {
+  margin-top: 8px;
+}
+
+.projectFileHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.projectFileName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.projectFileCounts {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.projectItems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.projectItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.projectItemDone .projectItemText {
+  text-decoration: line-through;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.projectBox {
+  flex: none;
+  width: 14px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.projectItemText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.projectSource {
+  margin: 4px 0 0;
+  font-family: var(--ds-font-family-code);
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-module-platform);
+  /* The source view scrolls on an elevated surface, so its thumb takes the
+     l2 elevation tokens (see ui-theme styles/scrollbar.css). */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.linkButton {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
 }

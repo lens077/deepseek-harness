@@ -43,6 +43,9 @@
       "path": "../../session/session-inbox"
     },
     {
+      "path": "../../todo/project-todos"
+    },
+    {
       "path": "../../host/plugin-inventory"
     },
     {

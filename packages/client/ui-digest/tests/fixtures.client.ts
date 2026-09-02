@@ -2,6 +2,7 @@
 import type { SessionId, SessionSummary, WorkspaceView } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionDigestView } from '@deepseek-ai/dsh-session-digest/client'
 import type { InboxSessionState, InboxSnapshot, InboxTodo, InboxTodoId } from '@deepseek-ai/dsh-session-inbox/types'
+import type { ProjectTodoFile, ProjectTodoItem, ProjectTodoProject, ProjectTodosSnapshot } from '@deepseek-ai/dsh-project-todos/types'
 import type { DigestPanelProps } from '../src/client/contract/slots.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -83,5 +84,46 @@ export const inbox = (over: Partial<InboxSnapshot> = {}): InboxSnapshot => ({
   reviewedAt: null,
   sessions: [],
   todos: [],
+  ...over,
+})
+
+export const projectItem = (text: string, over: Partial<ProjectTodoItem> = {}): ProjectTodoItem => ({
+  line: 1,
+  text,
+  status: 'open',
+  checkbox: true,
+  depth: 0,
+  section: null,
+  ...over,
+})
+
+export const projectFile = (path: string, items: ProjectTodoItem[], over: Partial<ProjectTodoFile> = {}): ProjectTodoFile => ({
+  path,
+  relativePath: path.split('/').slice(-1)[0] ?? path,
+  mtime: NOW - HOUR,
+  size: 100,
+  items,
+  open: items.filter(item => item.status === 'open').length,
+  done: items.filter(item => item.status === 'done').length,
+  truncated: false,
+  ...over,
+})
+
+export const project = (path: string, files: ProjectTodoFile[], over: Partial<ProjectTodoProject> = {}): ProjectTodoProject => ({
+  path,
+  name: path.split('/').slice(-1)[0] ?? path,
+  sources: ['root'],
+  files,
+  open: files.reduce((sum, file) => sum + file.open, 0),
+  done: files.reduce((sum, file) => sum + file.done, 0),
+  ...over,
+})
+
+export const projectsSnapshot = (over: Partial<ProjectTodosSnapshot> = {}): ProjectTodosSnapshot => ({
+  scannedAt: NOW - HOUR,
+  settings: { roots: ['/tmp/root'], files: ['TODO.md'], includeWorkspaces: true },
+  candidates: 3,
+  projects: [],
+  warnings: [],
   ...over,
 })

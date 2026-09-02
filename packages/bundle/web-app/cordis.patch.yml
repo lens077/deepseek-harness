@@ -103,6 +103,25 @@
       config:
         maxTextBytes: 4096
 
+    # Project-level todo documents (TODO.md and friends) scanned from the
+    # roots the user configures on the settings page plus every registered
+    # workspace, behind the projectTodos Remote; the digest panel lists them.
+    - id: project-todos
+      name: '@deepseek-ai/dsh-project-todos'
+      config:
+        roots: []
+        files:
+          - TODO.md
+          - TODO
+          - TODO.txt
+          - todo.md
+          - docs/TODO.md
+        includeWorkspaces: true
+        maxDepth: 2
+        maxFileBytes: 262144
+        maxItemsPerFile: 200
+        watchDebounceMs: 300
+
     # Resolve bind host, SSH launch, and display once at boot, then mount the
     # matching dual-face directory picker. Mount -native or -browse directly in
     # an overlay to pin the interaction.

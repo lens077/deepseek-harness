@@ -16,8 +16,9 @@ import { DigestNavEntry } from '../src/client/DigestNavEntry.tsx'
 import { createDigestStore } from '../src/client/stores.ts'
 import type { DigestNavEntryProps, DigestPanelProps } from '../src/client/contract/slots.ts'
 import type { InboxView } from '../src/client/controller.ts'
+import type { ProjectTodosView } from '../src/client/projects-controller.ts'
 import { zh } from '../src/client/locales.ts'
-import { DAY, HOUR, NOW, digest, inbox, mark, row, t, todo, workspace } from './fixtures.client.ts'
+import { DAY, HOUR, NOW, digest, inbox, mark, project, projectFile, projectItem, projectsSnapshot, row, t, todo, workspace } from './fixtures.client.ts'
 
 afterEach(() => {
   cleanup()
@@ -43,6 +44,7 @@ interface MountOptions {
   error?: string | null
   open?: boolean
   current?: string
+  projects?: Partial<ProjectTodosView>
 }
 
 /** Mount the panel over a real store handle, with stub framework hooks. */
@@ -55,14 +57,21 @@ function mountPanel({
   error = null,
   open = true,
   current,
+  projects = {},
 }: MountOptions = {}) {
   const store = createDigestStore().create()
   if (open) store.actions.open()
   else store.actions.close()
   const sessionState = { ids: rows.map(r => r.id), byId: Object.fromEntries(rows.map(r => [r.id, r])), current }
   const view: InboxView = { status, snapshot, error }
+  const projectsView: ProjectTodosView = { status: 'ready', snapshot: projectsSnapshot(), error: null, scanning: false, ...projects }
   const calls = {
     ensureInbox: vi.fn(async () => OK),
+    ensureProjects: vi.fn(async () => OK),
+    rescanProjects: vi.fn(async () => OK),
+    readProjectDocument: vi.fn(async (path: string) => ({ ok: true as const, value: { path, text: '- [ ] raw text', mtime: NOW } })),
+    openProject: vi.fn(async (_path: string, _text: string | null) => OK),
+    openPath: vi.fn(async (_path: string) => OK),
     openSession: vi.fn(),
     openQuestion: vi.fn(),
     continueSession: vi.fn(),
@@ -81,6 +90,7 @@ function mountPanel({
     useSessions: ((selector: (s: unknown) => unknown) => selector(sessionState)),
     useWorkspaces: ((selector: (s: unknown) => unknown) => selector({ items: workspaces, archivedSessionIds: archived })),
     useInbox: ((selector: (s: InboxView) => unknown) => selector(view)),
+    useProjects: ((selector: (s: ProjectTodosView) => unknown) => selector(projectsView)),
     ...calls,
     t,
   } as unknown as DigestPanelProps
@@ -159,12 +169,21 @@ describe('DigestPanel inbox tab', () => {
     expect(failed.textContent).toContain(zh['card.truncated'])
     expect(failed.textContent).toContain('改了 1 个文件')
     expect(failed.textContent).not.toContain('x.ts …')
+    // The question, reply, and files scroll inside the card; the head and
+    // the action row are siblings of that region so they stay in place.
+    const card = failed.querySelector('[data-session-id="cut"]') as HTMLElement
+    const body = card.querySelector('[data-card-body]') as HTMLElement
+    expect(body.textContent).toContain('已修复：token 刷新和跳转有竞态。…')
+    expect(body.textContent).toContain('改了 1 个文件')
+    expect(body.querySelector('button')).toBeNull()
+    expect(card.querySelector('button')?.textContent).toBe(zh['card.open'])
+    expect(body.contains(card.querySelector('[title="title-cut"]'))).toBe(false)
   })
 
   it('closes from the header, switches tabs by click, and counts snoozed rows', () => {
     const m = mountPanel({ rows: [row('a'), row('z')], snapshot: inbox({ sessions: [mark('z', { snoozedUntil: NOW + HOUR })] }) })
     expect(screen.getByText('已延后 1')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: /待办/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /^待办/ }))
     expect(m.store.getSnapshot().tab).toBe('todos')
     fireEvent.click(screen.getByRole('button', { name: zh['panel.close'] }))
     expect(m.store.getSnapshot().open).toBe(false)
@@ -517,6 +536,117 @@ describe('DigestPanel todo tab', () => {
     expect(m.continueSession).toHaveBeenCalledWith('f', zh['continue.prefill'])
     fireEvent.click(within(first).getByRole('button', { name: zh['card.handled'] }))
     expect(m.setHandled).toHaveBeenCalledWith('f', true)
+  })
+})
+
+describe('DigestPanel projects tab', () => {
+  const alpha = () => project('/tmp/root/alpha', [
+    projectFile('/tmp/root/alpha/TODO.md', [
+      projectItem('ship it', { line: 2, section: 'Alpha' }),
+      projectItem('plan it', { line: 3, status: 'done' }),
+      projectItem('plain bullet', { line: 4, checkbox: false, depth: 1 }),
+    ]),
+    projectFile('/tmp/root/alpha/notes/TODO.md', Array.from({ length: 10 }, (_, i) => projectItem(`doc ${i}`, { line: i + 1 })), { relativePath: 'notes/TODO.md', truncated: true }),
+  ], { sources: ['root', 'workspace'] })
+  const beta = () => project('/tmp/root/beta', [projectFile('/tmp/root/beta/TODO.md', [projectItem('finished', { status: 'done' })])], { sources: ['workspace'] })
+
+  function openProjects(options: MountOptions = {}) {
+    const m = mountPanel(options)
+    fireEvent.click(screen.getByRole('tab', { name: /项目待办/ }))
+    m.rerender()
+    return m
+  }
+
+  it('reads the scan when the tab shows and lists projects, documents, items, and counts', () => {
+    const m = openProjects({ projects: { snapshot: projectsSnapshot({ projects: [alpha(), beta()], candidates: 5, warnings: [{ path: '/tmp/root/nowhere', message: 'ENOENT' }] }) } })
+    expect(m.ensureProjects).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('tab', { name: /项目待办/ }).textContent).toContain('12')
+    expect(screen.getByText('扫描了 5 个目录，2 个项目有待办文档')).toBeTruthy()
+    expect(screen.getByText('1 个目录或文件无法读取').getAttribute('title')).toContain('ENOENT')
+    const section = document.querySelector<HTMLElement>('[data-project="/tmp/root/alpha"]')!
+    expect(section.textContent).toContain('根目录')
+    expect(section.textContent).toContain('工作区')
+    expect(section.textContent).toContain('已完成 1')
+    expect(section.textContent).toContain('ship it')
+    expect(section.textContent).toContain('plain bullet')
+    expect(section.textContent).toContain('2 未完成 · 1 已完成')
+    expect(section.textContent).toContain('仅列出前 10 项')
+    // Folded after eight items; expand and fold back.
+    expect(within(section).queryByText('doc 9')).toBeNull()
+    fireEvent.click(within(section).getByRole('button', { name: '还有 2 项…' }))
+    expect(within(section).getByText('doc 9')).toBeTruthy()
+    fireEvent.click(within(section).getByRole('button', { name: zh['projects.showLess'] }))
+    expect(within(section).queryByText('doc 9')).toBeNull()
+    const done = document.querySelector<HTMLElement>('[data-project="/tmp/root/beta"]')!
+    expect(done.textContent).toContain(zh['projects.noOpen'])
+    // The filter hides projects without open items.
+    fireEvent.click(screen.getByRole('checkbox', { name: zh['projects.onlyOpen'] }))
+    expect(document.querySelector('[data-project="/tmp/root/beta"]')).toBeNull()
+    expect(document.querySelector('[data-project="/tmp/root/alpha"]')).toBeTruthy()
+  })
+
+  it('starts a session in the project, opens paths, and shows the document source inline', async () => {
+    const m = openProjects({ projects: { snapshot: projectsSnapshot({ projects: [alpha()] }) } })
+    const file = document.querySelector<HTMLElement>('[data-project-file="/tmp/root/alpha/TODO.md"]')!
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.newSession'] }))
+    await act(async () => { await Promise.resolve() })
+    expect(m.openProject).toHaveBeenCalledWith('/tmp/root/alpha', '请阅读 TODO.md 里的待办，挑选下一项开始处理。')
+    expect(m.store.getSnapshot().open).toBe(false)
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.openFile'] }))
+    expect(m.openPath).toHaveBeenCalledWith('/tmp/root/alpha/TODO.md')
+    fireEvent.click(screen.getByRole('button', { name: zh['projects.reveal'] }))
+    expect(m.openPath).toHaveBeenCalledWith('/tmp/root/alpha')
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.view'] }))
+    await act(async () => { await Promise.resolve() })
+    expect(m.readProjectDocument).toHaveBeenCalledWith('/tmp/root/alpha/TODO.md')
+    expect(within(file).getByText('- [ ] raw text')).toBeTruthy()
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.hide'] }))
+    expect(within(file).queryByText('- [ ] raw text')).toBeNull()
+  })
+
+  it('reports failed opens and reads, and rescans on demand', async () => {
+    const m = openProjects({ projects: { snapshot: projectsSnapshot({ projects: [alpha()] }) } })
+    m.openProject.mockResolvedValueOnce({ ok: false, error: { code: 'runtime', message: 'no dir' } } as never)
+    m.openPath.mockResolvedValueOnce({ ok: false, error: { code: 'runtime', message: 'no app' } } as never)
+    m.readProjectDocument.mockResolvedValueOnce({ ok: false, error: { code: 'not-listed', message: 'stale' } } as never)
+    const file = document.querySelector<HTMLElement>('[data-project-file="/tmp/root/alpha/TODO.md"]')!
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.newSession'] }))
+    await act(async () => { await Promise.resolve() })
+    expect(within(file).getByRole('status').textContent).toBe('打开失败：no dir')
+    expect(m.store.getSnapshot().open).toBe(true)
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.openFile'] }))
+    await act(async () => { await Promise.resolve() })
+    expect(within(file).getByRole('status').textContent).toBe('打开失败：no app')
+    act(() => { vi.advanceTimersByTime(3_000) })
+    expect(within(file).queryByRole('status')).toBeNull()
+    fireEvent.click(within(file).getByRole('button', { name: zh['projects.view'] }))
+    await act(async () => { await Promise.resolve() })
+    expect(within(file).getByText('读取失败：stale')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: zh['projects.rescan'] }))
+    expect(m.rescanProjects).toHaveBeenCalledTimes(1)
+  })
+
+  it('explains an empty scan, the missing roots, and the current patterns', () => {
+    openProjects({ projects: { snapshot: projectsSnapshot({ projects: [], settings: { roots: [], files: ['TODO.md', 'todo.md'], includeWorkspaces: true } }) } })
+    expect(screen.getByText(zh['projects.empty.title'])).toBeTruthy()
+    expect(screen.getByText(zh['projects.empty.noRoots'])).toBeTruthy()
+    expect(screen.getByText('当前文件名规则：TODO.md, todo.md')).toBeTruthy()
+    cleanup()
+    openProjects({ projects: { status: 'loading', snapshot: projectsSnapshot({ scannedAt: null, projects: [], settings: { roots: ['/r'], files: [], includeWorkspaces: true } }) } })
+    expect(screen.getAllByText(zh['projects.loading']).length).toBeGreaterThan(0)
+    cleanup()
+    openProjects({ projects: { status: 'cold', snapshot: projectsSnapshot({ scannedAt: null, projects: [] }) } })
+    expect(screen.getByText(zh['projects.empty.title'])).toBeTruthy()
+  })
+
+  it('shows the load error with a retry and disables rescan while scanning', () => {
+    const m = openProjects({ projects: { status: 'error', error: 'host down', snapshot: projectsSnapshot({ projects: [] }) } })
+    expect(screen.getByRole('alert').textContent).toContain('项目待办读取失败：host down')
+    fireEvent.click(screen.getByRole('button', { name: zh['panel.retry'] }))
+    expect(m.rescanProjects).toHaveBeenCalledTimes(1)
+    cleanup()
+    openProjects({ projects: { scanning: true } })
+    expect(screen.getByRole('button', { name: zh['projects.scanning'] }).hasAttribute('disabled')).toBe(true)
   })
 })
 

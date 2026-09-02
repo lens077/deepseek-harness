@@ -47,6 +47,9 @@
       "path": "../../session/session-inbox"
     },
     {
+      "path": "../../todo/project-todos"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {

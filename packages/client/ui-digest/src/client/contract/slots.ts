@@ -10,14 +10,25 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls ui-sidebar's SlotMap merge (the 'sidebar.nav.entry' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only: pulls ui-settings' SlotMap merge (the 'settings.section' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InboxAddTodoRequest, InboxTodoId, InboxTodoStatus } from '@deepseek-ai/dsh-session-inbox/types'
 import type { InboxActionResult, InboxView } from '../controller.ts'
+import type { ProjectDocumentResult, ProjectTodosView } from '../projects-controller.ts'
+import type { ProjectSettingsView } from '../project-settings.ts'
 import type { createDigestStore } from '../stores.ts'
 
 /** Registrant-private reactive fact both entries read: the durable inbox (an object type so it satisfies the hooks record). */
 export type InboxHooks = {
   /** The inbox view; the renderer binds it as `useInbox`. */
   inbox: HostObservable<InboxView>
+}
+
+/** The panel's reactive facts: the inbox plus the project todo scan. */
+export type PanelHooks = InboxHooks & {
+  /** The project todo scan view; the renderer binds it as `useProjects`. */
+  projects: HostObservable<ProjectTodosView>
 }
 
 /** Injected share of the sidebar entry: the inbox view for the badge. */
@@ -27,9 +38,19 @@ export interface DigestNavEntryInjected {
 
 /** Registrant-private injected share of the panel: runtime actions and inbox mutations. */
 export interface DigestPanelInjected {
-  hooks: InboxHooks
+  hooks: PanelHooks
   /** Load the inbox once; the panel calls it on open. */
   ensureInbox: () => Promise<InboxActionResult>
+  /** Load the project todo scan once; the panel calls it when the projects tab shows. */
+  ensureProjects: () => Promise<InboxActionResult>
+  /** Ask the Host to scan the project directories again now. */
+  rescanProjects: () => Promise<InboxActionResult>
+  /** Read the text of one document the scan lists. */
+  readProjectDocument: (path: string) => Promise<ProjectDocumentResult>
+  /** Register `path` as a workspace when needed and open a session in it, with `text` in its composer. */
+  openProject: (path: string, text: string | null) => Promise<InboxActionResult>
+  /** Open a file or directory with the Host's default application. */
+  openPath: (path: string) => Promise<InboxActionResult>
   /** Open one session after the panel closes, exposing the navigation result in the center column. */
   openSession: (id: SessionId) => void
   /** Open one session and scroll its transcript to the question at `seq`. */
@@ -52,6 +73,28 @@ export type DigestNavEntryProps =
   PropsRuntime<'sidebar.nav.entry'>
   & PropsStore<ReturnType<typeof createDigestStore>>
   & InjectFace<DigestNavEntryInjected>
+  & PropsLocale<'digest'>
+
+/** Registrant-private injected share of the scan settings section. */
+export interface ProjectSettingsInjected {
+  hooks: {
+    /** The scan settings view; the renderer binds it as `useProjectSettings`. */
+    projectSettings: SnapshotStore<ProjectSettingsView>
+  }
+  /** Replace the scanned roots. */
+  setRoots: (roots: readonly string[]) => Promise<void>
+  /** Replace the document patterns. */
+  setFiles: (files: readonly string[]) => Promise<void>
+  /** Include or exclude registered workspaces. */
+  setIncludeWorkspaces: (include: boolean) => Promise<void>
+  /** Let the user choose a directory; resolves `null` when they cancel. */
+  pickDirectory: () => Promise<string | null>
+}
+
+/** Full props of the scan settings section: the shell's close affordance, the settings view, and copy. */
+export type ProjectSettingsSectionProps =
+  PropsRuntime<'settings.section'>
+  & InjectFace<ProjectSettingsInjected>
   & PropsLocale<'digest'>
 
 /** Full props of the panel: the shared store, the global session/workspace hooks, the inbox, and copy. */

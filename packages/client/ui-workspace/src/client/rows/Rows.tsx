@@ -552,6 +552,7 @@ export function SessionNodeItem({
         drag?.marker === 'before' && css.dropBefore, drag?.marker === 'after' && css.dropAfter,
       )}
       role="treeitem"
+      data-session-id={node.id}
       // With multi-selection live, aria-selected reports the selection set;
       // otherwise it keeps reporting the opened session, which is the only
       // selection concept the row has.

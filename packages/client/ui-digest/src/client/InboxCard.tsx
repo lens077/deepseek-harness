@@ -58,36 +58,40 @@ export function InboxCard({ item, focused, t, actions }: {
         <span className={css.cardTitle} title={item.title}>{item.title}</span>
         <span className={css.cardWorkspace} title={item.workspaceTitle}>{item.workspaceTitle}</span>
       </span>
-      <span className={css.fieldLabel}>{t('card.question')}</span>
-      <span className={css.question}>
-        {item.question === null ? t('card.noQuestion') : item.question}
-        {item.questionTruncated ? '…' : ''}
-      </span>
-      {!item.running && (
-        <>
-          <span className={css.fieldLabel}>{t('card.reply')}</span>
-          {item.reply === null
-            ? <span className={css.replyEmpty}>{t('card.noReply')}</span>
-            : (
-              <span className={css.reply}>
-                {item.reply}
-                {item.replyTruncated ? '…' : ''}
+      {/* The head above and the actions below stay put; only this region
+          scrolls once the reply outgrows the card's share of the panel. */}
+      <div className={css.cardBody} data-card-body="">
+        <span className={css.fieldLabel}>{t('card.question')}</span>
+        <span className={css.question}>
+          {item.question === null ? t('card.noQuestion') : item.question}
+          {item.questionTruncated ? '…' : ''}
+        </span>
+        {!item.running && (
+          <>
+            <span className={css.fieldLabel}>{t('card.reply')}</span>
+            {item.reply === null
+              ? <span className={css.replyEmpty}>{t('card.noReply')}</span>
+              : (
+                <span className={css.reply}>
+                  {item.reply}
+                  {item.replyTruncated ? '…' : ''}
+                </span>
+              )}
+            {item.replyTruncated && <span className={css.truncated}>{t('card.truncated')}</span>}
+          </>
+        )}
+        {item.changedFileCount > 0 && (
+          <span className={css.files} title={item.changedFiles.join('\n')}>
+            {t('card.files', { count: item.changedFileCount })}
+            {item.changedFiles.length > 0 && (
+              <span className={css.filesList}>
+                {item.changedFiles.map(path => path.slice(path.lastIndexOf('/') + 1)).join(' · ')}
+                {item.changedFileCount > item.changedFiles.length ? ' …' : ''}
               </span>
             )}
-          {item.replyTruncated && <span className={css.truncated}>{t('card.truncated')}</span>}
-        </>
-      )}
-      {item.changedFileCount > 0 && (
-        <span className={css.files} title={item.changedFiles.join('\n')}>
-          {t('card.files', { count: item.changedFileCount })}
-          {item.changedFiles.length > 0 && (
-            <span className={css.filesList}>
-              {item.changedFiles.map(path => path.slice(path.lastIndexOf('/') + 1)).join(' · ')}
-              {item.changedFileCount > item.changedFiles.length ? ' …' : ''}
-            </span>
-          )}
-        </span>
-      )}
+          </span>
+        )}
+      </div>
       <span className={css.cardActions}>
         <button type="button" className={css.openSession} onClick={() => { actions.open(item) }}>
           {t('card.open')}

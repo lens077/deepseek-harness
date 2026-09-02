@@ -1534,6 +1534,36 @@ export interface PlanModeConfig {
 
 Source: [`packages/plan/plan-mode/src/index.ts:70`](../packages/plan/plan-mode/src/index.ts)
 
+<a id="deepseek-aidsh-project-todos"></a>
+
+## `@deepseek-ai/dsh-project-todos`
+
+```ts config-catalog
+/** Complete plugin configuration: the user-editable section plus fixed scan bounds. */
+export interface Config extends ProjectTodosSettings {
+  /** Deepest directory level a file pattern may reach below a project. */
+  readonly maxDepth: number
+  /** Documents above this byte size are listed without items. */
+  readonly maxFileBytes: number
+  /** Items kept per document; later lines are counted but not listed. */
+  readonly maxItemsPerFile: number
+  /** Quiet time after a file event before the rescan runs. */
+  readonly watchDebounceMs: number
+}
+
+/** The user-editable part of the scanner configuration, mirrored from the settings section. */
+export interface ProjectTodosSettings {
+  /** Directories whose immediate subdirectories are projects; each root itself is also a candidate. */
+  readonly roots: string[]
+  /** Glob patterns, relative to a project directory, naming todo documents. */
+  readonly files: string[]
+  /** Whether every registered workspace directory is also a project candidate. */
+  readonly includeWorkspaces: boolean
+}
+```
+
+Source: [`packages/todo/project-todos/src/index.ts:45`](../packages/todo/project-todos/src/index.ts)
+
 <a id="deepseek-aidsh-pwsh-local"></a>
 
 ## `@deepseek-ai/dsh-pwsh-local`

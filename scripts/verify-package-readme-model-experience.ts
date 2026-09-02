@@ -130,6 +130,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/session/session-stats': { kind: 'none', reason: 'The sessionStats unit folds already-logged step boundaries into a client-facing read model and registers nothing model-facing.' },
   'packages/session/session-digest': { kind: 'none', reason: 'The sessionDigest unit folds already-logged questions, answers, outcomes, and file records into a client-facing read model and registers nothing model-facing.' },
   'packages/session/session-inbox': { kind: 'none', reason: 'The inbox sidecar stores user decisions about finished work behind a Remote; nothing enters the Session log, model context, or telemetry.' },
+  'packages/todo/project-todos': { kind: 'none', reason: 'The scanner reads the user\'s todo documents behind a Remote for browser chrome; nothing enters the Session log, model context, or telemetry.' },
   'packages/client/ui-digest': { kind: 'none', reason: 'Browser-side inbox surface over list projections and the inbox sidecar; registers nothing model-facing.' },
   'packages/session-query/session-query': { kind: 'none', reason: 'The trusted query service exposes cloned records only to callers and registers nothing model-facing.' },
   'packages/session-query/session-query-sqlite': { kind: 'none', reason: 'The search backend returns hits only to callers and registers nothing model-facing.' },

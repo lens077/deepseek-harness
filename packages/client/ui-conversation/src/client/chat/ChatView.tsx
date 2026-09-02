@@ -579,7 +579,7 @@ export function ChatView({
     return () => { document.removeEventListener('keydown', onKeyDown) }
   }, [currentQuestion, hasMore, jumpToQuestion, loadOlder, loadingOlder, questionNavigation, questions.length])
 
-  const loadOlderAnchored = (): void => {
+  const loadOlderAnchored = useCallback((): void => {
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: the paging button renders inside the list tree. */
     if (local !== null) {
@@ -593,7 +593,26 @@ export function ChatView({
       }
     }
     loadOlder()
-  }
+  }, [loadOlder])
+
+  // Load the whole session on request: the same anchored page path, issued
+  // again each time a page lands, until no earlier events remain. A settled
+  // page that moved the head nowhere is a failed or empty page, and stopping
+  // there keeps a persistent failure from becoming an endless request loop.
+  const [loadingAll, setLoadingAll] = useState(false)
+  /** Head seq at the last page issued by load-all; null before the first page. */
+  const loadAllHeadRef = useRef<{ seq: number | null } | null>(null)
+  useEffect(() => {
+    if (!loadingAll || loadingOlder) return
+    const issued = loadAllHeadRef.current
+    if (!hasMore || (issued !== null && issued.seq === firstSeq)) {
+      loadAllHeadRef.current = null
+      setLoadingAll(false)
+      return
+    }
+    loadAllHeadRef.current = { seq: firstSeq }
+    loadOlderAnchored()
+  }, [firstSeq, hasMore, loadOlderAnchored, loadingAll, loadingOlder])
 
   const barQuestion = questionAbove ? questions[currentQuestion] : undefined
   const barTurn = barQuestion === undefined
@@ -686,6 +705,7 @@ export function ChatView({
             questions={questions}
             current={Math.min(currentQuestion, Math.max(0, questions.length - 1))}
             hasMore={hasMore}
+            loadingAll={loadingAll}
             onPrevious={() => {
               if (currentQuestion > 0) jumpToQuestion(currentQuestion - 1)
               else if (hasMore && !loadingOlder) {
@@ -696,6 +716,7 @@ export function ChatView({
             onNext={() => { jumpToQuestion(currentQuestion + 1) }}
             onSelect={jumpToQuestion}
             onSelectSeq={jumpToQuestionSeq}
+            onLoadAll={() => { setLoadingAll(true) }}
             searchQuestions={searchQuestions}
             t={t}
           />

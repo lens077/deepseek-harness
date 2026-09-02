@@ -52,6 +52,12 @@
     },
     {
       "path": "../ui-workspace"
+    },
+    {
+      "path": "../ui-settings"
+    },
+    {
+      "path": "../../todo/project-todos"
     }
   ]
 }

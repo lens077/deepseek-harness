@@ -14,6 +14,7 @@ import type {} from '@deepseek-ai/dsh-llm/types'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import type {} from '@deepseek-ai/dsh-settings/types'
 import type {} from '@deepseek-ai/dsh-session-inbox/types'
+import type {} from '@deepseek-ai/dsh-project-todos/types'
 
 export {
   ApiRemoteSessionNotFound,

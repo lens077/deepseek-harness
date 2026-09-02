@@ -7,6 +7,7 @@ import dynamicRemote from '@deepseek-ai/dsh-cordis-host-runner/remote'
 import fileReferencesRemote from '@deepseek-ai/dsh-file-reference/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import messageFeedbackRemote from '@deepseek-ai/dsh-message-feedback/remote'
+import projectTodosRemote from '@deepseek-ai/dsh-project-todos/remote'
 import sessionInboxRemote from '@deepseek-ai/dsh-session-inbox/remote'
 import sessionReferencesRemote from '@deepseek-ai/dsh-session-reference/remote'
 import type { TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
@@ -18,6 +19,7 @@ export type {} from '@deepseek-ai/dsh-file-reference/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@deepseek-ai/dsh-message-feedback/remote'
+export type {} from '@deepseek-ai/dsh-project-todos/remote'
 export type {} from '@deepseek-ai/dsh-session-inbox/remote'
 export type {} from '@deepseek-ai/dsh-session-reference/remote'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
@@ -33,6 +35,7 @@ export type {} from '@deepseek-ai/dsh-llm/types'
 export type {} from '@deepseek-ai/dsh-agent-presets/types'
 export type {} from '@deepseek-ai/dsh-settings/types'
 export type {} from '@deepseek-ai/dsh-session-inbox/types'
+export type {} from '@deepseek-ai/dsh-project-todos/types'
 
 /**
  * The carrier's Client-facing types, re-exported so a business package names one
@@ -118,7 +121,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   try {
     for (const contribution of [
       commandsRemote, goalsRemote, dynamicRemote, fileReferencesRemote,
-      pluginInventoryRemote, messageFeedbackRemote, sessionInboxRemote, sessionReferencesRemote,
+      pluginInventoryRemote, messageFeedbackRemote, projectTodosRemote, sessionInboxRemote, sessionReferencesRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }
