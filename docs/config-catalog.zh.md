@@ -15,7 +15,7 @@
 
 ## `@deepseek-ai/dsh-acp`
 
-需要：`agents`
+需要：`agents` · `sandboxPolicy`
 
 ```ts config-catalog
 /** Plugin config: the provider/model selection used for each ACP-created agent. */
@@ -31,7 +31,7 @@ export interface AcpConfig {
 
 依赖：`Stream`（`@agentclientprotocol/sdk`）
 
-来源：[`packages/acp/acp/src/index.ts:71`](../packages/acp/acp/src/index.ts)
+来源：[`packages/acp/acp/src/index.ts:72`](../packages/acp/acp/src/index.ts)
 
 <a id="deepseek-aidsh-acp-demo"></a>
 
@@ -797,7 +797,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-host-apiproxy`
 
-需要：`agentDefaultModel` · `agents` · `attachments` · `directoryPicker` · `llm` · `sessions` · `subagents` · `sessionQuery` · `tools` · `userQuestions` · `workspaceRegistry`
+需要：`agentDefaultModel` · `agents` · `attachments` · `directoryPicker` · `llm` · `sandboxPolicy` · `sessions` · `subagents` · `sessionQuery` · `tools` · `userQuestions` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Gateway plugin configuration. */
@@ -1682,7 +1682,7 @@ export interface Config {
 
 依赖：[`SandboxMode`](subsystems/sandbox.zh.md)
 
-来源：[`packages/sandbox/sandbox-policy/src/index.ts:67`](../packages/sandbox/sandbox-policy/src/index.ts)
+来源：[`packages/sandbox/sandbox-policy/src/index.ts:74`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 <a id="deepseek-aidsh-sdk-jsonrpc-server"></a>
 

@@ -620,7 +620,11 @@ export class SessionManager {
     }
   }
 
-  /** Read one session's canonical primary and additional directory state. */
+  /**
+   * Read one session's canonical primary and additional directory state.
+   * @param sessionId - the session whose directory state is read.
+   * @returns the canonical directories, or the Host's rejection.
+   */
   async directories(sessionId: SessionId): Promise<RpcResult<SessionDirectories>> {
     try {
       const { result } = await this.api.sessions.directories({ sessionId })
@@ -630,7 +634,12 @@ export class SessionManager {
     }
   }
 
-  /** Replace one session's complete additional directory list. */
+  /**
+   * Replace one session's complete additional directory list.
+   * @param sessionId - the session whose additional directories change.
+   * @param additionalDirectories - the complete replacement list, in caller order.
+   * @returns the canonical directories after the replacement, or the Host's rejection.
+   */
   async replaceDirectories(
     sessionId: SessionId,
     additionalDirectories: readonly string[],

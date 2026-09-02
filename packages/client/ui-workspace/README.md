@@ -30,7 +30,7 @@ The shared sidebar projection hides rows whose durable Session summary has `orig
 
 ## Model Experience
 
-The browser chrome contributes no prompt text itself. A committed directory replacement appends the session event that the sandbox-policy owner renders in the next runtime-context snapshot.
+None, as the browser chrome contributes no prompt text: a committed directory replacement appends the session event that the sandbox-policy owner renders in the next runtime-context snapshot.
 
 #### KV Cache effect
 

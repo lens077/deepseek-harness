@@ -391,7 +391,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     doc: 'The default composer body: a single slot rendered as the composer\nchain\'s fallback (a real entry, not a chain rider, so a\ntakeover election hides rather than unmounts it and the textarea DOM\nsurvives). Session-maybe: the bar stays mounted across the\nno-session/session transition — the no-workspace hero renders the SAME\ntextarea DOM as a read-only Workspace-picker trigger instead of a\nparallel inert tree — with the machine hooks absent until a session is\ncurrent. InputBar registers\nhere from this package\'s apply; its machine state arrives through the\nstandard provide channel (useInput + inputActions), the keyboard\ncommand face through its own inject.',
     registerOptions: [],
     ownerProps: [
-      '/**\n * Owner share of the composer-bar slot: ConversationRoot\'s layout-phase\n * inputs plus the input-region child-slot content it renders (the region\n * slots stay declared/rendered by the conversation entry; the bar hosts the\n * results as chrome).\n */\nexport interface ComposerBarOwnerProps {\n  /** Hero = empty-state centered card; composer = resident bottom bar. */\n  variant: \'hero\' | \'composer\'\n  /**\n   * A block another plugin raised for this session: the bar refuses input and\n   * shows the blocker\'s reason as the placeholder, but — unlike `disabled` —\n   * keeps the model seat live. Every block this contract has is one the user\n   * clears by choosing a model, so locking that seat too would leave the\n   * composer telling them to do the one thing it prevents.\n   */\n  blocked?: { readonly reason: string }\n  /**\n   * Inert no-workspace state: the bar locks message actions while preserving\n   * its normal DOM so the Workspace pick transitions in place.\n   */\n  disabled?: boolean\n  /** Whether the shared Workspace picker menu is expanded, regardless of which trigger opened it. */\n  workspacePickerOpen?: boolean\n  /** Open the existing Workspace picker from the inert textarea. */ /* …truncated — full shape in source */',
+      '/**\n * Owner share of the composer-bar slot: ConversationRoot\'s layout-phase\n * inputs plus the input-region child-slot content it renders (the region\n * slots stay declared/rendered by the conversation entry; the bar hosts the\n * results as chrome).\n */\nexport interface ComposerBarOwnerProps {\n  /** Hero = empty-state centered card; composer = resident bottom bar. */\n  variant: \'hero\' | \'composer\'\n  /**\n   * A block another plugin raised for this session: the bar refuses input and\n   * shows the blocker\'s reason as the placeholder, but — unlike `disabled` —\n   * keeps the model seat live. Every block this contract has is one the user\n   * clears by choosing a model, so locking that seat too would leave the\n   * composer telling them to do the one thing it prevents.\n   */\n  blocked?: { readonly reason: string }\n  /**\n   * Inert no-session state: the bar locks message actions while preserving its\n   * normal DOM until Workspace selection or scratch creation materializes one.\n   */\n  disabled?: boolean\n  /** Whether the shared Workspace picker menu is expanded, regardless of which trigger opened it. */\n  workspacePickerOpen?: boolean\n  /** Open the existing Workspace picker from the  /* …truncated — full shape in source */',
     ],
     ownerPropsReferences: [
       'Workspace',
@@ -560,7 +560,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     doc: 'The hero-phase Workspace picker hole: rendered by ConversationRoot\nwhile the session is blank (picking another workspace switches to that\nworkspace\'s blank session, draft carried). Root scope: the picker\nreads the global workspace list.',
     registerOptions: [],
     ownerProps: [
-      '/** Owner share common to the hero / New-Session Workspace pickers. */\nexport interface EmptyWorkspaceOwnerProps {\n  open: boolean\n  anchorRef?: RefObject<HTMLElement>\n  /** Currently active workspace (renders a trailing check in the picker list). */\n  selectedId?: WorkspaceId | undefined\n  onPick: (workspaceId: WorkspaceId) => void\n  onClose: () => void\n}',
+      '/** Owner share common to the hero / New-Session Workspace pickers. */\nexport interface EmptyWorkspaceOwnerProps {\n  open: boolean\n  anchorRef?: RefObject<HTMLElement>\n  /** Currently active workspace (renders a trailing check in the picker list). */\n  selectedId?: WorkspaceId | undefined\n  onPick: (workspaceId: WorkspaceId) => void\n  /** Materialize a session without selecting a Workspace. */\n  onStartScratch: () => Promise<void>\n  onClose: () => void\n}',
     ],
     ownerPropsReferences: [
       'Workspace',
@@ -588,7 +588,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     doc: 'Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry).',
     registerOptions: [],
     ownerProps: [
-      '/**\n * Owner share of the directory-flow holes: the complete conversation between\n * the trigger surface and the picking interaction. The occupant reads `open`\n * to run/render its interaction and reports exactly one outcome per open.\n */\nexport interface DirectoryFlowOwnerProps {\n  /** True while a picking interaction is requested; flipping back to false withdraws the request. */\n  open: boolean\n  /** True while the owner adopts a picked path (`createWorkspace` in flight); occupants disable their commit affordances. */\n  busy: boolean\n  /** The operator picked a directory (absolute host path); the owner adopts it. */\n  onPicked: (path: string) => void\n  /** The operator dismissed the interaction; the owner just closes the flow. */\n  onCancel: () => void\n  /** The interaction itself failed (chooser missing, listing denied); the owner shows its error surface. */\n  onError: (message: string) => void\n}',
+      '/**\n * Owner share of the directory-flow holes: the complete conversation between\n * the trigger surface and the picking interaction. The occupant reads `open`\n * to run/render its interaction and reports exactly one outcome per open.\n */\nexport interface DirectoryFlowOwnerProps {\n  /** True while a picking interaction is requested; flipping back to false withdraws the request. */\n  open: boolean\n  /** True while the owner adopts a picked path; occupants disable their commit affordances. */\n  busy: boolean\n  /** Optional flow-specific picker title; browse occupants use their default when absent. */\n  title?: string\n  /** The operator picked a directory (absolute host path); the owner adopts it. */\n  onPicked: (path: string) => void\n  /** The operator dismissed the interaction; the owner just closes the flow. */\n  onCancel: () => void\n  /** The interaction itself failed (chooser missing, listing denied); the owner shows its error surface. */\n  onError: (message: string) => void\n}',
     ],
     ownerPropsReferences: [],
     standardProps: [
@@ -605,7 +605,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.hero.workspace.directoryFlow\', () => ctx.slots.register(\n      { name: \'conversation.hero.workspace.directoryFlow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-workspace/src/client/contract/slots.ts:58',
+    source: 'packages/client/ui-workspace/src/client/contract/slots.ts:56',
   },
   {
     key: 'conversation.input.attachments',
@@ -1986,11 +1986,11 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     key: 'sidebar.workspaces.directoryFlow',
     kind: 'single',
     scope: 'root',
-    summary: 'Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry).',
-    doc: 'Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry).',
+    summary: 'Directory-flow hole for adding a real Workspace from the sidebar.',
+    doc: 'Directory-flow hole for adding a real Workspace from the sidebar.',
     registerOptions: [],
     ownerProps: [
-      '/**\n * Owner share of the directory-flow holes: the complete conversation between\n * the trigger surface and the picking interaction. The occupant reads `open`\n * to run/render its interaction and reports exactly one outcome per open.\n */\nexport interface DirectoryFlowOwnerProps {\n  /** True while a picking interaction is requested; flipping back to false withdraws the request. */\n  open: boolean\n  /** True while the owner adopts a picked path (`createWorkspace` in flight); occupants disable their commit affordances. */\n  busy: boolean\n  /** The operator picked a directory (absolute host path); the owner adopts it. */\n  onPicked: (path: string) => void\n  /** The operator dismissed the interaction; the owner just closes the flow. */\n  onCancel: () => void\n  /** The interaction itself failed (chooser missing, listing denied); the owner shows its error surface. */\n  onError: (message: string) => void\n}',
+      '/**\n * Owner share of the directory-flow holes: the complete conversation between\n * the trigger surface and the picking interaction. The occupant reads `open`\n * to run/render its interaction and reports exactly one outcome per open.\n */\nexport interface DirectoryFlowOwnerProps {\n  /** True while a picking interaction is requested; flipping back to false withdraws the request. */\n  open: boolean\n  /** True while the owner adopts a picked path; occupants disable their commit affordances. */\n  busy: boolean\n  /** Optional flow-specific picker title; browse occupants use their default when absent. */\n  title?: string\n  /** The operator picked a directory (absolute host path); the owner adopts it. */\n  onPicked: (path: string) => void\n  /** The operator dismissed the interaction; the owner just closes the flow. */\n  onCancel: () => void\n  /** The interaction itself failed (chooser missing, listing denied); the owner shows its error surface. */\n  onError: (message: string) => void\n}',
     ],
     ownerPropsReferences: [],
     standardProps: [
@@ -2007,6 +2007,33 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.workspaces.directoryFlow\', () => ctx.slots.register(\n      { name: \'sidebar.workspaces.directoryFlow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+    source: 'packages/client/ui-workspace/src/client/contract/slots.ts:58',
+  },
+  {
+    key: 'sidebar.workspaces.sessionDirectoryFlow',
+    kind: 'single',
+    scope: 'root',
+    summary: 'Directory-flow hole for adding a writable root to one existing Session.',
+    doc: 'Directory-flow hole for adding a writable root to one existing Session.',
+    registerOptions: [],
+    ownerProps: [
+      '/**\n * Owner share of the directory-flow holes: the complete conversation between\n * the trigger surface and the picking interaction. The occupant reads `open`\n * to run/render its interaction and reports exactly one outcome per open.\n */\nexport interface DirectoryFlowOwnerProps {\n  /** True while a picking interaction is requested; flipping back to false withdraws the request. */\n  open: boolean\n  /** True while the owner adopts a picked path; occupants disable their commit affordances. */\n  busy: boolean\n  /** Optional flow-specific picker title; browse occupants use their default when absent. */\n  title?: string\n  /** The operator picked a directory (absolute host path); the owner adopts it. */\n  onPicked: (path: string) => void\n  /** The operator dismissed the interaction; the owner just closes the flow. */\n  onCancel: () => void\n  /** The interaction itself failed (chooser missing, listing denied); the owner shows its error surface. */\n  onError: (message: string) => void\n}',
+    ],
+    ownerPropsReferences: [],
+    standardProps: [
+      'useSessions: SnapshotSelectorHook<SessionListState>',
+      'useWorkspaces: SnapshotSelectorHook<import(\'./workspaces/service.ts\').WorkspaceListState>',
+    ],
+    keyDomain: '',
+    hookContext: '',
+    slotInject: '',
+    declaredBy: 'an entry in \'sidebar.workspaces\' (client-ui-workspace), so it exists while that entry is mounted',
+    occupants: [
+      'client-ui-directory-picker-browse BrowseDirectoryFlow',
+      'client-ui-directory-picker-native NativeDirectoryFlow',
+    ],
+    replaceRisk: 'shadows-shipped-ui',
+    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.workspaces.sessionDirectoryFlow\', () => ctx.slots.register(\n      { name: \'sidebar.workspaces.sessionDirectoryFlow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/client/ui-workspace/src/client/contract/slots.ts:60',
   },
   {

@@ -13,7 +13,7 @@ A `Requires:` line lists the service keys the plugin `inject`s: its `cordis.yml`
 
 ## `@deepseek-ai/dsh-acp`
 
-Requires: `agents`
+Requires: `agents` · `sandboxPolicy`
 
 ```ts config-catalog
 /** Plugin config: the provider/model selection used for each ACP-created agent. */
@@ -29,7 +29,7 @@ export interface AcpConfig {
 
 Depends on: `Stream` (`@agentclientprotocol/sdk`)
 
-Source: [`packages/acp/acp/src/index.ts:71`](../packages/acp/acp/src/index.ts)
+Source: [`packages/acp/acp/src/index.ts:72`](../packages/acp/acp/src/index.ts)
 
 <a id="deepseek-aidsh-acp-demo"></a>
 
@@ -795,7 +795,7 @@ Source: [`packages/hooks/hooks-codex/src/index.ts:44`](../packages/hooks/hooks-c
 
 ## `@deepseek-ai/dsh-host-apiproxy`
 
-Requires: `agentDefaultModel` · `agents` · `attachments` · `directoryPicker` · `llm` · `sessions` · `subagents` · `sessionQuery` · `tools` · `userQuestions` · `workspaceRegistry`
+Requires: `agentDefaultModel` · `agents` · `attachments` · `directoryPicker` · `llm` · `sandboxPolicy` · `sessions` · `subagents` · `sessionQuery` · `tools` · `userQuestions` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Gateway plugin configuration. */
@@ -1680,7 +1680,7 @@ export interface Config {
 
 Depends on: [`SandboxMode`](subsystems/sandbox.md)
 
-Source: [`packages/sandbox/sandbox-policy/src/index.ts:67`](../packages/sandbox/sandbox-policy/src/index.ts)
+Source: [`packages/sandbox/sandbox-policy/src/index.ts:74`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 <a id="deepseek-aidsh-sdk-jsonrpc-server"></a>
 

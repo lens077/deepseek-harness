@@ -608,6 +608,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ### `session/*`
 
+<a id="sessiondirectories--log-only"></a>
+
+#### `session/directories` — log-only
+
+```ts persistence-catalog
+/**
+ * Complete canonical additional-directory list for this session. The primary
+ * working directory remains {@link SessionHeader.cwd}; the latest snapshot
+ * only extends the session's writable-root set. Absence means no additional
+ * directories. This event is log-only but required for reconstruction because
+ * sandbox policy projects the effective roots into model-visible context.
+ */
+'session/directories': { additionalDirectories: string[] }
+```
+
+来源：[`packages/core/session/src/types.ts:311`](../packages/core/session/src/types.ts)
+
 <a id="sessionend-seed--log-only"></a>
 
 #### `session/end-seed` — log-only
