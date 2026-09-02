@@ -8,6 +8,8 @@
 
 ### 汇总：跨所有工作区，哪些会话需要你
 
+![工作日里的收件箱：九个工作区中一个失败/中断的会话和一个完成未读的会话，带时间窗与状态筛选、工作区 chip 和卡片操作；会话名与正文已打码](docs/user/guide/inbox-overview.png)
+
 **用持久的收件箱取代绿点。** 跨几个工作区跑了一夜的任务，第二天早上没有任何记录：侧边栏的"已完成"小圆点只是浏览器内存里的一个位，点一下或刷新就没了，卡在审批上的会话也无人察觉。「新会话」下方的 **汇总** 入口现在携带需要你处理的会话数，并在中间栏打开一个收件箱。行按需要关注的原因分区——等你回复、失败或中断、完成但未读、已读未处理、运行中——时间窗默认为"自上次查看"，工作区 chip 带各自的计数，卡片提供打开、带预填输入框的继续、标记已处理、加入待办、置顶、明天再看。`Ctrl+1` 可从任何位置开关面板，在输入框里打到一半也能用；卡片操作则在键盘环上（`j`/`k`、`Enter`、`e`、`t`、`p`、`s`）；"复制晨报"把各分区以 Markdown 放进剪贴板。每个标记都存在 Host 上——看过哪条回复、处理了什么、延后或置顶了什么——因此刷新、换浏览器、重启都还在，这个数字也会前缀到浏览器标签页标题。卡片永远不会高过面板：头部与操作行固定不动，长回答在卡片内部滚动；**打开会话** 会在侧边栏揭示该会话——重新展开折叠的工作区、撤销**显示更多**截断、展开嵌套分支、并把选区移到该行——因此高亮的行始终就是你打开的那一个。第四个标签 **项目待办** 列出配置的根目录与每个工作区里找到的 `TODO.md` 类文档。
 
 ![覆盖中间栏的收件箱：失败/中断分区、带计数的工作区 chip、在卡片内部滚动的长回答与固定在下方的操作行，以及待办、项目待办、时间线标签](docs/user/guide/inbox-panel.png)
@@ -80,7 +82,7 @@
 
 ![设置导航：通用设置、模型、插件、Agent 预设、视觉工具、对话布局，各有自己的图标](docs/user/guide/settings-sections-nav.zh.png)
 
-**截图是怎么拍的。** 上面每一张图都是这个 fork 自己构建出来的真实界面，不是效果图。为了不把个人会话和密钥拍进去，会从 checkout 的源码另起一个 `dsh web`，指向一个隔离的家目录（`DSH_HOME=/private/tmp/dsh-demo-home`，3099 端口）：它的 profile 只列出基础 bundle、Web 应用和视觉 bundle，`settings.yaml` 只声明一个虚构的 `acme-gateway` 提供方和一个 `acme-vision-think` 模型——没有 API 密钥、没有会话、没有工作区。收件箱的几张图来自同类的隔离服务，这次通过仓库自己的 Web 测试脚手架启动：用 `apps/web/tests/snapshots/` 下的 e2e fixture 日志播种六个会话，经仓库的 `parseSessionLog` 解析后通过真实的 JSONL 后端持久化，其中两个把最后的 `turn/end` 改写为 `interrupted` 与 `max-tokens`，以便失败分区有内容；随后 Playwright 以设备缩放 2、`zh-CN` 从卡片加入一条待办、置顶一行、切换标签、右键一个会话行，每张图都是当时的真实画面。Playwright 以设备缩放 2、浅色主题驱动 Firefox，每种语言各跑一遍，并沿用户真实的路径点击：设置 → 模型 → 编辑 → 自定义设置 → 高级。模型页的图随后按一次往返而非一次渲染来核验：再勾选两个档位并通过卡片保存，隔离的 `settings.yaml` 被改写为带 `off: null` 与 `minimal: minimal`，服务端 `llm.models` 的回复也为该模型列出了全部七个档位。画面里只有虚构提供方和 fork 自己的产品外壳，因此无需打码；演示服务、浏览器会话、家目录和临时文件事后全部删除，个人的 `~/.dsh` 与 3080 端口自始至终不被触碰。图中行为一旦回退，会在 `pnpm run test:gui`（组件与外壳测试）和 `DSH_SNAPSHOT=replay pnpm run test:web`（组装后的浏览器）中暴露。
+**截图是怎么拍的。** 上面每一张图都是这个 fork 自己构建出来的真实界面，不是效果图。下述隔离方式唯一的例外是收件箱的第一张图：那是作者自己的实例在某个工作日的画面，会话名与正文已打码，因为用 fixture 播种的服务拍不出九个工作区的真实流量。其余的图为了不把个人会话和密钥拍进去，会从 checkout 的源码另起一个 `dsh web`，指向一个隔离的家目录（`DSH_HOME=/private/tmp/dsh-demo-home`，3099 端口）：它的 profile 只列出基础 bundle、Web 应用和视觉 bundle，`settings.yaml` 只声明一个虚构的 `acme-gateway` 提供方和一个 `acme-vision-think` 模型——没有 API 密钥、没有会话、没有工作区。收件箱的几张图来自同类的隔离服务，这次通过仓库自己的 Web 测试脚手架启动：用 `apps/web/tests/snapshots/` 下的 e2e fixture 日志播种六个会话，经仓库的 `parseSessionLog` 解析后通过真实的 JSONL 后端持久化，其中两个把最后的 `turn/end` 改写为 `interrupted` 与 `max-tokens`，以便失败分区有内容；随后 Playwright 以设备缩放 2、`zh-CN` 从卡片加入一条待办、置顶一行、切换标签、右键一个会话行，每张图都是当时的真实画面。Playwright 以设备缩放 2、浅色主题驱动 Firefox，每种语言各跑一遍，并沿用户真实的路径点击：设置 → 模型 → 编辑 → 自定义设置 → 高级。模型页的图随后按一次往返而非一次渲染来核验：再勾选两个档位并通过卡片保存，隔离的 `settings.yaml` 被改写为带 `off: null` 与 `minimal: minimal`，服务端 `llm.models` 的回复也为该模型列出了全部七个档位。画面里只有虚构提供方和 fork 自己的产品外壳，因此无需打码；演示服务、浏览器会话、家目录和临时文件事后全部删除，个人的 `~/.dsh` 与 3080 端口自始至终不被触碰。图中行为一旦回退，会在 `pnpm run test:gui`（组件与外壳测试）和 `DSH_SNAPSHOT=replay pnpm run test:web`（组装后的浏览器）中暴露。
 
 **仓库。** 这个 fork 位于 [github.com/lens077/deepseek-harness](https://github.com/lens077/deepseek-harness)；其 `main` 跟随上游 `main`，并在其上叠加上述功能。fork 新增部分的问题请提到 fork 的 issues；上游行为、发布、插件发现与 Discord 社区仍归上游，见下文链接。这里的一切——上游代码与 fork 的新增——都采用 [MIT 许可证](LICENSE)，第三方许可证在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中披露。
 
