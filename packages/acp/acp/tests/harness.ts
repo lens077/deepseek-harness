@@ -123,6 +123,22 @@ class MemoryAttachmentStore extends AttachmentStore {
 }
 
 /** Scripted text response ending in a clean stop. */
+/**
+ * The prompt's own content inside a captured request. The sandbox policy the
+ * bridge injects appends a runtime-context snapshot after every prompt, so
+ * the prompt is the newest message that is not that snapshot.
+ * @param harness - the bridge under test.
+ * @param request - index into the captured requests.
+ * @returns the content blocks of the prompt message, if any request was captured.
+ */
+export function promptContent(harness: BridgeHarness, request = 0): GenerateOptions['messages'][number]['content'] | undefined {
+  const messages = harness.adapter.requests[request]?.messages ?? []
+  return [...messages].reverse().find((message) => {
+    const first = message.content[0]
+    return !(first?.type === 'text' && first.text.startsWith('Current runtime context'))
+  })?.content
+}
+
 export function textResponse(text: string): StreamChunk[] {
   return [
     { type: 'block-start', index: 0, blockType: 'text' },

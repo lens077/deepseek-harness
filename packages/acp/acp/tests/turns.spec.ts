@@ -510,8 +510,10 @@ describe('ACP prompt lifecycle', () => {
   it('cancels a prompt removed before its turn claims it', async () => {
     harness = await makeBridgeHarness({ script: [] })
     const sessionId = await newSession(harness)
+    // Every inserted message goes, the prompt and the runtime-context snapshot
+    // the sandbox policy appends behind it, so the turn finds nothing to claim.
     const dispose = harness.ctx.on('agent/inbox/inserted', ({ agent, message }) => {
-      if (message.source.kind === 'user') agent.inbox.remove(message.id)
+      agent.inbox.remove(message.id)
     })
 
     await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] }))

@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { LAUNCHER_FAILURE_EXIT } from '@deepseek-ai/node-addon-landlock-run'
-import { SANDBOX_UNAVAILABLE, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
+import { SANDBOX_UNAVAILABLE, SandboxUnavailableError, canonicalPath } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import {
   LocalSandboxProvider,
@@ -61,6 +61,13 @@ function fakeSeatbeltExec(status: number): string {
 /** The seatbelt read-only profile — every seatbelt profile starts with these forms. */
 const SEATBELT_RO_PROFILE = '(version 1) (allow default) (deny file-write*) (allow file-write* (literal "/dev/null"))'
 
+// The Linux profiles grant the canonical /tmp and the host temp root after
+// the workspace roots; on Linux the two temp paths are one and the grant
+// collapses, elsewhere (macOS /private/tmp and /var/folders/…) both stay.
+const TMP = canonicalPath('/tmp')
+const HOST_TEMP = canonicalPath(tmpdir())
+const EXTRA_TEMP_ROOTS = HOST_TEMP === TMP ? [] : [HOST_TEMP]
+
 describe('profile dialects', () => {
   it('bwrap read-only: whole tree read-only with fresh /dev and private PID-scoped /proc, no writable mounts', () => {
     expect(bwrapProfileArgs(RO)).toEqual(['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent'])
@@ -70,6 +77,7 @@ describe('profile dialects', () => {
     expect(bwrapProfileArgs(WW)).toEqual([
       '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
       '--tmpfs', '/tmp', '--bind', '/ws', '/ws',
+      ...EXTRA_TEMP_ROOTS.flatMap(root => ['--bind', root, root]),
     ])
   })
 
@@ -80,7 +88,10 @@ describe('profile dialects', () => {
   })
 
   it('landlock workspace-write: adds the host /tmp and the workspace root', () => {
-    expect(landlockProfileArgs(WW)).toEqual(['--ro', '/', '--rw', '/dev/null', '--rw', '/tmp', '--rw', '/ws'])
+    expect(landlockProfileArgs(WW)).toEqual([
+      '--ro', '/', '--rw', '/dev/null', '--rw', '/ws', '--rw', TMP,
+      ...EXTRA_TEMP_ROOTS.flatMap(root => ['--rw', root]),
+    ])
   })
 
   it('seatbelt read-only: allow-default with every file write denied except the /dev/null literal', () => {

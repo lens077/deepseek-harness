@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { makeBridgeHarness, textResponse, type BridgeHarness } from './harness.ts'
+import { makeBridgeHarness, promptContent, textResponse, type BridgeHarness } from './harness.ts'
 
 describe('automation-only ACP bridge', () => {
   let harness: BridgeHarness | undefined
@@ -66,7 +66,7 @@ describe('automation-only ACP bridge', () => {
       content: { type: 'text', text: 'hello there' },
     }])
     expect(harness.ctx.agents.get(SessionId(sessionId))?.session.header.cwd).toBe(process.cwd())
-    expect(harness.adapter.requests[0]?.messages.at(-1)?.content).toEqual([{ type: 'text', text: 'say hello' }])
+    expect(promptContent(harness)).toEqual([{ type: 'text', text: 'say hello' }])
   })
 
   it('leaves absent agent targets for request listeners to supply', async () => {
@@ -89,7 +89,7 @@ describe('automation-only ACP bridge', () => {
       ],
     })
 
-    expect(harness.adapter.requests[0]?.messages.at(-1)?.content).toEqual([{ type: 'text', text: 'first second' }])
+    expect(promptContent(harness)).toEqual([{ type: 'text', text: 'first second' }])
   })
 
   it('admits mixed text/image prompts in wire order and logs references only', async () => {
@@ -111,7 +111,7 @@ describe('automation-only ACP bridge', () => {
 
     expect(resolve).toHaveBeenCalledWith('mock', 'mock', expect.any(AbortSignal))
     expect(harness.attachments?.saved.map(input => [...input.data])).toEqual([[1], [2]])
-    const requestContent = harness.adapter.requests[0]?.messages.at(-1)?.content
+    const requestContent = promptContent(harness)
     expect(requestContent?.map(block => block.type)).toEqual(['text', 'image', 'text', 'image', 'text'])
     expect(requestContent?.[0]).toEqual({ type: 'text', text: 'before' })
     expect(requestContent?.[2]).toEqual({ type: 'text', text: 'between' })
@@ -217,7 +217,7 @@ describe('automation-only ACP bridge', () => {
         { type: 'resource_link', name: 'notes.txt', uri: 'file:///tmp/notes.txt' },
       ],
     })
-    expect(harness.adapter.requests[0]?.messages.at(-1)?.content).toEqual([{
+    expect(promptContent(harness)).toEqual([{
       type: 'text',
       text: 'summarize\n[resource_link name="notes.txt" uri="file:///tmp/notes.txt"]\n',
     }])

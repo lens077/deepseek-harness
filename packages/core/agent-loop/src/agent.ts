@@ -231,11 +231,15 @@ export class ReactLoopAgent implements Agent {
     signal.throwIfAborted()
     const sections = renderContextSections(assembly)
     const context = this.runtimeContext.project(joinContextSections(sections), sections)
+    // The snapshot rides a claimed message, never stands in for one: a
+    // waking message removed before its claim leaves an empty step, and the
+    // step's emptiness — not the presence of context — is what says the turn
+    // spends no model call.
     const decision = await this.dispatch.waterfall(
       'agent/pre-step', { messages: claimed, ...position, signal },
       (): Promise<PreStepDecision> => Promise.resolve<PreStepDecision>({
         kind: 'enter',
-        messages: context === undefined ? claimed : [...claimed, context],
+        messages: context === undefined || claimed.length === 0 ? claimed : [...claimed, context],
       }),
     )
     signal.throwIfAborted()

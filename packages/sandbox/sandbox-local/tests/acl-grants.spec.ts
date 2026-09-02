@@ -22,6 +22,8 @@ const mockState = vi.hoisted(() => ({
   addFailureStanding: undefined as boolean | undefined,
   createTempFailure: undefined as Error | undefined,
   disposeFailure: undefined as Error | undefined,
+  /** Root-set → SID assignments the mocked derivation has handed out. */
+  rootSetSids: new Map<string, string>(),
 }))
 
 vi.mock('@deepseek-ai/dsh-sandbox-windows-acl', () => {
@@ -58,7 +60,18 @@ vi.mock('@deepseek-ai/dsh-sandbox-windows-acl', () => {
         throw new Error(`Windows ACL temp root must be outside the workspace: workspace=${workspaceRoot}; temp=${tempRoot}`)
       }
     },
-    workspaceRootsWriteSid: () => 'S-1-4-42-42',
+    // One SID per distinct root set, as the real derivation guarantees: the
+    // first set seen keeps the well-known value the single-workspace
+    // assertions name, and every other set gets its own.
+    workspaceRootsWriteSid: (roots: readonly string[]) => {
+      const key = [...roots].sort().join('\0')
+      const known = mockState.rootSetSids
+      const existing = known.get(key)
+      if (existing !== undefined) return existing
+      const sid = known.size === 0 ? 'S-1-4-42-42' : `S-1-4-42-${42 + known.size}`
+      known.set(key, sid)
+      return sid
+    },
     tempWriteSid: (path: string) => `TEMP:${path}`,
   }
 })
@@ -73,8 +86,10 @@ async function setup() {
   return { ctx, sandbox, fiber }
 }
 
+// Canonical like every root the policy owner hands the provider: on macOS
+// the temp directory is a symlink, and the runner argv carries the realpath.
 function workspaceRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'dsh-acl-grants-ws-'))
+  return realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-acl-grants-ws-')))
 }
 
 function flag(argv: readonly string[], name: string): string | undefined {
@@ -87,6 +102,7 @@ describe('windows-acl write grants (LocalSandboxProvider)', () => {
 
   beforeEach(() => {
     mockState.grants = []
+    mockState.rootSetSids.clear()
     mockState.addFailure = undefined
     mockState.addFailureStanding = undefined
     mockState.createTempFailure = undefined

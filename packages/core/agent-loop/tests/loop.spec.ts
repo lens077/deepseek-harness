@@ -159,6 +159,27 @@ describe('agent loop', () => {
     expect(agent.session.events.filter(e => e.type === 'turn/start')).toHaveLength(0)
   })
 
+  it('spends no model call on a removed waking message even while a runtime-context section is registered', async () => {
+    const adapter = new MockAdapter([])
+    const ctx = await harness(adapter)
+    const dispose = ctx.systemPrompt.context({ name: 'policy', order: 0, text: () => 'Mode: read-only.' })
+    const agent = ctx.agentLoop.create(SessionId('removed-wake-with-context'), { provider: 'mock', model: 'mock' })
+    const wake = createUserMessage({ content: [{ type: 'text', text: 'removed' }], source: { kind: 'user' } })
+    const removeOnInsert = ctx.on('agent/inbox/inserted', ({ agent: owner, message }) => {
+      if (owner === agent && message.id === wake.id) agent.inbox.remove(message.id)
+    })
+    agent.followup(wake)
+    await agent.whenIdle()
+    removeOnInsert()
+    dispose()
+
+    // The turn opened and closed without a step: no snapshot was written and
+    // the adapter never saw a request carrying only the context.
+    expect(adapter.requests).toEqual([])
+    expect(agent.session.events.filter(e => e.type === 'step/start')).toHaveLength(0)
+    expect(agent.session.events.filter(e => e.type === 'user/message')).toHaveLength(0)
+  })
+
   it('runs a simple turn: queued message → model → idle, with ordered events', async () => {
     const adapter = new MockAdapter([textResponse('hello there')])
     const ctx = await harness(adapter)
