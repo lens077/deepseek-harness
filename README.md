@@ -102,10 +102,10 @@ The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it
 
 ### Run from source
 
-To run from a repository checkout:
+Clone this fork, not upstream: its `main` is the state the features above were built and verified on, and it is rebased onto upstream regularly, so a fresh clone of it is the safest working checkout.
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone https://github.com/lens077/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
@@ -113,6 +113,19 @@ pnpm dsh web
 ```
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+
+Upstream publishes on its own schedule, so this fork may trail it by a few commits. To run the newest upstream code together with the fork's additions, start from upstream and merge the fork on top; a conflict here means the fork has not caught up with that upstream change yet, and the fork's `main` on its own remains the verified fallback.
+
+```sh
+git clone https://github.com/deepseek-ai/deepseek-harness.git
+cd deepseek-harness
+git remote add fork https://github.com/lens077/deepseek-harness.git
+git fetch fork
+git merge fork/main
+pnpm install
+pnpm run build
+pnpm dsh web
+```
 
 ## Community and support
 

@@ -106,10 +106,10 @@ npx @deepseek-ai/dsh web
 
 ### 从源码运行
 
-如需从仓库源码运行：
+请克隆本 fork 而不是上游：它的 `main` 就是上面这些功能构建并验证过的状态，并且会定期跟进上游，所以直接克隆本仓库是最保险的可用状态。
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone https://github.com/lens077/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
@@ -117,6 +117,19 @@ pnpm dsh web
 ```
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+
+上游按自己的节奏发布，本 fork 可能落后几个提交。若想在最新的上游代码上使用本 fork 的新增功能，可以先拉取官方仓库，再把本 fork 合并上去；合并冲突意味着本 fork 尚未跟进那次上游改动，此时本 fork 自己的 `main` 仍是经过验证的兜底选择。
+
+```sh
+git clone https://github.com/deepseek-ai/deepseek-harness.git
+cd deepseek-harness
+git remote add fork https://github.com/lens077/deepseek-harness.git
+git fetch fork
+git merge fork/main
+pnpm install
+pnpm run build
+pnpm dsh web
+```
 
 ## 社区与支持
 
