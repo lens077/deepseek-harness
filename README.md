@@ -6,6 +6,26 @@ English | [中文](README.zh.md)
 
 This is a personal fork of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). Upstream is the source of truth for the project; this repository is not affiliated with DeepSeek AI and carries no support commitment.
 
+### The inbox: what needs you, across every workspace
+
+![The inbox on a working day: one failed/interrupted session and one finished-unread session across nine workspaces, with the time-window and status filters, the workspace chips, and the card actions; session names and text are blurred](docs/user/guide/inbox-overview.png)
+
+**A durable inbox instead of a green dot.** Work left running overnight across several workspaces left no record the next morning: the sidebar's "finished" dot was a browser-memory bit that cleared on click or refresh, and a session blocked on an approval waited unnoticed. The **汇总** entry under New Session now carries the number of sessions that need you and opens an inbox over the center column. Rows are sectioned by why they need attention — waiting for your reply, failed or interrupted, finished but unread, seen but not handled, running — with a time window that defaults to "since you last reviewed", workspace chips with per-workspace counts, and card actions to open, continue with a prefilled composer, mark handled, add a todo, pin, or snooze until tomorrow. `Ctrl+1` opens and closes the panel from anywhere, including mid-sentence in the composer, and the card actions ride a keyboard ring (`j`/`k`, `Enter`, `e`, `t`, `p`, `s`); "copy brief" puts the sections on the clipboard as Markdown. Every mark lives on the Host — which reply you saw, what you handled, what is snoozed or pinned — so it survives refresh, another browser, and a restart, and the number also prefixes the browser tab title. A card is never taller than the panel: its head and action row stay put while a long answer scrolls inside the card, and **打开会话** reveals the session in the sidebar — reopening a folded workspace, lifting the **Show more** cut, unfolding nested branches, and moving the selection onto that row — so the highlighted row is always the one you opened. A fourth tab, **项目待办**, lists the `TODO.md`-style documents found across the configured roots and every workspace.
+
+![The inbox over the center column: the failed/interrupted section, workspace chips with counts, a long answer scrolling inside its card with the actions pinned below, and the todo, project todo, and timeline tabs](docs/user/guide/inbox-panel.png)
+
+**Todos that point back at the conversation.** A todo is a Host record addressed to a session and, optionally, to one question inside it. Add one from a card, from the right-click menu on any session row, or from the todo tab's input; open it with "jump to that question", which scrolls the transcript to the exact question, paging back through history when it is not loaded yet, or with "continue", which opens the session with a continuation line in the composer. Sessions whose last turn did not finish appear as automatic todos until you mark them handled.
+
+![The todo tab: one manual todo joined with its session and question, and two automatic todos for a interrupted and a length-limited turn](docs/user/guide/inbox-todos.png)
+
+![The session row's right-click menu with Add to todos above Archive](docs/user/guide/session-context-menu-todo.png)
+
+**A per-question timeline.** The digest projection now retains each session's earlier questions with their outcome and changed-file count, so the timeline tab places every question on the day it was asked — a session worked on three days appears on three days — and a row opens the session at that question.
+
+![The timeline tab grouping questions by day, each with its workspace, session, and outcome](docs/user/guide/inbox-timeline.png)
+
+### Session file rail and the other additions
+
 **Why it exists.** The Web client shows a session's file work only where it happened — one diff card per `edit`/`write` tool row, plus the closing turn's produced-file chips. Reviewing what a session did to the workspace therefore means scrolling the whole transcript and rebuilding the per-file story by hand, and a long session buries the answer under hundreds of steps. Nothing showed which files the agent was touching right now, and nothing collected one file's repeated edits into one place.
 
 **What it adds.** A session file rail beside the transcript listing what the session read and changed, plus an inline side-by-side diff — before on the left, after on the right, paired line by line — that opens by default and is governed by a General setting. Descendant subagent sessions are read through the durable child catalog and merged in, one row per file with each segment labelled by the agent, turn, and tool that made it. The design, its rejected alternatives, and its known limits are recorded in [the file panel Agent Note](.agents/notes/implemented/feature/2026-08-26-web-session-file-panel.md).
@@ -62,20 +82,6 @@ In context, on a custom provider's editor card — the fold sits under the row i
 
 ![The Settings navigation: General, Models, Plugins, Agent presets, Vision tools, and Conversation layout, each with its own glyph](docs/user/guide/settings-sections-nav.png)
 
-**A durable inbox instead of a green dot.** Work left running overnight across several workspaces left no record the next morning: the sidebar's "finished" dot was a browser-memory bit that cleared on click or refresh, and a session blocked on an approval waited unnoticed. The **汇总** entry under New Session now carries the number of sessions that need you and opens an inbox over the center column. Rows are sectioned by why they need attention — waiting for your reply, failed or interrupted, finished but unread, seen but not handled, running — with a time window that defaults to "since you last reviewed", workspace chips with per-workspace counts, and card actions to open, continue with a prefilled composer, mark handled, add a todo, pin, or snooze until tomorrow. `Ctrl+1` opens and closes the panel from anywhere, including mid-sentence in the composer, and the card actions ride a keyboard ring (`j`/`k`, `Enter`, `e`, `t`, `p`, `s`); "copy brief" puts the sections on the clipboard as Markdown. Every mark lives on the Host — which reply you saw, what you handled, what is snoozed or pinned — so it survives refresh, another browser, and a restart, and the number also prefixes the browser tab title.
-
-![The inbox over the center column: failed/interrupted and finished-unread sections, workspace chips with counts, and the card actions](docs/user/guide/inbox-panel.png)
-
-**Todos that point back at the conversation.** A todo is a Host record addressed to a session and, optionally, to one question inside it. Add one from a card, from the right-click menu on any session row, or from the todo tab's input; open it with "jump to that question", which scrolls the transcript to the exact question, paging back through history when it is not loaded yet, or with "continue", which opens the session with a continuation line in the composer. Sessions whose last turn did not finish appear as automatic todos until you mark them handled.
-
-![The todo tab: one manual todo joined with its session and question, and two automatic todos for a interrupted and a length-limited turn](docs/user/guide/inbox-todos.png)
-
-![The session row's right-click menu with Add to todos above Archive](docs/user/guide/session-context-menu-todo.png)
-
-**A per-question timeline.** The digest projection now retains each session's earlier questions with their outcome and changed-file count, so the timeline tab places every question on the day it was asked — a session worked on three days appears on three days — and a row opens the session at that question.
-
-![The timeline tab grouping questions by day, each with its workspace, session, and outcome](docs/user/guide/inbox-timeline.png)
-
 **How the screenshots are made.** Every picture above is a real screen from this fork's own build, never a mock-up. To keep personal sessions and keys out of them, a second `dsh web` is started from the checkout's source against an isolated home (`DSH_HOME=/private/tmp/dsh-demo-home`, port 3099): its profile lists only the base bundle, the web app, and the vision bundle, and its `settings.yaml` declares a fictitious `acme-gateway` provider with an `acme-vision-think` model — no API key, no sessions, no workspace. The inbox pictures come from the same kind of isolated server, this time launched through the repository's own web test scaffold: six sessions are seeded from the e2e fixture logs under `apps/web/tests/snapshots/`, parsed with the repository's `parseSessionLog` and persisted through the real JSONL backend, two of them with their final `turn/end` rewritten to `interrupted` and `max-tokens` so the failed section has rows; Playwright at device scale 2 in `zh-CN` then adds a todo from a card, pins a row, switches tabs, and right-clicks a session row, and every picture is the screen at that moment. Playwright drives Firefox at device scale 2 in the light theme, once per language, and clicks through the same path a user would: Settings → Models → Edit → Customized settings → Advanced. The Models-page pictures were then verified as a round trip rather than a rendering: checking two more levels and saving through the card rewrote the isolated `settings.yaml` with `off: null` and `minimal: minimal`, and the server's `llm.models` reply listed all seven levels for that model. The fixture provider and the fork's own product chrome are the only content, so nothing needs masking; the demo server, browser sessions, home directory, and temporary files are removed afterwards, and the personal `~/.dsh` and port 3080 are never touched. Any regression in the pictured behavior shows up in `pnpm run test:gui` (the component and shell suites) and in `DSH_SNAPSHOT=replay pnpm run test:web` (the assembled browser).
 
 **Repository.** This fork lives at [github.com/lens077/deepseek-harness](https://github.com/lens077/deepseek-harness); its `main` tracks upstream `main` and adds the features above on top. File problems with the fork's additions as issues on the fork; upstream behavior, releases, plugin discovery, and the Discord community remain upstream's, linked below. Everything here — upstream code and the fork's additions alike — is under the [MIT license](LICENSE), and third-party licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
@@ -106,7 +112,7 @@ The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it
 
 ### Run from source
 
-Clone this fork, not upstream: its `main` is the state the features above were built and verified on, and it is rebased onto upstream regularly, so a fresh clone of it is the safest working checkout.
+Run from this repository's source. It pulls from the official [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) regularly and resolves the merge conflicts; the repository is fully public and transparent, with no poisoning of any kind — every change is in the commit history.
 
 ```sh
 git clone https://github.com/lens077/deepseek-harness.git
@@ -118,7 +124,7 @@ pnpm dsh web
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
-Upstream publishes on its own schedule, so this fork may trail it by a few commits. To run the newest upstream code together with the fork's additions, start from upstream and merge the fork on top; a conflict here means the fork has not caught up with that upstream change yet, and the fork's `main` on its own remains the verified fallback.
+You can of course also start from the official repository and overlay this one on top — merge this fork's `main` into the official code:
 
 ```sh
 git clone https://github.com/deepseek-ai/deepseek-harness.git
