@@ -1708,6 +1708,49 @@ export interface JsonRpcConfig {
 
 来源：[`packages/sdk/server/src/index.ts:29`](../packages/sdk/server/src/index.ts)
 
+<a id="deepseek-aidsh-session-digest"></a>
+
+## `@deepseek-ai/dsh-session-digest`
+
+需要：`sessionProjections`
+
+```ts config-catalog
+/**
+ * Retained-text budgets. The value rides every `session.list` row, so these
+ * bound the listing payload rather than the durable log: a consumer reads the
+ * complete message through `session.history` when the user expands an entry.
+ * Invalid values fail plugin load.
+ */
+export interface Config {
+  /** Maximum retained question characters. Omit for 400. */
+  questionChars?: number
+  /** Maximum retained answer characters. Omit for 1200. */
+  replyChars?: number
+  /** Maximum retained changed-file paths of the current question. Omit for 8. */
+  changedFilePaths?: number
+  /** Maximum retained earlier questions. Omit for 30. */
+  historyQuestions?: number
+}
+```
+
+来源：[`packages/session/session-digest/src/index.ts:29`](../packages/session/session-digest/src/index.ts)
+
+<a id="deepseek-aidsh-session-inbox"></a>
+
+## `@deepseek-ai/dsh-session-inbox`
+
+需要：`storageDomain`
+
+```ts config-catalog
+/** Required deployment policy for todo text. */
+export interface Config {
+  /** Maximum UTF-8 byte length accepted for one todo's text. */
+  readonly maxTextBytes: number
+}
+```
+
+来源：[`packages/session/session-inbox/src/index.ts:51`](../packages/session/session-inbox/src/index.ts)
+
 <a id="deepseek-aidsh-session-persistence-jsonl"></a>
 
 ## `@deepseek-ai/dsh-session-persistence-jsonl`
@@ -3243,6 +3286,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-conversation`（[`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-cordis`（[`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-deliverables` — 需要 `systemPrompt`（[`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-digest`（[`packages/client/ui-digest/src/index.ts`](../packages/client/ui-digest/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-browse`（[`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-native`（[`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-goal`（[`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts)）

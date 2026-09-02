@@ -1662,6 +1662,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     path: '/tmp/fixture',
     title: 'fixture',
     sessionIds: [sid('fx-alpha'), sid('fx-beta'), sid('fx-gamma')],
+    nestedUnder: {},
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
   }, {
@@ -1669,6 +1670,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     path: `${FIXTURE_HOME}/Documents/project`,
     title: 'project',
     sessionIds: [],
+    nestedUnder: {},
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
   }]
@@ -2538,6 +2540,38 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { sessionId: child.sessionId })
       },
+      delete: (request) => {
+        const rootId = request.payload.sessionId
+        if (summaryOf(rootId) === undefined) {
+          return err(request, {
+            code: 'session-not-found',
+            message: `no session ${rootId}`,
+            details: { sessionId: rootId },
+          })
+        }
+        const deletedSessionIds: SessionId[] = []
+        const visit = (parentId: SessionId): void => {
+          for (const child of sessions.filter(summary => summary.parentSessionId === parentId)) {
+            visit(child.sessionId)
+          }
+          deletedSessionIds.push(parentId)
+        }
+        visit(rootId)
+        const deleted = new Set(deletedSessionIds)
+        for (let index = sessions.length - 1; index >= 0; index--) {
+          const candidate = sessions[index]
+          if (candidate !== undefined && deleted.has(candidate.sessionId)) sessions.splice(index, 1)
+        }
+        for (const id of deletedSessionIds) logs.delete(id)
+        for (const workspace of workspaces) {
+          workspace.sessionIds = workspace.sessionIds.filter(id => !deleted.has(id))
+        }
+        for (let index = archivedSessionIds.length - 1; index >= 0; index--) {
+          if (deleted.has(archivedSessionIds[index] as SessionId)) archivedSessionIds.splice(index, 1)
+        }
+        emitHost({ type: 'host/session-deleted', sessionIds: deletedSessionIds })
+        return ok(request, { deletedSessionIds })
+      },
       history: async (request) => {
         const log = logs.get(request.payload.sessionId) ?? []
         // Snapshot at request time, deliver after the transit delay (mirrors a real host under latency).
@@ -2765,6 +2799,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           path,
           title: path.split('/').filter(Boolean).at(-1) ?? path,
           sessionIds: [],
+          nestedUnder: {},
           createdAt: now,
           updatedAt: now,
         }
@@ -2871,12 +2906,61 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { workspace: { ...workspace } })
       },
+      setSessionMembership: (request) => {
+        const { workspaceId, sessionIds, member } = request.payload
+        const workspace = workspaces.find(w => w.workspaceId === workspaceId)
+        if (workspace === undefined) {
+          return err(request, {
+            code: 'workspace-not-found',
+            message: `no workspace ${workspaceId}`,
+            details: { workspaceId },
+          })
+        }
+        const ids = new Set(sessionIds)
+        if (member) {
+          workspace.sessionIds = [
+            ...sessionIds.filter(sessionId => !workspace.sessionIds.includes(sessionId)),
+            ...workspace.sessionIds,
+          ]
+        } else {
+          workspace.sessionIds = workspace.sessionIds.filter(sessionId => !ids.has(sessionId))
+          workspace.nestedUnder = Object.fromEntries(Object.entries(workspace.nestedUnder)
+            .filter(([child, parent]) => !ids.has(sid(child)) && !ids.has(parent)))
+        }
+        workspace.updatedAt = new Date().toISOString()
+        emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
+        return ok(request, { workspace: { ...workspace } })
+      },
       archiveSession: (request) => {
         const missing = requireSession(request)
         if (missing !== undefined) return missing
         const { sessionId } = request.payload
         if (!archivedSessionIds.includes(sessionId)) {
           archivedSessionIds.push(sessionId)
+          emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        }
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      archiveSessions: (request) => {
+        const missingId = request.payload.sessionIds.find(sessionId => summaryOf(sessionId) === undefined)
+        if (missingId !== undefined) {
+          return err(request, {
+            code: 'session-not-found',
+            message: `no session ${missingId}`,
+            details: { sessionId: missingId },
+          })
+        }
+        for (const sessionId of request.payload.sessionIds) {
+          if (!archivedSessionIds.includes(sessionId)) archivedSessionIds.push(sessionId)
+        }
+        emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      unarchiveSession: (request) => {
+        const { sessionId } = request.payload
+        const index = archivedSessionIds.indexOf(sessionId)
+        if (index !== -1) {
+          archivedSessionIds.splice(index, 1)
           emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
         }
         return ok(request, { archivedSessionIds: [...archivedSessionIds] })
@@ -3276,6 +3360,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.fork': return this.api.sessions.fork(request)
+      case 'session.delete': return this.api.sessions.delete(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
       case 'session.attachment': return this.api.sessions.attachment(request)
       case 'session.updateQueue': return this.api.sessions.updateQueue(request)
@@ -3295,7 +3380,10 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.delete': return this.api.workspace.delete(request)
       case 'workspace.insertBefore': return this.api.workspace.insertBefore(request)
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
+      case 'workspace.setSessionMembership': return this.api.workspace.setSessionMembership(request)
       case 'workspace.archiveSession': return this.api.workspace.archiveSession(request)
+      case 'workspace.archiveSessions': return this.api.workspace.archiveSessions(request)
+      case 'workspace.unarchiveSession': return this.api.workspace.unarchiveSession(request)
       case 'skill.list': return this.api.skills.list(request)
       case 'agentPreset.list': return this.api.agentPresets.list(request)
       case 'agentPreset.select': return this.api.agentPresets.select(request)

@@ -1,10 +1,10 @@
 /**
  * Session file rail, node half. It registers the durable section holding the
- * inline-diff expansion preference and nothing else: every fact the rail and
- * the inline diff show is already in the session log, so this package adds no
- * host behavior, no prompt section, and no tool. The browser half ships via
- * exports["./client"], discovered through the package.json dsh.client
- * declaration.
+ * file-surface preferences (inline-diff expansion, Files visibility) and
+ * nothing else: every fact the rail and the inline diff show is already in
+ * the session log, so this package adds no host behavior, no prompt section,
+ * and no tool. The browser half ships via exports["./client"], discovered
+ * through the package.json dsh.client declaration.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -12,8 +12,9 @@ import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { SESSION_FILES_SETTINGS_NAMESPACE, SessionFilesSettingsSchema } from './diff-settings.ts'
 
 export {
-  DEFAULT_DIFF_EXPANSION, DIFF_EXPANSION_FIELD, DIFF_EXPANSIONS,
-  SESSION_FILES_SETTINGS_NAMESPACE, type DiffExpansion, type SessionFilesSettings,
+  DEFAULT_DIFF_EXPANSION, DEFAULT_RAIL_VISIBILITY, DIFF_EXPANSION_FIELD, DIFF_EXPANSIONS,
+  RAIL_VISIBILITIES, RAIL_VISIBILITY_FIELD, SESSION_FILES_SETTINGS_NAMESPACE,
+  type DiffExpansion, type RailVisibility, type SessionFilesSettings,
 } from './diff-settings.ts'
 
 /**

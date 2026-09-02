@@ -136,21 +136,24 @@ export function SidebarRoot({
             onClick={() => { startSession() }}
           >
             <span className={css.brandIdentity} aria-hidden="true">
-              <span className={css.brandMark}>
-                {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
+              <span className={css.brandRow}>
+                <span className={css.brandMark}>
+                  {renderSlot('sidebar.brand.mark', { size: 20 }, { fallback: <FishLogo size={20} /> })}
+                </span>
+                <span className={css.brandName}>
+                  {renderSlot('sidebar.brand.name', {}, {
+                    fallback: (
+                      <>
+                        <span className={css.fallbackBrandName}>Sumery DSH Pro</span>
+                        {process.env.DSH_CLIENT_COMMIT_HASH
+                          ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_COMMIT_HASH}</span>
+                          : null}
+                      </>
+                    ),
+                  })}
+                </span>
               </span>
-              <span className={css.brandName}>
-                {renderSlot('sidebar.brand.name', {}, {
-                  fallback: (
-                    <>
-                      <span className={css.fallbackBrandName}>DSH Local Build</span>
-                      {process.env.DSH_CLIENT_COMMIT_HASH
-                        ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_COMMIT_HASH}</span>
-                        : null}
-                    </>
-                  ),
-                })}
-              </span>
+              <span className={css.brandTagline}>{t('brand.tagline')}</span>
             </span>
           </button>
         )}
@@ -186,6 +189,12 @@ export function SidebarRoot({
           {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
         </button>
       </Tooltip>
+
+      {/* Whole-surface navigation entries sit directly under New Session, so
+          the column reads as: start work, go to a surface, then browse. */}
+      <div className={css.navArea}>
+        {renderSlot('sidebar.nav.entry', { wide })}
+      </div>
 
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}

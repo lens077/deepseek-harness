@@ -46,12 +46,12 @@ describe('DiffExpansionPolicy', () => {
     // Loading: no value yet, so the shipped default stands.
     expect(policy.expansion.getSnapshot()).toBe('all')
 
-    host.publish({ status: 'ready', value: { diffExpansion: 'none' } })
+    host.publish({ status: 'ready', value: { diffExpansion: 'none', railVisibility: 'show' } })
     expect(policy.expansion.getSnapshot()).toBe('none')
     expect(host.set).not.toHaveBeenCalled()
 
     // A republication of the value already held changes nothing.
-    host.publish({ value: { diffExpansion: 'none' } })
+    host.publish({ value: { diffExpansion: 'none', railVisibility: 'show' } })
     expect(policy.expansion.getSnapshot()).toBe('none')
   })
 })

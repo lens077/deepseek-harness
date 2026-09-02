@@ -1,0 +1,727 @@
+/* The panel fills the center column and is opaque: it replaces the
+   conversation while open rather than floating over it. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--dsw-alias-bg-base);
+}
+
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.counts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.countEnded {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Running work is counted but never listed, so the count carries the only
+   signal that the grid is not the whole picture. */
+.countRunning {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Bordered rather than filled: the scrolling body below sits on the base
+   surface, and an elevated fill here would put the panel's sheet in the
+   elevated-scrollbar rebind rule for a chip that is not the scroll surface. */
+.groupToggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.groupButton {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.groupButton:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.groupActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 24px;
+}
+
+.section + .section {
+  margin-top: 24px;
+}
+
+.sectionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sectionCount {
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+/* Left-to-right card flow: cards fill the row, then wrap. The panel owns the
+   whole center column, so the grid gets real horizontal space. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* The top edge carries the status colour — green once the turn completed.
+   Navigation is a separate button so reading the card never moves the user. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-top-width: 3px;
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  text-align: left;
+  overflow: hidden;
+}
+
+.success {
+  border-top-color: var(--dsw-alias-state-success-primary);
+}
+
+.failure {
+  border-top-color: var(--dsw-alias-state-error-primary);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+  min-width: 0;
+}
+
+.badge {
+  flex: none;
+  padding: 0 7px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.badgeSuccess {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.badgeFailure {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.cardTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fieldLabel {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The question is the card's headline: it is what the user recognizes the
+   task by, so it gets the strongest weight and the larger clamp. */
+.question {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 19px;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reply {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.replyEmpty {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  font-style: italic;
+}
+
+.truncated {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.openSession {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 4px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.openSession:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 64px 20px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.emptyBody {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Tabs sit beside the title; the count on a tab is the same attention number
+   the sidebar badge shows, so the two never disagree. */
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.tabCount {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.tabCountUrgent {
+  background: var(--dsw-alias-state-warn-secondary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.headerAction,
+.action {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  padding: 4px 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.headerAction:hover,
+.action:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.notice {
+  font-size: 12px;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+/* Second header row: the time window, the counts it produced, and the
+   handled toggle. Kept off the title row so the title row stays one line. */
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.since {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.showHandled {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+/* Workspace chips: one per workspace with work to show, each carrying its
+   attention count so the scattered picture reads at a glance. */
+.chips {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.chipActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-color: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.chipCount {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-secondary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+.chipRunning {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.errorBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.inlineError {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.sectionHint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Card tones beyond success and failure: waiting takes the warn edge because
+   the agent is idle until the user acts; running takes the brand edge. */
+.waiting {
+  border-top-color: var(--dsw-alias-state-warn-primary);
+}
+
+.runningTone {
+  border-top-color: var(--dsw-alias-brand-primary);
+}
+
+.badgeWaiting {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+/* Unread stays on the sheet's own surface (the body scrolls, and an elevated
+   fill here would need the scrollbar rebind); the border carries the signal. */
+.unreadCard {
+  border-color: var(--dsw-alias-border-l3);
+}
+
+.unreadDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.pinMark {
+  flex: none;
+  font-size: 11px;
+}
+
+.cardWorkspace {
+  flex: none;
+  max-width: 40%;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The keyboard ring's current card: an outline rather than a fill so the
+   status edge stays readable. */
+.focused {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.filesList {
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cardActions .openSession {
+  margin-top: 0;
+}
+
+.keys {
+  margin: 16px 0 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+/* Todo tab. */
+.todoTab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.todoAdd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todoInput {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.todoInput:disabled {
+  opacity: 0.6;
+}
+
+.todoList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.todoRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.todoDone .todoText {
+  text-decoration: line-through;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.todoCheck {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.todoBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todoText {
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  word-break: break-word;
+}
+
+.todoMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.todoWorkspace {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.todoSession {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.todoQuestion {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todoMissing {
+  font-style: italic;
+}
+
+.todoActions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Timeline tab. */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.day + .day {
+  margin-top: 0;
+}
+
+.dayLabel {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 6px 0;
+  background: var(--dsw-alias-bg-base);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dayDate {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dayList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timelineRow {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.timelineRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.timelineTime {
+  grid-row: span 2;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+
+.timelineQuestion {
+  min-width: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.timelineQuestion:hover {
+  text-decoration: underline;
+}
+
+.timelineMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.currentMark {
+  color: var(--dsw-alias-brand-primary);
+}

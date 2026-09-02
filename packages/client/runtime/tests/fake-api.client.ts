@@ -16,6 +16,7 @@ function fakeWorkspace(id: string, over: Partial<WorkspaceView> = {}): Workspace
     path: '/f/ws',
     title: 'ws',
     sessionIds: [],
+    nestedUnder: {},
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...over,
@@ -81,6 +82,8 @@ export class FakeApiClient implements IApiClient {
   readonly defaultModel: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
   onRename: (payload: unknown) => Promise<RpcResponse<{ title: string; seq: number }>> = () => Promise.resolve(ok({ title: 'fk-renamed', seq: 0 }))
   onFork: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-fork' as SessionId }))
+  onDelete: (payload: { sessionId: SessionId }) => Promise<RpcResponse<{ deletedSessionIds: SessionId[] }>> =
+    payload => Promise.resolve(ok({ deletedSessionIds: [payload.sessionId] }))
   onHistory: (payload: { sessionId: SessionId; beforeSeq?: number; maxMessages?: number })
   => Promise<RpcResponse<{ events: never[]; hasMore: boolean }>> =
     () => Promise.resolve(ok({ events: [], hasMore: false }))
@@ -152,6 +155,7 @@ export class FakeApiClient implements IApiClient {
       this.record('session.selectModel', payload, this.onSelectModel(payload)),
     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
     fork: (payload: unknown) => this.record('session.fork', payload, this.onFork(payload)),
+    delete: (payload: { sessionId: SessionId }) => this.record('session.delete', payload, this.onDelete(payload)),
     prompt: (payload: unknown) => this.record('session.prompt', payload, this.onPrompt(payload)),
     attachment: (payload: unknown) => this.record('session.attachment', payload, this.onAttachment(payload)),
     updateQueue: (payload: unknown) => this.record('session.updateQueue', payload, this.onUpdateQueue(payload)),
@@ -202,8 +206,17 @@ export class FakeApiClient implements IApiClient {
   onWorkspaceInsertSessionBefore: (payload: unknown) => Promise<RpcResponse<{ workspace: WorkspaceView }>> =
     () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws') }))
 
+  onWorkspaceSetSessionMembership: (payload: unknown) => Promise<RpcResponse<{ workspace: WorkspaceView }>> =
+    payload => Promise.resolve(ok({ workspace: fakeWorkspace((payload as { workspaceId: WorkspaceId }).workspaceId) }))
+
   onWorkspaceArchiveSession: (payload: unknown) => Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>> =
     payload => Promise.resolve(ok({ archivedSessionIds: [(payload as { sessionId: SessionId }).sessionId] }))
+
+  onWorkspaceArchiveSessions: (payload: unknown) => Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>> =
+    payload => Promise.resolve(ok({ archivedSessionIds: (payload as { sessionIds: SessionId[] }).sessionIds }))
+
+  onWorkspaceUnarchiveSession: (payload: unknown) => Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>> =
+    () => Promise.resolve(ok({ archivedSessionIds: [] }))
 
   readonly workspace: IApiClient['workspace'] = {
     list: (payload: unknown) => this.record('workspace.list', payload, this.onWorkspaceList(payload).then(response => (
@@ -218,8 +231,14 @@ export class FakeApiClient implements IApiClient {
       this.record('workspace.insertBefore', payload, this.onWorkspaceInsertBefore(payload)),
     insertSessionBefore: (payload: unknown) =>
       this.record('workspace.insertSessionBefore', payload, this.onWorkspaceInsertSessionBefore(payload)),
+    setSessionMembership: (payload: unknown) =>
+      this.record('workspace.setSessionMembership', payload, this.onWorkspaceSetSessionMembership(payload)),
     archiveSession: (payload: unknown) =>
       this.record('workspace.archiveSession', payload, this.onWorkspaceArchiveSession(payload)),
+    archiveSessions: (payload: unknown) =>
+      this.record('workspace.archiveSessions', payload, this.onWorkspaceArchiveSessions(payload)),
+    unarchiveSession: (payload: unknown) =>
+      this.record('workspace.unarchiveSession', payload, this.onWorkspaceUnarchiveSession(payload)),
   }
 
   // Payloads stay `unknown` (lint-lane note above); response rows are the real

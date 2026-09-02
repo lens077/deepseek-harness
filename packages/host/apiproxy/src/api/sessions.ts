@@ -337,8 +337,16 @@ export interface SessionsApi {
    * without acquiring an Agent. Workspace attachment follows the source
    * directly, or the nearest workspace-owning ancestor when the source is a
    * subagent.
+   *
+   * `placement` picks the child's display slot in that workspace: `sibling`
+   * (the default) is a top-level account entry; `nested` additionally
+   * records the child under the source in the workspace's `nestedUnder` map,
+   * so grouping surfaces render it inside the source's branch. Nested
+   * placement requires the source itself to be accounted in the attached
+   * workspace — an ungrouped source, or a subagent source attached through
+   * an ancestor, degrades to the sibling slot rather than failing the fork.
    */
-  fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number }>):
+  fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number; placement?: 'sibling' | 'nested' }>):
   Promise<RpcResponse<{ sessionId: SessionId }>>
 
   /**
@@ -373,5 +381,13 @@ export interface SessionsApi {
    * subagents reject with `agent-busy`.
    */
   cancel(request: RpcRequest<{ sessionId: SessionId }>): Promise<RpcResponse<{ accepted: true }>>
+
+  /**
+   * Permanently deletes one cold Session and its complete transitive
+   * `parentSession` descendant closure. The operation rejects atomically when
+   * any target is live and returns ids in durable child-first deletion order.
+   */
+  delete(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ deletedSessionIds: SessionId[] }>>
 
 }

@@ -134,7 +134,10 @@ export type HostFrame =
     cwd?: string
     agentPreset?: string
   }
+  /** Process-local detach; durable history remains and may reappear in a later list baseline. */
   | { type: 'host/session-removed'; sessionId: SessionId }
+  /** Permanent deletion committed through persistence and Workspace bookkeeping. */
+  | { type: 'host/session-deleted'; sessionIds: SessionId[] }
   | { type: 'host/session-status'; sessionId: SessionId; running: boolean }
   | { type: 'host/agent-error'; sessionId: SessionId; message: string }
   | { type: 'host/workspace-changed'; workspace: WorkspaceView }

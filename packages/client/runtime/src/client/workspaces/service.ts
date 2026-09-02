@@ -293,6 +293,25 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Archive several Sessions with one durable Host mutation.
+   * @param sessionIds - sessions to archive.
+   */
+  async archiveSessions(sessionIds: readonly SessionId[]): Promise<void> {
+    const result = await this.manager.archiveSessions(sessionIds)
+    if (!result.ok) throw new Error(`session archive failed: ${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
+   * Remove a session from the registry-global archive set. The retained
+   * accounting position becomes visible again; selection remains unchanged.
+   * @param sessionId - session to unarchive.
+   */
+  async unarchiveSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.unarchiveSession(sessionId)
+    if (!result.ok) throw new Error(`session unarchive failed: ${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
    * Move a session within its Workspace's manual order (DOM-insertBefore-like).
    * @param workspaceId - owning workspace.
    * @param sessionId - accounted session to move.
@@ -306,6 +325,25 @@ export class WorkspaceRuntime implements IWorkspaces {
   ): Promise<WorkspaceView> {
     const result = await this.manager.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     if (!result.ok) throw new Error(`workspace move failed: ${result.error.code}: ${result.error.message}`)
+    return result.value.workspace
+  }
+
+  /**
+   * Add or remove several Sessions from one Workspace account.
+   * @param workspaceId - Workspace whose membership changes.
+   * @param sessionIds - Sessions to add or remove.
+   * @param member - `true` to add, `false` to remove.
+   * @returns the updated Workspace view.
+   */
+  async setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView> {
+    const result = await this.manager.setSessionMembership(workspaceId, sessionIds, member)
+    if (!result.ok) {
+      throw new Error(`workspace membership failed: ${result.error.code}: ${result.error.message}`)
+    }
     return result.value.workspace
   }
 

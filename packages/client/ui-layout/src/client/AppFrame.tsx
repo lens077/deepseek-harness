@@ -20,12 +20,21 @@ import css from './AppFrame.module.css'
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'center.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
 
-/** Center column grid item (session-body building block). */
-function CenterColumn(props: { children?: ReactNode }) {
-  return <div className={css.centerCol}>{props.children}</div>
+/**
+ * Center column grid item (session-body building block). `overlay` renders
+ * above the conversation inside the same grid cell; entries that render
+ * nothing leave the conversation untouched.
+ */
+function CenterColumn(props: { children?: ReactNode; overlay?: ReactNode }) {
+  return (
+    <div className={css.centerCol}>
+      {props.children}
+      <div className={css.centerOverlay}>{props.overlay}</div>
+    </div>
+  )
 }
 
 /** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
@@ -187,7 +196,7 @@ export function AppFrame({
             the shell's own pending rendering. The conversation
             is session-maybe; the strict details entry naturally renders
             empty while no session is current. */}
-        <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
+        <CenterColumn overlay={renderSlot('center.overlay', {})}>{renderSlot('conversation', {})}</CenterColumn>
         <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
       </>
       <div className={css.overlayLayer} data-shell-overlay>

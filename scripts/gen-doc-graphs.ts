@@ -221,8 +221,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'storage-domain',
     title: 'Domain data facility',
     mode: 'core',
-    consumers: ['workspace', 'message-feedback'],
+    consumers: ['workspace', 'message-feedback', 'session-inbox'],
     note: 'Waits for every configured backend, then publishes the domain form as one lifecycle-bound service for typed durable state.',
+  },
+  {
+    key: 'sessionInbox',
+    pkg: 'session-inbox',
+    title: 'Durable session inbox marks',
+    mode: 'core',
+    note: 'Owns the user\'s seen/handled/snooze/pin marks, review time, and todos over the domain facility, publishes every change as one snapshot event, and serves the Host unary Remote contract without entering Session history.',
   },
   {
     key: 'messageFeedback',

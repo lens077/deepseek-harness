@@ -5,8 +5,8 @@
 
 .root {
   --dsh-session-list-edge-inset: var(--dsh-sidebar-inline-padding);
-  --dsh-session-list-scrollbar-width: 8px;
-  --dsh-session-list-scrollbar-offset: 2px;
+  --dsh-session-list-scrollbar-width: 12px;
+  --dsh-session-list-scrollbar-offset: 0px;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -17,6 +17,117 @@
 
 .root.rail {
   padding-right: 0;
+}
+
+.contextMenuAnchor {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.selectionBar {
+  flex: none;
+  margin: 8px 6px 14px;
+  padding: 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--dsw-alias-interactive-bg-hover) 78%, transparent);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.06);
+}
+
+.selectionSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+  padding-inline: 3px 1px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.selectionClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.selectionClear:hover:not(:disabled),
+.selectionActions button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.selectionActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.selectionActions button {
+  min-width: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.selectionActions button:disabled,
+.selectionClear:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.selectionActions .selectionPlacement {
+  flex: 1;
+  overflow: hidden;
+}
+
+.selectionPlacement span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selectionActions .selectionDelete {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.selectionActions .selectionDelete:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+}
+
+.selectionStatus,
+.selectionError {
+  margin: 5px 3px 0;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.selectionStatus {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.selectionError {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .iconButton {
@@ -330,9 +441,9 @@
 }
 
 /* List: the only scrolling region. Block children keep their design heights
-   under content overflow. The 2px edge offset, stable 8px themed scrollbar,
-   and remaining padding equal the shell's right inset, with or without
-   overflow, so moving the bar does not move the rows. */
+   under content overflow. The stable 12px themed scrollbar and remaining
+   padding equal the shell's right inset, with or without overflow, so moving
+   the bar does not move the rows. */
 .list {
   flex: 1;
   min-height: 0;
@@ -349,6 +460,16 @@
      above the gradient instead of under it. */
   padding-bottom: 16px;
   scrollbar-gutter: stable;
+  scrollbar-width: auto;
+}
+
+.list::-webkit-scrollbar {
+  width: var(--dsh-session-list-scrollbar-width);
+}
+
+.list::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  border-radius: 6px;
 }
 
 .flatList > * + *,
@@ -358,7 +479,8 @@
 }
 
 .searchStatus,
-.searchWarning {
+.searchWarning,
+.listError {
   padding: 10px 12px;
   font-size: 12px;
   line-height: 18px;
@@ -367,6 +489,10 @@
 
 .searchWarning {
   color: var(--dsw-alias-label-secondary);
+}
+
+.listError {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 /* One workspace section: header row + a compact expanded session run. */

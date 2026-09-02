@@ -24,7 +24,9 @@ Workspace 和 Session 列表各自具有单调的 `pending` → `ready` 基线�
 
 `WorkspaceRuntime.delete(workspaceId)` 在一元响应成功后从客户端投影中移除注册记录；对应的 `host/workspace-removed` 帧具有幂等性，并负责同步其他标签页。Session 状态与当前 Session selection 相互独立，因此 Workspace 消失后，其已纳入客户端投影的 Session 会立即投影到 Ungrouped 下。
 
-`WorkspaceListState.archivedSessionIds` 镜像 Host 的注册表级全局归档集合（一个按 Host 顺序的 `readonly SessionId[]`，仅在成员变化时才替换；需要 O(1) 查询的消费方自建临时 Set）。它是全快照状态：`workspace.list` 基线、`archiveSession` 一元回声和 `host/archived-sessions-changed` 帧各自安装完整集合。`WorkspaceRuntime.archiveSession(sessionId)` 通过 wire 归档；投影层在当前 selection 落入归档集合时统一清空为 New Session 视图状态——一条规则同时覆盖本地回声、其他标签页的帧、以及重连基线恢复出一个离线期间被归档的 selection。在 `workspace.list` 请求进行中安装的集合还会取代该过期基线携带的集合。各分组视图在所有位置隐藏集合成员，而会话行本身仍留在列表 store 中。
+`WorkspaceListState.archivedSessionIds` 镜像 Host 的注册表级全局归档集合（一个按 Host 顺序排列的 `readonly SessionId[]`，仅在成员变化时才替换；需要 O(1) 查询的消费方可自行建立临时 Set）。它属于全快照状态：`workspace.list` 基线、`archiveSession`、`archiveSessions` 与 `unarchiveSession` 一元回声，以及 `host/archived-sessions-changed` 帧都会安装完整集合。`WorkspaceRuntime.archiveSession(sessionId)`、`archiveSessions(sessionIds)` 和 `unarchiveSession(sessionId)` 通过 wire 修改该集合；批量调用只发送一个请求，并安装一份完整集合响应。`WorkspaceRuntime.setSessionMembership(workspaceId, sessionIds, member)` 会在一次 Host 成员关系变更后安装返回的 Workspace 视图。投影层会在当前 selection 落入归档集合时统一清空为 New Session 视图状态；同一规则覆盖本地归档回声、其他标签页发来的帧，以及重连基线恢复出离线期间被归档的 selection。取消归档不会重新打开或选中 Session。在 `workspace.list` 请求进行期间安装的集合（包括成员移除）会取代过期基线携带的集合。活跃分组视图会在所有位置隐藏集合成员，会话行本身仍留在列表 store 中，供已归档浏览视图使用。
+
+`SessionRuntime.delete(sessionId)` 会从一元响应或 `host/session-deleted` 应用完整的已提交后代优先 id 列表。`SessionManager` 会在进程生命周期内 tombstone 这些 id，移除其摘要、实例、待处理交互、投影、后台任务、目录、地址与 selection，过滤过期列表响应，并忽略迟到的 Host 或 mux 帧。`host/session-removed` 仍是可逆的进程内 detach，绝不会建立删除 tombstone。
 
 SlotRegistry 分别为 renderer 提供 `useSessions` 与 `useWorkspaces` 的裸 observable；ui-renderer 创建钩子。Workspace 业务状态不会进入 `SessionListState` 或条目 store。
 

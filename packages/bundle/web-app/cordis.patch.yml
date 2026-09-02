@@ -90,6 +90,19 @@
     - id: session-stats
       name: '@deepseek-ai/dsh-session-stats'
 
+    # Newest question / closing answer / turn outcome for the digest panel (the
+    # sessionDigest projection key). Cold list rows come from the projection
+    # cache row above, so the panel covers sessions this process never attached.
+    - id: session-digest
+      name: '@deepseek-ai/dsh-session-digest'
+
+    # Durable inbox marks (seen/handled/snooze/pin) and cross-workspace todos
+    # behind the sessionInbox Remote; the digest panel joins them with list rows.
+    - id: session-inbox
+      name: '@deepseek-ai/dsh-session-inbox'
+      config:
+        maxTextBytes: 4096
+
     # Resolve bind host, SSH launch, and display once at boot, then mount the
     # matching dual-face directory picker. Mount -native or -browse directly in
     # an overlay to pin the interaction.
@@ -263,6 +276,11 @@
     # Background jobs: the session-header list over the jobsBySession mirror.
     - id: ui-jobs
       name: '@deepseek-ai/dsh-client-ui-jobs'
+
+    # Digest surface: a sidebar entry toggling the center-column grid of
+    # finished sessions, read from the sessionDigest projection on list rows.
+    - id: ui-digest
+      name: '@deepseek-ai/dsh-client-ui-digest'
 
     # Goal surface: GoalBar in the input dock over the goal session projection.
     - id: ui-goal

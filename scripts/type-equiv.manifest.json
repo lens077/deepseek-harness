@@ -1974,6 +1974,111 @@
       "doc": "docs/subsystems/feedback.md",
       "symbol": "MessageFeedbackDeleteResult",
       "source": "packages/feedback/message-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTodoId",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSessionState",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTodoStatus",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTodo",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSnapshot",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxMarkSeenRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSetHandledRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSnoozeRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSetPinnedRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxAddTodoRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxUpdateTodoRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxRemoveTodoRequest",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTextBlank",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTextTooLarge",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTodoNotFound",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSnoozeInPast",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxFailure",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSuccess",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxRejected",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxTodoResult",
+      "source": "packages/session/session-inbox/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session-inbox.md",
+      "symbol": "InboxSnoozeResult",
+      "source": "packages/session/session-inbox/src/types.ts"
     }
   ]
 }

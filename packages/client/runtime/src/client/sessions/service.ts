@@ -119,6 +119,19 @@ export class SessionCreateError extends Error {
   }
 }
 
+/** Structured permanent session-deletion failure. */
+export class SessionDeleteError extends Error {
+  override readonly name = 'SessionDeleteError'
+
+  /**
+   * @param rpcError - Host business or folded transport error.
+   * @param sessionId - requested cascade root.
+   */
+  constructor(readonly rpcError: RpcError, readonly sessionId: SessionId) {
+    super(`session delete failed: ${rpcError.code}: ${rpcError.message}`)
+  }
+}
+
 /** Structured session-fork failure. */
 export class SessionForkError extends Error {
   override readonly name = 'SessionForkError'
@@ -499,7 +512,8 @@ export class SessionRuntime implements ISessions {
    *   and whether to increment an inherited durable title before resolving.
    *   A fractional anchor floors to a real event seq: the frozen nodes of an
    *   interrupted turn carry flow-ordering seqs between two events, and the
-   *   wire takes integers only.
+   *   wire takes integers only. `placement` forwards verbatim: `nested` asks
+   *   the host to account the child under the source in its workspace.
    * @returns the child session id.
    * @throws {SessionForkError} with the source id.
    * @throws {Error} when a requested child-title rename fails after creation.
@@ -508,6 +522,7 @@ export class SessionRuntime implements ISessions {
     sessionId: SessionId
     atSeq?: number
     increaseTitle?: boolean
+    placement?: 'sibling' | 'nested'
   }): Promise<SessionId> {
     const sourceTitle = opts.increaseTitle
       ? this.list.getSnapshot().byId[opts.sessionId]?.title
@@ -518,6 +533,7 @@ export class SessionRuntime implements ISessions {
       // turn/start), so the host's first-turn/end-at-or-after cut still ends
       // on that turn — never clipped back to the previous one.
       ...(opts.atSeq === undefined ? {} : { atSeq: Math.floor(opts.atSeq) }),
+      ...(opts.placement === undefined ? {} : { placement: opts.placement }),
     })
     if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
     this.projectList()
@@ -529,6 +545,20 @@ export class SessionRuntime implements ISessions {
       if (!renamed.ok) throw new Error(`fork child rename failed: ${renamed.error.code}: ${renamed.error.message}`)
     }
     return childId
+  }
+
+  /**
+   * Permanently delete one Session and its transitive descendants. Unary and
+   * Host-frame echoes converge through the same manager tombstones.
+   * @param sessionId - cascade root.
+   * @returns complete child-first committed ids.
+   * @throws {SessionDeleteError} when liveness, storage, or transport rejects.
+   */
+  async delete(sessionId: SessionId): Promise<readonly SessionId[]> {
+    const result = await this.manager.delete(sessionId)
+    if (!result.ok) throw new SessionDeleteError(result.error, sessionId)
+    this.projectList()
+    return result.value.deletedSessionIds
   }
 
   /**

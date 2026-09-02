@@ -13,13 +13,17 @@
 // ChatNodeSeat subscribes to one Node key, so Assistant deltas and Tool
 // lifecycle updates replace only their own row without remounting it.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
-import { QuestionNavigator, questionEntries } from './QuestionNavigator.tsx'
+import { QuestionNavigator } from './QuestionNavigator.tsx'
+import { QuestionBar, TurnRecapRow } from './QuestionBar.tsx'
+import {
+  buildQuestionTurnIndex, buildTurnGroups, buildTurnRecaps, questionEntries,
+} from './turn-summary.ts'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
@@ -157,8 +161,8 @@ function TurnStatus({ startTime, t }: {
  * ordered business Node crosses the keyed renderer seat.
  */
 export function ChatView({
-  useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, questionNavigation: readQuestionNavigation, t,
+  useSession, useSessions, useStore, actions, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
+  fileMentions, turnFiles, turnFilesAvailable, questionNavigation: readQuestionNavigation, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -172,6 +176,7 @@ export function ChatView({
   const hasMore = useSession(s => s.hasMore)
   const loadingOlder = useSession(s => s.loadingOlder)
   const selectedCallId = useStore(s => s.selection?.callId)
+  const reveal = useStore(s => s.reveal ?? null)
   const [fileOpenError, setFileOpenError] = useState<{ path: string; message: string } | null>(null)
   const [fileOpenBusy, setFileOpenBusy] = useState(false)
   // Close/retry must ignore a settlement that started before the latest
@@ -222,6 +227,7 @@ export function ChatView({
   const atBottomRef = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
   const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [questionAbove, setQuestionAbove] = useState(false)
   const [highlightedQuestion, setHighlightedQuestion] = useState<string | null>(null)
   const pendingQuestionMoveRef = useRef<'previous' | null>(null)
   const questionNavigation = readQuestionNavigation?.() ?? {
@@ -232,6 +238,22 @@ export function ChatView({
   const questions = useMemo(
     () => questionEntries(order, nodeStore, t('chat.questions.image')),
     [nodeStore, order, t],
+  )
+  // One join per snapshot, shared by the sticky bar and every other
+  // question-level surface, so none of them walks the Node list itself.
+  const questionTurns = useMemo(
+    () => buildQuestionTurnIndex(questions, timeline),
+    [questions, timeline],
+  )
+  // Recaps ride ChatView rather than the turn-tail slot: the tail entries are
+  // per-node and must not scan the Node list to find their own opener.
+  const recaps = useMemo(
+    () => buildTurnRecaps(order, nodeStore, questionTurns),
+    [nodeStore, order, questionTurns],
+  )
+  const turnGroups = useMemo(
+    () => buildTurnGroups(order, nodeStore, timeline),
+    [nodeStore, order, timeline],
   )
   /** Last position delivered or written on the main thread. */
   const observedTopRef = useRef(0)
@@ -428,18 +450,41 @@ export function ChatView({
     }, 2_000)
   }, [questions])
 
+  /** Same jump addressed by Chat Node key, which is what a recap row carries. */
+  const jumpToQuestionKey = useCallback((key: string) => {
+    const index = questions.findIndex(question => question.key === key)
+    if (index !== -1) jumpToQuestion(index)
+  }, [jumpToQuestion, questions])
+
   useEffect(() => {
     const local = listRef.current
     if (local === null || questions.length === 0) return
     const scrollport = scrollerOf(local)
+    // Question rows are found in one pass over the rendered anchors rather
+    // than one scan per question: this runs on every scroll event, and the
+    // per-question form is quadratic in a long session.
+    const indexOfKey = new Map(questions.map((question, index) => [question.key, index]))
     const updateCurrent = (): void => {
-      const top = scrollport.getBoundingClientRect().top + 8
+      const edge = scrollport.getBoundingClientRect().top
+      const top = edge + 8
       let next = 0
-      questions.forEach((question, index) => {
-        const row = anchorElement(local, question.key)
-        if (row !== null && row.getBoundingClientRect().top <= top) next = index
-      })
+      let currentBottom: number | null = null
+      for (const row of local.querySelectorAll<HTMLElement>('[data-chat-anchor-key]')) {
+        const key = row.dataset.chatAnchorKey
+        const index = key === undefined ? undefined : indexOfKey.get(key)
+        if (index === undefined) continue
+        const rect = row.getBoundingClientRect()
+        if (rect.top > top) continue
+        next = index
+        currentBottom = rect.bottom
+      }
       setCurrentQuestion(next)
+      // The bar exists for the question the reader can no longer see, so it
+      // appears only once that row has fully passed the scrollport's top edge.
+      // Comparing against the edge itself rather than the reading line also
+      // keeps an unmeasured layout — every rect zero — from claiming the
+      // question scrolled away.
+      setQuestionAbove(currentBottom !== null && currentBottom < edge)
     }
     updateCurrent()
     scrollport.addEventListener('scroll', updateCurrent, { passive: true })
@@ -451,6 +496,26 @@ export function ChatView({
     pendingQuestionMoveRef.current = null
     jumpToQuestion(0)
   }, [jumpToQuestion, loadingOlder, questions.length])
+
+  // A reveal request from another surface: scroll to the question logged at
+  // `seq` once its row is loaded, paging back while older history may hold
+  // it. A seq older than everything reachable clears once history is
+  // exhausted, so a stale request cannot keep paging forever.
+  useEffect(() => {
+    if (reveal === null || openState !== 'open') return
+    const index = questions.findIndex(question => question.node.seq === reveal.seq)
+    if (index !== -1) {
+      jumpToQuestion(index)
+      actions.clearReveal()
+      return
+    }
+    const oldest = questions[0]?.node.seq
+    if (hasMore && (oldest === undefined || oldest > reveal.seq)) {
+      if (!loadingOlder) loadOlder()
+      return
+    }
+    actions.clearReveal()
+  }, [reveal, questions, openState, hasMore, loadingOlder, loadOlder, jumpToQuestion, actions])
 
   useEffect(() => {
     const shortcutOf = (event: KeyboardEvent): string => {
@@ -497,9 +562,31 @@ export function ChatView({
     loadOlder()
   }
 
+  const barQuestion = questionAbove ? questions[currentQuestion] : undefined
+  const barTurn = barQuestion === undefined
+    ? undefined
+    : questionTurns.turnOfQuestion.get(barQuestion.key)
+  const barSummary = barTurn === undefined ? null : questionTurns.byTurn.get(barTurn) ?? null
+
   return (
     <div className={css.root}>
       <div ref={listRef} className={css.scroll}>
+        {/* Zero-height dock: the bar sticks to the scrollport's top edge
+            without adding flow height, which the follow and paging logic
+            measures through `scrollHeight`. */}
+        <div className={css.questionBarDock}>
+          {barQuestion !== undefined && (
+            <QuestionBar
+              text={barQuestion.text}
+              number={currentQuestion + 1}
+              summary={barSummary}
+              files={barTurn === undefined ? [] : turnFiles(barTurn)}
+              filesKnown={turnFilesAvailable()}
+              onSelect={() => { jumpToQuestion(currentQuestion) }}
+              t={t}
+            />
+          )}
+        </div>
         <div ref={columnRef} className={css.column} data-chat-flow="">
           {openState === 'loading' && <div className={css.hint}>{t('chat.loadingHistory')}</div>}
           {openState === 'error' && openError !== null && (
@@ -514,22 +601,35 @@ export function ChatView({
               </button>
             </div>
           )}
-          {order.map(nodeKey => (
-            <ChatNodeSeat
-              key={nodeKey}
-              nodeKey={nodeKey}
-              highlighted={highlightedQuestion === nodeKey}
-              useSession={useSession}
-              selectedCallId={selectedCallId}
-              cwd={cwd}
-              openFile={requestOpenFile}
-              inspectCall={inspectCall}
-              forkAt={forkAt}
-              renderMessageImages={renderMessageImages}
-              fileMentions={fileMentions}
-              renderSlot={renderSlot}
-              t={t}
-            />
+          {turnGroups.map(group => (
+            group.keys.map((nodeKey) => {
+              const recap = recaps.get(nodeKey)
+              return (
+                <Fragment key={nodeKey}>
+                  {recap !== undefined && (
+                    <TurnRecapRow
+                      recap={recap}
+                      onSelect={() => { jumpToQuestionKey(recap.key) }}
+                      t={t}
+                    />
+                  )}
+                  <ChatNodeSeat
+                    nodeKey={nodeKey}
+                    highlighted={highlightedQuestion === nodeKey}
+                    useSession={useSession}
+                    selectedCallId={selectedCallId}
+                    cwd={cwd}
+                    openFile={requestOpenFile}
+                    inspectCall={inspectCall}
+                    forkAt={forkAt}
+                    renderMessageImages={renderMessageImages}
+                    fileMentions={fileMentions}
+                    renderSlot={renderSlot}
+                    t={t}
+                  />
+                </Fragment>
+              )
+            })
           ))}
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
@@ -552,7 +652,6 @@ export function ChatView({
           <QuestionNavigator
             questions={questions}
             current={Math.min(currentQuestion, Math.max(0, questions.length - 1))}
-            loadingOlder={loadingOlder}
             hasMore={hasMore}
             onPrevious={() => {
               if (currentQuestion > 0) jumpToQuestion(currentQuestion - 1)
@@ -562,8 +661,6 @@ export function ChatView({
               }
             }}
             onNext={() => { jumpToQuestion(currentQuestion + 1) }}
-            onSelect={jumpToQuestion}
-            onLoadAll={() => { if (hasMore && !loadingOlder) loadOlder() }}
             t={t}
           />
           {!atBottom && (

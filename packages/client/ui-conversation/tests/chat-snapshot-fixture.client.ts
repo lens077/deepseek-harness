@@ -153,18 +153,27 @@ export function chatSnapshotFixture(input: {
   for (const call of legacy.runningCalls) turnNumbers.add(call.turn)
   const turns = new Map<number, TurnLocation>()
   const turnData = new Map<number, FixtureTurnDataStore>()
+  // `turn/start` opens a turn BEFORE the loop writes the `user/message` events
+  // entering its first step, so each synthesized boundary sits below every seq
+  // the turn owns and above the previous turn's end. Placing it after the
+  // turn's own nodes would make seq-to-turn attribution disagree with the log.
+  let startSeq = 0
   for (const turn of [...turnNumbers].sort((left, right) => left - right)) {
     const timing = legacy.turnTimings.get(turn)
     const endSeq = legacy.turnEnds.get(turn)
+    const openedAt = startSeq
+    startSeq = (endSeq ?? startSeq) + 1
     const data = new FixtureTurnDataStore()
     turnData.set(turn, data)
     turns.set(turn, {
       turn,
+      // Envelope-faithful boundaries: the real events carry their payload
+      // under `data`, and readers of `turn/end` branch on `data.reason.kind`.
       start: timing === undefined ? undefined : {
-        type: 'turn/start', seq: Math.max(0, (endSeq ?? 1) - 1), time: timing.startTime, turn,
+        type: 'turn/start', seq: openedAt, time: timing.startTime, data: { turn },
       } as never,
       end: timing?.endTime === undefined || endSeq === undefined ? undefined : {
-        type: 'turn/end', seq: endSeq, time: timing.endTime, turn, reason: 'completed',
+        type: 'turn/end', seq: endSeq, time: timing.endTime, data: { turn, reason: { kind: 'completed' } },
       } as never,
       status: endSeq === undefined ? 'open' : 'closed',
       steps: EMPTY,

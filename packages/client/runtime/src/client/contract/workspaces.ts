@@ -85,10 +85,34 @@ export interface IWorkspaces {
    */
   insertSessionBefore(workspaceId: WorkspaceId, sessionId: SessionId, beforeSessionId?: SessionId): Promise<WorkspaceView>
   /**
+   * Add or remove several Sessions from one Workspace account.
+   * @param workspaceId - Workspace whose membership changes.
+   * @param sessionIds - Sessions to add or remove.
+   * @param member - `true` to add, `false` to remove.
+   * @returns the updated Workspace view.
+   */
+  setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView>
+  /**
    * Archive a session into the registry-global set (hidden from grouping
    * surfaces; session log and accounting slot remain). Archiving the current
    * session clears the selection into the New Session view state.
    * @param sessionId - session to archive.
    */
   archiveSession(sessionId: SessionId): Promise<void>
+  /**
+   * Archive several Sessions with one Host mutation. Any unknown Session rejects
+   * the complete request.
+   * @param sessionIds - sessions to archive.
+   */
+  archiveSessions(sessionIds: readonly SessionId[]): Promise<void>
+  /**
+   * Remove a session from the registry-global archive set, restoring its
+   * retained Workspace accounting position without opening it.
+   * @param sessionId - session to unarchive.
+   */
+  unarchiveSession(sessionId: SessionId): Promise<void>
 }

@@ -1,5 +1,6 @@
-/* Inline-diff expansion row: title/description plus selector pill. Geometry
-   matches the composer's Enter row so the General list keeps one rhythm. */
+/* Shared settings-row chrome: title/description plus selector pill, used by
+   every preference row this package contributes. Geometry matches the
+   composer's Enter row so the settings lists keep one rhythm. */
 
 .row {
   display: flex;

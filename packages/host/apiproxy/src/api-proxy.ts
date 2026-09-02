@@ -10,8 +10,9 @@ import { dirname } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
+import type {} from '@deepseek-ai/dsh-session-inbox/types'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -27,7 +28,8 @@ import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import {
   workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId,
-  WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError,
+  WorkspaceMembershipInvalidError, WorkspaceMoveInvalidError, WorkspaceOrderInvalidError,
+  WorkspaceSessionLiveError, WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
 // Type-only: brings the `ctx.tools` Context merge into this program (viewFor reads presenters).
 import {
@@ -1020,6 +1022,7 @@ function workspaceView(workspace: Workspace): WorkspaceView {
     path: workspace.path,
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
+    nestedUnder: { ...workspace.nestedUnder },
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
   }
@@ -1033,6 +1036,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
     path: record.path,
     title: record.title,
     sessionIds: [...record.sessionIds],
+    nestedUnder: { ...record.nestedUnder },
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -1066,6 +1070,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
+  /** Exact ordinary Agent handles created by this ApiProxy; only these idle lifecycles may be disposed for deletion. */
+  const sessionHandles = new Map<SessionId, { agent: Agent; handle: AgentHandle }>()
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
@@ -1209,6 +1215,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     agentOptions,
     setup: async ({ meta, events }) =>
       (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+    // Implicit cold resume produces an ordinary ApiProxy-owned lifecycle, so it
+    // is retained exactly like an explicit create/resume. Dropping the handle
+    // here left every session opened through a generic read (models, commands,
+    // prompt) live but undisposable, which permanently failed its deletion.
+    onResumed: rememberSessionHandle,
   })
 
   /** Send one transient frame to every connected mux consumer. */
@@ -1555,6 +1566,22 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     }
   }
 
+  /** Retain the exact disposal capability for one ordinary ApiProxy-owned lifecycle. */
+  function rememberSessionHandle(handle: AgentHandle): Agent {
+    sessionHandles.set(handle.agent.id, { agent: handle.agent, handle })
+    return handle.agent
+  }
+
+  // A lifecycle that ends on its own (owner unload, subagent teardown, a failed
+  // turn) leaves a handle whose agent is gone. The entry must not outlive it:
+  // the deletion fence compares the retained agent against the live registry,
+  // so a stale row of the same id would reject a later legitimate retirement.
+  // Compared by identity — a same-id lifecycle registered after this one is a
+  // different agent and keeps its own entry.
+  ctx.on('agent/disposed', ({ agent }: { agent: Agent }) => {
+    if (sessionHandles.get(agent.id)?.agent === agent) sessionHandles.delete(agent.id)
+  })
+
   /** Resolve one requested identity to a live agent, creating or resuming it once. */
   async function ensureSession(
     sessionId: SessionId,
@@ -1595,11 +1622,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
-          return (await ctx.agents.resume({
+          return rememberSessionHandle(await ctx.agents.resume({
             resumeSessionId: sessionId,
             agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
-          })).agent
+          }))
         }
 
         try {
@@ -1608,7 +1635,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
         const composition = await composeAgent(presetId)
-        return (await ctx.agents.create({
+        return rememberSessionHandle(await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
           meta: {
@@ -1616,7 +1643,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
           },
           setup: composition.setup,
-        })).agent
+        }))
       })().catch((error: unknown) => {
         // Another Host entry path may have published the same identity while
         // this operation crossed an asynchronous persistence/filesystem step.
@@ -2261,7 +2288,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       async fork(request) {
-        const { sessionId, atSeq } = request.payload
+        const { sessionId, atSeq, placement } = request.payload
         let source: SessionReadState
         try {
           source = await readSessionState(sessionId)
@@ -2320,7 +2347,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // plane, composing nothing would leave the child with no tools at all.
         const forkComposition = await composeAgent(resolveSessionPreset(source))
         try {
-          await ctx.agents.create({
+          rememberSessionHandle(await ctx.agents.create({
             sessionId: childId,
             seed: events.slice(0, cut),
             meta: {
@@ -2333,7 +2360,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             },
             agentOptions: agentOptions(),
             setup: forkComposition.setup,
-          })
+          }))
         } catch (error: unknown) {
           return err(request, {
             code: 'internal',
@@ -2345,8 +2372,16 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // not listed there, so its ordinary fork joins the nearest owning
         // ancestor instead. The child is already published if attach fails.
         if (workspace !== undefined) {
+          // Nested placement needs the source accounted in the attached
+          // workspace; an ancestor-derived attach degrades to the sibling
+          // slot (documented on SessionsApi.fork).
+          const nestUnder = placement === 'nested' && workspace.sessionIds.includes(source.id)
+            ? source.id
+            : undefined
           try {
-            await workspace.attachSession(childId)
+            await (nestUnder === undefined
+              ? workspace.attachSession(childId)
+              : workspace.attachSession(childId, { nestUnder }))
           } catch (error: unknown) {
             return err(request, {
               code: 'workspace-attach-failed',
@@ -2530,6 +2565,50 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         agent.cancel({ kind: 'user' }, { keepInbox: true })
         return Promise.resolve(ok(request, { accepted: true as const }))
+      },
+
+      async delete(request) {
+        const { sessionId } = request.payload
+        try {
+          const deletedSessionIds = await ctx.workspaceRegistry.deleteSession(
+            sessionId,
+            async (liveSessionIds) => {
+              // Every live target must be an idle lifecycle this gateway owns:
+              // `sessionHandles` holds the exact disposer for each one, including
+              // the implicit cold resumes `agentFor` performs for generic reads.
+              for (const liveSessionId of liveSessionIds) {
+                const agent = ctx.agents.get(liveSessionId)
+                const owned = sessionHandles.get(liveSessionId)
+                if (agent === undefined || agent.status === 'running' || owned?.agent !== agent) {
+                  throw new WorkspaceSessionLiveError(sessionId, liveSessionIds)
+                }
+              }
+              for (const liveSessionId of liveSessionIds) {
+                const owned = sessionHandles.get(liveSessionId)
+                if (owned === undefined) throw new WorkspaceSessionLiveError(sessionId, liveSessionIds)
+                await owned.handle.dispose()
+                if (sessionHandles.get(liveSessionId) === owned) sessionHandles.delete(liveSessionId)
+              }
+            },
+          )
+          return ok(request, { deletedSessionIds: [...deletedSessionIds] })
+        } catch (error: unknown) {
+          if (error instanceof WorkspaceUnknownSessionError) {
+            return err(request, {
+              code: 'session-not-found',
+              message: error.message,
+              details: { sessionId },
+            })
+          }
+          if (error instanceof WorkspaceSessionLiveError) {
+            return err(request, {
+              code: 'agent-busy',
+              message: error.message,
+              details: { reason: `live deletion targets: ${error.liveSessionIds.join(', ')}` },
+            })
+          }
+          throw error
+        }
       },
     },
 
@@ -2802,6 +2881,28 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { workspace: workspaceView(workspace) })
       },
 
+      async setSessionMembership(request) {
+        const { payload } = request
+        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(payload.workspaceId))
+        if (workspace === undefined) return workspaceNotFound(request, payload.workspaceId)
+        try {
+          if (payload.member) await workspace.attachSessions(payload.sessionIds)
+          else await workspace.detachSessions(payload.sessionIds)
+        } catch (error: unknown) {
+          if (!(error instanceof WorkspaceMembershipInvalidError)) throw error
+          return err(request, {
+            code: 'workspace-membership-invalid',
+            message: error.message,
+            details: {
+              workspaceId: payload.workspaceId,
+              sessionIds: payload.sessionIds,
+              member: payload.member,
+            },
+          })
+        }
+        return ok(request, { workspace: workspaceView(workspace) })
+      },
+
       async archiveSession(request) {
         const { sessionId } = request.payload
         try {
@@ -2816,6 +2917,25 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { sessionId },
           })
         }
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async archiveSessions(request) {
+        try {
+          await ctx.workspaceRegistry.archiveSessions(request.payload.sessionIds)
+        } catch (error: unknown) {
+          if (!(error instanceof WorkspaceUnknownSessionError)) throw error
+          return err(request, {
+            code: 'session-not-found',
+            message: error.message,
+            details: { sessionId: error.sessionId },
+          })
+        }
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async unarchiveSession(request) {
+        await ctx.workspaceRegistry.unarchiveSession(request.payload.sessionId)
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
       },
     },
@@ -3440,6 +3560,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // stream opens against the current set; workspace.list re-baselines
         // reconnecting clients, so only later changes need frames.
         let archivedSessionIds = ctx.workspaceRegistry.archivedSessionIds
+        let pendingSessionDeletionIds = ctx.workspaceRegistry.pendingSessionDeletionIds
         const disposers = [
           ctx.on('session/created', (session: Session) => {
             queue.push(frame({
@@ -3493,6 +3614,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                   archivedSessionIds: [...state.archivedSessionIds],
                 }))
               }
+              const nextPendingSessionDeletionIds = state.pendingMutation?.operation === 'delete-sessions'
+                ? state.pendingMutation.sessionIds
+                : undefined
+              if (pendingSessionDeletionIds !== undefined
+                && nextPendingSessionDeletionIds === undefined) {
+                queue.push(frame({
+                  type: 'host/session-deleted',
+                  sessionIds: [...pendingSessionDeletionIds],
+                }))
+              }
+              pendingSessionDeletionIds = nextPendingSessionDeletionIds
               return
             }
             if (change.table !== 'workspaces') return

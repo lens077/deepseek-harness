@@ -2,19 +2,19 @@
 
 [English](README.md) | 中文
 
-侧边栏外壳插件：负责品牌行、New Session 操作、布局持有的折叠控件、可感知滚动的区域 seat，以及固定在底部的 Settings seat。[ui-workspace](../ui-workspace/README.zh.md) 持有渲染到 `sidebar.workspaces` 的 Workspace 与 Session 浏览器；本包既不派生其中的行，也不持有其视图偏好。折叠到布局拥有的 56px 轨道仍属于本地呈现行为。约定：[slot 系统标准](../../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.zh.md)。
+侧边栏外壳插件：负责品牌行、New Session 操作、布局持有的折叠控件、`sidebar.nav.entry` 列表、可感知滚动的区域 seat，以及固定在底部的 Settings 与页脚操作 seat。整页导航条目渲染在 New Session 与 Workspace 浏览区之间，并接收与其他轨道感知控件相同的 `wide` 标记。[ui-workspace](../ui-workspace/README.zh.md) 持有渲染到 `sidebar.workspaces` 的 Workspace 与 Session 浏览器；本包既不派生其中的行，也不持有其视图偏好。折叠到布局拥有的 56px 轨道仍属于本地呈现行为。约定：[slot 系统标准](../../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.zh.md)。
 
-展开的品牌行把 `sidebar.brand.mark` 与 `sidebar.brand.name` 渲染为两个独立的 single slot，收起轨道则渲染同一个 mark slot。没有占位者时，外壳使用鱼形标记，以及带有构建期 7 位 `DSH_CLIENT_COMMIT_HASH` 徽标的 `DSH Local Build` 标签。部署包可以单独替换任一值，而无须替换 New Session 控件或轨道几何；声明感知的 `slots.inject()` 让这种包无论先于还是后于侧边栏激活都能生效。
+展开的品牌行把 `sidebar.brand.mark` 与 `sidebar.brand.name` 渲染为两个独立的 single slot，收起轨道则渲染同一个 mark slot。没有占位者时，外壳使用鱼形标记，以及带有构建期 7 位 `DSH_CLIENT_COMMIT_HASH` 徽标的 `Sumery DSH Pro` 标签。部署包可以单独替换任一值，而无须替换 New Session 控件或轨道几何；声明感知的 `slots.inject()` 让这种包无论先于还是后于侧边栏激活都能生效。外壳以 20px 行高渲染二者（占位者的图形通过 CSS 缩放到该高度），并在该行下方用更小的次级文字渲染自己的 `brand.tagline` 文案，即分叉标语。
 
 New Session 会启动运行时的页面局部前端 Session Intent。运行时优先使用作用域操作明确指定的 Workspace，否则使用当前 Session 所属 Workspace，再否则使用最近活跃 Workspace；一个 Workspace 都没有时则清空选择，进入空白 New Session 页面。Workspace 专属控件与共享选择器由 ui-workspace 持有。
 
-`SidebarRootComponentProps` 组合布局 owner share、全局 `useSessions` 和 `useWorkspaces` 钩子、已声明的品牌、`sidebar.workspaces` 与 `sidebar.settings` 子 slot，以及注入的 `startSession` 与侧边栏切换回调。这里没有插件 store。
+`SidebarRootComponentProps` 组合布局 owner share、全局 `useSessions` 和 `useWorkspaces` 钩子、已声明的品牌、`sidebar.nav.entry`、`sidebar.workspaces`、`sidebar.settings` 与 `sidebar.footer.action` 子 slot，以及注入的 `startSession` 与侧边栏切换回调。这里没有插件 store。
 
-实时收起时，外壳会把展开内容固定在当前宽度，并用 150ms 将其淡出。随后，上方四个控件——外壳的侧栏切换与新建会话，以及通过 `sidebar.workspaces` 渲染的添加和搜索——共用一次 150ms 的淡入和 49px 左移，在布局的 300ms 栏滑动结束时一起进入 56px 轨道；每个 36px 控件盒都会沿同一条路径到达轨道左侧 10px 的内边距。固定在底部的 `sidebar.settings` 控件只共用淡入时序，不发生横向位移。页面初始即为收起状态时会静态渲染轨道；减少动态效果模式会禁用两段过渡。
+实时收起时，外壳会把展开内容固定在当前宽度，并用 150ms 将其淡出。随后，上方控件——外壳的侧栏切换、New Session、`sidebar.nav.entry` 占位者，以及通过 `sidebar.workspaces` 渲染的添加和搜索——共用一次 150ms 的淡入和 49px 左移，在布局的 300ms 栏滑动结束时一起进入 56px 轨道；每个 36px 控件盒都会沿同一条路径到达轨道左侧 10px 的内边距。固定在底部的 `sidebar.settings` 控件只共用淡入时序，不发生横向位移。页面初始即为收起状态时会静态渲染轨道；减少动态效果模式会禁用两段过渡。
 
 栏内的滚动条是一种指针可供性：只要指针不在栏内，外壳就把 ui-theme 的[滚动条间接层](../ui-theme/README.zh.md)重新绑定为 `transparent`；指针离开后滑块再保留 2 秒，因此没人指向的列表不会带着滚动条。避免行位移的空间预留属于滚动区域本身（[ui-workspace](../ui-workspace/README.zh.md)），所以显示滑块不会引起重排。
 
-页脚承载 `sidebar.settings`：侧边栏只渲染固定在底部的布局 slot，并共享其栏状态（`wide`）；ui-settings 在此注册触发行和设置面板。
+页脚在 `sidebar.settings` seat 上方承载 `sidebar.footer.action` 条目。侧边栏只共享栏状态（`wide`）；ui-settings 注册设置触发行与面板，可选操作则持有自己的行为。
 
 `/client` 导出表层只包含插件主体（`apply`／`inject`）及约定类型；SidebarRoot、行组件和树派生仍由 slot 注册封装在包内。
 

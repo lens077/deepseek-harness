@@ -10,8 +10,10 @@ import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { ConversationLayoutSection } from '../src/client/ConversationLayoutSection.tsx'
 import { DelegationFiles, type DelegationFilesInjected } from '../src/client/DelegationFiles.tsx'
 import { DiffExpansionRow, type DiffExpansionRowInjected } from '../src/client/DiffExpansionRow.tsx'
+import { FilesVisibilityRow, type FilesVisibilityRowInjected } from '../src/client/FilesVisibilityRow.tsx'
 import { SessionFilesButton } from '../src/client/SessionFilesButton.tsx'
 import { SessionFilesRail } from '../src/client/SessionFilesRail.tsx'
 import type { SessionFilesButtonInjected } from '../src/client/SessionFilesButton.tsx'
@@ -60,7 +62,7 @@ function declare(slots: SlotRegistry): () => void {
       'conversation.session.tabs.leading': { kind: 'list', scope: 'session' },
       'conversation.session.rail': { kind: 'single', scope: 'session' },
       'tool.call.tail': { kind: 'list', scope: 'session' },
-      'settings.general.item': { kind: 'list', scope: 'root' },
+      'settings.section': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -117,12 +119,19 @@ describe('session-files browser plugin', () => {
     expect(b.slots.entries('tool.call.tail')).toHaveLength(0)
   })
 
-  it('takes the General settings seat and writes the expansion preference through it', async () => {
+  it('registers the Conversation-layout section and writes the expansion preference through its row', async () => {
     const b = await bench()
-    const row = b.slots.entries('settings.general.item')[0]
-    expect(row?.component).toBe(DiffExpansionRow)
-    expect(row?.options).toMatchObject({ id: 'session-files-diff-expansion' })
+    const section = b.slots.entries('settings.section')[0]
+    expect(section?.component).toBe(ConversationLayoutSection)
+    expect(section?.options).toMatchObject({ id: 'conversation-layout', order: 40 })
 
+    const rows = b.slots.entries('settings.conversation-layout.item')
+    expect(rows.map(entry => [entry.options.id, entry.component])).toEqual([
+      ['session-files-visibility', FilesVisibilityRow],
+      ['session-files-diff-expansion', DiffExpansionRow],
+    ])
+
+    const row = rows.find(entry => entry.options.id === 'session-files-diff-expansion')
     const face = (row?.inject as unknown as () => DiffExpansionRowInjected)()
     expect(face.hooks.diffExpansion.getSnapshot()).toBe('all')
     face.setDiffExpansion('single')
@@ -130,7 +139,40 @@ describe('session-files browser plugin', () => {
     expect(b.ctx.chatFileDiffs.expansion.getSnapshot()).toBe('single')
 
     await b.fiber.dispose()
-    expect(b.slots.entries('settings.general.item')).toHaveLength(0)
+    expect(b.slots.entries('settings.section')).toHaveLength(0)
+  })
+
+  it('releases both seats while the preference says hide, and retakes them on show', async () => {
+    const b = await bench()
+    const row = b.slots.entries('settings.conversation-layout.item')
+      .find(entry => entry.options.id === 'session-files-visibility')
+    const face = (row?.inject as unknown as () => FilesVisibilityRowInjected)()
+    expect(face.hooks.filesVisibility.getSnapshot()).toBe('show')
+
+    face.setFilesVisibility('hide')
+    await vi.waitFor(() => {
+      expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(0)
+      expect(b.slots.entries('conversation.session.rail')).toHaveLength(0)
+    })
+    // Conversation content is unaffected: the delegation chips keep their seat,
+    // and the settings rows stay so the choice can be reversed.
+    expect(b.slots.entries('tool.call.tail')).toHaveLength(1)
+    expect(b.slots.entries('settings.conversation-layout.item')).toHaveLength(2)
+
+    face.setFilesVisibility('show')
+    await vi.waitFor(() => {
+      expect(b.slots.entries('conversation.session.tabs.leading')[0]?.component).toBe(SessionFilesButton)
+      expect(b.slots.entries('conversation.session.rail')[0]?.component).toBe(SessionFilesRail)
+    })
+
+    // Disposing while hidden releases the gate without a seat to release.
+    face.setFilesVisibility('hide')
+    await vi.waitFor(() => {
+      expect(b.slots.entries('conversation.session.rail')).toHaveLength(0)
+    })
+    await b.fiber.dispose()
+    expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(0)
+    expect(b.slots.entries('settings.conversation-layout.item')).toHaveLength(0)
   })
 
   it('shares one rail preference between the control and the pane', async () => {

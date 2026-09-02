@@ -29,4 +29,12 @@ export interface ChatStoreState {
    * persisted snapshots from before this field rehydrate without it.
    */
   inspect: { callId: CallId } | null
+  /**
+   * One-shot reveal handoff: another surface asks the chat to scroll to the
+   * question logged at `seq`; the chat consumes it once the row is loaded and
+   * acknowledges by clearing. `nonce` makes a repeat request for the same seq
+   * distinguishable. Read with `?? null` — persisted snapshots from before
+   * this field rehydrate without it.
+   */
+  reveal: { seq: number; nonce: number } | null
 }

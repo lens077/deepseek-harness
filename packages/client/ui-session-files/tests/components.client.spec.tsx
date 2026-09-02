@@ -133,17 +133,33 @@ describe('SessionFilesRail', () => {
     expect(screen.getByText(zh['rail.empty'])).toBeTruthy()
   })
 
-  it('lists changed files oldest first and selects the most recent by default', () => {
+  it('groups changed files under their directory and selects the most recent by default', () => {
     const b = bench(snapshot({ nodes: [changeNode(10, 'src/old.ts'), changeNode(20, 'src/new.ts')] }), 'spec.rail-list')
     const reveal = vi.fn()
     const { container } = render(<SessionFilesRail {...railProps(b, { reveal })} />)
+    const dir = container.querySelector('[class*="_dir_"]') as HTMLElement
+    expect(dir.textContent).toBe('src')
+    expect(dir.getAttribute('title')).toBe('src')
+    expect(dir.style.paddingLeft).toBe('16px')
     const rows = [...container.querySelectorAll('[class*="_file_"]')]
-    expect(rows.map(row => row.textContent)).toEqual(['old.ts+1-1', 'new.ts+1-1'])
-    expect(rows[1]?.getAttribute('aria-current')).toBe('true')
+    expect(rows.map(row => row.textContent)).toEqual(['new.ts+1-1', 'old.ts+1-1'])
+    expect((rows[0] as HTMLElement).style.paddingLeft).toBe('30px')
+    expect(rows[0]?.getAttribute('aria-current')).toBe('true')
 
-    fireEvent.click(rows[0] as HTMLElement)
+    fireEvent.click(rows[1] as HTMLElement)
     expect(reveal).toHaveBeenCalledWith('src/old.ts')
-    expect([...container.querySelectorAll('[class*="_file_"]')][0]?.getAttribute('aria-current')).toBe('true')
+    expect([...container.querySelectorAll('[class*="_file_"]')][1]?.getAttribute('aria-current')).toBe('true')
+  })
+
+  it('keeps the tail of an over-long directory label and titles it with the full path', () => {
+    const deep = 'packages/client/ui-session-files/src/client/deep.ts'
+    const b = bench(snapshot({ nodes: [changeNode(10, deep)] }), 'spec.rail-truncate')
+    const { container } = render(<SessionFilesRail {...railProps(b)} />)
+    const dir = container.querySelector('[class*="_dir_"]') as HTMLElement
+    // The default 300px rail budgets 35 characters at depth 0; the collapsed
+    // 43-character chain keeps its tail and marks the cut at the front.
+    expect(dir.textContent).toBe('…client/ui-session-files/src/client')
+    expect(dir.getAttribute('title')).toBe('packages/client/ui-session-files/src/client')
   })
 
   it('marks the file a running call is writing', () => {
@@ -163,7 +179,8 @@ describe('SessionFilesRail', () => {
     expect(container.querySelector('[class*="_read_"]')).toBeNull()
 
     fireEvent.click(toggle)
-    expect(screen.getByText('one.ts')).toBeTruthy()
+    // Reads stay a flat recency list; the full path carries the directory.
+    expect(screen.getByText('src/one.ts')).toBeTruthy()
     fireEvent.click(screen.getByText(zh['rail.readOne']).closest('button') as HTMLElement)
     expect(container.querySelector('[class*="_read_"]')).toBeNull()
   })
@@ -221,7 +238,9 @@ describe('SessionFilesRail', () => {
     )
     const { container } = render(<SessionFilesRail {...railProps(b)} />)
     const rows = [...container.querySelectorAll('[class*="_file_"]')]
-    expect(rows.map(row => row.textContent)).toEqual(['local.ts+1-1', 'from-child.ts+1-1'])
+    expect(rows.map(row => row.textContent)).toEqual(['from-child.ts+1-1', 'local.ts+1-1'])
+    // One `src` group holds both, whoever recorded them.
+    expect(container.querySelector('[class*="_dir_"]')?.textContent).toBe('src')
     // A descendant read that left pages behind says so through the same notice.
     expect(screen.getByText(zh['rail.partial'])).toBeTruthy()
   })

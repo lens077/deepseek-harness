@@ -40,6 +40,9 @@
       "path": "../../feedback/message-feedback"
     },
     {
+      "path": "../../session/session-inbox"
+    },
+    {
       "path": "../../host/plugin-inventory"
     },
     {

@@ -18,6 +18,9 @@ export const workspaceViewSchema = z.object({
   path: z.string(),
   title: z.string(),
   sessionIds: z.array(sessionIdSchema),
+  // Defaulted at the wire so a browser refreshed ahead of a host restart
+  // still lists workspaces (a pre-field host simply serves no nesting).
+  nestedUnder: z.record(z.string(), sessionIdSchema).default({}),
   createdAt: z.string(),
   updatedAt: z.string(),
 }) satisfies z.ZodType<Wire<WorkspaceView>>
@@ -89,6 +92,18 @@ export const workspaceInsertSessionBeforeValueSchema = z.object({
   workspace: workspaceViewSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'workspace.insertSessionBefore'>>>
 
+/** workspace.setSessionMembership request payload. */
+export const workspaceSetSessionMembershipRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  sessionIds: z.array(sessionIdSchema).min(1),
+  member: z.boolean(),
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.setSessionMembership'>>>
+
+/** workspace.setSessionMembership response value. */
+export const workspaceSetSessionMembershipValueSchema = z.object({
+  workspace: workspaceViewSchema,
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.setSessionMembership'>>>
+
 /** workspace.archiveSession request payload. */
 export const workspaceArchiveSessionRequestSchema = z.object({
   sessionId: sessionIdSchema,
@@ -98,3 +113,23 @@ export const workspaceArchiveSessionRequestSchema = z.object({
 export const workspaceArchiveSessionValueSchema = z.object({
   archivedSessionIds: z.array(sessionIdSchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'workspace.archiveSession'>>>
+
+/** workspace.archiveSessions request payload. */
+export const workspaceArchiveSessionsRequestSchema = z.object({
+  sessionIds: z.array(sessionIdSchema).min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.archiveSessions'>>>
+
+/** workspace.archiveSessions response value: the full updated archive set. */
+export const workspaceArchiveSessionsValueSchema = z.object({
+  archivedSessionIds: z.array(sessionIdSchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.archiveSessions'>>>
+
+/** workspace.unarchiveSession request payload. */
+export const workspaceUnarchiveSessionRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.unarchiveSession'>>>
+
+/** workspace.unarchiveSession response value: the full updated archive set. */
+export const workspaceUnarchiveSessionValueSchema = z.object({
+  archivedSessionIds: z.array(sessionIdSchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.unarchiveSession'>>>

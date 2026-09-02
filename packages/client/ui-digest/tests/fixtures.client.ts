@@ -1,0 +1,87 @@
+/** Shared row, digest, inbox, and translate fixtures for the ui-digest specs. */
+import type { SessionId, SessionSummary, WorkspaceView } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionDigestView } from '@deepseek-ai/dsh-session-digest/client'
+import type { InboxSessionState, InboxSnapshot, InboxTodo, InboxTodoId } from '@deepseek-ai/dsh-session-inbox/types'
+import type { DigestPanelProps } from '../src/client/contract/slots.ts'
+import { zh } from '../src/client/locales.ts'
+
+/** A fixed "now" every spec shares: 2026-09-16 10:00 local. */
+export const NOW = new Date(2026, 8, 16, 10, 0, 0).getTime()
+export const HOUR = 3_600_000
+export const DAY = 24 * HOUR
+
+/** Chinese-dictionary translate stub with `{name}` interpolation. */
+export const t = ((key: string, params?: Record<string, unknown>) => {
+  const raw = (zh as Record<string, string>)[key] ?? key
+  return params === undefined
+    ? raw
+    : raw.replace(/\{(\w+)\}/g, (_m, name: string) => {
+      const value = params[name]
+      return typeof value === 'number' || typeof value === 'string' ? String(value) : ''
+    })
+}) as DigestPanelProps['t']
+
+export const digest = (over: Partial<SessionDigestView> = {}): SessionDigestView => ({
+  question: '修一下登录的 bug',
+  questionTruncated: false,
+  questionSeq: 1,
+  questionAt: NOW - 2 * HOUR,
+  reply: '已修复：token 刷新和跳转有竞态。',
+  replyTruncated: false,
+  outcome: 'completed',
+  replySeq: 3,
+  repliedAt: NOW - HOUR,
+  changedFiles: [],
+  changedFileCount: 0,
+  history: [],
+  ...over,
+})
+
+export const row = (id: string, over: Partial<SessionSummary> = {}): SessionSummary => ({
+  id: id as SessionId,
+  displayTitle: `title-${id}`,
+  running: false,
+  blank: false,
+  updatedAt: NOW - HOUR,
+  projectionValues: { sessionDigest: digest() },
+  ...over,
+})
+
+export const workspace = (id: string, sessionIds: string[], title = `ws-${id}`): WorkspaceView => ({
+  workspaceId: id,
+  title,
+  path: `/tmp/${id}`,
+  sessionIds: sessionIds as SessionId[],
+  nestedUnder: {},
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+} as unknown as WorkspaceView)
+
+export const mark = (id: string, over: Partial<InboxSessionState> = {}): InboxSessionState => ({
+  sessionId: id as SessionId,
+  lastSeenSeq: null,
+  handledAt: null,
+  snoozedUntil: null,
+  pinned: false,
+  updatedAt: NOW,
+  ...over,
+})
+
+export const todo = (id: string, sessionId: string, over: Partial<InboxTodo> = {}): InboxTodo => ({
+  id: id as InboxTodoId,
+  sessionId: sessionId as SessionId,
+  questionSeq: null,
+  text: `todo-${id}`,
+  status: 'open',
+  createdAt: NOW - HOUR,
+  updatedAt: NOW - HOUR,
+  doneAt: null,
+  ...over,
+})
+
+export const inbox = (over: Partial<InboxSnapshot> = {}): InboxSnapshot => ({
+  reviewedAt: null,
+  sessions: [],
+  todos: [],
+  ...over,
+})

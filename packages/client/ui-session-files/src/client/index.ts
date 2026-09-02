@@ -5,6 +5,9 @@
  * rail cannot disagree. All policy lives here — what counts as a change, what
  * counts as a read, how long the read list is kept — so composing this plugin
  * out of cordis.yml removes the surface entirely and leaves both seats empty.
+ * The durable Files-visibility preference gates the same two seats at
+ * runtime, chosen from the Conversation-layout settings section this package
+ * registers; the transcript's produced-file chips stay either way.
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -13,6 +16,9 @@ import type { ChatFileDiffs } from '@deepseek-ai/dsh-client-ui-conversation/clie
 // the registration below typechecks against the seat ui-tool declares.
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { segmentLabel, sessionFilesOf } from './session-files.ts'
+import { ConversationLayoutSection } from './ConversationLayoutSection.tsx'
+import { FilesVisibilityRow, type FilesVisibilityRowInjected } from './FilesVisibilityRow.tsx'
+import { RailVisibilityPolicy } from './rail-visibility.ts'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { SessionFilesRailController } from './rail-store.ts'
 import { SessionTreeController, type SubagentApi } from './tree-controller.ts'
@@ -43,11 +49,17 @@ export {
   clampRailWidth, RAIL_DEFAULT, RAIL_MAX, RAIL_MIN, RAIL_PERSIST_KEY, SessionFilesRailController,
 } from './rail-store.ts'
 export type { SessionFilesRailState } from './rail-store.ts'
+export { railRows, TREE_INDENT_PX } from './rail-rows.ts'
+export type { RailDirRow, RailFileRow, RailRow } from './rail-rows.ts'
 export { deriveTreeFiles, mergeTreeChanges } from './tree-files.ts'
 export type { TreeFileChange, TreeHistoryEntry, TreeSource } from './tree-files.ts'
 export { SessionTreeController } from './tree-controller.ts'
 export type { SessionTreeEntry, SessionTreeState, SubagentApi } from './tree-controller.ts'
-export { DiffExpansionPolicy } from './diff-expansion.ts'
+export { DiffExpansionPolicy, SectionFieldPolicy } from './diff-expansion.ts'
+export { RailVisibilityPolicy } from './rail-visibility.ts'
+export { ConversationLayoutSection } from './ConversationLayoutSection.tsx'
+export type { ConversationLayoutItemOwnerProps, ConversationLayoutSectionProps } from './ConversationLayoutSection.tsx'
+export { FilesVisibilityRow, type FilesVisibilityRowInjected } from './FilesVisibilityRow.tsx'
 export { DiffExpansionRow, type DiffExpansionRowInjected } from './DiffExpansionRow.tsx'
 export { DelegationFiles, childSessionOf } from './DelegationFiles.tsx'
 export type { DelegationFilesInjected, DelegationFilesProps } from './DelegationFiles.tsx'
@@ -92,14 +104,66 @@ export function apply(ctx: ClientContext): void {
   // Reached through ctx.get, so composing this plugin out turns that surface
   // off rather than breaking the package that draws it.
   const t = ctx.locale.bind(NS)
-  const expansionPolicy = new DiffExpansionPolicy(
-    ctx.settingsScope.bind<SessionFilesSettings>({ namespace: SESSION_FILES_SETTINGS_NAMESPACE }),
-  )
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  const scope = ctx.settingsScope.bind<SessionFilesSettings>({ namespace: SESSION_FILES_SETTINGS_NAMESPACE })
+  const expansionPolicy = new DiffExpansionPolicy(scope)
+  const visibilityPolicy = new RailVisibilityPolicy(scope)
+
+  /**
+   * Keep one seat registered exactly while the Files surface is set to show.
+   * The returned disposer removes the subscription and any live registration,
+   * so the surrounding declaration lifetime still collects everything.
+   * @param register - takes the seat; its disposer releases it.
+   * @returns disposer for the gate and any live seat.
+   */
+  const seatWhileVisible = (register: () => () => void): () => void => {
+    let seat: (() => void) | undefined
+    const reconcile = (): void => {
+      const visible = visibilityPolicy.visibility.getSnapshot() === 'show'
+      if (visible === (seat !== undefined)) return
+      if (visible) {
+        seat = register()
+        return
+      }
+      const dispose = seat
+      seat = undefined
+      dispose?.()
+    }
+    const unsubscribe = visibilityPolicy.visibility.subscribe(reconcile)
+    reconcile()
+    return () => {
+      unsubscribe()
+      const dispose = seat
+      seat = undefined
+      dispose?.()
+    }
+  }
+
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'conversation-layout',
+    // Below every shipped section (General 0, Models 10, Plugins 15, Agent
+    // presets 20) and the installed vision bundle (30): a tuning page, not a
+    // daily destination.
+    order: 40,
+    locale: NS,
+    label: () => t('settings.layout.nav'),
+    children: { 'settings.conversation-layout.item': { kind: 'list', scope: 'root' } },
+  }, ConversationLayoutSection))
+  ctx.slots.inject('settings.conversation-layout.item', () => ctx.slots.register({
+    name: 'settings.conversation-layout.item',
+    id: 'session-files-visibility',
+    // The whole-surface switch reads before the per-diff behavior below it.
+    order: 10,
+    locale: NS,
+    inject: (): FilesVisibilityRowInjected => ({
+      hooks: { filesVisibility: visibilityPolicy.visibility },
+      setFilesVisibility: (visibility) => { visibilityPolicy.set(visibility) },
+    }),
+  }, FilesVisibilityRow))
+  ctx.slots.inject('settings.conversation-layout.item', () => ctx.slots.register({
+    name: 'settings.conversation-layout.item',
     id: 'session-files-diff-expansion',
-    // After the composer's Enter row: input behavior reads before output chrome.
-    order: 30,
+    order: 20,
     locale: NS,
     inject: (): DiffExpansionRowInjected => ({
       hooks: { diffExpansion: expansionPolicy.expansion },
@@ -125,10 +189,18 @@ export function apply(ctx: ClientContext): void {
         newText: segment.newText,
       }))
     },
+    // Local only: a descendant's turn numbers are its own session's, so
+    // merging them here would attribute a subagent's turn 3 to this session's.
+    // The delegation call itself still lands in the parent turn that made it.
+    forTurn(sessionId, turn) {
+      const session = ctx.sessions.binding(sessionId)?.session
+      if (session === undefined) return []
+      return sessionFilesOf(session.getSnapshot()).byTurn.get(turn) ?? []
+    },
   }
   ctx.provide('chatFileDiffs', diffs)
 
-  ctx.slots.inject('conversation.session.tabs.leading', () => ctx.slots.register({
+  ctx.slots.inject('conversation.session.tabs.leading', () => seatWhileVisible(() => ctx.slots.register({
     name: 'conversation.session.tabs.leading',
     id: 'session-files',
     locale: NS,
@@ -136,7 +208,7 @@ export function apply(ctx: ClientContext): void {
       hooks: { rail: controller.store },
       toggle: () => { controller.toggle() },
     }),
-  }, SessionFilesButton))
+  }, SessionFilesButton)))
 
   ctx.slots.inject('tool.call.tail', () => ctx.slots.register({
     name: 'tool.call.tail',
@@ -148,7 +220,7 @@ export function apply(ctx: ClientContext): void {
     }),
   }, DelegationFiles))
 
-  ctx.slots.inject('conversation.session.rail', () => ctx.slots.register({
+  ctx.slots.inject('conversation.session.rail', () => seatWhileVisible(() => ctx.slots.register({
     name: 'conversation.session.rail',
     locale: NS,
     inject: (sessionId: SessionId): SessionFilesRailInjected => ({
@@ -161,7 +233,7 @@ export function apply(ctx: ClientContext): void {
       },
       reveal: revealFile,
     }),
-  }, SessionFilesRail))
+  }, SessionFilesRail)))
 }
 
 /**

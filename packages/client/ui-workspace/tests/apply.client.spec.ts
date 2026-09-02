@@ -18,6 +18,9 @@ async function bench() {
   const startSession = vi.fn()
   const rename = vi.fn(async () => ({}))
   const insertSessionBefore = vi.fn(async () => ({}))
+  const archiveSession = vi.fn(async () => {})
+  const archiveSessions = vi.fn(async () => {})
+  const unarchiveSession = vi.fn(async () => {})
   const open = vi.fn()
   const clear = vi.fn()
   const search = vi.fn(async () => ({
@@ -28,7 +31,7 @@ async function bench() {
   const binding = vi.fn(() => ({ session: { rename: renameSession } }))
   const fork = vi.fn(async () => 'forked' as never)
   ctx.provide('workspaces', {
-    create, startSession, rename, insertSessionBefore,
+    create, startSession, rename, insertSessionBefore, archiveSession, archiveSessions, unarchiveSession,
   } as never)
   ctx.provide('sessions', { open, clear, search, searchResultLimit: 20, binding, fork } as never)
   ctx.provide('connection', {
@@ -42,7 +45,8 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, startSession, rename,
-    insertSessionBefore, open, clear, search, renameSession, binding, fork,
+    insertSessionBefore, archiveSession, archiveSessions, unarchiveSession,
+    open, clear, search, renameSession, binding, fork,
   }
 }
 
@@ -100,17 +104,35 @@ describe('ui-workspace apply', () => {
     await browser.renameSession('session' as never, 'renamed session')
     expect(b.binding).toHaveBeenCalledWith('session')
     expect(b.renameSession).toHaveBeenCalledWith('renamed session')
-    browser.forkSession('session' as never)
+    browser.forkSession('session' as never, 'sibling')
     await vi.waitFor(() => {
       expect(b.open).toHaveBeenCalledWith('forked')
     })
-    expect(b.fork).toHaveBeenCalledWith({ sessionId: 'session', increaseTitle: true })
+    expect(b.fork).toHaveBeenCalledWith({ sessionId: 'session', increaseTitle: true, placement: 'sibling' })
+    browser.forkSession('session' as never, 'nested')
+    await vi.waitFor(() => {
+      expect(b.fork).toHaveBeenCalledWith({ sessionId: 'session', increaseTitle: true, placement: 'nested' })
+    })
     await browser.renameWorkspace('ws' as never, 'renamed')
     expect(b.rename).toHaveBeenCalledWith('ws', 'renamed')
     await browser.insertSessionBefore('ws' as never, 's1' as never, 's2' as never)
     expect(b.insertSessionBefore).toHaveBeenCalledWith('ws', 's1', 's2')
+    await browser.archiveSession('s1' as never)
+    expect(b.archiveSession).toHaveBeenCalledWith('s1')
+    await browser.archiveSessions(['s1', 's2'] as never)
+    expect(b.archiveSessions).toHaveBeenCalledWith(['s1', 's2'])
+    await browser.unarchiveSession('s1' as never)
+    expect(b.unarchiveSession).toHaveBeenCalledWith('s1')
     await browser.createWorkspace({ path: '/tmp/browser-project' })
     expect(b.create).toHaveBeenCalledWith({ path: '/tmp/browser-project' })
+    // The todo seat is optional: absent it hides the action, present it receives the ids.
+    expect(browser.todosAvailable()).toBe(false)
+    browser.addTodos(['s1'] as never)
+    const add = vi.fn()
+    b.ctx.provide('sessionTodos', { add })
+    expect(browser.todosAvailable()).toBe(true)
+    browser.addTodos(['s1', 's2'] as never)
+    expect(add).toHaveBeenCalledWith(['s1', 's2'])
 
     const picker = (b.slots.entries('conversation.hero.workspace')[0]!.inject as () => WorkspacePickerInjected)()
     await picker.createWorkspace({ path: '/tmp/project' })

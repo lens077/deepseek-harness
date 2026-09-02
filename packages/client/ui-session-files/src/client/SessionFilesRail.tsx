@@ -1,10 +1,12 @@
 // SessionFilesRail: navigation and status, not a reading surface. It lists the
-// files this session changed (oldest first, so the newest sits at the bottom)
-// and, while the agent runs, what it is reading; selecting a file reveals that
-// file's changes in the transcript, where the full column width exists. The
-// diffs deliberately do not render here: at this width two code columns are
-// unreadable, and a second, narrower rendering of the same content is a second
-// thing to keep in step.
+// files this session changed as a `tree`-style outline — a header per
+// directory, files indented beneath it — and, while the agent runs, what it is
+// reading; selecting a file reveals that file's changes in the transcript,
+// where the full column width exists. Long labels drop their head, never their
+// tail: the segments nearest the file are what tell rows apart at this width.
+// The diffs deliberately do not render here: at this width two code columns
+// are unreadable, and a second, narrower rendering of the same content is a
+// second thing to keep in step.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
@@ -17,7 +19,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionFilesRailState } from './rail-store.ts'
 import type { SessionTreeState } from './tree-controller.ts'
 import { mergeTreeChanges } from './tree-files.ts'
-import { basename, defaultSelection, labelBudget, sessionFilesOf, truncateHead } from './session-files.ts'
+import { railRows, TREE_INDENT_PX } from './rail-rows.ts'
+import { defaultSelection, labelBudget, sessionFilesOf, truncateHead } from './session-files.ts'
 import type { NS } from './locales.ts'
 import css from './SessionFilesRail.module.css'
 
@@ -106,31 +109,49 @@ export function SessionFilesRail({
           ? <p className={css.empty}>{t('rail.empty')}</p>
           : (
             <ul className={css.list}>
-              {model.changed.map(entry => (
-                <li key={entry.path}>
-                  <button
-                    type="button"
-                    className={clsx(css.file, entry.path === selected && css.selected)}
-                    title={entry.path}
-                    aria-current={entry.path === selected}
-                    aria-label={t('rail.select', { name: entry.path })}
-                    onClick={() => { setChosen(entry.path); reveal(entry.path) }}
-                  >
-                    <span className={css.name}>{truncateHead(basename(entry.path), budget)}</span>
-                    <span className={css.stats} aria-label={`+${entry.additions} -${entry.deletions}`}>
-                      <span className={css.additions}>+{entry.additions}</span>
-                      <span className={css.deletions}>-{entry.deletions}</span>
-                    </span>
-                    {entry.writing && (
-                      <IconLoadingOutline16
-                        size={12}
-                        className={css.spinner}
-                        aria-label={t('rail.writing', { name: entry.path })}
-                      />
-                    )}
-                  </button>
-                </li>
-              ))}
+              {railRows(model.changed).map((row) => {
+                // Indentation eats label width, so each level pays its inset
+                // out of the character budget too. The left inset overrides
+                // the 16px the module stylesheet gives an un-nested row.
+                const inset = row.depth * TREE_INDENT_PX
+                const rowBudget = labelBudget(width - inset)
+                if (row.kind === 'dir') {
+                  return (
+                    <li key={`dir:${row.path}`}>
+                      <span className={css.dir} style={{ paddingLeft: 16 + inset }} title={row.path}>
+                        {truncateHead(row.label, rowBudget)}
+                      </span>
+                    </li>
+                  )
+                }
+                const { entry } = row
+                return (
+                  <li key={entry.path}>
+                    <button
+                      type="button"
+                      className={clsx(css.file, entry.path === selected && css.selected)}
+                      style={{ paddingLeft: 16 + inset }}
+                      title={entry.path}
+                      aria-current={entry.path === selected}
+                      aria-label={t('rail.select', { name: entry.path })}
+                      onClick={() => { setChosen(entry.path); reveal(entry.path) }}
+                    >
+                      <span className={css.name}>{truncateHead(row.name, rowBudget)}</span>
+                      <span className={css.stats} aria-label={`+${entry.additions} -${entry.deletions}`}>
+                        <span className={css.additions}>+{entry.additions}</span>
+                        <span className={css.deletions}>-{entry.deletions}</span>
+                      </span>
+                      {entry.writing && (
+                        <IconLoadingOutline16
+                          size={12}
+                          className={css.spinner}
+                          aria-label={t('rail.writing', { name: entry.path })}
+                        />
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         {partial && (
@@ -156,9 +177,11 @@ export function SessionFilesRail({
             </button>
             {readOpen && (
               <ul className={css.list}>
+                {/* Recency is this list's information, so it stays flat; the
+                    head-truncated full path carries the directory instead. */}
                 {model.read.map(path => (
                   <li key={path}>
-                    <span className={css.read} title={path}>{truncateHead(basename(path), budget)}</span>
+                    <span className={css.read} title={path}>{truncateHead(path, budget)}</span>
                   </li>
                 ))}
               </ul>

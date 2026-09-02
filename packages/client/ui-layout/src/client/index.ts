@@ -81,6 +81,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * `id` is added beside the shipped entries instead of replacing them.
      */
     'shell.overlay': { kind: 'list'; scope: 'root' }
+    /**
+     * Full-bleed layer over the center column only, inside the frame's grid so
+     * the sidebar and the details column stay reachable beside it. Unlike
+     * `shell.overlay` this layer is opaque to pointer events and replaces what
+     * the center column shows while an entry renders content, which is what a
+     * whole-surface view (a cross-session digest, a settings page) needs
+     * without taking the `conversation` seat away from its occupant.
+     *
+     * Entries decide their own visibility: an entry rendering `null` leaves the
+     * conversation visible, so the layer costs nothing while every entry is
+     * closed.
+     */
+    'center.overlay': { kind: 'list'; scope: 'root' }
   }
 }
 
@@ -124,6 +137,7 @@ export function apply(ctx: ClientContext): void {
         'conversation': { kind: 'single', scope: 'session-maybe' },
         'details': { kind: 'single', scope: 'session' },
         'shell.overlay': { kind: 'list', scope: 'root' },
+        'center.overlay': { kind: 'list', scope: 'root' },
       },
       // Exclusive store: the factory itself — the framework instantiates per
       // entry and delivers useStore/actions to AppFrame as standard props.

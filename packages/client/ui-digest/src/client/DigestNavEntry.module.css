@@ -1,0 +1,92 @@
+/* Mirrors the sidebar's New Session control so the two read as one group:
+   a labelled row while wide, a 36px rail icon once collapsed. The sidebar
+   owns the collapse animation; this entry only follows the wide flag. */
+.entry {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.entry:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.active {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Rail: the sidebar collapses to a 56px column and every control becomes one
+   centred 36px square. Driven by the owner's `wide` flag rather than the
+   sidebar's own class, which belongs to that package's stylesheet. */
+.rail {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+}
+
+/* Attention count: the number of sessions waiting for the user, failed, or
+   finished unread. Rendered as a small pill at the row's end; on the rail it
+   floats over the icon's corner so the count survives the collapse. */
+.badge {
+  flex: none;
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Someone is waiting on the user: the count takes the danger tone. */
+.badgeUrgent {
+  background: var(--dsw-alias-state-warn-secondary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.badgeRail {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  margin-left: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.rail {
+  position: relative;
+}

@@ -11,7 +11,7 @@ import {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   basename, changedPaths, defaultSelection, deriveSessionFiles, diffHunks, labelBudget,
-  readPaths, READ_LIMIT, segmentLabel, sessionFilesOf, truncateHead, turnResolver,
+  readPaths, READ_LIMIT, segmentLabel, sessionFilesOf, textLineCount, truncateHead, turnResolver,
 } from '../src/client/session-files.ts'
 
 const SID = 'files' as SessionId
@@ -300,6 +300,14 @@ describe('segmentLabel', () => {
     // Turn numbers restart per session, so the source is what keeps two
     // agents' turn 3 apart in one merged list.
     expect(segmentLabel({ turn: 3, tool: 'edit', source: 'reviewer' }, t)).toBe('reviewer · Turn 3 · edit')
+  })
+})
+
+describe('textLineCount', () => {
+  it('does not count a trailing newline as opening a phantom line', () => {
+    expect(textLineCount('a\nb\n')).toBe(2)
+    expect(textLineCount('a\nb')).toBe(2)
+    expect(textLineCount(null)).toBe(0)
   })
 })
 

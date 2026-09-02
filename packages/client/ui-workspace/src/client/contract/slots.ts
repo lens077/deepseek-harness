@@ -32,6 +32,7 @@ import type {
   SessionId, SessionSearchResultItem, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { createWorkspaceViewStore } from '../stores.ts'
+import type { SelectionState } from '../selection.ts'
 
 /**
  * Owner share of the directory-flow holes: the complete conversation between
@@ -91,7 +92,18 @@ export type WorkspaceBrowserInjected = {
   hooks: DirectoryPickingInjected['hooks'] & {
     /** Current generation's Host description, bound by the slot renderer. */
     hostDescription: HostDescriptionSource
+    /**
+     * Live session-row multi-selection. It rides the reserved `hooks`
+     * compartment rather than the register's store seat because that seat is
+     * taken by the persisted viewing store, and whole-value persistence would
+     * restore a stale selection on every reload.
+     */
+    sessionSelection: HostObservable<SelectionState>
   }
+  /** Commit a new session-row multi-selection. */
+  setSessionSelection: (next: SelectionState) => void
+  /** Drop the session-row multi-selection entirely. */
+  clearSessionSelection: () => void
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
    * open it; without an explicit workspace, inherit the current Session
@@ -112,8 +124,12 @@ export type WorkspaceBrowserInjected = {
   searchResultLimit: number
   /** Rename a Session (explicit user title; resolves on host acceptance). */
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
-  /** Fork a Session at its last completed turn and open the child. */
-  forkSession: (sessionId: SessionId) => void
+  /**
+   * Fork a Session at its last completed turn and open the child. `sibling`
+   * duplicates into a top-level row of the same Workspace; `nested` accounts
+   * the child under the source, which becomes an expandable parent row.
+   */
+  forkSession: (sessionId: SessionId, placement: 'sibling' | 'nested') => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
@@ -129,6 +145,30 @@ export type WorkspaceBrowserInjected = {
    * session clears the selection into the New Session view state.
    */
   archiveSession: (sessionId: SessionId) => Promise<void>
+  /** Archive several Sessions in one durable mutation. */
+  archiveSessions: (sessionIds: readonly SessionId[]) => Promise<void>
+  /** Permanently delete a Session lineage subtree and its persisted bytes. */
+  deleteSession: (sessionId: SessionId) => Promise<readonly SessionId[]>
+  /**
+   * Add each Session to the user's todo list through the optional
+   * {@link SessionTodos} seat, resolved lazily per call so composing the
+   * provider in or out takes effect live. Rows offer the action only while
+   * {@link WorkspaceBrowserInjected.todosAvailable} reports a provider.
+   */
+  addTodos: (sessionIds: readonly SessionId[]) => void
+  /** Whether a todo provider is composed in. */
+  todosAvailable: () => boolean
+  /** Add or remove several Sessions from one Workspace account atomically. */
+  setSessionMembership: (
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ) => Promise<WorkspaceView>
+  /**
+   * Remove a Session from the registry-global archive set. Its retained
+   * Workspace accounting position becomes visible again.
+   */
+  unarchiveSession: (sessionId: SessionId) => Promise<void>
   /**
    * Reorder a session inside its Workspace account (DOM-insertBefore
    * semantics: omitted anchor appends to the end). The view refreshes from
@@ -169,3 +209,25 @@ export type WorkspacePickerProps =
   & Omit<WorkspacePickerInjected, 'hooks'>
   & DirectoryPickingHooks
   & PropsLocale<'workspace'>
+
+/**
+ * Optional todo seat, provided by a plugin that owns a durable todo list and
+ * consumed via `ctx.get('sessionTodos')`: the session browser's row and
+ * selection menus add the chosen Sessions to that list without knowing where
+ * it lives. An absent provider hides the action.
+ */
+export interface SessionTodos {
+  /**
+   * Add one todo about each Session, worded by the provider from what it
+   * knows of the Session (its newest question), and show the list.
+   * @param sessionIds - the chosen Sessions.
+   */
+  add(sessionIds: readonly SessionId[]): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Todo provider (a plugin owning a todo list); reach via ctx.get — optional. */
+    sessionTodos: SessionTodos
+  }
+}

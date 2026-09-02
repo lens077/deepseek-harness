@@ -185,7 +185,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork'
+      | 'clear' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -487,6 +487,29 @@ export class TestSessions implements ISessions {
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
+  }
+
+  /**
+   * Permanently remove one fixture lineage subtree in child-first order.
+   * @param sessionId - cascade root.
+   * @returns removed ids.
+   */
+  async delete(sessionId: SessionId): Promise<readonly SessionId[]> {
+    this.require(sessionId)
+    this.calls.push({ method: 'delete', args: [sessionId] })
+    const summaries = Object.values(this.list.getSnapshot().byId)
+    const deleted: SessionId[] = []
+    const visit = (parentId: SessionId, visiting: Set<SessionId>): void => {
+      if (visiting.has(parentId)) return
+      visiting.add(parentId)
+      for (const summary of summaries) {
+        if (summary.parentId === parentId) visit(summary.id, visiting)
+      }
+      deleted.push(parentId)
+    }
+    visit(sessionId, new Set())
+    for (const id of deleted) await this.remove(id)
+    return deleted
   }
 
   /**

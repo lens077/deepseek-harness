@@ -1177,6 +1177,67 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'sessionInbox',
+    summary: 'Storage-domain sidecar service.',
+    description: 'Storage-domain sidecar service. It never reads a Session log: a mark on a Session that no longer exists is harmless and is filtered by the consumer that joins marks with the live Session list.',
+    methods: [
+      {
+        signature: '@Remote(\'get\') get(): InboxSnapshot',
+        description: 'Read the complete inbox state.',
+        parameters: [],
+        returns: 'every Session mark and todo plus the review boundary.',
+      },
+      {
+        signature: '@Remote(\'markSeen\') markSeen(request: InboxMarkSeenRequest): Promise<InboxSnapshot>',
+        description: 'Raise a Session\'s seen mark to `seq`. A lower or equal seq changes nothing and emits nothing.',
+        parameters: [{ name: 'request', description: 'Session and the highest seq the user had on screen.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'setHandled\') setHandled(request: InboxSetHandledRequest): Promise<InboxSnapshot>',
+        description: 'Mark or clear a Session as dealt with.',
+        parameters: [{ name: 'request', description: 'Session and the desired handled state.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'snooze\') snooze(request: InboxSnoozeRequest): Promise<InboxSnoozeResult>',
+        description: 'Hide a Session until a future time, or clear its snooze.',
+        parameters: [{ name: 'request', description: 'Session and the epoch-ms time to resurface it, or `null`.' }],
+        returns: 'the complete state, or `snooze-in-past` for a time not after now.',
+      },
+      {
+        signature: '@Remote(\'setPinned\') setPinned(request: InboxSetPinnedRequest): Promise<InboxSnapshot>',
+        description: 'Pin or unpin a Session.',
+        parameters: [{ name: 'request', description: 'Session and the desired pinned state.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'markReviewed\') markReviewed(): Promise<InboxSnapshot>',
+        description: 'Record that the user reviewed the inbox now. The next "since you left" window starts here.',
+        parameters: [],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'addTodo\') addTodo(request: InboxAddTodoRequest): Promise<InboxTodoResult>',
+        description: 'Create one todo.',
+        parameters: [{ name: 'request', description: 'target Session, optional question seq, and text.' }],
+        returns: 'the complete state, or an explicit text failure.',
+      },
+      {
+        signature: '@Remote(\'updateTodo\') updateTodo(request: InboxUpdateTodoRequest): Promise<InboxTodoResult>',
+        description: 'Change a todo\'s text or status. A request that changes nothing is a successful no-op.',
+        parameters: [{ name: 'request', description: 'todo id and the fields to replace.' }],
+        returns: 'the complete state, or an explicit failure.',
+      },
+      {
+        signature: '@Remote(\'removeTodo\') removeTodo(request: InboxRemoveTodoRequest): Promise<InboxSnapshot>',
+        description: 'Delete one todo. An absent id is a successful no-op.',
+        parameters: [{ name: 'request', description: 'todo id.' }],
+        returns: 'the complete state after the change.',
+      },
+    ],
+  },
+  {
     key: 'sessionPersistence',
     summary: 'Durable append-only session storage.',
     description: 'Durable append-only session storage. Implementations preserve contiguous, losslessly JSON-serializable events; append resolves only after durability, and load balances a complete interrupted tail without rewriting committed events.',
@@ -1208,6 +1269,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>',
         description: 'Durably persist a batch of events. Honors the append-only and contiguous- seq contracts: the first event\'s `seq` MUST equal the stored next-seq (after `load` has durably closed any interrupted turn). Rejects non-JSON- serializable `event.data` with an error naming the offending event type.',
         parameters: [{ name: 'id', description: 'the session the batch belongs to.' }, { name: 'events', description: 'the contiguous batch to persist, in seq order.' }],
+      },
+      {
+        signature: 'abstract delete(id: SessionId): Promise<boolean>',
+        description: 'Permanently remove one session\'s materialized durable storage. The operation rejects while the identity is live or exclusively reserved for publication, and resolves only after backend deletion is durable. A lazy create intent with no physical artifact is discarded and returns `false`.\n\nDeletion is deliberately not observer-cancellable: once destructive mutation starts, its caller observes the authoritative settlement.',
+        parameters: [{ name: 'id', description: 'the session identity whose storage is removed.' }],
+        returns: 'whether a materialized backend artifact existed and was removed.',
       },
       {
         signature: 'async prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation>',
@@ -2348,10 +2415,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete committed workspace order.',
       },
       {
+        signature: 'deleteSession( sessionId: SessionId, retire?: RetireSessionsForDelete, ): Promise<readonly SessionId[]>',
+        description: 'Permanently delete a stored Session and every transitive fork/subagent descendant, child first. Live targets reject unless the caller supplies an exact disposer capability; the registry reserves the full subtree before invoking it, then requires every target to leave the live store. The durable marker makes physical deletion, Workspace account pruning, archive cleanup, and index cleanup restartable.',
+        parameters: [{ name: 'sessionId', description: 'Root identity whose complete lineage subtree is removed.' }, { name: 'retire', description: 'Optional exact capability that may retire the reported live subset.' }],
+        returns: 'the deterministic child-first deleted ids.',
+      },
+      {
         signature: 'archiveSession(sessionId: SessionId): Promise<void>',
         description: 'Archive one session durably. The session must exist (live or in session persistence); its workspace accounting — or lack of one — is irrelevant. An already archived id resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to archive.' }],
         returns: 'resolution after durability.',
+      },
+      {
+        signature: 'archiveSessions(sessionIds: readonly SessionId[]): Promise<void>',
+        description: 'Archive several sessions in one registry-state write. Every id is validated before mutation, so an unknown Session rejects the complete selection.',
+        parameters: [{ name: 'sessionIds', description: 'Sessions to add to the archive set.' }],
+        returns: 'resolution after durability.',
+      },
+      {
+        signature: 'unarchiveSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one session from the archive set durably. An id outside the set resolves without writing, including an unknown id: archive membership is the operation\'s authority, so stale entries always remain clearable.',
+        parameters: [{ name: 'sessionId', description: 'The session to unarchive.' }],
+        returns: 'resolution after durability, or immediately for an absent id.',
       },
       {
         signature: 'async resolveByPath(path: string): Promise<Workspace | undefined>',
@@ -2620,6 +2705,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Waterfall around every streaming model call (retry, replay, routing).',
     description: 'Waterfall around every streaming model call (retry, replay, routing). Bound to the LlmRuntime; call `next()` to reach the resolved adapter\'s stream, or yield your own chunks to short-circuit.',
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; their messages already obey the immutable creation contract.' }],
+  },
+  {
+    name: 'session-inbox/changed',
+    mode: 'emit',
+    signature: '\'session-inbox/changed\'(snapshot: InboxSnapshot): void',
+    summary: 'The durable inbox state changed through any mutation.',
+    description: 'The durable inbox state changed through any mutation. Carries the complete snapshot so a consumer replaces its copy instead of merging.',
+    parameters: [{ name: 'snapshot', description: 'the complete inbox state after the change.' }],
   },
   {
     name: 'session-telemetry/record',
@@ -3474,12 +3567,96 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export class Inbox {\n    constructor(private readonly session: Session, private readonly notifications: InboxNotifications);\n    get nextTurn(): readonly UserMessage[];\n    get nextStep(): readonly UserMessage[];\n    get hasPending(): boolean;\n    clear(): void;\n    claim(target: InboxTarget, turn: number): UserMessage[];\n    append(target: InboxTarget, message: UserMessage): void;\n    prepend(target: InboxTarget, message: UserMessage): void;\n    replace(messageId: MessageId, newMessage: UserMessage): boolean;\n    remove(messageId: MessageId): boolean;\n    splice(target: InboxTarget, start: number, deleteCount: number, inserted: UserMessage[]): UserMessage[];\n}',
   },
   {
+    name: 'InboxAddTodoRequest',
+    declaration: 'export interface InboxAddTodoRequest {\n    readonly sessionId: SessionId;\n    readonly questionSeq: number | null;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'InboxFailure',
+    declaration: 'export type InboxFailure = InboxTextBlank | InboxTextTooLarge | InboxTodoNotFound | InboxSnoozeInPast;',
+  },
+  {
+    name: 'InboxMarkSeenRequest',
+    declaration: 'export interface InboxMarkSeenRequest {\n    readonly sessionId: SessionId;\n    readonly seq: number;\n}',
+  },
+  {
     name: 'InboxNotifications',
     declaration: 'export interface InboxNotifications {\n    inserted(message: UserMessage): void;\n    discarded(message: UserMessage): void;\n    claimed(message: UserMessage, turn: number): void;\n}',
   },
   {
+    name: 'InboxRejected',
+    declaration: 'export interface InboxRejected<E extends InboxFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'InboxRemoveTodoRequest',
+    declaration: 'export interface InboxRemoveTodoRequest {\n    readonly id: InboxTodoId;\n}',
+  },
+  {
+    name: 'InboxSessionState',
+    declaration: 'export interface InboxSessionState {\n    readonly sessionId: SessionId;\n    readonly lastSeenSeq: number | null;\n    readonly handledAt: number | null;\n    readonly snoozedUntil: number | null;\n    readonly pinned: boolean;\n    readonly updatedAt: number;\n}',
+  },
+  {
+    name: 'InboxSetHandledRequest',
+    declaration: 'export interface InboxSetHandledRequest {\n    readonly sessionId: SessionId;\n    readonly handled: boolean;\n}',
+  },
+  {
+    name: 'InboxSetPinnedRequest',
+    declaration: 'export interface InboxSetPinnedRequest {\n    readonly sessionId: SessionId;\n    readonly pinned: boolean;\n}',
+  },
+  {
+    name: 'InboxSnapshot',
+    declaration: 'export interface InboxSnapshot {\n    readonly reviewedAt: number | null;\n    readonly sessions: readonly InboxSessionState[];\n    readonly todos: readonly InboxTodo[];\n}',
+  },
+  {
+    name: 'InboxSnoozeInPast',
+    declaration: 'export interface InboxSnoozeInPast {\n    readonly code: \'snooze-in-past\';\n    readonly until: number;\n}',
+  },
+  {
+    name: 'InboxSnoozeRequest',
+    declaration: 'export interface InboxSnoozeRequest {\n    readonly sessionId: SessionId;\n    readonly until: number | null;\n}',
+  },
+  {
+    name: 'InboxSnoozeResult',
+    declaration: 'export type InboxSnoozeResult = InboxSuccess<InboxSnapshot> | InboxRejected<InboxSnoozeInPast>;',
+  },
+  {
+    name: 'InboxSuccess',
+    declaration: 'export interface InboxSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
     name: 'InboxTarget',
     declaration: 'export type InboxTarget = \'next-turn\' | \'next-step\';',
+  },
+  {
+    name: 'InboxTextBlank',
+    declaration: 'export interface InboxTextBlank {\n    readonly code: \'text-blank\';\n}',
+  },
+  {
+    name: 'InboxTextTooLarge',
+    declaration: 'export interface InboxTextTooLarge {\n    readonly code: \'text-too-large\';\n    readonly maxBytes: number;\n    readonly actualBytes: number;\n}',
+  },
+  {
+    name: 'InboxTodo',
+    declaration: 'export interface InboxTodo {\n    readonly id: InboxTodoId;\n    readonly sessionId: SessionId;\n    readonly questionSeq: number | null;\n    readonly text: string;\n    readonly status: InboxTodoStatus;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly doneAt: number | null;\n}',
+  },
+  {
+    name: 'InboxTodoId',
+    declaration: 'export type InboxTodoId = Branded<\'InboxTodoId\'>;',
+  },
+  {
+    name: 'InboxTodoNotFound',
+    declaration: 'export interface InboxTodoNotFound {\n    readonly code: \'todo-not-found\';\n    readonly id: InboxTodoId;\n}',
+  },
+  {
+    name: 'InboxTodoResult',
+    declaration: 'export type InboxTodoResult = InboxSuccess<InboxSnapshot> | InboxRejected<InboxTextBlank | InboxTextTooLarge | InboxTodoNotFound>;',
+  },
+  {
+    name: 'InboxTodoStatus',
+    declaration: 'export type InboxTodoStatus = \'open\' | \'done\';',
+  },
+  {
+    name: 'InboxUpdateTodoRequest',
+    declaration: 'export interface InboxUpdateTodoRequest {\n    readonly id: InboxTodoId;\n    readonly text?: string;\n    readonly status?: InboxTodoStatus;\n}',
   },
   {
     name: 'IndexInjection',
@@ -3979,7 +4156,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RpcErrorDetailsMap',
-    declaration: 'export interface RpcErrorDetailsMap {\n    \'bad-request\': {\n        issues: ZodIssue[];\n    };\n    \'cancelled\': {};\n    \'session-not-found\': {\n        sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        provider: string;\n        model: string;\n    };\n    \'session-conflict\': {\n        sessionId: SessionId;\n        requestedCwd: string;\n        existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        value: string;\n    };\n    \'workspace-attach-failed\': {\n        sessionId: SessionId;\n        workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        workspaceId: string;\n    };\n    \'workspace-invalid-path\': {\n        path: string;\n    };\n    \'workspace-name-conflict\': {\n        name: string;\n    };\n    \'workspace-move-invalid\': {\n        workspaceId: string;\n        sessionId: SessionId;\n        beforeSessionId?: SessionId;\n    };\n    \'directory-unreadable\': {\n        path: string;\n    };\n    \'directory-exists\': {\n        path: string;\n    };\n    \'directory-create-failed\': {\n        path: string;\n    };\n    \'directory-picker-unavailable\': {\n        capability: string;\n    };\n    \'agent-preset-read-only\': {\n        agentPreset: string;\n        reason: string;\n    };\n    \'agent-preset-locked\': {\n        sessionId: SessionId;\n        agentPreset: string;\n    };\n    \'agent-preset-conflict\': {\n        sessionId: SessionId;\n        requestedPreset: string;\n        existingPreset?: string;\n    };\n    \'agent-preset-not-found\': {\n        agentPreset: string;\n      /* …truncated — full shape in source */',
+    declaration: 'export interface RpcErrorDetailsMap {\n    \'bad-request\': {\n        issues: ZodIssue[];\n    };\n    \'cancelled\': {};\n    \'session-not-found\': {\n        sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        provider: string;\n        model: string;\n    };\n    \'session-conflict\': {\n        sessionId: SessionId;\n        requestedCwd: string;\n        existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        value: string;\n    };\n    \'workspace-attach-failed\': {\n        sessionId: SessionId;\n        workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        workspaceId: string;\n    };\n    \'workspace-invalid-path\': {\n        path: string;\n    };\n    \'workspace-name-conflict\': {\n        name: string;\n    };\n    \'workspace-move-invalid\': {\n        workspaceId: string;\n        sessionId: SessionId;\n        beforeSessionId?: SessionId;\n    };\n    \'workspace-membership-invalid\': {\n        workspaceId: string;\n        sessionIds: SessionId[];\n        member: boolean;\n    };\n    \'directory-unreadable\': {\n        path: string;\n    };\n    \'directory-exists\': {\n        path: string;\n    };\n    \'directory-create-failed\': {\n        path: string;\n    };\n    \'directory-picker-unavailable\': {\n        capability: string;\n    };\n    \'agent-preset-read-only\': {\n        agentPreset: string;\n        reason: string;\n    };\n    \'agent-preset-locked\': {\n        sessionId: SessionId;\n        agentPreset: string;\n    };\n    \'agent-preset-conflict\': {\n        sessionId: SessionId;\n        /* …truncated — full shape in source */',
   },
   {
     name: 'RpcId',

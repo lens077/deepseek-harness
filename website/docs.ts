@@ -268,6 +268,7 @@ const subsystemGroups = [
     ['session-reference.md', '会话引用', 'Session references'],
     ['session-title.md', '会话标题', 'Session titles'],
     ['session-projection.md', '会话投影', 'Session projections'],
+    ['session-inbox.md', '会话收件箱', 'Session inbox'],
     ['persistence.md', '会话持久化', 'Session persistence'],
     ['spill.md', 'Spill 存储', 'Spill storage'],
     ['session-telemetry.md', '遥测', 'SessionTelemetryBackend'],

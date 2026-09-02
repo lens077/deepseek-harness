@@ -296,6 +296,19 @@ abstract create(meta: SessionHeader): Promise<void>
 abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>
 
 /**
+ * Permanently remove one session's materialized durable storage. The
+ * operation rejects while the identity is live or exclusively reserved for
+ * publication, and resolves only after backend deletion is durable. A lazy
+ * create intent with no physical artifact is discarded and returns `false`.
+ *
+ * Deletion is deliberately not observer-cancellable: once destructive
+ * mutation starts, its caller observes the authoritative settlement.
+ * @param id - the session identity whose storage is removed.
+ * @returns whether a materialized backend artifact existed and was removed.
+ */
+abstract delete(id: SessionId): Promise<boolean>
+
+/**
  * Prepare the exact unpublished Session used by resume. Implementations may
  * reuse object graphs retained by an earlier {@link inspect} after confirming
  * their durable revision is still current; disposal releases an unpublished

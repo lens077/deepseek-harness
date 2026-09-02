@@ -11,6 +11,8 @@ type ChatActions = {
   setDraft: (draft: ChatStoreState, text: string) => void
   setView: (draft: ChatStoreState, view: string) => void
   setInspect: (draft: ChatStoreState, target: { callId: CallId } | null) => void
+  requestReveal: (draft: ChatStoreState, seq: number) => void
+  clearReveal: (draft: ChatStoreState) => void
 }
 
 /**
@@ -22,13 +24,15 @@ export function createChatStore(): EngineStoreHandle<ChatStoreState, ChatActions
     // Anchored to the contract shape: consumers read the store through
     // PropsStore<ChatStore>'s SnapshotSelectorHook<ChatStoreState>, so init
     // and the contract cannot drift.
-    init: (): ChatStoreState => ({ selection: null, draft: '', view: null, inspect: null }),
+    init: (): ChatStoreState => ({ selection: null, draft: '', view: null, inspect: null, reveal: null }),
     persist: 'dsh.conversation.chat',
     actions: {
       select: (d, target: SelectionTarget | null) => { d.selection = target },
       setDraft: (d, text: string) => { d.draft = text },
       setView: (d, view: string) => { d.view = view },
       setInspect: (d, target: { callId: CallId } | null) => { d.inspect = target },
+      requestReveal: (d, seq: number) => { d.reveal = { seq, nonce: (d.reveal?.nonce ?? 0) + 1 } },
+      clearReveal: (d) => { d.reveal = null },
     },
   })
 }

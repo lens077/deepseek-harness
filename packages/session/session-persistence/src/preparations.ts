@@ -191,6 +191,21 @@ export class SessionPreparations<Source extends PreparedSource, CommitState> {
   }
 
   /**
+   * Discard a loading or ready source before permanent deletion. A committing
+   * repair or published candidate owns the identity exclusively and must settle
+   * before deletion can be retried.
+   * @param id - session identity to invalidate.
+   */
+  discardForDelete(id: SessionId): void {
+    const entry = this.entries.get(id)
+    if (entry === undefined) return
+    if (entry.phase === 'committing' || entry.phase === 'reserved') {
+      throw new Error(`cannot delete session "${id}" while its persisted preparation is reserved`)
+    }
+    this.remove(entry)
+  }
+
+  /**
    * Discard an exact stale ready source without disturbing an exclusive owner.
    * @param id - changed session identity.
    * @param expected - exact source observed before its revision check.

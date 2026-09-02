@@ -2,8 +2,8 @@
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
- * except workspace Rename/Delete and session Rename/Fork/Archive; the session
- * and workspace hover cards are suppressed while a menu is open.
+ * except workspace Rename/Delete and session Rename/Fork/Archive/Unarchive;
+ * session and workspace hover cards are suppressed while a menu is open.
  */
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -15,7 +15,7 @@ import {
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
+import type { ArchivedSessionNode, GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import { relativeTime } from '../tree.ts'
 import css from './Rows.module.css'
 
@@ -88,6 +88,23 @@ export interface RowDragProps {
 interface WorkspaceRowDragProps {
   start: () => void
   end: () => void
+}
+
+/**
+ * The modifier state a row activation carries to its owner. Only the flags
+ * matter here: the owner maps them onto the platform's selection semantics,
+ * so rows stay free of platform knowledge.
+ */
+export interface RowActivationEvent {
+  readonly ctrlKey: boolean
+  readonly metaKey: boolean
+  readonly shiftKey: boolean
+}
+
+/** Pointer coordinates used to anchor the selection-aware context menu. */
+export interface RowContextMenuEvent {
+  readonly clientX: number
+  readonly clientY: number
 }
 
 /** Pointer-position half of a row (insert line above or below). */
@@ -305,14 +322,21 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
  * event inside the conversation.
  * @param props.result - merged local/content search row.
  * @param props.currentId - selected session id.
- * @param props.onOpen - open the selected session.
+ * @param props.onOpen - open the selected session, carrying gesture modifiers.
+ * @param props.multiSelected - the row is in the multi-selection set.
+ * @param props.multiLead - the row is the selection lead.
  * @param props.t - Workspace-browser translation seat.
  * @returns the result button.
  */
-export function SearchResultItem({ result, currentId, onOpen, t }: {
+export function SearchResultItem({ result, currentId, onOpen, onContextMenu, multiSelected = false, multiLead = false, t }: {
   result: SearchResultNode
   currentId: string | undefined
-  onOpen: (id: SearchResultNode['id']) => void
+  onOpen: (id: SearchResultNode['id'], event: RowActivationEvent) => void
+  onContextMenu?: (id: SearchResultNode['id'], event: RowContextMenuEvent) => void
+  /** The row belongs to the current multi-selection. */
+  multiSelected?: boolean | undefined
+  /** The row is the selection lead that arrow keys move and Shift extends to. */
+  multiLead?: boolean | undefined
   t: RowTranslate
 }) {
   const selected = result.id === currentId
@@ -321,10 +345,17 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
   return (
     <button
       type="button"
-      className={clsx(css.searchResultRow, selected && css.selected)}
+      className={clsx(
+        css.searchResultRow, selected && css.selected,
+        multiSelected && css.multiSelected, multiLead && css.multiLead,
+      )}
       role="treeitem"
-      aria-selected={selected}
-      onClick={() => { onOpen(result.id) }}
+      aria-selected={multiSelected || selected}
+      onClick={(e) => { onOpen(result.id, e) }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onContextMenu?.(result.id, e)
+      }}
     >
       <span className={css.searchResultHeading}>
         <span className={css.slot}>
@@ -345,35 +376,142 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
 }
 
 /**
+ * One archived Session row: retained Workspace context with unarchive and
+ * permanent-delete actions, without open, reorder, rename, fork, or selection.
+ * @param props.node - archived session projection.
+ * @param props.now - epoch ms for relative-time formatting.
+ * @param props.busy - the unarchive mutation is awaiting its state echo.
+ * @param props.onUnarchive - remove this Session from the archive set.
+ * @param props.onDelete - request permanent deletion for this Session.
+ * @param props.t - the browser root's locale seat.
+ * @returns the archived session row.
+ */
+export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, t }: {
+  node: ArchivedSessionNode
+  now: number
+  busy: boolean
+  onUnarchive: (id: SessionNode['id']) => void
+  onDelete: (id: SessionNode['id']) => void
+  t: RowTranslate
+}) {
+  const title = displayTitle(node.session, t)
+  const statuses = sessionStatuses(node.session, t)
+  const primaryStatus = statuses[0]
+  const showStatus = primaryStatus.state !== 'done' || node.session.completed
+  const [menuOpen, setMenuOpen] = useState(false)
+  const ownRow = (
+    <div
+      className={clsx(css.searchResultRow, css.archivedSessionRow, menuOpen && css.menuOpen)}
+      role="treeitem"
+      aria-busy={busy || undefined}
+    >
+      <span className={css.searchResultHeading}>
+        <span className={css.slot}>
+          {showStatus && <SessionStatusDots statuses={statuses} />}
+        </span>
+        <span className={css.searchResultTitle}>{title}</span>
+        {busy
+          ? <span className={css.time}>{t('unarchive.pending')}</span>
+          : <span className={css.time}>{timeLabel(node.session.updatedAt, now, t)}</span>}
+        <span className={css.rowActions}>
+          <Menu
+            open={menuOpen}
+            onClose={() => { setMenuOpen(false) }}
+            items={[
+              { id: 'unarchive', label: t('menu.unarchiveSession'), icon: <IconArchiveOutline20 size={16} /> },
+              { id: 'delete', label: t('menu.deleteSession'), icon: <IconTrashOutline16 />, danger: true },
+            ]}
+            onSelect={(id) => {
+              setMenuOpen(false)
+              if (id === 'unarchive') onUnarchive(node.session.id)
+              if (id === 'delete') onDelete(node.session.id)
+            }}
+            portal
+            closeOnPointerLeave
+            anchor={(
+              <button
+                type="button"
+                className={css.iconButton}
+                aria-label={t('actions.session.aria', { name: title })}
+                disabled={busy}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(value => !value)
+                }}
+              >
+                <IconEllipsisOutline16 />
+              </button>
+            )}
+          />
+        </span>
+      </span>
+      <span className={css.searchResultMeta}>
+        <span className={css.searchResultWorkspace}>{node.workspace}</span>
+      </span>
+    </div>
+  )
+  return (
+    <HoverCard
+      anchor={ownRow}
+      content={<SessionHoverContent node={node.session} now={now} t={t} />}
+      disabled={menuOpen}
+      copyText={node.session.blank ? undefined : node.session.title}
+      copyLabel={t('copy')}
+      copiedLabel={t('hover.copied')}
+    />
+  )
+}
+
+/**
  * One top-level 34px session row: status dot (pending user interaction outranks
  * own or descendant activity), title, relative time, and the row actions menu.
  * @param props.node - derived session node.
  * @param props.currentId - selected session id (row highlight).
  * @param props.now - epoch ms for relative-time formatting.
- * @param props.onOpen - open a session by id.
+ * @param props.onOpen - open a session by id, carrying the gesture's modifiers.
  * @param props.onRename - open the session rename dialog (id + current title).
- * @param props.onFork - fork a session at its last completed turn.
+ * @param props.onFork - fork a session at its last completed turn into the picked display slot.
  * @param props.onArchive - archive a session by id.
  * @param props.drag - optional draggable-row wiring.
  * @param props.flat - omit the empty status slot in the hierarchy-free flat list.
+ * @param props.branch - nested-children affordance (chevron + count) for rows with a child branch.
+ * @param props.multiSelected - the row is in the multi-selection set.
+ * @param props.multiLead - the row is the selection lead (arrow-key cursor).
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, flat = false, t }: {
+export function SessionNodeItem({
+  node, currentId, now, onOpen, onContextMenu, onRename, onFork, onArchive, onDelete,
+  drag, flat = false, branch, multiSelected = false, multiLead = false, t,
+}: {
   node: SessionNode
   currentId: string | undefined
   now: number
-  onOpen: (id: SessionNode['id']) => void
+  /**
+   * Activate the row. The event carries the modifier keys so the owner can
+   * apply range or toggle selection; a plain click still opens the session.
+   */
+  onOpen: (id: SessionNode['id'], event: RowActivationEvent) => void
+  /** Open the browser-owned selection action menu at the pointer. */
+  onContextMenu?: (id: SessionNode['id'], event: RowContextMenuEvent) => void
   /** Open the browser-owned session rename dialog (row menu action). */
   onRename: (id: SessionNode['id'], currentTitle: string) => void
-  /** Fork a session at its last completed turn (row menu action). */
-  onFork: (id: SessionNode['id']) => void
+  /** Fork a session at its last completed turn into the picked display slot (row menu actions). */
+  onFork: (id: SessionNode['id'], placement: 'sibling' | 'nested') => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
+  /** Request permanent deletion for this Session lineage. */
+  onDelete: (id: SessionNode['id']) => void
   /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
   /** The row is rendered without a parent Workspace header. */
   flat?: boolean | undefined
+  /** Present only on rows with nested children: expansion state + toggle. */
+  branch?: { expanded: boolean; toggle: () => void } | undefined
+  /** The row belongs to the current multi-selection. */
+  multiSelected?: boolean | undefined
+  /** The row is the selection lead that arrow keys move and Shift extends to. */
+  multiLead?: boolean | undefined
   t: RowTranslate
 }) {
   const row = node
@@ -388,25 +526,41 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   // confirmation dialog.
   const sessionMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
-    { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
+    { id: 'fork', label: t('menu.forkSibling'), icon: <IconBranchOutline16 /> },
+    { id: 'fork-nested', label: t('menu.forkNested'), icon: <IconBranchOutline16 /> },
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
     { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
+    { id: 'delete', label: t('menu.deleteSession'), icon: <IconTrashOutline16 />, danger: true },
   ]
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
     <div
       className={clsx(
         css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
+        multiSelected && css.multiSelected, multiLead && css.multiLead,
         flat && !showStatus && css.flatSessionRowWithoutStatus,
         drag?.marker === 'before' && css.dropBefore, drag?.marker === 'after' && css.dropAfter,
       )}
       role="treeitem"
-      aria-selected={selected}
-      onClick={() => { onOpen(node.id) }}
+      // With multi-selection live, aria-selected reports the selection set;
+      // otherwise it keeps reporting the opened session, which is the only
+      // selection concept the row has.
+      aria-selected={multiSelected || selected}
+      onClick={(e) => { onOpen(node.id, e) }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onContextMenu?.(node.id, e)
+      }}
       draggable={drag !== undefined}
       onDragStart={drag === undefined
         ? undefined
         : (e) => {
+          // A modified press is a selection gesture: starting a reorder drag
+          // from it would both move the row and lose the selection.
+          if (e.ctrlKey || e.metaKey || e.shiftKey) {
+            e.preventDefault()
+            return
+          }
           e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('text/plain', node.id)
           drag.start()
@@ -428,6 +582,19 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
           drag.drop(rowHalf(e))
         }}
     >
+      {/* A row with nested children carries its own expand affordance; the
+          chevron replaces nothing — it leads the status slot. */}
+      {branch !== undefined && (
+        <button
+          type="button"
+          className={css.branchChevron}
+          aria-expanded={branch.expanded}
+          aria-label={t('branch.aria', { n: node.children.length })}
+          onClick={(e) => { e.stopPropagation(); branch.toggle() }}
+        >
+          <IconTriangleRightFill14 className={clsx(css.branchGlyph, branch.expanded && css.branchGlyphOpen)} />
+        </button>
+      )}
       {/* Pending interaction and own or descendant activity outrank the
           finished-but-unviewed reminder, which returns after activity stops
           and is cleared by opening the session. */}
@@ -437,6 +604,9 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
         </span>
       )}
       <span className={css.title}>{title}</span>
+      {branch !== undefined && (
+        <span className={css.branchCount}>{node.children.length}</span>
+      )}
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the row verbs
           (rename/fork/archive) would all act on content that does not
@@ -451,8 +621,10 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
             onSelect={(id) => {
               setMenuOpen(false)
               if (id === 'rename') onRename(node.id, row.title)
-              if (id === 'fork') onFork(node.id)
+              if (id === 'fork') onFork(node.id, 'sibling')
+              if (id === 'fork-nested') onFork(node.id, 'nested')
               if (id === 'archive') onArchive(node.id)
+              if (id === 'delete') onDelete(node.id)
             }}
             portal
             closeOnPointerLeave
@@ -475,10 +647,83 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
     <HoverCard
       anchor={ownRow}
       content={<SessionHoverContent node={node} now={now} t={t} />}
-      disabled={menuOpen || drag?.active === true}
+      // A hover card over a row the user is ranging across is pure noise, so
+      // any live multi-selection suppresses it.
+      disabled={menuOpen || drag?.active === true || multiSelected}
       copyText={row.blank ? undefined : row.title}
       copyLabel={t('copy')}
       copiedLabel={t('hover.copied')}
     />
+  )
+}
+
+/** Shared row callbacks/context one branch passes unchanged to every row it renders. */
+export interface SessionRowContext {
+  currentId: string | undefined
+  now: number
+  onOpen: (id: SessionNode['id'], event: RowActivationEvent) => void
+  onContextMenu: (id: SessionNode['id'], event: RowContextMenuEvent) => void
+  onRename: (id: SessionNode['id'], currentTitle: string) => void
+  onFork: (id: SessionNode['id'], placement: 'sibling' | 'nested') => void
+  onArchive: (id: SessionNode['id']) => void
+  onDelete: (id: SessionNode['id']) => void
+  isSelected: (id: SessionNode['id']) => boolean
+  isLead: (id: SessionNode['id']) => boolean
+  t: RowTranslate
+}
+
+/**
+ * One session row plus its nested-child branch, recursively. Children render
+ * inside an indented, guide-lined container; a folded parent renders its row
+ * alone. Drag wiring applies to THIS row only and is never passed down, so
+ * reordering stays a top-level flat-account operation.
+ * @param props.node - the branch root.
+ * @param props.row - shared row callbacks/context.
+ * @param props.drag - optional drag wiring for the root row.
+ * @param props.collapsedBranches - ids whose branches are currently folded.
+ * @param props.onToggleBranch - fold/unfold one parent row's branch.
+ * @returns the branch fragment.
+ */
+export function SessionBranch({ node, row, drag, collapsedBranches, onToggleBranch }: {
+  node: SessionNode
+  row: SessionRowContext
+  drag?: RowDragProps | undefined
+  collapsedBranches: readonly string[]
+  onToggleBranch: (id: SessionNode['id']) => void
+}) {
+  const hasChildren = node.children.length > 0
+  const expanded = !collapsedBranches.includes(node.id)
+  return (
+    <>
+      <SessionNodeItem
+        node={node}
+        currentId={row.currentId}
+        now={row.now}
+        onOpen={row.onOpen}
+        onContextMenu={row.onContextMenu}
+        onRename={row.onRename}
+        onFork={row.onFork}
+        onArchive={row.onArchive}
+        onDelete={row.onDelete}
+        drag={drag}
+        branch={hasChildren ? { expanded, toggle: () => { onToggleBranch(node.id) } } : undefined}
+        multiSelected={row.isSelected(node.id)}
+        multiLead={row.isLead(node.id)}
+        t={row.t}
+      />
+      {hasChildren && expanded && (
+        <div className={css.childBranch} role="group">
+          {node.children.map(child => (
+            <SessionBranch
+              key={child.id}
+              node={child}
+              row={row}
+              collapsedBranches={collapsedBranches}
+              onToggleBranch={onToggleBranch}
+            />
+          ))}
+        </div>
+      )}
+    </>
   )
 }

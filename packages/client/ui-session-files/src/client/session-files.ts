@@ -71,10 +71,28 @@ export interface SessionFileEntry {
   readonly writing: boolean
 }
 
+/** One file one turn changed, with that turn's own line totals for it. */
+export interface SessionTurnFileEntry {
+  readonly path: string
+  /** Added lines across the hunks this turn recorded for the path. */
+  readonly additions: number
+  /** Removed lines across the hunks this turn recorded for the path. */
+  readonly deletions: number
+  /** Whether a call in flight right now is writing this path. */
+  readonly writing: boolean
+}
+
 /** The panel's complete model for one session. */
 export interface SessionFilesModel {
   /** Changed files, oldest first, so the newest file to be touched sits at the bottom. */
   readonly changed: readonly SessionFileEntry[]
+  /**
+   * The same changes sliced by the turn that made them, each list in the order
+   * that turn first touched the file. A turn whose `turn/start` fell outside
+   * the loaded window has no entry: its changes are in `changed`, but nothing
+   * in the window says they were its.
+   */
+  readonly byTurn: ReadonlyMap<number, readonly SessionTurnFileEntry[]>
   /**
    * Files read while the agent runs, most recent first, capped at
    * {@link READ_LIMIT}. Empty while the agent is idle: this list answers what
@@ -225,6 +243,31 @@ interface Accumulated {
   segments: SessionFileSegment[]
 }
 
+/** Mutable per-turn line totals for one path. */
+interface TurnAccumulated {
+  additions: number
+  deletions: number
+  writing: boolean
+}
+
+/** Find or open the per-turn accumulator for one path, preserving first-touch order. */
+function accumulateTurn(
+  into: Map<number, Map<string, TurnAccumulated>>,
+  turn: number,
+  path: string,
+): TurnAccumulated {
+  let files = into.get(turn)
+  if (files === undefined) {
+    files = new Map()
+    into.set(turn, files)
+  }
+  const existing = files.get(path)
+  if (existing !== undefined) return existing
+  const fresh: TurnAccumulated = { additions: 0, deletions: 0, writing: false }
+  files.set(path, fresh)
+  return fresh
+}
+
 /**
  * Derive the panel's model from one conversation snapshot.
  *
@@ -238,6 +281,7 @@ interface Accumulated {
 export function deriveSessionFiles(snapshot: ConversationSnapshot): SessionFilesModel {
   const resolveTurn = turnResolver(snapshot.chat.timeline)
   const accumulated = new Map<string, Accumulated>()
+  const perTurn = new Map<number, Map<string, TurnAccumulated>>()
   const reads: string[] = []
 
   for (const node of snapshot.nodes) {
@@ -250,11 +294,15 @@ export function deriveSessionFiles(snapshot: ConversationSnapshot): SessionFiles
     const hunks = diffHunks(node.resultView)
     for (const path of changed) {
       const entry = accumulate(accumulated, path, node.seq)
+      const owned = turn === null ? null : accumulateTurn(perTurn, turn, path)
       for (const hunk of hunks) {
         if (hunk.path !== path) continue
         entry.segments.push({
           turn, tool, source: null, time: node.time, oldText: hunk.oldText, newText: hunk.newText,
         })
+        if (owned === null) continue
+        owned.additions += textLineCount(hunk.newText)
+        owned.deletions += textLineCount(hunk.oldText)
       }
     }
   }
@@ -265,6 +313,7 @@ export function deriveSessionFiles(snapshot: ConversationSnapshot): SessionFiles
     for (const path of changedPaths(call.callView)) {
       writing.add(path)
       accumulate(accumulated, path, IN_FLIGHT_SEQ)
+      accumulateTurn(perTurn, call.turn, path).writing = true
     }
   }
 
@@ -279,8 +328,16 @@ export function deriveSessionFiles(snapshot: ConversationSnapshot): SessionFiles
     }))
     .sort((left, right) => left.firstSeq - right.firstSeq)
 
+  const byTurn = new Map<number, readonly SessionTurnFileEntry[]>()
+  for (const [turn, files] of perTurn) {
+    byTurn.set(turn, [...files].map(([path, stats]) => ({
+      path, additions: stats.additions, deletions: stats.deletions, writing: stats.writing,
+    })))
+  }
+
   return {
     changed,
+    byTurn,
     read: snapshot.running ? recentReads(reads) : [],
     running: snapshot.running,
     hasMore: snapshot.hasMore,
@@ -337,6 +394,68 @@ function recentReads(paths: readonly string[]): readonly string[] {
 
 function isToolResult(node: ConversationNode): node is ToolResultNode {
   return node.kind === 'tool-result'
+}
+
+/** One question's changed files, as the rail draws one collapsible group. */
+export interface SessionFileGroup {
+  /** Stable group identity for collapse state; the turn number, or `other`. */
+  readonly id: string
+  /** The question that caused these changes, absent for the trailing group. */
+  readonly question: { readonly number: number; readonly text: string; readonly key: string } | null
+  readonly files: readonly SessionTurnFileEntry[]
+  /** Added lines across the group's files. */
+  readonly additions: number
+  /** Removed lines across the group's files. */
+  readonly deletions: number
+}
+
+/**
+ * Group a session's changes under the question that caused each of them.
+ *
+ * Newest question first, because the change a reader came to check is the one
+ * the agent just made. Everything the loaded window cannot attribute to a
+ * question — a turn older than the window, and every file only a descendant
+ * session touched — collects in one trailing group rather than being dropped,
+ * so the grouped view still lists exactly what the flat one does.
+ * @param model - the derived panel model, descendants already merged.
+ * @param questions - loaded questions with their turns, oldest first.
+ * @returns the non-empty groups, newest question first, trailing group last.
+ */
+export function groupFilesByQuestion(
+  model: SessionFilesModel,
+  questions: readonly { readonly turn: number; readonly text: string; readonly number: number; readonly key: string }[],
+): readonly SessionFileGroup[] {
+  const groups: SessionFileGroup[] = []
+  const claimed = new Set<string>()
+  for (const question of [...questions].reverse()) {
+    const files = model.byTurn.get(question.turn) ?? []
+    if (files.length === 0) continue
+    for (const file of files) claimed.add(file.path)
+    groups.push({
+      id: String(question.turn),
+      question: { number: question.number, text: question.text, key: question.key },
+      files,
+      ...totals(files),
+    })
+  }
+  const rest = model.changed
+    .filter(entry => !claimed.has(entry.path))
+    .map(entry => ({
+      path: entry.path, additions: entry.additions, deletions: entry.deletions, writing: entry.writing,
+    }))
+  if (rest.length > 0) groups.push({ id: 'other', question: null, files: rest, ...totals(rest) })
+  return groups
+}
+
+/** Added and removed line totals across a group's files. */
+function totals(files: readonly SessionTurnFileEntry[]): { additions: number; deletions: number } {
+  let additions = 0
+  let deletions = 0
+  for (const file of files) {
+    additions += file.additions
+    deletions += file.deletions
+  }
+  return { additions, deletions }
 }
 
 /**

@@ -16,14 +16,17 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
+import { createSessionSelectionStore } from './selectionStore.ts'
+import type { SelectionState } from './selection.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 import { SessionCountSettingsRow } from './SessionCountSettingsRow.tsx'
+import { MultiSelectSettingsRow } from './MultiSelectSettingsRow.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+  SessionTodos, WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
 
@@ -71,6 +74,11 @@ export function apply(ctx: ClientContext): void {
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
   const workspaceViewStore = createWorkspaceViewStore()
+  // The browser's second store: session-row multi-selection. The register
+  // store seat already carries the persisted viewing store, and persistence is
+  // whole-value, so the selection lives in its own non-persisted instance and
+  // reaches the component through the reserved `hooks` compartment.
+  const sessionSelection = createSessionSelectionStore().create()
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
@@ -88,8 +96,8 @@ export function apply(ctx: ClientContext): void {
       const result = await session.rename(title)
       if (!result.ok) throw new Error(result.error.message)
     },
-    forkSession: (sessionId) => {
-      ctx.sessions.fork({ sessionId, increaseTitle: true })
+    forkSession: (sessionId, placement) => {
+      ctx.sessions.fork({ sessionId, increaseTitle: true, placement })
         .then((childId) => { ctx.sessions.open(childId) })
         .catch(() => {
           // Fork or child-rename failure keeps the current selection.
@@ -101,11 +109,27 @@ export function apply(ctx: ClientContext): void {
       await ctx.workspaces.insertBefore(workspaceId, beforeWorkspaceId)
     },
     archiveSession: async (sessionId) => { await ctx.workspaces.archiveSession(sessionId) },
+    archiveSessions: async (sessionIds) => { await ctx.workspaces.archiveSessions(sessionIds) },
+    unarchiveSession: async (sessionId) => { await ctx.workspaces.unarchiveSession(sessionId) },
+    deleteSession: sessionId => ctx.sessions.delete(sessionId),
+    addTodos: (sessionIds) => { ctx.get('sessionTodos')?.add(sessionIds) },
+    todosAvailable: () => ctx.get('sessionTodos') !== undefined,
+    setSessionMembership: (workspaceId, sessionIds, member) =>
+      ctx.workspaces.setSessionMembership(workspaceId, sessionIds, member),
     insertSessionBefore: async (workspaceId, sessionId, beforeSessionId) => {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => ctx.workspaces.create(input),
-    hooks: { directoryFlow: browserFlowSource, hostDescription },
+    setSessionSelection: (next: SelectionState) => { sessionSelection.actions.setSelection(next) },
+    clearSessionSelection: () => { sessionSelection.actions.clearSelection() },
+    hooks: {
+      directoryFlow: browserFlowSource,
+      hostDescription,
+      sessionSelection: {
+        getSnapshot: () => sessionSelection.getSnapshot(),
+        subscribe: listener => sessionSelection.subscribe(listener),
+      },
+    },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => ctx.workspaces.create(input),
@@ -123,14 +147,24 @@ export function apply(ctx: ClientContext): void {
     },
     WorkspaceBrowser,
   ))
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
-    id: 'workspace-session-count',
-    order: 25,
-    store: workspaceViewStore,
-    inject: () => ({}),
-    locale: NS,
-  }, SessionCountSettingsRow))
+  ctx.slots.inject('settings.general.item', function* () {
+    yield ctx.slots.register({
+      name: 'settings.general.item',
+      id: 'workspace-session-count',
+      order: 25,
+      store: workspaceViewStore,
+      inject: () => ({}),
+      locale: NS,
+    }, SessionCountSettingsRow)
+    yield ctx.slots.register({
+      name: 'settings.general.item',
+      id: 'workspace-multi-select',
+      order: 26,
+      store: workspaceViewStore,
+      inject: () => ({}),
+      locale: NS,
+    }, MultiSelectSettingsRow)
+  })
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {
       name: 'conversation.hero.workspace',

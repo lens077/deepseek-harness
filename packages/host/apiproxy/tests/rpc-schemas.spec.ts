@@ -26,7 +26,8 @@ import {
   workspaceInsertBeforeRequestSchema, workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeRequestSchema, workspaceInsertSessionBeforeValueSchema,
   workspaceListRequestSchema, workspaceListValueSchema,
-  workspaceRenameRequestSchema, workspaceRenameValueSchema, workspaceViewSchema,
+  workspaceRenameRequestSchema, workspaceRenameValueSchema,
+  workspaceUnarchiveSessionRequestSchema, workspaceUnarchiveSessionValueSchema, workspaceViewSchema,
 } from '../src/api/workspace.schema.ts'
 import { skillEntrySchema, skillListRequestSchema, skillListValueSchema } from '../src/api/skills.schema.ts'
 import {
@@ -350,6 +351,7 @@ describe('host domain schemas', () => {
 describe('workspace domain schemas', () => {
   const view = {
     workspaceId: 'w1', path: '/p', title: 'p', sessionIds: ['s1'],
+    nestedUnder: {},
     createdAt: '2026-07-25T00:00:00.000Z', updatedAt: '2026-07-25T00:00:00.000Z',
   }
 
@@ -363,12 +365,17 @@ describe('workspace domain schemas', () => {
     expect(() => workspaceListValueSchema.parse({ items: [view] })).toThrow()
   })
 
-  it('archiveSession request/value carry the id and the full updated set', () => {
+  it('archive mutations carry the id and the full updated set', () => {
     expect(workspaceArchiveSessionRequestSchema.parse({ sessionId: 's1' }).sessionId).toBe('s1')
     expect(() => workspaceArchiveSessionRequestSchema.parse({})).toThrow()
     expect(workspaceArchiveSessionValueSchema.parse({ archivedSessionIds: ['s1', 's2'] }).archivedSessionIds)
       .toEqual(['s1', 's2'])
     expect(() => workspaceArchiveSessionValueSchema.parse({ archivedSessionIds: 's1' })).toThrow()
+    expect(workspaceUnarchiveSessionRequestSchema.parse({ sessionId: 's2' }).sessionId).toBe('s2')
+    expect(() => workspaceUnarchiveSessionRequestSchema.parse({})).toThrow()
+    expect(workspaceUnarchiveSessionValueSchema.parse({ archivedSessionIds: ['s1'] }).archivedSessionIds)
+      .toEqual(['s1'])
+    expect(() => workspaceUnarchiveSessionValueSchema.parse({ archivedSessionIds: 's1' })).toThrow()
   })
 
   it('insertSessionBefore accepts an anchored and an anchorless move', () => {
@@ -522,6 +529,7 @@ describe('events frame schemas', () => {
       { type: 'host/agent-error', sessionId: 's', message: 'boom' },
       { type: 'host/workspace-changed', workspace: {
         workspaceId: 'w', path: '/w', title: 'w', sessionIds: [],
+        nestedUnder: {},
         createdAt: '0', updatedAt: '0',
       } },
       { type: 'host/workspace-removed', workspaceId: 'w' },

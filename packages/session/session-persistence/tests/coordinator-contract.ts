@@ -322,6 +322,47 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       }
     })
 
+    it('rejects deletion while the exact Session is live, then deletes after retirement', async () => {
+      const fix = await makeFixture()
+      const { ctx, fiber } = await freshCtx(fix)
+      let session!: Session
+      const sessionFiber = await ctx.plugin(Object.assign((inner: Context) => {
+        session = inner.sessions.create(SessionId('delete-live'), { meta: { cwd: WORK } })
+      }, { inject: ['sessions'] }))
+      try {
+        send(session, oneTurnLog())
+        await ctx.sessions.flush(session)
+        await expect(ctx.sessionPersistence.delete(session.id)).rejects.toThrow('while it is live')
+        expect((await ctx.sessionPersistence.list()).map(value => value.id)).toContain(session.id)
+
+        await sessionFiber.dispose()
+        await expect(ctx.sessionPersistence.delete(session.id)).resolves.toBe(true)
+        await expect(ctx.sessionPersistence.load(session.id)).rejects.toThrow('not found')
+      } finally {
+        await sessionFiber.dispose()
+        await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
+    it('rejects deletion while an unpublished preparation exclusively reserves the id', async () => {
+      const fix = await makeFixture()
+      const { ctx, fiber } = await freshCtx(fix)
+      try {
+        const header = meta('delete-prepared', WORK)
+        await ctx.sessionPersistence.create(header)
+        await ctx.sessionPersistence.append(header.id, oneTurnLog())
+        const preparation = await ctx.sessionPersistence.prepare(header.id)
+
+        await expect(ctx.sessionPersistence.delete(header.id)).rejects.toThrow('preparation is reserved')
+        preparation[Symbol.dispose]()
+        await expect(ctx.sessionPersistence.delete(header.id)).resolves.toBe(true)
+      } finally {
+        await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
     it('round-trips the seed boundary (seedLength) through persistence', async () => {
       // A forked child records how many leading events were inherited via the seed; the
       // boundary must survive a reload (so a resume/replay can tell the inherited prefix from

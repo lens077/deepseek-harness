@@ -12,7 +12,7 @@ beforeEach(() => {
 describe('createChatStore', () => {
   it('init shape: empty selection/draft/view', () => {
     const store = createChatStore().create()
-    expect(store.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null })
+    expect(store.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null, reveal: null })
   })
 
   it('actions cover the declared write set', () => {
@@ -33,6 +33,14 @@ describe('createChatStore', () => {
     expect(store.store.getSnapshot().inspect).toEqual({ callId: 'c1' })
     store.actions.setInspect(null)
     expect(store.store.getSnapshot().inspect).toBeNull()
+
+    // Repeating a reveal for the same seq advances the nonce so the chat sees it again.
+    store.actions.requestReveal(7)
+    expect(store.store.getSnapshot().reveal).toEqual({ seq: 7, nonce: 1 })
+    store.actions.requestReveal(7)
+    expect(store.store.getSnapshot().reveal).toEqual({ seq: 7, nonce: 2 })
+    store.actions.clearReveal()
+    expect(store.store.getSnapshot().reveal).toBeNull()
   })
 
   it('persists per scope key and rehydrates a fresh instance', () => {

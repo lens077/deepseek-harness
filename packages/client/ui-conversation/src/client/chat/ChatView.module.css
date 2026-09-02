@@ -123,6 +123,10 @@
     background-size: 100% 100%;
     animation: none;
   }
+
+  .questionBar {
+    animation: none;
+  }
 }
 
 .hint {
@@ -157,6 +161,150 @@
   opacity: 0.6;
 }
 
+/* Sticky dock for the current-question bar. Zero height and no flow
+   participation: the chat view's follow, prepend-anchoring and paging logic all
+   read `scrollHeight`, so a bar appearing and disappearing in the flow would
+   move the reader's position every time it changed. The bar is the absolutely
+   positioned child, centered on the transcript's own column axis. */
+.questionBarDock {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  height: 0;
+}
+
+.questionBar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--dsh-chat-content-width);
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  transform: translateX(-50%);
+  animation: dsh-question-bar-in 140ms ease;
+}
+
+@keyframes dsh-question-bar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+.questionBarMain {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xs-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.questionBarNumber {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.questionBarText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.questionBarMain:hover .questionBarText {
+  text-decoration: underline;
+}
+
+.questionBarMeta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xs-13);
+}
+
+.questionBarFiles {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.questionBarOutcome {
+  white-space: nowrap;
+}
+
+.questionBarOutcome[data-outcome='completed'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.questionBarOutcome[data-outcome='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.questionBarClock {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Ordinary flow content, unlike the bar: it belongs to one completed turn and
+   scrolls away with it. Start-aligned and kept to one line so a linear read
+   passes it as a caption rather than a card. The negative bottom margin closes
+   the column gap to the tail it introduces, keeping the two one unit. */
+.turnRecap {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: -8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xs-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.turnRecapIcon,
+.turnRecapLabel {
+  flex: none;
+}
+
+.turnRecapText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turnRecap:hover .turnRecapText {
+  text-decoration: underline;
+}
+
 .navigationRail {
   position: fixed;
   top: 96px;
@@ -187,81 +335,6 @@
   gap: 6px;
 }
 
-.questionCompact {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 34px;
-  width: 32px;
-  padding: 8px 5px;
-  border: 0;
-  color: var(--dsw-alias-label-secondary);
-  background: transparent;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.questionMark {
-  position: relative;
-  display: flex;
-  align-items: center;
-  height: 4px;
-}
-
-.questionTick {
-  width: 12px;
-  height: 3px;
-  border-radius: 3px;
-  background: transparent;
-}
-
-.questionMark[data-current] .questionTick {
-  width: 18px;
-  background: rgb(103 158 254);
-}
-
-.questionDetail {
-  position: absolute;
-  right: 26px;
-  top: 50%;
-  width: 230px;
-  height: 34px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-button-floating-fill);
-  box-shadow: var(--dsw-shadow-lv2);
-  font: var(--dsw-font-xs-13);
-  line-height: 20px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: auto;
-  transform: translateY(-50%) translateX(4px);
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.questionCompact:not([data-panel-open]):hover .questionDetail,
-.questionCompact:not([data-panel-open]):focus-visible .questionDetail {
-  opacity: 1;
-  transform: translateY(-50%);
-}
-
-.questionDetail:hover {
-  width: min(520px, calc(100vw - 96px));
-  height: auto;
-  min-height: 34px;
-  overflow: visible;
-  white-space: normal;
-  transition-delay: 2s;
-}
-
 .questionArrow {
   display: grid;
   place-items: center;
@@ -279,93 +352,6 @@
 .questionArrow:disabled {
   opacity: 0.35;
   cursor: default;
-}
-
-.questionPanel {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: min(360px, calc(100vw - 48px));
-  max-height: min(560px, calc(100vh - var(--dsh-composer-height, 152px) - 72px));
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 16px;
-  background: var(--dsw-alias-button-floating-fill);
-  box-shadow: var(--dsw-shadow-lv3);
-}
-
-.questionSearch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-}
-
-.questionSearch input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  color: var(--dsw-alias-label-primary);
-  background: transparent;
-}
-
-.questionList {
-  overflow-y: auto;
-}
-
-.questionRow {
-  display: flex;
-  width: 100%;
-  gap: 10px;
-  padding: 9px 8px;
-  border: 0;
-  border-radius: 10px;
-  color: var(--dsw-alias-label-primary);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.questionRow:hover,
-.questionRow[data-current] {
-  background: var(--dsw-alias-interactive-bg-hover-solid);
-}
-
-.questionNumber {
-  flex: 0 0 28px;
-  color: var(--dsw-alias-label-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.questionCopy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.questionCopy > span {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.questionCopy time {
-  color: var(--dsw-alias-label-tertiary);
-  font: var(--dsw-font-xs-13);
-}
-
-.questionLoadAll {
-  border: 0;
-  color: var(--dsw-alias-label-secondary);
-  background: transparent;
-  cursor: pointer;
 }
 
 .toBottom {
@@ -388,8 +374,7 @@
 }
 
 .toBottom:hover,
-.questionArrow:not(:disabled):hover,
-.questionCompact:hover {
+.questionArrow:not(:disabled):hover {
   background: var(--dsw-alias-button-floating-hover);
 }
 
@@ -406,32 +391,8 @@
     position: static;
   }
 
-  .questionCompact {
-    width: 42px;
-    gap: 8px;
-    padding: 6px;
-    border: 1px solid var(--dsw-alias-border-l2);
-    border-radius: 14px;
-    background: var(--dsw-alias-button-floating-fill);
-    box-shadow: var(--dsw-shadow-lv2);
-  }
-
-  .questionDetail {
-    display: none;
-  }
-
   .toBottom {
     position: static;
-  }
-
-  .questionPanel {
-    position: fixed;
-    z-index: 20;
-    right: 12px;
-    bottom: calc(var(--dsh-composer-height, 152px) + 16px);
-    left: 12px;
-    width: auto;
-    max-height: 70vh;
   }
 }
 

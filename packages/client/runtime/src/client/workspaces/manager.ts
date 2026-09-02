@@ -220,6 +220,28 @@ export class WorkspaceManager {
   }
 
   /**
+   * Add or remove several Sessions from one Workspace account, then publish
+   * the returned snapshot without waiting for the Host frame.
+   * @param workspaceId - Workspace whose account changes.
+   * @param sessionIds - Sessions to add or remove.
+   * @param member - `true` to add, `false` to remove.
+   * @returns the wire result.
+   */
+  async setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<RpcResult<{ workspace: WorkspaceView }>> {
+    const { result } = await this.api.workspace.setSessionMembership({
+      workspaceId,
+      sessionIds: [...sessionIds],
+      member,
+    })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
    * Archive one session in the registry-global set, then install the
    * returned full set without waiting for the changed frame.
    * @param sessionId - session to archive.
@@ -227,6 +249,29 @@ export class WorkspaceManager {
    */
   async archiveSession(sessionId: SessionId): Promise<RpcResult<{ archivedSessionIds: SessionId[] }>> {
     const { result } = await this.api.workspace.archiveSession({ sessionId })
+    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * Archive several Sessions in one Host mutation and install the returned set.
+   * @param sessionIds - sessions to archive.
+   * @returns the wire result.
+   */
+  async archiveSessions(sessionIds: readonly SessionId[]): Promise<RpcResult<{ archivedSessionIds: SessionId[] }>> {
+    const { result } = await this.api.workspace.archiveSessions({ sessionIds: [...sessionIds] })
+    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * Remove one session from the registry-global archive set, then install the
+   * returned full set without waiting for the changed frame.
+   * @param sessionId - session to unarchive.
+   * @returns the wire result.
+   */
+  async unarchiveSession(sessionId: SessionId): Promise<RpcResult<{ archivedSessionIds: SessionId[] }>> {
+    const { result } = await this.api.workspace.unarchiveSession({ sessionId })
     if (result.ok) this.installArchived(result.value.archivedSessionIds)
     return result
   }

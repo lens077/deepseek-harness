@@ -127,10 +127,11 @@ export const sessionRenameValueSchema = z.object({
   seq: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.rename'>>>
 
-/** session.fork request payload (atSeq anchors the completed-turn cut). */
+/** session.fork request payload (atSeq anchors the completed-turn cut; placement picks the child's display slot). */
 export const sessionForkRequestSchema = z.object({
   sessionId: sessionIdSchema,
   atSeq: z.number().int().nonnegative().optional(),
+  placement: z.enum(['sibling', 'nested']).optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'session.fork'>>>
 
 /** session.fork response value (the child session id). */
@@ -352,3 +353,13 @@ export const sessionCancelRequestSchema = z.object({
 export const sessionCancelValueSchema = z.object({
   accepted: z.literal(true),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.cancel'>>>
+
+/** session.delete request payload. */
+export const sessionDeleteRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'session.delete'>>>
+
+/** session.delete response value: complete child-first committed cascade. */
+export const sessionDeleteValueSchema = z.object({
+  deletedSessionIds: z.array(sessionIdSchema).min(1),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.delete'>>>

@@ -9,6 +9,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
+import { createSessionSelectionStore } from '../src/client/selectionStore.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/WorkspaceBrowser.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -36,7 +37,7 @@ const sessionState = (items: readonly SessionSummary[], overrides: Partial<Sessi
 })
 const workspace = (id: string, sessionIds: string[], title = id): WorkspaceView => ({
   workspaceId: wid(id), path: `/projects/${id}`, title,
-  sessionIds: sessionIds.map(sid), createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  sessionIds: sessionIds.map(sid), nestedUnder: {}, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 })
 const workspaceState = (items: readonly WorkspaceView[], archivedSessionIds: readonly SessionId[] = []): WorkspaceListState => ({
   items, archivedSessionIds, state: 'idle', phase: 'ready', error: null, baselinesReady: true,
@@ -60,6 +61,9 @@ function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setDat
 
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const store = createWorkspaceViewStore().create()
+  // A real selection store, so selection specs drive the same transitions the
+  // browser runs in production instead of a hand-held snapshot.
+  const selection = createSessionSelectionStore().create()
   const props: WorkspaceBrowserProps = {
     wide: true,
     expandSidebar: vi.fn(),
@@ -76,17 +80,29 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
+    archiveSessions: vi.fn(async () => {}),
+    unarchiveSession: vi.fn(async () => {}),
+    deleteSession: vi.fn(async sessionId => [sessionId]),
+    addTodos: vi.fn(),
+    todosAvailable: () => false,
+    setSessionMembership: vi.fn(async (workspaceId, sessionIds, member) => ({
+      ...workspace(workspaceId, member ? sessionIds : []),
+      workspaceId,
+    })),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostDescription: selector => selector(undefined),
+    useSessionSelection: bindSnapshotSelector(selection),
+    setSessionSelection: (next) => { selection.actions.setSelection(next) },
+    clearSessionSelection: () => { selection.actions.clearSelection() },
     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
     ...overrides,
   }
   const view = render(<WorkspaceBrowser {...props} />)
-  return { view, props, store }
+  return { view, props, store, selection }
 }
 
 /** Re-render with (possibly) changed props — WorkspaceBrowser has no side channel. */
@@ -139,6 +155,23 @@ describe('WorkspaceBrowser', () => {
     })
   })
 
+  it('shows archived Sessions with inverse and permanent-delete actions', async () => {
+    const unarchiveSession = vi.fn(async () => {})
+    const b = mount({
+      useSessions: hook(sessionState([summary('one', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['one'], 'Alpha')], [sid('one')])),
+      unarchiveSession,
+    })
+    act(() => { b.store.actions.setGroupBy('archived') })
+
+    expect(screen.getByText('已归档')).toBeTruthy()
+    expect(screen.getByText('one')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '会话“one”的操作' }))
+    expect(screen.getByRole('menuitem', { name: '永久删除会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消归档' }))
+    await waitFor(() => { expect(unarchiveSession).toHaveBeenCalledWith(sid('one')) })
+  })
+
   it('renders the grouped tree by default and switches to the flat list via Group by', () => {
     const sessions = sessionState([summary('alpha-s', 2), summary('beta-s', 1)])
     const b = mount({
@@ -154,7 +187,7 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByText('分组方式')).toBeTruthy() // the menu heading label
     expect(screen.getAllByRole('separator')).toHaveLength(2)
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '按工作区', '单列表', '手动排序', '最近更新', '自适应',
+      '按工作区', '单列表', '已归档', '手动排序', '最近更新', '自适应',
       ...Array.from({ length: 16 }, (_, index) => String(index + 5)),
     ])
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
@@ -1230,6 +1263,163 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     expect(deleteWorkspace).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: '删除工作区' })).toBeNull()
+  })
+
+  it('shows Workspace-local actions beneath the header and removes the complete selection', async () => {
+    const setSessionMembership = vi.fn(async () => workspace('alpha', []))
+    mount({
+      useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'], 'Alpha')])),
+      setSessionMembership,
+    })
+    fireEvent.click(screen.getByText('Alpha'))
+    fireEvent.click(screen.getByText('one').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByText('two').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+
+    const toolbar = screen.getByRole('toolbar', { name: '已选择 2 个会话' })
+    expect(toolbar.compareDocumentPosition(screen.getByText('one')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '移出工作区' }))
+    await waitFor(() => {
+      expect(setSessionMembership).toHaveBeenCalledWith(wid('alpha'), [sid('one'), sid('two')], false)
+    })
+  })
+
+  it('right-click keeps a multi-selection and archives it in one mutation', async () => {
+    const archiveSessions = vi.fn(async () => {})
+    mount({
+      archiveSessions,
+      useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'], 'Alpha')])),
+    })
+    fireEvent.click(screen.getByText('Alpha'))
+    const one = screen.getByText('one').closest('[role="treeitem"]') as HTMLElement
+    const two = screen.getByText('two').closest('[role="treeitem"]') as HTMLElement
+    fireEvent.click(one, { ctrlKey: true })
+    fireEvent.click(two, { ctrlKey: true })
+    fireEvent.contextMenu(one, { clientX: 120, clientY: 180 })
+
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '归档' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '移出工作区' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '永久删除会话' })).toBeTruthy()
+    expect(screen.getByRole('toolbar', { name: '已选择 2 个会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '归档' }))
+    await waitFor(() => {
+      expect(archiveSessions).toHaveBeenCalledWith([sid('one'), sid('two')])
+    })
+  })
+
+  it('offers "add to todos" in the right-click menu only while a todo provider is composed in', () => {
+    const addTodos = vi.fn()
+    mount({
+      addTodos,
+      todosAvailable: () => true,
+      useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'], 'Alpha')])),
+    })
+    fireEvent.click(screen.getByText('Alpha'))
+    const one = screen.getByText('one').closest('[role="treeitem"]') as HTMLElement
+    const two = screen.getByText('two').closest('[role="treeitem"]') as HTMLElement
+    fireEvent.click(one, { ctrlKey: true })
+    fireEvent.click(two, { ctrlKey: true })
+    fireEvent.contextMenu(one, { clientX: 120, clientY: 180 })
+    fireEvent.click(screen.getByRole('menuitem', { name: '加入待办' }))
+    expect(addTodos).toHaveBeenCalledWith([sid('one'), sid('two')])
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('right-clicking an unselected Session replaces the prior selection', async () => {
+    const archiveSessions = vi.fn(async () => {})
+    mount({
+      useSessions: hook(sessionState([summary('one', 3), summary('two', 2), summary('three', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two', 'three'], 'Alpha')])),
+      archiveSessions,
+    })
+    fireEvent.click(screen.getByText('Alpha'))
+    fireEvent.click(screen.getByText('one').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByText('two').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.contextMenu(screen.getByText('three').closest('[role="treeitem"]') as HTMLElement)
+
+    expect(screen.queryByRole('toolbar')).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: '归档' }))
+    await waitFor(() => { expect(archiveSessions).toHaveBeenCalledWith([sid('three')]) })
+  })
+
+  it('creates a Workspace from ungrouped Sessions that share one cwd', async () => {
+    const createWorkspace = vi.fn(async () => ({
+      ...workspace('created', []),
+      path: '/projects/new',
+    }))
+    const setSessionMembership = vi.fn(async () => workspace('created', ['one', 'two']))
+    mount({
+      useSessions: hook(sessionState([
+        summary('one', 2, { cwd: '/projects/new' }),
+        summary('two', 1, { cwd: '/projects/new' }),
+      ])),
+      createWorkspace,
+      setSessionMembership,
+    })
+    fireEvent.click(screen.getByText('未分组'))
+    fireEvent.click(screen.getByText('one').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByText('two').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: '用所选会话创建工作区' }))
+
+    await waitFor(() => {
+      expect(createWorkspace).toHaveBeenCalledWith({ path: '/projects/new' })
+      expect(setSessionMembership).toHaveBeenCalledWith(wid('created'), [sid('one'), sid('two')], true)
+    })
+  })
+
+  it('permanent deletion deduplicates a selected parent and nested child into one cascade root', async () => {
+    const deleteSession = vi.fn(async sessionId => [sessionId])
+    const nested = {
+      ...workspace('alpha', ['parent', 'child'], 'Alpha'),
+      nestedUnder: { child: sid('parent') },
+    }
+    mount({
+      useSessions: hook(sessionState([
+        summary('parent', 2),
+        summary('child', 1, { parentId: sid('parent') }),
+      ])),
+      useWorkspaces: hook(workspaceState([nested])),
+      deleteSession,
+    })
+    fireEvent.click(screen.getByText('Alpha'))
+    fireEvent.click(screen.getByText('parent').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByText('child').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    expect(screen.getByRole('dialog', { name: '永久删除所选会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '永久删除' }))
+
+    await waitFor(() => {
+      expect(deleteSession).toHaveBeenCalledTimes(1)
+      expect(deleteSession).toHaveBeenCalledWith(sid('parent'))
+    })
+  })
+
+  it('keeps deleting the remaining roots after one rejection and re-selects only the failures', async () => {
+    const deleteSession = vi.fn(async (sessionId: SessionId) => {
+      if (sessionId === sid('one')) throw new Error('会话正在使用中')
+      return [sessionId]
+    })
+    mount({
+      useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'], 'Alpha')])),
+      deleteSession,
+    })
+    fireEvent.click(screen.getByText('Alpha'))
+    fireEvent.click(screen.getByText('one').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByText('two').closest('[role="treeitem"]') as HTMLElement, { ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    fireEvent.click(screen.getByRole('button', { name: '永久删除' }))
+
+    // The healthy root is still deleted, and the dialog stays open reporting
+    // the failure instead of silently abandoning the rest of the selection.
+    await waitFor(() => {
+      expect(deleteSession).toHaveBeenCalledWith(sid('two'))
+      expect(screen.getByRole('alert').textContent).toContain('会话正在使用中')
+    })
+    expect(deleteSession).toHaveBeenCalledTimes(2)
   })
 
   it('search hides drag affordances (rows are not draggable during search)', () => {

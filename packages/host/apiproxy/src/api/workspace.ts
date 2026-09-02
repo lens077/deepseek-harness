@@ -29,6 +29,13 @@ export interface WorkspaceView {
    * (attach prepends, insertSessionBefore reorders; activity never does).
    */
   sessionIds: SessionId[]
+  /**
+   * Nested display placement over the flat account: child session id →
+   * parent session id (nested-fork organization). Grouping surfaces render a
+   * mapped session under its parent, siblings in flat-account order, and an
+   * entry whose parent is not visible as a top-level row.
+   */
+  nestedUnder: Record<string, SessionId>
   /** ISO-8601 creation instant. */
   createdAt: string
   /** ISO-8601 last-mutation instant. */
@@ -97,13 +104,40 @@ export interface WorkspaceApi {
   }>): Promise<RpcResponse<{ workspace: WorkspaceView }>>
 
   /**
+   * Atomically adds or removes several Sessions from one Workspace account.
+   * Addition validates every Session cwd before writing; removal preserves logs
+   * and promotes surviving children whose nested parent was removed.
+   */
+  setSessionMembership(request: RpcRequest<{
+    workspaceId: WorkspaceId
+    sessionIds: SessionId[]
+    member: boolean
+  }>): Promise<RpcResponse<{ workspace: WorkspaceView }>>
+
+  /**
    * Adds one session to the registry-global archive set: the session
-   * disappears from every grouping surface but keeps its session log and its
-   * workspace accounting slot (a future unarchive restores its position).
+   * disappears from every active grouping surface but keeps its session log
+   * and its workspace accounting slot.
    * Idempotent for an already archived id. A session neither live nor in
    * session persistence fails with `session-not-found`. Returns the full
    * updated set (same snapshot the changed frame carries).
    */
   archiveSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Adds several Sessions to the global archive set in one durable write.
+   * Any unknown id rejects the complete request.
+   */
+  archiveSessions(request: RpcRequest<{ sessionIds: SessionId[] }>):
+  Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Removes one session from the registry-global archive set so active
+   * grouping surfaces show its retained accounting position again. An id
+   * outside the archive set is an idempotent no-op, including an unknown id.
+   * Returns the full updated set (same snapshot the changed frame carries).
+   */
+  unarchiveSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
 }

@@ -11,7 +11,7 @@ const wid = (id: string): WorkspaceId => id as WorkspaceId
 
 function workspace(id: string, sessionIds: SessionId[] = [], createdAt = '2026-01-01T00:00:00.000Z'): WorkspaceView {
   return {
-    workspaceId: wid(id), path: `/w/${id}`, title: id, sessionIds,
+    workspaceId: wid(id), path: `/w/${id}`, title: id, sessionIds, nestedUnder: {},
     createdAt, updatedAt: createdAt,
   }
 }
@@ -462,9 +462,10 @@ describe('WorkspaceRuntime', () => {
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-idle'])
     expect(sessions.list.getSnapshot().current).toBe('s-open')
 
-    // Archiving the current session clears it into the New Session view state.
-    api.onWorkspaceArchiveSession = () => Promise.resolve(ok({ archivedSessionIds: [sid('s-idle'), sid('s-open')] }))
-    await workspaces.archiveSession(sid('s-open'))
+    // A batch call uses one RPC and clears the current Session through the same projection sweep.
+    api.onWorkspaceArchiveSessions = () => Promise.resolve(ok({ archivedSessionIds: [sid('s-idle'), sid('s-open')] }))
+    await workspaces.archiveSessions([sid('s-idle'), sid('s-open')])
+    expect(api.callsOf('workspace.archiveSessions')).toEqual([{ sessionIds: ['s-idle', 's-open'] }])
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-idle', 's-open'])
     expect(sessions.list.getSnapshot().current).toBeUndefined()
 
@@ -474,6 +475,19 @@ describe('WorkspaceRuntime', () => {
     }))
     await expect(workspaces.archiveSession(sid('ghost'))).rejects.toThrow(/session-not-found/)
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-idle', 's-open'])
+
+    // Unarchive installs the same full-set echo and never reopens the session.
+    api.onWorkspaceUnarchiveSession = () => Promise.resolve(ok({ archivedSessionIds: [sid('s-open')] }))
+    await expect(workspaces.unarchiveSession(sid('s-idle'))).resolves.toBeUndefined()
+    expect(api.callsOf('workspace.unarchiveSession')).toEqual([{ sessionId: 's-idle' }])
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-open'])
+    expect(sessions.list.getSnapshot().current).toBeUndefined()
+
+    api.onWorkspaceUnarchiveSession = () => Promise.resolve(err({
+      code: 'internal', message: 'storage unavailable', details: {},
+    }))
+    await expect(workspaces.unarchiveSession(sid('s-open'))).rejects.toThrow(/storage unavailable/)
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-open'])
 
     // The changed frame and the list baseline both re-install the full set.
     workspaces.handleHostEnvelope({
@@ -515,8 +529,18 @@ describe('WorkspaceRuntime', () => {
     await hydration
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-open'])
     // The next (fresh) baseline is authoritative again.
-    api.onWorkspaceList = () => Promise.resolve(ok({ items: [], archivedSessionIds: [] }) as never)
+    api.onWorkspaceList = () => Promise.resolve(ok({ items: [], archivedSessionIds: [sid('s-open')] }) as never)
     await workspaces.refresh()
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-open'])
+
+    // A unary unarchive echo is equally authoritative over an older in-flight baseline.
+    const unarchiveGate = deferred<Awaited<ReturnType<FakeApiClient['onWorkspaceList']>>>()
+    api.onWorkspaceList = () => unarchiveGate.promise
+    const unarchiveHydration = workspaces.refresh()
+    api.onWorkspaceUnarchiveSession = () => Promise.resolve(ok({ archivedSessionIds: [] }))
+    await workspaces.unarchiveSession(sid('s-open'))
+    unarchiveGate.resolve(ok({ items: [], archivedSessionIds: [sid('s-open')] }) as never)
+    await unarchiveHydration
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
   })
 })

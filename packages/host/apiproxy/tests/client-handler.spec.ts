@@ -54,6 +54,7 @@ function scriptedApi(overrides: {
       }),
       rename: r => ok(r, { title: 'renamed', seq: 0 }),
       fork: r => ok(r, { sessionId: sid('s-fork') }),
+      delete: r => ok(r, { deletedSessionIds: [r.payload.sessionId] }),
       prompt: r => ok(r, { accepted: true as const }),
       attachment: r => ok(r, {
         attachment: { attachmentId: 'a' as never, mediaType: 'image/png', bytes: 1, width: 1, height: 1 },
@@ -82,12 +83,15 @@ function scriptedApi(overrides: {
     },
     workspace: {
       list: r => ok(r, { items: [], archivedSessionIds: [] }),
-      create: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' }, created: true }),
-      rename: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
+      create: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], nestedUnder: {}, createdAt: '0', updatedAt: '0' }, created: true }),
+      rename: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], nestedUnder: {}, createdAt: '0', updatedAt: '0' } }),
       delete: r => ok(r, { deleted: true as const }),
       insertBefore: r => ok(r, { workspaceIds: [r.payload.workspaceId] }),
-      insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
+      insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], nestedUnder: {}, createdAt: '0', updatedAt: '0' } }),
+      setSessionMembership: r => ok(r, { workspace: { workspaceId: r.payload.workspaceId, path: '/t', title: 't', sessionIds: [...r.payload.sessionIds], nestedUnder: {}, createdAt: '0', updatedAt: '0' } }),
       archiveSession: r => ok(r, { archivedSessionIds: [r.payload.sessionId] }),
+      archiveSessions: r => ok(r, { archivedSessionIds: r.payload.sessionIds }),
+      unarchiveSession: r => ok(r, { archivedSessionIds: [] }),
     },
     skills: { list: r => ok(r, { skills: [] }), ...overrides.skills },
     agentPresets: {
@@ -433,12 +437,20 @@ describe('workspace domain round trip', () => {
     if (created.result.ok) expect(created.result.value.created).toBe(true)
     const archivedResponse = await c.workspace.archiveSession({ sessionId: 's-arch' as never })
     expect(archivedResponse.result).toEqual({ ok: true, value: { archivedSessionIds: ['s-arch'] } })
+    const batchResponse = await c.workspace.archiveSessions({ sessionIds: ['s-one', 's-two'] as never })
+    expect(batchResponse.result).toEqual({ ok: true, value: { archivedSessionIds: ['s-one', 's-two'] } })
+    const unarchivedResponse = await c.workspace.unarchiveSession({ sessionId: 's-arch' as never })
+    expect(unarchivedResponse.result).toEqual({ ok: true, value: { archivedSessionIds: [] } })
   })
 
-  it('rejects a pathless create payload at the handler schema', async () => {
-    const response = await client(scriptedApi()).workspace.create({} as never)
+  it('rejects invalid Workspace payloads at the handler schema', async () => {
+    const c = client(scriptedApi())
+    const response = await c.workspace.create({} as never)
     expect(response.result.ok).toBe(false)
     if (!response.result.ok) expect(response.result.error.code).toBe('bad-request')
+    const emptyArchive = await c.workspace.archiveSessions({ sessionIds: [] })
+    expect(emptyArchive.result.ok).toBe(false)
+    if (!emptyArchive.result.ok) expect(emptyArchive.result.error.code).toBe('bad-request')
   })
 })
 

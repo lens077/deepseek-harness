@@ -134,7 +134,8 @@ describe('sessions.fork', () => {
       })),
     } as never)
 
-    const response = await api(ctx).sessions.fork(request({ sessionId: grandchild.id }))
+    const proxy = api(ctx)
+    const response = await proxy.sessions.fork(request({ sessionId: grandchild.id }))
 
     expect(response.result.ok).toBe(true)
     if (!response.result.ok) return
@@ -144,6 +145,36 @@ describe('sessions.fork', () => {
       cwd: '/proj',
     })
     expect(ctx.sessions.get(response.result.value.sessionId)?.header.origin).toBeUndefined()
+
+    // Nested placement degrades to the sibling slot here: the subagent source
+    // is not accounted in the ancestor-derived attach target.
+    const nested = await proxy.sessions.fork(request({ sessionId: grandchild.id, placement: 'nested' }))
+    expect(nested.result.ok).toBe(true)
+    if (!nested.result.ok) return
+    expect(attachSession).toHaveBeenLastCalledWith(nested.result.value.sessionId)
+    await ctx.fiber.dispose()
+  })
+
+  it('accounts a placement=nested fork under its accounted source', async () => {
+    const accounted: SessionId[] = []
+    const attachSession = vi.fn<(sessionId: SessionId, options?: { nestUnder?: SessionId }) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const workspace = { sessionIds: accounted, attachSession } as unknown as Workspace
+    const ctx = await composed([workspace])
+    const source = liveAgent(ctx, 'session-nest-source', 1)
+    accounted.push(source.id)
+
+    const proxy = api(ctx)
+    const response = await proxy.sessions.fork(request({ sessionId: source.id, placement: 'nested' }))
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    expect(attachSession).toHaveBeenCalledWith(response.result.value.sessionId, { nestUnder: source.id })
+
+    // The default placement stays a plain top-level attach.
+    const sibling = await proxy.sessions.fork(request({ sessionId: source.id }))
+    expect(sibling.result.ok).toBe(true)
+    if (!sibling.result.ok) return
+    expect(attachSession).toHaveBeenLastCalledWith(sibling.result.value.sessionId)
     await ctx.fiber.dispose()
   })
 

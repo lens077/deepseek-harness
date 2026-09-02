@@ -48,7 +48,12 @@ async function harness(options: HarnessOptions = {}) {
   const list = vi.fn(async () => listed)
   const load = vi.fn(() => { throw new Error('event bodies must not be loaded') })
   const inspect = vi.fn(() => { throw new Error('event bodies must not be inspected') })
-  ctx.provide('sessionPersistence', { list, load, inspect } as never)
+  const deleteSession = vi.fn(async (id: SessionId) => {
+    const before = listed.length
+    listed = listed.filter(meta => meta.id !== id)
+    return listed.length !== before
+  })
+  ctx.provide('sessionPersistence', { list, load, inspect, delete: deleteSession } as never)
 
   if (options.sessionStore === true) {
     await ctx.plugin(SessionStore)
@@ -75,6 +80,7 @@ async function harness(options: HarnessOptions = {}) {
     list,
     load,
     inspect,
+    deleteSession,
     setSessions: (headers: SessionHeader[]) => { listed = headers },
   }
 }
@@ -134,6 +140,7 @@ function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:0
     path,
     title: basename(path),
     sessionIds: sessionIds.map(SessionId),
+    nestedUnder: {},
     createdAt,
     updatedAt: createdAt,
   }
@@ -632,6 +639,34 @@ describe('Workspace session ordering', () => {
     expect(storedRecord(result.pool, workspace.id).sessionIds).toEqual(['s2', 's1'])
   })
 
+  it('records, guards, and prunes nested placement on the account', async () => {
+    const dir = await makeDir('nested-under')
+    const result = await harness()
+    result.setSessions([header('parent', dir, 1), header('child', dir, 2)])
+    const workspace = await result.registry.create(dir)
+    await workspace.attachSession(SessionId('parent'))
+    await workspace.attachSession(SessionId('child'), { nestUnder: SessionId('parent') })
+    expect(workspace.nestedUnder).toEqual({ child: 'parent' })
+    expect(storedRecord(result.pool, workspace.id).nestedUnder).toEqual({ child: 'parent' })
+
+    // Guards decide on the write chain: unaccounted parent, self, and a
+    // parent chain leading back to the attached session all reject.
+    await expect(workspace.attachSession(SessionId('child'), { nestUnder: SessionId('ghost') }))
+      .rejects.toThrow(/not accounted/)
+    await expect(workspace.attachSession(SessionId('child'), { nestUnder: SessionId('child') }))
+      .rejects.toThrow(/under itself/)
+    await expect(workspace.attachSession(SessionId('parent'), { nestUnder: SessionId('child') }))
+      .rejects.toThrow(/leads back/)
+    expect(workspace.nestedUnder).toEqual({ child: 'parent' })
+
+    // Detaching the parent prunes its entries: the child keeps its slot and
+    // is promoted to top level rather than detached with the branch.
+    await workspace.detachSession(SessionId('parent'))
+    expect(workspace.sessionIds).toEqual(['child'])
+    expect(workspace.nestedUnder).toEqual({})
+    expect(storedRecord(result.pool, workspace.id).nestedUnder).toEqual({})
+  })
+
   it('moves one id before an anchor or to the end, durably', async () => {
     const dir = await makeDir('insert-before')
     const result = await harness()
@@ -723,6 +758,22 @@ describe('Workspace session ordering', () => {
     const attached = workspace.attachSession(SessionId('s1'))
     await Promise.all([detached, attached])
     expect(workspace.sessionIds).toEqual(['s1'])
+  })
+
+  it('adds and removes a selection in one record mutation while promoting surviving nested children', async () => {
+    const dir = await makeDir('membership-batch')
+    const result = await harness()
+    result.setSessions([header('parent', dir), header('child', dir), header('other', dir)])
+    const workspace = await result.registry.create(dir)
+    const writesBefore = result.changes.filter(change => change.table === 'workspaces').length
+    await workspace.attachSessions([SessionId('parent'), SessionId('child'), SessionId('other')])
+    expect(workspace.sessionIds).toEqual(['parent', 'child', 'other'])
+    expect(result.changes.filter(change => change.table === 'workspaces')).toHaveLength(writesBefore + 1)
+    await workspace.attachSession(SessionId('child'), { nestUnder: SessionId('parent') })
+
+    await workspace.detachSessions([SessionId('parent'), SessionId('other')])
+    expect(workspace.sessionIds).toEqual(['child'])
+    expect(workspace.nestedUnder).toEqual({})
   })
 
 })
@@ -895,6 +946,40 @@ describe('registry-global session archive', () => {
     expect(result.registry.archivedSessionIds).toEqual(['gone', 'kept'])
   })
 
+  it('validates a batch before one archive-set write', async () => {
+    const dir = await makeDir('archive-batch')
+    const result = await harness({ sessions: [header('first', dir, 100), header('second', dir, 200)] })
+    const changesBefore = result.changes.filter(change => change.table === '').length
+
+    await expect(result.registry.archiveSessions([SessionId('first'), SessionId('ghost')]))
+      .rejects.toThrow(/cannot archive session 'ghost'/)
+    expect(result.registry.archivedSessionIds).toEqual([])
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesBefore)
+
+    await result.registry.archiveSessions([SessionId('first'), SessionId('second'), SessionId('first')])
+    expect(result.registry.archivedSessionIds).toEqual(['first', 'second'])
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesBefore + 1)
+  })
+
+  it('unarchives durably, retains accounting order, and skips absent ids without writing', async () => {
+    const dir = await makeDir('unarchive-home')
+    const result = await harness({ sessions: [header('first', dir, 100), header('second', dir, 200)] })
+    const workspace = result.registry.list()[0]!
+    await result.registry.archiveSession(SessionId('first'))
+    await result.registry.archiveSession(SessionId('second'))
+
+    await result.registry.unarchiveSession(SessionId('first'))
+    expect(result.registry.archivedSessionIds).toEqual(['second'])
+    expect(workspace.sessionIds).toEqual(['second', 'first'])
+    expect(storedState(result.pool).archivedSessionIds).toEqual(['second'])
+    const changesAfterRemoval = result.changes.filter(change => change.table === '').length
+
+    await result.registry.unarchiveSession(SessionId('first'))
+    await result.registry.unarchiveSession(SessionId('unknown'))
+    expect(result.registry.archivedSessionIds).toEqual(['second'])
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesAfterRemoval)
+  })
+
   it('accepts unaccounted and live sessions but rejects unknown ids without writing', async () => {
     const dir = await makeDir('archive-strays')
     const live = await makeDir('archive-live')
@@ -930,7 +1015,12 @@ describe('registry-global session archive', () => {
 
     const second = await harness({ pool, sessions: [header('s1', dir, 100)] })
     expect(second.registry.archivedSessionIds).toEqual(['s1'])
+    await second.registry.unarchiveSession(SessionId('s1'))
     await second.fiber.dispose()
+
+    const third = await harness({ pool, sessions: [header('s1', dir, 100)] })
+    expect(third.registry.archivedSessionIds).toEqual([])
+    await third.fiber.dispose()
 
     // A medium written before the field existed parses through the schema default.
     const legacyId = WorkspaceId('00000000-0000-4000-8000-00000000000a')
@@ -940,5 +1030,26 @@ describe('registry-global session archive', () => {
     )
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
+  })
+})
+
+describe('permanent Session deletion', () => {
+  it('deletes a lineage child-first and prunes archive, account, and nested placement together', async () => {
+    const dir = await makeDir('delete-session-lineage')
+    const root = header('root', dir, 100)
+    const child = { ...header('child', dir, 200), parentSession: root.id }
+    const leaf = { ...header('leaf', dir, 300), parentSession: child.id }
+    const result = await harness({ sessions: [root, child, leaf] })
+    const workspace = result.registry.list()[0]!
+    await workspace.attachSession(child.id, { nestUnder: root.id })
+    await workspace.attachSession(leaf.id, { nestUnder: child.id })
+    await result.registry.archiveSession(child.id)
+
+    await expect(result.registry.deleteSession(root.id)).resolves.toEqual(['leaf', 'child', 'root'])
+    expect(result.deleteSession.mock.calls.map(([id]) => id)).toEqual(['leaf', 'child', 'root'])
+    expect(workspace.sessionIds).toEqual([])
+    expect(workspace.nestedUnder).toEqual({})
+    expect(result.registry.archivedSessionIds).toEqual([])
+    expect(storedState(result.pool).pendingMutation).toBeUndefined()
   })
 })

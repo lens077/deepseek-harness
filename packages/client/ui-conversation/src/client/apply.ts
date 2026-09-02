@@ -12,9 +12,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ViewTab } from './contract/views.ts'
 import type {
-  ApprovalWait, ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, ComposerBarInjected,
-  ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
-  DetailsInjected,
+  ApprovalWait, ChatNodeTurnDataInjected, ChatQuestionIndex, ChatQuestionSummary, ChatReveal, ChatScrollPosition,
+  ChatViewInjected, ComposerBarInjected, ComposerChainProps, ConversationInjected,
+  ConversationSessionHeaderInjected, ConversationSessionInjected, DetailsInjected,
 } from './contract/slots.ts'
 import type { InputNotice } from './input/contract.ts'
 import { createChatStore } from './stores.ts'
@@ -31,6 +31,7 @@ import { QuestionShortcutRow } from './settings/QuestionShortcutRow.tsx'
 import type { QuestionShortcutRowInjected } from './settings/QuestionShortcutRow.tsx'
 import { QuestionNavigationPolicy } from './input/question-navigation-policy.ts'
 import { ChatView } from './chat/ChatView.tsx'
+import { buildQuestionTurnIndex, questionEntries } from './chat/turn-summary.ts'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
@@ -164,6 +165,40 @@ export function apply(ctx: Context): void {
   // width reflow when the tab ring remounts the view. Deliberately not
   // persisted: a fresh page load keeps the open-jump-to-bottom default.
   const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
+
+  // The question index other surfaces group by. Snapshots are immutable and
+  // replaced on change, so the snapshot is the cache key: a rail redrawing on
+  // every streaming frame walks the Chat order once per frame at most.
+  const questionIndexCache = new WeakMap<object, readonly ChatQuestionSummary[]>()
+  ctx.provide('chatQuestionIndex', {
+    forSession: (sessionId) => {
+      const snapshot = sessions.binding(sessionId)?.session.getSnapshot()
+      if (snapshot === undefined) return []
+      const cached = questionIndexCache.get(snapshot)
+      if (cached !== undefined) return cached
+      const entries = questionEntries(snapshot.chat.order, snapshot.chat.nodes, t('chat.questions.image'))
+      const index = buildQuestionTurnIndex(entries, snapshot.chat.timeline)
+      const summaries = entries.flatMap((entry, position) => {
+        const turn = index.turnOfQuestion.get(entry.key)
+        return turn === undefined ? [] : [{ turn, text: entry.text, number: position + 1, key: entry.key }]
+      })
+      questionIndexCache.set(snapshot, summaries)
+      return summaries
+    },
+  } satisfies ChatQuestionIndex)
+
+  // Reveal requests reach the chat store through the bound actions the chat
+  // view's inject factory receives; a request for a session whose chat has
+  // not mounted yet waits here and is delivered by that factory.
+  const revealActions = new Map<SessionId, BoundActions<typeof chatStore>>()
+  const pendingReveals = new Map<SessionId, number>()
+  ctx.provide('chatReveal', {
+    reveal: (sessionId, seq) => {
+      const bound = revealActions.get(sessionId)
+      if (bound === undefined) pendingReveals.set(sessionId, seq)
+      else bound.requestReveal(seq)
+    },
+  } satisfies ChatReveal)
 
   const viewTabs = (): ViewTab[] => {
     const tabs: ViewTab[] = []
@@ -422,12 +457,20 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
       const conversation = concreteConversation(ctx)
       const scoped = scopedConversation(sessions, sessionId)
+      revealActions.set(sessionId, actions)
+      const pendingReveal = pendingReveals.get(sessionId)
+      if (pendingReveal !== undefined) {
+        pendingReveals.delete(sessionId)
+        actions.requestReveal(pendingReveal)
+      }
       return {
         openDetails: (target) => {
           actions.select(target)
           layout.openDetails()
         },
         fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
+        turnFiles: turn => ctx.get('chatFileDiffs')?.forTurn(sessionId, turn) ?? [],
+        turnFilesAvailable: () => ctx.get('chatFileDiffs') !== undefined,
         questionNavigation: () => questionNavigationPolicy.settings.getSnapshot(),
         openFile: (path) => {
           const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd

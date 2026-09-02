@@ -529,6 +529,39 @@ describe('Host Workspace increments', () => {
     abort.abort()
   })
 
+  it('adds and removes a Session selection through one Workspace membership RPC', async () => {
+    const { api, root } = await harness()
+    const source = expectOk(await api.workspace.create(request({ path: stageDir(root, 'membership-source') }))).workspace
+    const other = expectOk(await api.workspace.create(request({ path: stageDir(root, 'membership-other') }))).workspace
+    const first = SessionId('membership-first')
+    const second = SessionId('membership-second')
+    expectOk(await api.sessions.create(request({ workspaceId: source.workspaceId, sessionId: first })))
+    expectOk(await api.sessions.create(request({ workspaceId: source.workspaceId, sessionId: second })))
+
+    const removed = expectOk(await api.workspace.setSessionMembership(request({
+      workspaceId: source.workspaceId,
+      sessionIds: [first, second],
+      member: false,
+    }))).workspace
+    expect(removed.sessionIds).toEqual([])
+    const restored = expectOk(await api.workspace.setSessionMembership(request({
+      workspaceId: source.workspaceId,
+      sessionIds: [first, second],
+      member: true,
+    }))).workspace
+    expect(restored.sessionIds).toEqual([first, second])
+
+    const mismatch = await api.workspace.setSessionMembership(request({
+      workspaceId: other.workspaceId,
+      sessionIds: [first],
+      member: true,
+    }))
+    expect(mismatch.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-membership-invalid' },
+    })
+  })
+
   it('archives a session into the global set, keeps its accounting, and streams the set once', async () => {
     const { api, root } = await harness()
     const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'archive-home') }))).workspace
@@ -560,6 +593,27 @@ describe('Host Workspace increments', () => {
     const otherSession = SessionId('session-after-archive')
     expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId: otherSession })))
     expect((await after).payload.type).not.toBe('host/archived-sessions-changed')
+
+    const batchMissing = await api.workspace.archiveSessions(request({
+      sessionIds: [otherSession, SessionId('session-ghost')],
+    }))
+    expect(batchMissing.result).toMatchObject({
+      ok: false,
+      error: { code: 'session-not-found', details: { sessionId: 'session-ghost' } },
+    })
+    expect(expectOk(await api.workspace.list(request({}))).archivedSessionIds).toEqual([sessionId])
+
+    const batchChanged = nextHostFrame(stream)
+    expect(expectOk(await api.workspace.archiveSessions(request({
+      sessionIds: [sessionId, otherSession],
+    }))).archivedSessionIds).toEqual([sessionId, otherSession])
+    let batchFrame = await batchChanged
+    for (let skipped = 0; batchFrame.payload.type !== 'host/archived-sessions-changed' && skipped < 2; skipped++) {
+      batchFrame = await nextHostFrame(stream)
+    }
+    expect(batchFrame).toMatchObject({
+      payload: { type: 'host/archived-sessions-changed', archivedSessionIds: [sessionId, otherSession] },
+    })
 
     const missing = await api.workspace.archiveSession(request({ sessionId: SessionId('session-ghost') }))
     expect(missing.result).toMatchObject({

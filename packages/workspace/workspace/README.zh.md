@@ -12,11 +12,12 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 - `ctx.workspaceRegistry.get(id)`/`list()`/`resolveByPath(path)`：由缓存提供的查找。`list()` 为同步操作，并遵循持久注册表顺序；`resolveByPath` 为异步操作，因为它采用相同的 `realpath` 规范化方式，并会拒绝缺失路径，而不是创建路径。
 - `ctx.workspaceRegistry.insertBefore(id, before?)`：在持久注册表顺序内移动一个已注册 Workspace，语义类似 DOM 的 insertBefore：插到锚点之前，省略锚点则追加到末尾。来源或锚点不在注册表中时拒绝且不写入；以自身为锚点或移动到当前位置时直接完成且不写入。返回的 id 列表是完整的已提交顺序。
 - `ctx.workspaceRegistry.delete(id)`：只移除 Workspace 注册记录、对应的持久顺序条目及会话归属记录。未知 id 返回 `false`，成功移除记录则返回 `true`。目录、用户文件、活跃会话和持久化会话日志绝不受影响，因此相关会话会进入 Ungrouped。表写入失败时会恢复原顺序和此前发布的实体。
-- `Workspace.attachSession(id)`：对照 workspace 路径验证实时或已持久化的会话头 cwd，并将新 id 前置。未知会话、缺失／无法解析／非目录的 cwd 值和不匹配情况都会在不写入的前提下被拒绝。`detachSession` 只移除候选索引条目。
+- `Workspace.attachSession(id)` 与 `attachSessions(ids)` 会在写入前，对照 Workspace 路径验证实时或已持久化 Session 头部的 cwd，再按选区顺序前置新 id。未知 Session、缺失／无法解析／非目录的 cwd 值和不匹配情况都会拒绝完整调用且不写入。`detachSession` 与 `detachSessions` 只移除 Workspace 记账，清理无效嵌套位置，并提升父会话被移除后仍然存在的子会话。
 - `Workspace.insertSessionBefore(id, before?)`：在手动顺序内移动一个已记账的会话，语义类似 DOM 的 insertBefore：插到锚点之前，省略锚点则追加到末尾。会话或锚点不在记账中时拒绝且不写入；移动到当前位置时直接完成且不写入。注册表中的 Workspace 顺序绝不改变。
-- `ctx.workspaceRegistry.archiveSession(id)`/`archivedSessionIds`：覆盖在 workspace 记账之上的注册表级全局归档集合：被归档的会话从各分组视图中消失，但其会话日志和 `sessionIds` 席位保持不变，未来取消归档时可恢复原位置。归档接受任何实时或已持久化的会话（无论已记账还是 Ungrouped），对已归档的 id 直接完成而不写入，并拒绝未知 id。在该字段出现之前写入的状态解析为一个空集合。
+- `ctx.workspaceRegistry.archiveSession(id)`/`archiveSessions(ids)`/`unarchiveSession(id)`/`archivedSessionIds`：覆盖在 Workspace 记账之上的注册表级全局归档集合。被归档的 Session 会从活跃分组视图中消失，但其 Session 日志和 `sessionIds` 席位保持不变，因此取消归档后仍回到原位置。归档接受任何实时或已持久化的 Session（无论已记账还是 Ungrouped），对已归档的 id 直接完成且不写入，并拒绝未知 id；批量归档会在一次状态写入前验证全部 id。取消归档会移除已归档的 id；若 id 不在集合中（包括未知 id），则直接完成且不写入，使过期的归档条目仍可恢复。两项变更均与注册表操作串行执行，并保留集合的 Host 顺序。在该字段出现之前写入的状态会解析为空集合。
 - `Workspace.sessionIds`：按持久候选顺序提供同步 id 加规范 cwd 成员投影。缺失头部、无效 cwd 值和不匹配情况都被过滤；下一次 workspace 变更会剪除它们。如果同一存储介质将一个会话索引到两个 workspace 下、用两条记录声明同一路径，或偏离持久 workspace 顺序，启动会被拒绝。
 - `Workspace.status()`：未缓存的目录检查，返回 `'ok' | 'missing-dir'`；目录缺失绝不会改动记录。
+- `ctx.workspaceRegistry.deleteSession(id, retire?)` 会计算完整的持久化后代谱系，在变更前拒绝不安全的实时目标，写入可恢复的子级优先删除标记，删除全部持久化工件，再清理 Workspace 记账、归档成员关系和嵌套位置。可选的 `RetireSessionsForDelete` 回调是 ApiProxy 持有的能力，只能停用由其确切持有的空闲 Agent handle；缺少或不足的所有权会拒绝实时删除。
 
 `storageDomain` 和 `sessionPersistence` 是启动必需依赖。任一依赖服务不可用时，插件保持待处理，且不能提交空的已初始化标记。首次成功启动时，注册表调用 `SessionPersistence.list()`，仅使用头部 `id`、`cwd` 和 `createdAt` 对有效历史目录分组并持久化初始顺序；它绝不读取事件正文。已初始化标记最后写入，因此重启后可安全复用引导初始化期间的部分写入。后续仅能通过 cwd 识别的会话仍属于 Ungrouped。
 
@@ -40,5 +41,5 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 
 ## 已知限制与暂缓事项
 
-- 会话删除与破坏性的文件夹移除是彼此独立且尚未提供的功能；删除 Workspace 注册记录绝不能替代二者（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
+- 破坏性的文件夹移除仍未提供；删除 Workspace 注册记录绝不能替代永久 Session 删除（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
 - 头部索引会在启动时刷新，也会在 attach 必须解析未缓存持久 id 时刷新；另一进程执行的删除或造成的 cwd 损坏会在下次刷新或重启后被发现。

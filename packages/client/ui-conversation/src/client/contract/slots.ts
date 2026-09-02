@@ -404,6 +404,20 @@ export interface ChatFileDiffSegment {
 }
 
 /**
+ * One file a turn changed, as a turn-level summary lists it. Line totals come
+ * from the hunks that turn recorded, so a mutation that recorded no diff
+ * contributes a path with two zeroes rather than disappearing.
+ */
+export interface ChatTurnFileChange {
+  /** The file-tool path exactly as the mutation recorded it. */
+  readonly path: string
+  /** Added lines across this turn's hunks for the path. */
+  readonly additions: number
+  /** Removed lines across this turn's hunks for the path. */
+  readonly deletions: number
+}
+
+/**
  * Optional session-change provider, consumed via `ctx.get('chatFileDiffs')`
  * (optional-service convention): a surface that lists a turn's changed files
  * asks it what this session did to one of them and draws the answer inline.
@@ -418,6 +432,16 @@ export interface ChatFileDiffs {
    * @returns the segments to draw, empty when this session recorded no diff for the path.
    */
   forPath(sessionId: SessionId, path: string): readonly ChatFileDiffSegment[]
+  /**
+   * Files one turn of this session changed, in the order the turn first
+   * touched them. This is the same recorded change data `forPath` reads, sliced
+   * by owning turn instead of by path, so a question-level summary and the file
+   * rail cannot disagree about what a turn did.
+   * @param sessionId - the session whose log is read.
+   * @param turn - the turn number to slice by.
+   * @returns the changed files, empty when the turn changed nothing or is outside the loaded window.
+   */
+  forTurn(sessionId: SessionId, turn: number): readonly ChatTurnFileChange[]
   /**
    * How much of a turn's changed files opens without being asked. Reactive so
    * a Settings change reaches transcripts already on screen; a reader's own
@@ -438,6 +462,62 @@ declare module '@deepseek-ai/cordis' {
     /** Session-change provider (ui-session-files); reach via ctx.get — optional. */
     chatFileDiffs: ChatFileDiffs
   }
+}
+
+/** One user question and the turn that answered it, as another surface labels it. */
+export interface ChatQuestionSummary {
+  /** Turn opened for this question; the key a per-turn file slice is taken by. */
+  readonly turn: number
+  /** Question prose, or the image stand-in for a picture-only ask. */
+  readonly text: string
+  /** 1-based position in the loaded question index, matching the navigator's numbering. */
+  readonly number: number
+  /** Chat Node key, which is also the transcript's scroll anchor for this question. */
+  readonly key: string
+}
+
+/**
+ * Optional question-index provider, published by the conversation plugin and
+ * consumed via `ctx.get('chatQuestionIndex')`: a surface that groups session
+ * facts by the question that caused them asks which turn belongs to which
+ * question, instead of deriving questions from the transcript a second time.
+ * An absent service leaves such a surface on whatever ungrouped form it had.
+ */
+export interface ChatQuestionIndex {
+  /**
+   * Loaded questions of one session with the turn each opened, oldest first.
+   * A question the loaded window cannot attribute to a turn is omitted: it has
+   * no turn for a caller to slice by.
+   * @param sessionId - the session whose transcript is read.
+   * @returns the attributed questions, empty for an unknown session.
+   */
+  forSession(sessionId: SessionId): readonly ChatQuestionSummary[]
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Question-index provider (ui-conversation); reach via ctx.get — optional. */
+    chatQuestionIndex: ChatQuestionIndex
+    /** Question-reveal request seat (ui-conversation); reach via ctx.get — optional. */
+    chatReveal: ChatReveal
+  }
+}
+
+/**
+ * Optional reveal seat, published by the conversation plugin and consumed via
+ * `ctx.get('chatReveal')`: a surface that lists questions across sessions
+ * asks the chat to scroll one session to the question logged at `seq`. The
+ * chat pages back through older history until the row is loaded, then
+ * scrolls and highlights it exactly as the question navigator does.
+ */
+export interface ChatReveal {
+  /**
+   * Ask a session's chat to show the question at `seq`. Safe before the
+   * session's chat has mounted: the request is held until it does.
+   * @param sessionId - the session whose transcript scrolls.
+   * @param seq - log seq of the `user/message` to reveal.
+   */
+  reveal(sessionId: SessionId, seq: number): void
 }
 
 /**
@@ -869,6 +949,16 @@ export interface ChatViewInjected {
    * absent or the turn produced nothing worth linking.
    */
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /**
+   * Files one turn changed, from the optional {@link ChatFileDiffs} service
+   * (resolved lazily per call, like {@link ChatViewInjected.fileMentions}, so
+   * composing the provider in or out takes effect live). Empty without the
+   * service: the question summary then states the turn and its clock and says
+   * nothing about files, rather than claiming the turn changed none.
+   */
+  turnFiles: (turn: number) => readonly ChatTurnFileChange[]
+  /** Whether a file provider is composed in, which decides if an empty file list means anything. */
+  turnFilesAvailable: () => boolean
   /** Read the live global question-navigation shortcut preference. */
   questionNavigation: () => import('../../submission-settings.ts').QuestionNavigationSettings
 }

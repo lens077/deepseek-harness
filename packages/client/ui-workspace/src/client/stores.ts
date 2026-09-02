@@ -10,8 +10,8 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-run
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 
-/** Session-list grouping mode: workspace sections or one flat recency list. */
-export type SessionGroupBy = 'workspace' | 'flat'
+/** Session-list presentation: workspace sections, one flat list, or the archive set. */
+export type SessionGroupBy = 'workspace' | 'flat' | 'archived'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
 /** Collapsed rows per Workspace, or automatic sizing from available height. */
@@ -28,6 +28,12 @@ type WorkspaceViewState = {
   sessionOrderByAccount: Record<string, string[]>
   /** Last observed update timestamps per order account for one-time promotion events. */
   sessionUpdatedAtByAccount: Record<string, Record<string, number>>
+  /**
+   * Whether Shift/Ctrl range and toggle selection is active on session rows.
+   * Disabled restores plain single-click-opens behavior and ignores the
+   * modifier keys entirely.
+   */
+  multiSelect: boolean
 }
 
 /**
@@ -38,6 +44,7 @@ type WorkspaceViewActions = {
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
   setCollapsedSessionCount: (draft: WorkspaceViewState, count: CollapsedSessionCount) => void
+  setMultiSelect: (draft: WorkspaceViewState, enabled: boolean) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
   retainAccountKeys: (draft: WorkspaceViewState, workspaceKeys: readonly string[]) => void
   syncSessionOrderAccount: (
@@ -62,12 +69,14 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
+      multiSelect: true,
     }),
-    persist: 'dsh.workspace.view.v6',
+    persist: 'dsh.workspace.view.v7',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
       setCollapsedSessionCount: (d, count: CollapsedSessionCount) => { d.collapsedSessionCount = count },
+      setMultiSelect: (d, enabled: boolean) => { d.multiSelect = enabled },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
       retainAccountKeys: (d, workspaceKeys: readonly string[]) => {
         const retained = new Set(workspaceKeys)

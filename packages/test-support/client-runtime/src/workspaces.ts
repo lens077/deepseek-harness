@@ -85,6 +85,7 @@ export class TestWorkspaces implements IWorkspaces {
       title: input.path,
       path: input.path,
       sessionIds: [],
+      nestedUnder: {},
     } as unknown as WorkspaceView
   }
 
@@ -160,7 +161,7 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'rename', args: [workspaceId, title] })
     const stub = this.stubs.get('rename')
     if (stub !== undefined) return await (stub(workspaceId, title) as Promise<WorkspaceView>)
-    return { workspaceId, title, path: `/${title}`, sessionIds: [] } as unknown as WorkspaceView
+    return { workspaceId, title, path: `/${title}`, sessionIds: [], nestedUnder: {} } as unknown as WorkspaceView
   }
 
   /**
@@ -193,7 +194,31 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'insertSessionBefore', args: [workspaceId, sessionId, beforeSessionId] })
     const stub = this.stubs.get('insertSessionBefore')
     if (stub !== undefined) return await (stub(workspaceId, sessionId, beforeSessionId) as Promise<WorkspaceView>)
-    return { workspaceId, title: '', path: '', sessionIds: [sessionId] } as unknown as WorkspaceView
+    return { workspaceId, title: '', path: '', sessionIds: [sessionId], nestedUnder: {} } as unknown as WorkspaceView
+  }
+
+  /**
+   * Add or remove Sessions from one Workspace account (recorded).
+   * @param workspaceId - target Workspace.
+   * @param sessionIds - Sessions whose membership changes.
+   * @param member - whether to add or remove them.
+   * @returns the stubbed or inert updated view.
+   */
+  async setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView> {
+    this.calls.push({ method: 'setSessionMembership', args: [workspaceId, sessionIds, member] })
+    const stub = this.stubs.get('setSessionMembership')
+    if (stub !== undefined) return await (stub(workspaceId, sessionIds, member) as Promise<WorkspaceView>)
+    return {
+      workspaceId,
+      title: '',
+      path: '',
+      sessionIds: member ? [...sessionIds] : [],
+      nestedUnder: {},
+    } as unknown as WorkspaceView
   }
 
   /**
@@ -209,7 +234,43 @@ export class TestWorkspaces implements IWorkspaces {
       return
     }
     await this.update((draft) => {
-      draft.archivedSessionIds = [...draft.archivedSessionIds, sessionId]
+      if (!draft.archivedSessionIds.includes(sessionId)) {
+        draft.archivedSessionIds = [...draft.archivedSessionIds, sessionId]
+      }
+    })
+  }
+
+  /**
+   * Archive several sessions in one recorded call.
+   * @param sessionIds - sessions to archive.
+   */
+  async archiveSessions(sessionIds: readonly SessionId[]): Promise<void> {
+    this.calls.push({ method: 'archiveSessions', args: [sessionIds] })
+    const stub = this.stubs.get('archiveSessions')
+    if (stub !== undefined) {
+      await (stub(sessionIds) as Promise<void>)
+      return
+    }
+    await this.update((draft) => {
+      draft.archivedSessionIds = [...new Set([...draft.archivedSessionIds, ...sessionIds])]
+    })
+  }
+
+  /**
+   * Unarchive a session (recorded). The default removes it from the observable set.
+   * @param sessionId - session to unarchive.
+   */
+  async unarchiveSession(sessionId: SessionId): Promise<void> {
+    this.calls.push({ method: 'unarchiveSession', args: [sessionId] })
+    const stub = this.stubs.get('unarchiveSession')
+    if (stub !== undefined) {
+      await (stub(sessionId) as Promise<void>)
+      return
+    }
+    await this.update((draft) => {
+      if (draft.archivedSessionIds.includes(sessionId)) {
+        draft.archivedSessionIds = draft.archivedSessionIds.filter(id => id !== sessionId)
+      }
     })
   }
 }

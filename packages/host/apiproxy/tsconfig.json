@@ -45,6 +45,9 @@
       "path": "../../preset/agent-presets"
     },
     {
+      "path": "../../session/session-inbox"
+    },
+    {
       "path": "../../core/session"
     },
     {

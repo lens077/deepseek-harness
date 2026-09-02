@@ -1,4 +1,4 @@
-/** General Settings row for how much of a turn's inline diffs opens by default. */
+/** Conversation-layout row for how much of a turn's inline diffs opens by default. */
 import { useState } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -6,7 +6,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { DiffExpansion } from './diff-expansion.ts'
 import type { NS, SessionFilesKey } from './locales.ts'
-import css from './DiffExpansionRow.module.css'
+import css from './SettingsRow.module.css'
 
 /** Registration-side preference face. */
 export interface DiffExpansionRowInjected {
@@ -20,7 +20,7 @@ export interface DiffExpansionRowInjected {
 
 /** Full Settings-row props. */
 export type DiffExpansionRowProps =
-  PropsRuntime<'settings.general.item'>
+  PropsRuntime<'settings.conversation-layout.item'>
   & PropsLocale<typeof NS>
   & InjectFace<DiffExpansionRowInjected>
 

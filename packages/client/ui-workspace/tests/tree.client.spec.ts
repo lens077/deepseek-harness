@@ -3,7 +3,7 @@ import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
+  deriveArchived, deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
   UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -22,7 +22,7 @@ const list = (...items: SessionSummary[]): SessionListState => ({
 })
 const workspace = (id: string, sessionIds: string[], title = id): WorkspaceView => ({
   workspaceId: wid(id), path: `/projects/${id}`, title,
-  sessionIds: sessionIds.map(sid), createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  sessionIds: sessionIds.map(sid), nestedUnder: {}, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 })
 const view = (expandedGroups: readonly string[] = [], ungroupedOrder?: readonly string[]) => ({
   expandedGroups,
@@ -38,6 +38,40 @@ describe('deriveGroups', () => {
     const groups = deriveGroups(sessions, workspaces, noArchive, view(['first']))
     expect(groups.map(group => group.key)).toEqual(['first', 'empty'])
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('older'), sid('newer')])
+  })
+
+  it('nests placement children under their parent and promotes children of invisible parents', () => {
+    const sessions = list(
+      summary('parent', 5), summary('childA', 4), summary('childB', 3),
+      summary('grand', 2), summary('orphan', 1),
+    )
+    const ws = {
+      ...workspace('tree', ['parent', 'childA', 'childB', 'grand', 'orphan']),
+      nestedUnder: {
+        childA: sid('parent'),
+        childB: sid('parent'),
+        grand: sid('childA'),
+        // Parent not visible in the group: the child renders top-level.
+        orphan: sid('missing'),
+      },
+    }
+    const groups = deriveGroups(sessions, [ws], noArchive, view(['tree']))
+    const rows = groups[0]!.sessions
+    expect(rows.map(row => row.id)).toEqual([sid('parent'), sid('orphan')])
+    expect(rows[0]!.children.map(child => child.id)).toEqual([sid('childA'), sid('childB')])
+    expect(rows[0]!.children[0]!.children.map(child => child.id)).toEqual([sid('grand')])
+    expect(groups[0]!.sessionCount).toBe(5)
+    // The flat list stays hierarchy-free.
+    expect(deriveFlat(sessions, noArchive).every(row => row.children.length === 0)).toBe(true)
+  })
+
+  it('renders every member of a malformed placement cycle instead of dropping the branch', () => {
+    const sessions = list(summary('a', 2), summary('b', 1))
+    const ws = { ...workspace('cyc', ['a', 'b']), nestedUnder: { a: sid('b'), b: sid('a') } }
+    const rows = deriveGroups(sessions, [ws], noArchive, view(['cyc']))[0]!.sessions
+    const rendered = (nodes: readonly { id: string; children: readonly unknown[] }[]): string[] =>
+      nodes.flatMap(node => [node.id, ...rendered(node.children as never)])
+    expect(rendered(rows as never).sort()).toEqual(['a', 'b'])
   })
 
   it('projects pending-interaction state into grouped and flat rows', () => {
@@ -251,6 +285,31 @@ describe('deriveFlat', () => {
   })
 })
 
+describe('deriveArchived', () => {
+  it('follows archive order, retains Workspace context, and keeps recoverable blanks', () => {
+    const blank = { ...summary('blank', 50), blank: true }
+    const parent = summary('parent', 40)
+    parent.pendingInteraction = 'approval'
+    const loose = summary('loose', 30, '/outside/loose-project')
+    const child = {
+      ...summary('child', 20), parentId: parent.id, origin: 'subagent' as const, running: true,
+    }
+    const sessions = list(blank, parent, loose, child)
+    const rows = deriveArchived(
+      sessions,
+      [workspace('owned', ['parent'], 'Owned Project')],
+      archived('blank', 'missing', 'parent', 'loose', 'child', 'parent'),
+    )
+
+    expect(rows.map(row => row.session.id)).toEqual([blank.id, parent.id, loose.id])
+    expect(rows.map(row => row.workspace)).toEqual([UNGROUPED_LABEL, 'Owned Project', 'loose-project'])
+    expect(rows[0]?.session).toMatchObject({ blank: true, title: 'New Session' })
+    expect(rows[1]?.session).toMatchObject({
+      pendingInteraction: 'approval', runningSubagentCount: 1,
+    })
+  })
+})
+
 describe('deriveSearchResults archive filtering', () => {
   it('archived sessions never match — not by title and not via a backend content hit', () => {
     const hit = summary('hit', 2)
@@ -396,12 +455,12 @@ describe('createWorkspaceViewStore', () => {
     const store = createWorkspaceViewStore().create()
     expect(store.getSnapshot().groupBy).toBe('workspace')
     expect(store.getSnapshot().orderBy).toBe('updated')
-    store.actions.setGroupBy('flat')
+    store.actions.setGroupBy('archived')
     store.actions.setOrderBy('updated')
     store.actions.setGroupExpanded('alpha', true)
     store.actions.syncSessionOrderAccount('alpha', ['two', 'one'], { one: 1, two: 2 })
     store.actions.setSessionOrder('alpha', ['one', 'two'])
-    expect(store.getSnapshot().groupBy).toBe('flat')
+    expect(store.getSnapshot().groupBy).toBe('archived')
     expect(store.getSnapshot()).toMatchObject({
       orderBy: 'updated',
       groupExpansion: { alpha: true },

@@ -1706,6 +1706,49 @@ Depends on: `Readable` (`node:stream`) · `Writable` (`node:stream`)
 
 Source: [`packages/sdk/server/src/index.ts:25`](../packages/sdk/server/src/index.ts)
 
+<a id="deepseek-aidsh-session-digest"></a>
+
+## `@deepseek-ai/dsh-session-digest`
+
+Requires: `sessionProjections`
+
+```ts config-catalog
+/**
+ * Retained-text budgets. The value rides every `session.list` row, so these
+ * bound the listing payload rather than the durable log: a consumer reads the
+ * complete message through `session.history` when the user expands an entry.
+ * Invalid values fail plugin load.
+ */
+export interface Config {
+  /** Maximum retained question characters. Omit for 400. */
+  questionChars?: number
+  /** Maximum retained answer characters. Omit for 1200. */
+  replyChars?: number
+  /** Maximum retained changed-file paths of the current question. Omit for 8. */
+  changedFilePaths?: number
+  /** Maximum retained earlier questions. Omit for 30. */
+  historyQuestions?: number
+}
+```
+
+Source: [`packages/session/session-digest/src/index.ts:29`](../packages/session/session-digest/src/index.ts)
+
+<a id="deepseek-aidsh-session-inbox"></a>
+
+## `@deepseek-ai/dsh-session-inbox`
+
+Requires: `storageDomain`
+
+```ts config-catalog
+/** Required deployment policy for todo text. */
+export interface Config {
+  /** Maximum UTF-8 byte length accepted for one todo's text. */
+  readonly maxTextBytes: number
+}
+```
+
+Source: [`packages/session/session-inbox/src/index.ts:51`](../packages/session/session-inbox/src/index.ts)
+
 <a id="deepseek-aidsh-session-persistence-jsonl"></a>
 
 ## `@deepseek-ai/dsh-session-persistence-jsonl`
@@ -3241,6 +3284,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-conversation` ([`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-cordis` ([`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-deliverables` — requires `systemPrompt` ([`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-digest` ([`packages/client/ui-digest/src/index.ts`](../packages/client/ui-digest/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-directory-picker-browse` ([`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-directory-picker-native` ([`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-goal` ([`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts))

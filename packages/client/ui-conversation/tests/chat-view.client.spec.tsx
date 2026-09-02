@@ -3,7 +3,7 @@
 // Tool seat ownership and selection handoff — driven through a scripted
 // ObservableSnapshot fake, no wire or Tool presentation plugin.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect } from 'react'
 import type {
@@ -289,6 +289,9 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     forkAt,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
+    // Absent file provider by default; question-bar tests override both.
+    turnFiles: () => [],
+    turnFilesAvailable: () => false,
     questionNavigation: () => ({
       previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable',
     }),
@@ -298,7 +301,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
   const setSelection = (next: SelectionTarget | null): void => { chat.actions.select(next) }
   return {
     set, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
-    chatScroll, forkAt, setSelection, toolOwners,
+    chatScroll, forkAt, setSelection, toolOwners, chat,
   }
 }
 
@@ -1459,5 +1462,246 @@ describe('ChatView', () => {
     const failedView = render(<failed.ChatView {...failed.props} />)
     expect(failedView.getByText('Compaction cancelled.')).toBeTruthy()
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
+  })
+})
+
+describe('current-question bar', () => {
+  /**
+   * Place the transcript so `above` question rows have fully passed the
+   * scrollport's top edge and the rest sit below it.
+   * @param view - the rendered chat view.
+   * @param rows - flow keys in transcript order.
+   * @param above - how many leading rows have scrolled off the top.
+   * @returns the resolved scrollport, ready for `readerScroll`.
+   */
+  function placeRows(
+    view: ReturnType<typeof render>,
+    rows: readonly string[],
+    above: number,
+  ): HTMLElement {
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    vi.spyOn(scroller, 'getBoundingClientRect').mockImplementation(
+      () => ({ top: 0, bottom: 400 } as DOMRect),
+    )
+    rows.forEach((key, index) => {
+      const row = view.container.querySelector(`[data-chat-flow-key="${key}"]`) as HTMLDivElement
+      const top = index < above ? -200 + index * 40 : 100 + index * 40
+      vi.spyOn(row, 'getBoundingClientRect').mockImplementation(
+        () => ({ top, bottom: top + 30 } as DOMRect),
+      )
+    })
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2_000, writable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 400, writable: true })
+    return scroller
+  }
+
+  it('stays hidden while the question it would name is still on screen', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'do the thing'), assistant(2, 'answer')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = placeRows(view, ['fixture:user:1'], 0)
+    readerScroll(scroller, 10)
+    expect(view.container.querySelector('[data-question-bar]')).toBeNull()
+  })
+
+  it('names the question, its outcome and its clock once that row has scrolled away', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'do the thing'), assistant(2, 'answer')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = placeRows(view, ['fixture:user:1'], 1)
+    readerScroll(scroller, 600)
+    const bar = view.container.querySelector('[data-question-bar]') as HTMLElement
+    expect(bar).not.toBeNull()
+    expect(bar.textContent).toContain('#1')
+    expect(bar.textContent).toContain('do the thing')
+    expect(bar.textContent).toContain('已完成')
+    expect(bar.textContent).toContain('3秒')
+  })
+
+  it('follows the reader to the question whose answer is on screen', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'first ask'), assistant(2, 'a'), user(4, 'second ask'), assistant(5, 'b', 2)],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 3_000 }], [2, { startTime: 5_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = placeRows(view, ['fixture:user:1', 'fixture:user:4'], 2)
+    readerScroll(scroller, 900)
+    const bar = view.container.querySelector('[data-question-bar]') as HTMLElement
+    expect(bar.textContent).toContain('#2')
+    expect(bar.textContent).toContain('second ask')
+    // Turn 2 is still open, so it reports the running badge, not an outcome.
+    expect(bar.textContent).toContain('进行中')
+  })
+
+  it('reports the turn\'s changed files only when a provider answered', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'touch files'), assistant(2, 'done')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const turnFiles = vi.fn(() => [
+      { path: 'src/a.ts', additions: 4, deletions: 1 },
+      { path: 'src/b.ts', additions: 0, deletions: 2 },
+    ])
+    const view = render(
+      <h.ChatView {...h.props} turnFiles={turnFiles} turnFilesAvailable={() => true} />,
+    )
+    const scroller = placeRows(view, ['fixture:user:1'], 1)
+    readerScroll(scroller, 600)
+    const bar = view.container.querySelector('[data-question-bar]') as HTMLElement
+    expect(bar.textContent).toContain('2 个文件')
+    expect(turnFiles).toHaveBeenCalledWith(1)
+    expect(bar.querySelector('[title*="src/a.ts"]')?.getAttribute('title'))
+      .toBe('src/a.ts  +4 -1\nsrc/b.ts  +0 -2')
+
+    // The same turn without a composed-in provider says nothing about files
+    // rather than claiming it changed none.
+    const bare = render(<h.ChatView {...h.props} turnFiles={() => []} turnFilesAvailable={() => false} />)
+    readerScroll(placeRows(bare, ['fixture:user:1'], 1), 600)
+    expect((bare.container.querySelector('[data-question-bar]') as HTMLElement).textContent)
+      .not.toContain('个文件')
+  })
+
+  it('scrolls back to the named question when the bar is clicked', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'do the thing'), assistant(2, 'answer')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = placeRows(view, ['fixture:user:1'], 1)
+    const row = view.container.querySelector('[data-chat-flow-key="fixture:user:1"]') as HTMLDivElement
+    const scrollIntoView = vi.fn()
+    row.scrollIntoView = scrollIntoView
+    // jsdom implements no media queries; the jump consults reduced-motion.
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    readerScroll(scroller, 600)
+    fireEvent.click(view.getByRole('button', { name: /当前提问/ }))
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+  })
+
+  it('reveals a requested question once its row is loaded, paging back until then', () => {
+    const h = makeHarness({
+      nodes: [user(4, 'later ask'), assistant(5, 'answer')],
+      hasMore: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    placeRows(view, ['fixture:user:4'], 1)
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    const scrollIntoView = vi.fn()
+    const proto = HTMLElement.prototype as unknown as Record<string, unknown>
+    const original = proto['scrollIntoView']
+    proto['scrollIntoView'] = scrollIntoView
+    onTestFinished(() => {
+      vi.unstubAllGlobals()
+      proto['scrollIntoView'] = original
+    })
+
+    // The seq is older than the loaded window: page back and keep the request.
+    act(() => { h.chat.actions.requestReveal(1) })
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+    expect(h.chat.store.getSnapshot().reveal).toEqual({ seq: 1, nonce: 1 })
+    expect(scrollIntoView).not.toHaveBeenCalled()
+
+    // The page arrives with the row: scroll to it and acknowledge.
+    act(() => {
+      h.set({
+        nodes: [user(1, 'first ask'), assistant(2, 'first answer'), user(4, 'later ask'), assistant(5, 'answer')],
+        hasMore: false,
+      })
+    })
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+    expect(h.chat.store.getSnapshot().reveal).toBeNull()
+
+    // A seq no page can hold clears once history is exhausted.
+    act(() => { h.chat.actions.requestReveal(0) })
+    expect(h.chat.store.getSnapshot().reveal).toBeNull()
+    expect(h.loadOlder).toHaveBeenCalledTimes(1)
+  })
+
+  it('restates the question at the end of a long completed turn', () => {
+    const h = makeHarness({
+      nodes: [
+        user(1, 'do the long thing'),
+        assistant(2, 'thinking'),
+        toolResult(3, 'a'),
+        toolResult(4, 'b'),
+        assistant(5, 'final answer'),
+      ],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 9_000 }]]),
+      turnEnds: new Map([[1, 6]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const recap = view.container.querySelector('[data-turn-recap]') as HTMLElement
+    expect(recap).not.toBeNull()
+    expect(recap.textContent).toContain('回应')
+    expect(recap.textContent).toContain('#1')
+    expect(recap.textContent).toContain('do the long thing')
+
+    // It belongs to the turn's tail, so it comes after the answer it recaps.
+    const rows = [...view.container.querySelectorAll('[data-chat-flow-key], [data-turn-recap]')]
+    expect(rows.indexOf(recap)).toBeGreaterThan(
+      rows.indexOf(view.container.querySelector('[data-chat-flow-key="fixture:assistant:5"]') as HTMLElement),
+    )
+  })
+
+  it('leaves a short turn alone, where the question is still on screen', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'quick ask'), assistant(2, 'quick answer')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 2_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.container.querySelector('[data-turn-recap]')).toBeNull()
+  })
+
+  it('scrolls back to the question the recap names, honouring reduced motion', () => {
+    const h = makeHarness({
+      nodes: [
+        user(1, 'do the long thing'),
+        assistant(2, 'thinking'),
+        toolResult(3, 'a'),
+        toolResult(4, 'b'),
+        assistant(5, 'final answer'),
+      ],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 9_000 }]]),
+      turnEnds: new Map([[1, 6]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const row = view.container.querySelector('[data-chat-flow-key="fixture:user:1"]') as HTMLDivElement
+    const scrollIntoView = vi.fn()
+    row.scrollIntoView = scrollIntoView
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    fireEvent.click(view.container.querySelector('[data-turn-recap]') as HTMLElement)
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' })
+  })
+
+  it('keeps a live clock on the open turn it names', () => {
+    vi.useFakeTimers()
+    try {
+      const h = makeHarness({
+        nodes: [user(1, 'long job'), assistant(2, 'working')],
+        turnTimings: new Map([[1, { startTime: Date.now() - 30_000 }]]),
+        running: true,
+      })
+      const view = render(<h.ChatView {...h.props} />)
+      const scroller = placeRows(view, ['fixture:user:1'], 1)
+      readerScroll(scroller, 600)
+      const bar = view.container.querySelector('[data-question-bar]') as HTMLElement
+      expect(bar.textContent).toContain('30秒')
+      act(() => { vi.advanceTimersByTime(2_000) })
+      expect(bar.textContent).toContain('32秒')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

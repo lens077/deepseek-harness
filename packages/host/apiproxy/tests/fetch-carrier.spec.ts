@@ -93,6 +93,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async fork(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { sessionId: 's-fork' as never } } }
       },
+      async delete(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { deletedSessionIds: [request.payload.sessionId] } } }
+      },
       async prompt(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { accepted: true as const } } }
       },
@@ -167,13 +170,13 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async create(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' }, created: true } },
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], nestedUnder: {}, createdAt: 't', updatedAt: 't' }, created: true } },
         }
       },
       async rename(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' } } },
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], nestedUnder: {}, createdAt: 't', updatedAt: 't' } } },
         }
       },
       async delete(request) {
@@ -185,11 +188,23 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async insertSessionBefore(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' } } },
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], nestedUnder: {}, createdAt: 't', updatedAt: 't' } } },
+        }
+      },
+      async setSessionMembership(request) {
+        return {
+          rpcId: request.rpcId,
+          result: { ok: true, value: { workspace: { workspaceId: request.payload.workspaceId, path: '/w', title: 'w', sessionIds: [...request.payload.sessionIds], nestedUnder: {}, createdAt: 't', updatedAt: 't' } } },
         }
       },
       async archiveSession(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { archivedSessionIds: [request.payload.sessionId] } } }
+      },
+      async archiveSessions(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { archivedSessionIds: [...request.payload.sessionIds] } } }
+      },
+      async unarchiveSession(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { archivedSessionIds: [] } } }
       },
     },
     agentPresets: {

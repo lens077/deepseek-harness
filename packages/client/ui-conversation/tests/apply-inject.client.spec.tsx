@@ -233,6 +233,20 @@ describe('conversation slot inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('chatReveal holds a request until the chat view mounts, then routes through its store actions', async () => {
+    const b = await bench()
+    const reveal = b.runtime.ctx.get('chatReveal')
+    if (reveal === undefined) throw new Error('chatReveal not provided')
+    // Before the chat view's inject ran for ROOT, the request waits.
+    reveal.reveal(ROOT, 12)
+    const { instance } = b.chatViewApi(ROOT)
+    expect(instance.store.getSnapshot().reveal).toEqual({ seq: 12, nonce: 1 })
+    // Once bound, later requests land directly.
+    reveal.reveal(ROOT, 30)
+    expect(instance.store.getSnapshot().reveal).toEqual({ seq: 30, nonce: 2 })
+    await b.runtime.dispose()
+  })
+
   it('openFile (chat view face) resolves against session cwd and calls workspaces.openPath', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(ROOT)

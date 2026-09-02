@@ -26,6 +26,8 @@ Serves current, log-derived per-session state to client carriers.
 | [`session-projection/`](session-projection/README.md) | Defines and drives session projection units | `ctx.sessionProjections` |
 | [`session-projection-cache/`](session-projection-cache/README.md) | Persists and restores projection checkpoints | `ctx.sessionProjectionCache` |
 | [`session-stats/`](session-stats/README.md) | Serves whole-log counts, lifecycle/model/tool timing, retries, and outcome aggregates (`sessionStats` unit) | registers on `ctx.sessionProjections` |
+| [`session-digest/`](session-digest/README.md) | Serves the newest question, closing answer, outcome, changed files, and question history (`sessionDigest` unit) | registers on `ctx.sessionProjections` |
+| [`session-inbox/`](session-inbox/README.md) | Stores the user's seen/handled/snooze/pin marks and todos behind the `sessionInbox` Remote | `ctx.sessionInbox` |
 
 ## Titles
 

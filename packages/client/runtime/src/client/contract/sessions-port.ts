@@ -38,6 +38,12 @@ export interface SessionsPort {
    */
   create(opts: { workspaceId: WorkspaceId }): Promise<SessionId>
   /**
+   * Permanently delete a Session lineage subtree.
+   * @param sessionId - cascade root.
+   * @returns complete child-first committed ids.
+   */
+  delete(sessionId: SessionId): Promise<readonly SessionId[]>
+  /**
    * Select a session as current.
    * @param id - session id (must exist in the list store).
    */

@@ -16,12 +16,16 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
  * stamped at create; `sessionIds` is the ordered ownership account (array
- * order is display order); timestamps are ISO-8601 strings.
+ * order is display order); `nestedUnder` maps an accounted child session to
+ * the accounted session it displays under (nested-fork placement — an
+ * organization fact, distinct from header lineage); timestamps are ISO-8601
+ * strings. Defaulted so records written before the field parse unchanged.
  */
 export const workspaceRecord = z.object({
   path: z.string(),
   title: z.string(),
   sessionIds: z.array(z.string().transform(SessionId)),
+  nestedUnder: z.record(z.string(), z.string().transform(SessionId)).default({}),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -37,6 +41,13 @@ export type WorkspaceRecord = z.infer<typeof workspaceRecord>
 const workspacePendingMutation = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('create'), workspaceId }),
   z.object({ operation: z.literal('delete'), workspaceId }),
+  z.object({
+    operation: z.literal('delete-sessions'),
+    sessionIds: z.array(z.string().transform(SessionId)).min(1).refine(
+      ids => new Set(ids).size === ids.length,
+      { message: 'session deletion marker repeats a session id' },
+    ),
+  }),
 ])
 
 /**

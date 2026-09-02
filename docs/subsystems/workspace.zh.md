@@ -60,6 +60,15 @@ interface Workspace {
   readonly sessionIds: readonly SessionId[]
 
   /**
+   * Nested display placement over the flat account: child session id →
+   * parent session id. An entry is served only while BOTH ends pass the
+   * membership filter of {@link sessionIds}; grouping surfaces render an
+   * unmapped (or unservable-parent) session as a top-level row. Sibling
+   * order among a parent's children follows the flat account order.
+   */
+  readonly nestedUnder: Readonly<Record<string, SessionId>>
+
+  /**
    * Replace the display title durably.
    * @param title - New title; any string, duplicates across workspaces allowed.
    * @returns resolution after durability.
@@ -74,10 +83,26 @@ interface Workspace {
    * header cwd must resolve to an existing directory equal to {@link path};
    * unknown ids, missing or invalid cwd values, and mismatches reject without
    * writing.
+   *
+   * `options.nestUnder` additionally records nested display placement under
+   * an accounted parent, decided on the write chain: an unaccounted parent,
+   * a self-parent, or a parent chain reaching back to the session itself
+   * rejects without writing. Re-attaching an accounted session with
+   * `nestUnder` re-parents it durably.
    * @param sessionId - The session to record.
+   * @param options - Optional nested placement under an accounted parent.
    * @returns resolution after durability.
    */
-  attachSession(sessionId: SessionId): Promise<void>
+  attachSession(sessionId: SessionId, options?: { nestUnder?: SessionId }): Promise<void>
+
+  /**
+   * Prepend several sessions in one durable record update. Every new id is
+   * validated before the write; any invalid cwd rejects the complete batch.
+   * Batch attachment creates no nested-placement entries.
+   * @param sessionIds - Sessions to account, in their resulting display order.
+   * @returns resolution after durability.
+   */
+  attachSessions(sessionIds: readonly SessionId[]): Promise<void>
 
   /**
    * Move an accounted session within the manual order, DOM-insertBefore-like:
@@ -104,6 +129,14 @@ interface Workspace {
   detachSession(sessionId: SessionId): Promise<void>
 
   /**
+   * Remove several sessions in one durable record update. Any surviving child
+   * whose nested parent is removed is promoted to top level.
+   * @param sessionIds - Sessions to remove from this account.
+   * @returns resolution after durability.
+   */
+  detachSessions(sessionIds: readonly SessionId[]): Promise<void>
+
+  /**
    * Live directory check, uncached: whether {@link path} currently exists and
    * is a directory. A missing directory never mutates the record — the
    * directory may only be temporarily moved.
@@ -113,11 +146,13 @@ interface Workspace {
 }
 ```
 
-所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区路径，因此一个会话在结构上至多属于一个工作区。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，存储失败以普通错误拒绝）；每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。
+所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区路径，因此一个会话在结构上至多属于一个工作区。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，批量附加错误以 `WorkspaceMembershipInvalidError` 拒绝，存储失败以普通错误拒绝）。`attachSessions` 会在一次 Workspace 记录写入前验证完整集合；`detachSessions` 保留日志，清理无效嵌套位置，并提升因父会话被移除而失去显示位置的存续子会话。每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。
 
 ## 注册表：`ctx.workspaceRegistry`
 
 `WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 规范化路径，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? basename(path)` 的记录并前插到持久的注册表顺序中——新记录不得与既有显示标题重复（`WorkspaceNameConflictError`）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
+
+注册表还拥有全局归档集合。`archiveSessions(ids)` 会在一次持久集合写入前验证每个实时或已持久化 Session；已归档 Session 保留 Workspace 记账和日志。`unarchiveSession(id)` 会幂等移除一个成员，包括过期的未知 id，使“已归档”界面始终可以作为恢复入口。
 
 会话的 cwd 在创建时由创建者赋予，而不是由本注册表赋予——API 网关从所选工作区的 `path` 解析新会话的 cwd（回退到显式或默认 cwd），先创建会话使 cwd 落入其不可变的 [`SessionHeader`](persistence.zh.md#sessionheader--metadata-beside-the-log)，再调用 `attachSession`，后者会把已存储的 header cwd 与工作区路径重新校验一遍。首次成功启动时，注册表仅凭已持久化的 header（`id`、`cwd`、`createdAt`——绝不读事件正文）引导历史：把规范 cwd 有效的会话按目录分组为工作区，最新的排在最前；「已初始化」标记最后写入，因此被中断的引导可以安全续跑。引导只发生这一次：没有 cwd 的历史遗留会话保持 Ungrouped，此后创建的会话只能通过 `attachSession` 加入工作区。
 
@@ -204,6 +239,19 @@ delete(id: WorkspaceId): Promise<boolean>
 insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly WorkspaceId[]>
 
 /**
+ * Permanently delete a stored Session and every transitive fork/subagent
+ * descendant, child first. Live targets reject unless the caller supplies an
+ * exact disposer capability; the registry reserves the full subtree before
+ * invoking it, then requires every target to leave the live store. The durable
+ * marker makes physical deletion, Workspace account pruning, archive cleanup,
+ * and index cleanup restartable.
+ * @param sessionId - Root identity whose complete lineage subtree is removed.
+ * @param retire - Optional exact capability that may retire the reported live subset.
+ * @returns the deterministic child-first deleted ids.
+ */
+deleteSession( sessionId: SessionId, retire?: RetireSessionsForDelete, ): Promise<readonly SessionId[]>
+
+/**
  * Archive one session durably. The session must exist (live or in session
  * persistence); its workspace accounting — or lack of one — is irrelevant.
  * An already archived id resolves without writing.
@@ -211,6 +259,23 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
  * @returns resolution after durability.
  */
 archiveSession(sessionId: SessionId): Promise<void>
+
+/**
+ * Archive several sessions in one registry-state write. Every id is validated
+ * before mutation, so an unknown Session rejects the complete selection.
+ * @param sessionIds - Sessions to add to the archive set.
+ * @returns resolution after durability.
+ */
+archiveSessions(sessionIds: readonly SessionId[]): Promise<void>
+
+/**
+ * Remove one session from the archive set durably. An id outside the set
+ * resolves without writing, including an unknown id: archive membership is
+ * the operation's authority, so stale entries always remain clearable.
+ * @param sessionId - The session to unarchive.
+ * @returns resolution after durability, or immediately for an absent id.
+ */
+unarchiveSession(sessionId: SessionId): Promise<void>
 
 /**
  * Resolve by canonical directory path without creating or mutating a

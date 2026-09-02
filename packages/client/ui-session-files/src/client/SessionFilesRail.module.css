@@ -62,6 +62,22 @@
   font-weight: 600;
 }
 
+/* A directory header groups the file rows indented beneath it; it is
+   orientation, not a control — selection and reveal stay on the files. The
+   component head-truncates the label so the tail (the segments nearest the
+   file) survives a narrow rail; the left padding is set inline per depth, and
+   this trailing ellipsis is only the backstop for a beaten estimate. */
+.dir {
+  display: block;
+  padding: 7px 16px 2px;
+  font: var(--dsw-font-xs-13);
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The name is the scannable part; a long one truncates rather than widening the
    rail or wrapping to a second row. The full path rides the button's title.
 

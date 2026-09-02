@@ -26,6 +26,8 @@
 | [`session-projection/`](session-projection/README.zh.md) | 定义并驱动会话投影单元 | `ctx.sessionProjections` |
 | [`session-projection-cache/`](session-projection-cache/README.zh.md) | 持久化并恢复投影检查点 | `ctx.sessionProjectionCache` |
 | [`session-stats/`](session-stats/README.zh.md) | 提供全日志计数、生命周期/模型/工具耗时、重试与结果聚合（`sessionStats` 单元） | 注册到 `ctx.sessionProjections` |
+| [`session-digest/`](session-digest/README.zh.md) | 提供最新提问、收尾回答、结果、改动文件与提问历史（`sessionDigest` 单元） | 注册到 `ctx.sessionProjections` |
+| [`session-inbox/`](session-inbox/README.zh.md) | 在 `sessionInbox` Remote 背后存储用户的已读/已处理/延后/置顶标记与待办 | `ctx.sessionInbox` |
 
 ## 标题
 

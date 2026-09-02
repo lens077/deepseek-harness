@@ -9,7 +9,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { readdirSync } from 'node:fs'
-import { open, mkdir, readFile, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readFile, readdir, realpath, link, lstat, rm, stat, truncate, unlink } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -179,6 +179,10 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
     return this.coordinator.append(id, events)
+  }
+
+  delete(id: SessionId): Promise<boolean> {
+    return this.coordinator.delete(id)
   }
 
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
@@ -426,6 +430,27 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     } else {
       await this.materialize(meta, events)
     }
+  }
+
+  /** Remove the complete session-owned directory without pruning its shared project directory. */
+  async deleteStored(id: SessionId): Promise<boolean> {
+    const candidates: Array<{ path: string; project: string; directory: boolean }> = []
+    for (const project of await this.listProjectDirs()) {
+      await this.rejectLegacyFlatArtifact(project, id)
+      const path = join(project, encodeSegment(id))
+      const info = await this.lstatIfExists(path)
+      if (info !== undefined) candidates.push({ path, project, directory: info.isDirectory() })
+    }
+    if (candidates.length > 1) {
+      throw new Error(`duplicate JSONL session id "${id}" appears in multiple project directories`)
+    }
+    const candidate = candidates[0]
+    if (candidate === undefined) return false
+    if (candidate.directory) await rm(candidate.path, { recursive: true })
+    else await unlink(candidate.path)
+    /* v8 ignore next -- Windows namespace operations do not expose POSIX directory fsync. */
+    if (process.platform !== 'win32') await this.syncDirPosix(candidate.project)
+    return true
   }
 
   /**
@@ -924,6 +949,15 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
       `session artifact ${JSON.stringify(path)} uses the unsupported flat-file layout; `
       + 'use a separate root or move it into a project/session directory before loading',
     )
+  }
+
+  private async lstatIfExists(path: string): Promise<Awaited<ReturnType<typeof lstat>> | undefined> {
+    try {
+      return await lstat(path)
+    } catch (error: unknown) {
+      if (isENOENT(error)) return undefined
+      throw error
+    }
   }
 
   private async exists(path: string): Promise<boolean> {

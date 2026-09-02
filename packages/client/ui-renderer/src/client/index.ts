@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import { createSlotRenderer } from './scoped-slots.tsx'
 import { buildRenderApp } from './app.tsx'
+import { createDocumentBadge, type DocumentBadge } from './DocumentTitle.tsx'
 
 /** Selector hook over a session's conversation snapshot. */
 export type UseSession<Snap extends object = object> = SnapshotSelectorHook<Snap>
@@ -19,6 +20,7 @@ export type {
   SlotRenderer, SlotRendererHost, StoreInstanceLike,
 } from '@deepseek-ai/dsh-client-ui-slots'
 export type { SessionProviderProps } from './session-provider.tsx'
+export type { DocumentBadge } from './DocumentTitle.tsx'
 
 /** Mount operation exposed to the framework-free boot kernel. */
 export interface UiRendererService {
@@ -34,6 +36,12 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Mount face provided after the UI renderer activates. */
     uiRenderer: UiRendererService
+    /**
+     * The browser-title count seat. A plugin that knows how many things need
+     * the user reports the number here; the renderer prefixes it to the tab
+     * title. Provided together with the mount face.
+     */
+    documentBadge: DocumentBadge
   }
 }
 
@@ -77,9 +85,11 @@ function mountApp(container: HTMLElement, app: () => ReactNode): Root {
  */
 export function apply(ctx: Context): void {
   ctx.slots.install(createSlotRenderer())
+  const badge = createDocumentBadge()
+  ctx.reflect.provide('documentBadge', badge)
   ctx.reflect.provide('uiRenderer', {
     mount: (container: HTMLElement): (() => void) => {
-      const root = mountApp(container, buildRenderApp({ ctx }))
+      const root = mountApp(container, buildRenderApp({ ctx, badge }))
       return () => { root.unmount() }
     },
   })

@@ -138,6 +138,7 @@ describe('mergeTreeChanges', () => {
       },
       { path: 'own.ts', firstSeq: 20, lastSeq: 20, writing: true, additions: 0, deletions: 0, segments: [] },
     ],
+    byTurn: new Map(),
     read: [],
     running: false,
     hasMore: false,

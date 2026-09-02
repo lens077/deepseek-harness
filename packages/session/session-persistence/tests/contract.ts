@@ -277,6 +277,47 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
       }
     })
 
+    it('permanently removes one materialized session and leaves unrelated storage intact', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const removed = meta('delete-materialized', '/secret')
+        const retained = meta('delete-retained', '/safe')
+        await persistence.create(removed)
+        await persistence.append(removed.id, oneTurnLog())
+        await persistence.create(retained)
+        await persistence.append(retained.id, oneTurnLog())
+
+        await expect(persistence.delete(removed.id)).resolves.toBe(true)
+        await expect(persistence.load(removed.id)).rejects.toThrow('not found')
+        await expect(persistence.inspect(removed.id)).rejects.toThrow('not found')
+        await expect(persistence.readFrom(removed.id, 0)).rejects.toThrow('not found')
+        expect((await persistence.list()).map(value => value.id)).toEqual([retained.id])
+        expect((await persistence.listSnapshots()).map(value => value.header.id)).toEqual([retained.id])
+        await expect(persistence.delete(removed.id)).resolves.toBe(false)
+        await expect(persistence.load(retained.id)).resolves.toMatchObject({ meta: { id: retained.id } })
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('discards a lazy create intent without inventing a durable artifact and permits id reuse', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const first = meta('delete-lazy', '/first')
+        await persistence.create(first)
+        await expect(persistence.delete(first.id)).resolves.toBe(false)
+
+        const replacement = meta('delete-lazy', '/replacement')
+        await persistence.create(replacement)
+        await persistence.append(replacement.id, oneTurnLog())
+        await expect(persistence.load(replacement.id)).resolves.toMatchObject({
+          meta: { id: replacement.id, cwd: '/replacement' },
+        })
+      } finally {
+        await dispose()
+      }
+    })
+
     it('rejects pre-aborted observation reads with the exact cancellation reason', async () => {
       const { persistence, dispose } = await make()
       try {

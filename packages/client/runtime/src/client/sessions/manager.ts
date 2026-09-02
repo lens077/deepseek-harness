@@ -105,6 +105,8 @@ function questionInteractionStatus(
 /** Instance cluster + frame entry + the session list. */
 export class SessionManager {
   private readonly sessions = new Map<SessionId, Session>()
+  /** Process-lifetime durable-deletion tombstones for stale pulls and late frames. */
+  private readonly deletedSessionIds = new Set<SessionId>()
   /** Pre-instantiation buffer for answerable requests and the queued-turn snapshot, which history
    *  cannot reconstruct on open. Live requests remain until resolution; queue and replay duplicates
    *  compact by identity. Instantiation replays and clears it, while removal drops it. */
@@ -270,6 +272,9 @@ export class SessionManager {
    * @returns the resident instance.
    */
   get(sessionId: SessionId): Session {
+    if (this.deletedSessionIds.has(sessionId)) {
+      throw new Error(`session "${sessionId}" was permanently deleted`)
+    }
     let session = this.sessions.get(sessionId)
     if (session === undefined) {
       session = this.createSession(sessionId)
@@ -345,6 +350,7 @@ export class SessionManager {
    * @param parentSessionId - catalog owner.
    */
   refreshSubagents(parentSessionId: SessionId): Promise<void> {
+    if (this.deletedSessionIds.has(parentSessionId)) return Promise.resolve()
     const existing = this.catalogInflight.get(parentSessionId)
     if (existing !== undefined) return existing.promise
     const previous = this.catalogs.get(parentSessionId)
@@ -360,12 +366,17 @@ export class SessionManager {
     const operation = (async () => {
       try {
         const { result } = await this.api.subagents.list({ parentSessionId })
+        if (this.deletedSessionIds.has(parentSessionId)) return
         if (result.ok) {
           const parentAvailable = this.catalogInflight.get(parentSessionId)?.parentAvailableOverride
             ?? result.value.parentAvailable
           this.catalogs.set(parentSessionId, {
             ...result.value,
-            entries: this.withCatalogMutations(result.value.entries, expandableRows, activityRows),
+            entries: this.withCatalogMutations(
+              result.value.entries.filter(entry => !this.deletedSessionIds.has(entry.id)),
+              expandableRows,
+              activityRows,
+            ),
             parentAvailable,
             state: 'ready',
             error: null,
@@ -386,6 +397,7 @@ export class SessionManager {
           })
         }
       } catch (error: unknown) {
+        if (this.deletedSessionIds.has(parentSessionId)) return
         const folded = transportError<never>(error)
         this.catalogs.set(parentSessionId, {
           entries: this.withCatalogMutations(
@@ -401,7 +413,8 @@ export class SessionManager {
         // Re-arm the trailing pull before the dirty notify: the response the
         // caller observed predates the stale-marking change, so the follow-up
         // refresh is the only carrier of that change.
-        if (this.catalogStale.delete(parentSessionId)) void this.refreshSubagents(parentSessionId)
+        if (!this.deletedSessionIds.has(parentSessionId)
+          && this.catalogStale.delete(parentSessionId)) void this.refreshSubagents(parentSessionId)
         this.notifier.markDirty()
       }
     })()
@@ -448,9 +461,12 @@ export class SessionManager {
       try {
         const { result } = await this.api.sessions.list({})
         if (result.ok) {
+          const listed = result.value.items.filter(
+            summary => !this.deletedSessionIds.has(summary.sessionId),
+          )
           const baseline = this.listPhase === 'pending'
-            ? result.value.items
-            : mergeOrderedBaseline(established, result.value.items, summary => summary.sessionId)
+            ? listed
+            : mergeOrderedBaseline(established, listed, summary => summary.sessionId)
           // Seed first observations from the pull-time baseline BEFORE replaying
           // in-flight mutations, then reconcile the reminders after EVERY
           // replayed mutation: an edge that happens entirely between mutations
@@ -574,17 +590,19 @@ export class SessionManager {
    * child carries the source's history, so it is never blank; lineage rides
    * parentSessionId so the list nests it under its source. A child published
    * before Workspace attachment fails is also reconciled into the list.
-   * @param opts - source session and the optional seq anchoring the cut.
+   * @param opts - source session, optional seq anchoring the cut, and the
+   *   Workspace placement requested for the published child.
    * @returns the fork result (the child session id).
    */
   async fork(
-    opts: { sessionId: SessionId; atSeq?: number },
+    opts: { sessionId: SessionId; atSeq?: number; placement?: 'sibling' | 'nested' },
   ): Promise<RpcResult<{ sessionId: SessionId }>> {
     try {
       const source = this.summaries.find(s => s.sessionId === opts.sessionId)
       const { result } = await this.api.sessions.fork({
         sessionId: opts.sessionId,
         ...opts.atSeq === undefined ? {} : { atSeq: opts.atSeq },
+        ...opts.placement === undefined ? {} : { placement: opts.placement },
       })
       const childId = result.ok
         ? result.value.sessionId
@@ -596,6 +614,21 @@ export class SessionManager {
           ...(source?.cwd !== undefined ? { cwd: source.cwd } : {}),
         } })
       }
+      return result
+    } catch (error) {
+      return transportError(error)
+    }
+  }
+
+  /**
+   * Permanently delete one Session cascade and apply the unary result immediately.
+   * @param sessionId - root of the cascade to delete.
+   * @returns the deleted ids, or the Host's rejection.
+   */
+  async delete(sessionId: SessionId): Promise<RpcResult<{ deletedSessionIds: SessionId[] }>> {
+    try {
+      const { result } = await this.api.sessions.delete({ sessionId })
+      if (result.ok) this.applyDeletion(result.value.deletedSessionIds)
       return result
     } catch (error) {
       return transportError(error)
@@ -625,10 +658,46 @@ export class SessionManager {
 
   /** Apply immediately and retain for replay when a list response is in flight. */
   private recordMutation(mutation: SessionListMutation): void {
+    const sessionId = mutation.kind === 'upsert' ? mutation.summary.sessionId : mutation.sessionId
+    if (mutation.kind !== 'remove' && this.deletedSessionIds.has(sessionId)) return
     this.listMutations?.push(mutation)
     this.summaries = applyMutation(this.summaries, mutation)
     // Eager edge reconciliation — a snapshot-build-time pass would miss consecutive status frames.
     this.syncCompletedNotifications()
+    this.notifier.markDirty()
+  }
+
+  /** Apply a durable deletion idempotently and remove every session-keyed client projection. */
+  private applyDeletion(sessionIds: readonly SessionId[]): void {
+    const deleted = new Set(sessionIds)
+    for (const sessionId of sessionIds) {
+      this.deletedSessionIds.add(sessionId)
+      this.recordMutation({ kind: 'remove', sessionId })
+      this.sessions.get(sessionId)?.handleRemoved()
+      this.sessions.delete(sessionId)
+      this.pendingBuffers.delete(sessionId)
+      this.pendingInteractions.delete(sessionId)
+      this.completedNotifications.delete(sessionId)
+      this.prevRunning.delete(sessionId)
+      this.projectionStores.delete(sessionId)
+      this.jobsBySession.delete(sessionId)
+      this.addresses.delete(sessionId)
+      this.catalogs.delete(sessionId)
+      this.catalogStale.delete(sessionId)
+      this.openCatalogs.delete(sessionId)
+      const timer = this.catalogDebounce.get(sessionId)
+      if (timer !== undefined) clearTimeout(timer)
+      this.catalogDebounce.delete(sessionId)
+      this.catalogInflight.delete(sessionId)
+    }
+    for (const [childId, address] of this.addresses) {
+      if (deleted.has(address.parentSessionId)) this.addresses.delete(childId)
+    }
+    for (const [parentId, catalog] of this.catalogs) {
+      const entries = catalog.entries.filter(entry => !deleted.has(entry.id))
+      if (entries.length !== catalog.entries.length) this.catalogs.set(parentId, { ...catalog, entries })
+    }
+    if (this.selected !== undefined && deleted.has(this.selected)) this.selected = undefined
     this.notifier.markDirty()
   }
 
@@ -683,6 +752,7 @@ export class SessionManager {
   handleMuxEnvelope(envelope: RpcRequest<MuxFrame>): void {
     const frame = envelope.payload
     if (frame.type === 'stream/error') return // Controller already treats this as stream failure
+    if (this.deletedSessionIds.has(frame.sessionId)) return
     if (
       frame.type === 'session/event'
       && frame.event.type === 'user/message'
@@ -796,6 +866,7 @@ export class SessionManager {
     const frame = envelope.payload
     switch (frame.type) {
       case 'host/session-added': {
+        if (this.deletedSessionIds.has(frame.sessionId)) return
         this.mergeSummary({
           sessionId: frame.sessionId, updatedAt: Date.now(), running: false, blank: frame.blank,
           ...(frame.parentSessionId !== undefined ? { parentSessionId: frame.parentSessionId } : {}),
@@ -813,7 +884,12 @@ export class SessionManager {
         }
         return
       }
+      case 'host/session-deleted': {
+        this.applyDeletion(frame.sessionIds)
+        return
+      }
       case 'host/session-removed': {
+        if (this.deletedSessionIds.has(frame.sessionId)) return
         const summary = this.summaries.find(candidate => candidate.sessionId === frame.sessionId)
         const durableSubagent = summary?.origin === 'subagent' || this.addresses.has(frame.sessionId)
         this.recordMutation(durableSubagent
@@ -861,12 +937,14 @@ export class SessionManager {
         return
       }
       case 'host/session-status': {
+        if (this.deletedSessionIds.has(frame.sessionId)) return
         this.recordMutation({ kind: 'status', sessionId: frame.sessionId, running: frame.running })
         this.sessions.get(frame.sessionId)?.handleRunning(frame.running)
         this.updateCatalogActivity(frame.sessionId, frame.running)
         return
       }
       case 'host/agent-error': {
+        if (this.deletedSessionIds.has(frame.sessionId)) return
         this.sessions.get(frame.sessionId)?.handleAgentError(frame.message)
         return // not reflected in the list
       }

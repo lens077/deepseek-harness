@@ -29,6 +29,7 @@ export type {
 } from './contract/chat-nodes.ts'
 export type {
   ChatFileDiffExpansion, ChatFileDiffs, ChatFileDiffSegment, ChatFileMentions,
+  ChatQuestionIndex, ChatQuestionSummary, ChatReveal, ChatTurnFileChange,
   ChatNodeOwnerProps, ChatNodeViewProps,
   ChatStore, ChatViewInjected, ChatViewSlotProps, CommandRowOwnerProps, CommandRowProps, ComposerBarInjected,
   ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps, ComposerChainProps, ConversationInjected,

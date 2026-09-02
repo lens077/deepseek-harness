@@ -184,6 +184,15 @@ export interface PersistenceBackend<TornMarker = unknown> {
   appendBatch(meta: SessionHeader, events: readonly SessionEvent[], isMaterialized: boolean): Promise<void>
 
   /**
+   * Permanently remove one materialized session artifact. The provider must
+   * commit namespace/database durability before resolving. Unknown ids return
+   * `false`; provider corruption and I/O failures reject.
+   * @param id - durable session identity to remove.
+   * @returns whether a materialized artifact existed and was removed.
+   */
+  deleteStored(id: SessionId): Promise<boolean>
+
+  /**
    * Make a crash repair durable: truncate the torn tail (iff
    * `tornMarker !== undefined`) and append `closers` (iff any). NOT required to
    * be atomic — a file backend may truncate-then-append in two fsync'd steps.
@@ -707,6 +716,31 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     state.materialized = true
     state.cursor += events.length
     this.preparations.invalidate(id)
+  }
+
+  /**
+   * Permanently remove one materialized artifact after live retirement and all
+   * earlier operations for the identity have settled.
+   * @param id - session identity to remove.
+   * @returns whether durable storage existed and was removed.
+   */
+  async delete(id: SessionId): Promise<boolean> {
+    await this.waitForRetirement(id)
+    return this.serialize(id, () => this.deleteCore(id))
+  }
+
+  private async deleteCore(id: SessionId): Promise<boolean> {
+    if (this.ctx.sessions.get(id) !== undefined) {
+      throw new Error(`cannot delete session "${id}" while it is live`)
+    }
+    const state = this.states.get(id)
+    if (state?.owner !== undefined || [...this.live.keys()].some(session => session.id === id)) {
+      throw new Error(`cannot delete session "${id}" while its live persistence owner is retiring`)
+    }
+    this.preparations.discardForDelete(id)
+    const deleted = await this.backend.deleteStored(id)
+    this.states.delete(id)
+    return deleted
   }
 
   /**

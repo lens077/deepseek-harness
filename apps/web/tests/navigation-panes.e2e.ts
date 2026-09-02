@@ -15,6 +15,7 @@ import { strFromU8, unzipSync } from 'fflate'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-session-projection-cache'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
@@ -26,6 +27,7 @@ const SEED = join(SNAPSHOT_DIR, 'seed.jsonl')
 const TRAJECTORY_EXPECTED = join(SNAPSHOT_DIR, 'trajectory.expected.md')
 const SEARCH_EXPECTED = join(SNAPSHOT_DIR, 'search-results.expected.md')
 const TERMINAL_EXPECTED = join(SNAPSHOT_DIR, 'terminal-card.expected.md')
+const DIGEST_EXPECTED = join(SNAPSHOT_DIR, 'digest.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'navigation-panes-web-e2e'
 
@@ -97,7 +99,10 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       const raw = await readFile(SEED, 'utf8')
       expect(fixtureUserPrompts(raw), 'seed fixture must carry exactly the two drive prompts')
         .toEqual([PROMPT_TURN1, PROMPT_TURN2])
-      await seedSession(scaffold, raw, SEED_ID)
+      const seededId = await seedSession(scaffold, raw, SEED_ID)
+      // Direct fixture persistence bypasses live turn/end checkpointing; warm the
+      // same derived cache a normally completed Session already owns.
+      await scaffold.ctx.sessionProjectionCache.coldSnapshot(seededId)
     }
     browser = await chromium.launch()
   }, 120_000)
@@ -181,6 +186,26 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     const calls = recorded.filter((e): e is SessionEvent & { data: { name: string } } => e.type === 'tool/call')
     expect(calls.map(e => e.data.name).sort()).toEqual(['bash', 'read', 'read'])
   }, 400_000)
+
+  it.skipIf(MODE === 'record')('lists the latest finished turn as unread and opens its session explicitly', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-digest'))
+    await page.getByRole('button', { name: /^Digest/ }).click()
+    const digest = page.getByRole('region', { name: 'Digest', exact: true })
+    await digest.waitFor({ timeout: 15_000 })
+    await digest.getByText(PROMPT_TURN2, { exact: true }).waitFor({ timeout: 15_000 })
+    await digest.locator('span').filter({ hasText: /^## Navigation Summary/ }).waitFor({ timeout: 15_000 })
+    await digest.getByText('1 to handle', { exact: true }).waitFor({ timeout: 15_000 })
+    const snapshot = (await captureStableAria(
+      page,
+      '[data-digest-panel]',
+      scaffold.workspaceCwd,
+    )).split(SEED_ID).join('{{seededId}}')
+    await compareOrRefreshGolden(DIGEST_EXPECTED, snapshot, MODE)
+
+    await digest.getByRole('button', { name: 'Open session', exact: true }).click()
+    await expect.poll(() => digest.count(), { timeout: 5_000 }).toBe(0)
+    await page.getByRole('heading', { name: 'Navigation Summary' }).waitFor({ timeout: 15_000 })
+  }, 60_000)
 
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
@@ -515,8 +540,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
 
   it.skipIf(MODE === 'record')('keeps the recorded fixture inventory exact', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
-      'seed.jsonl', 'search-results.expected.md', 'trajectory.expected.md',
-      'terminal-card.expected.md',
+      'digest.expected.md', 'seed.jsonl', 'search-results.expected.md',
+      'trajectory.expected.md', 'terminal-card.expected.md',
     ])
   })
 })
