@@ -7,6 +7,7 @@ export const NS = 'digest'
 export const zh = {
   'nav.label': '汇总',
   'nav.badge': '{attention} 项待处理',
+  'nav.shortcut': 'Ctrl+1',
   'panel.title': '汇总',
   'panel.close': '关闭汇总',
   'panel.loading': '正在读取收件箱…',
@@ -26,7 +27,7 @@ export const zh = {
   'panel.copied': '已复制',
   'panel.copyFailed': '复制失败',
   'panel.showHandled': '显示已处理',
-  'panel.keys': 'j/k 上下 · Enter 打开 · e 已处理 · t 加入待办 · p 置顶 · s 延后到明天',
+  'panel.keys': 'j/k 上下 · Enter 打开 · e 已处理 · t 加入待办 · p 置顶 · s 延后到明天 · Ctrl+1 开关面板',
   'tab.inbox': '收件箱',
   'tab.todos': '待办',
   'tab.timeline': '时间线',
@@ -94,6 +95,7 @@ export const zh = {
 export const en: Record<DigestKey, string> = {
   'nav.label': 'Digest',
   'nav.badge': '{attention} need attention',
+  'nav.shortcut': 'Ctrl+1',
   'panel.title': 'Digest',
   'panel.close': 'Close digest',
   'panel.loading': 'Loading inbox…',
@@ -113,7 +115,7 @@ export const en: Record<DigestKey, string> = {
   'panel.copied': 'Copied',
   'panel.copyFailed': 'Copy failed',
   'panel.showHandled': 'Show handled',
-  'panel.keys': 'j/k move · Enter open · e handled · t todo · p pin · s snooze until tomorrow',
+  'panel.keys': 'j/k move · Enter open · e handled · t todo · p pin · s snooze until tomorrow · Ctrl+1 toggle',
   'tab.inbox': 'Inbox',
   'tab.todos': 'Todos',
   'tab.timeline': 'Timeline',

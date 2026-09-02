@@ -6,12 +6,24 @@
  * Session control above it: a labelled row while the column is wide, a single
  * icon on the rail.
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import clsx from 'clsx'
 import { IconChecklistOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DigestNavEntryProps } from './contract/slots.ts'
 import { selectInbox } from './select.ts'
 import css from './DigestNavEntry.module.css'
+
+/**
+ * Whether the event is the panel's toggle chord. `code` addresses the digit
+ * row's physical key so layouts that shift `1` still reach it, with `key` as
+ * the fallback for layouts that report no code.
+ * @param event - the keyboard event.
+ * @returns whether the chord matches.
+ */
+function isToggleChord(event: KeyboardEvent): boolean {
+  if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
+  return event.code === 'Digit1' || event.key === '1'
+}
 
 /**
  * Render the inbox toggle row.
@@ -37,8 +49,25 @@ export function DigestNavEntry({ wide, useStore, actions, useSessions, useWorksp
   const label = counts.attention > 0
     ? `${t('nav.label')} · ${t('nav.badge', { attention: counts.attention })}`
     : t('nav.label')
+
+  // The entry is mounted for the whole session, wide or railed, so it owns the
+  // keyboard path to its own action. The chord carries a modifier, so it stays
+  // live inside the composer and the panel's own inputs — reaching the inbox
+  // mid-sentence is the point — unlike the panel's single-letter triage ring.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!isToggleChord(event)) return
+      event.preventDefault()
+      actions.toggle()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [actions])
+
   return (
-    <Tooltip label={label} delayMs={500} disabled={wide}>
+    // The tooltip states the shortcut in both column states: railed it also
+    // names the entry, wide it carries the one fact the row cannot show.
+    <Tooltip label={`${label} · ${t('nav.shortcut')}`} delayMs={500}>
       <button
         type="button"
         className={clsx(css.entry, !wide && css.rail, open && css.active)}

@@ -922,6 +922,10 @@ function normalizeAria(snapshot: string, workspaceCwd: string): string {
     .replace(/\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
     .replace(/(?<!\d)\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[AP]M)?(?!\d)/gi, '{{clock}}')
     .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
+    // A window boundary rendered as a locale date (the inbox's "since …")
+    // moves with the wall clock, so the day itself cannot enter a golden.
+    .replace(/(?<!\d)\d{1,2}\/\d{1,2}\/\d{4}(?!\d)/g, '{{date}}')
+    .replace(/(?<!\d)\d{4}\/\d{1,2}\/\d{1,2}(?!\d)/g, '{{date}}')
 }
 
 /**

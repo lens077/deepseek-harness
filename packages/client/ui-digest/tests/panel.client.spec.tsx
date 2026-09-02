@@ -572,14 +572,45 @@ describe('DigestNavEntry', () => {
     return { store, rerender: () => { rendered.rerender(<DigestNavEntry {...props} />) } }
   }
 
-  it('toggles the shared store and reports the pressed state', () => {
+  it('toggles the shared store, reports the pressed state, and names its shortcut', () => {
     const e = mountEntry()
     const button = screen.getByRole('button', { name: /汇总/ })
+    expect(screen.getByText(zh['nav.label'])).toBeTruthy()
     expect(button.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(button)
     expect(e.store.getSnapshot().open).toBe(true)
     e.rerender()
     expect(button.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('toggles the panel on Ctrl+1 from anywhere, including a focused text field', () => {
+    const e = mountEntry()
+    fireEvent.keyDown(document, { key: '1', code: 'Digit1', ctrlKey: true })
+    expect(e.store.getSnapshot().open).toBe(true)
+    // The chord carries a modifier, so it stays live while the composer has focus.
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    fireEvent.keyDown(input, { key: '1', code: 'Digit1', ctrlKey: true })
+    expect(e.store.getSnapshot().open).toBe(false)
+    // A layout reporting no code still reaches the digit.
+    fireEvent.keyDown(document, { key: '1', ctrlKey: true })
+    expect(e.store.getSnapshot().open).toBe(true)
+    input.remove()
+  })
+
+  it('ignores near-miss chords and stops listening once unmounted', () => {
+    const e = mountEntry()
+    for (const init of [
+      { key: '1', code: 'Digit1' },
+      { key: '1', code: 'Digit1', ctrlKey: true, shiftKey: true },
+      { key: '1', code: 'Digit1', ctrlKey: true, altKey: true },
+      { key: '1', code: 'Digit1', ctrlKey: true, metaKey: true },
+      { key: '2', code: 'Digit2', ctrlKey: true },
+    ]) fireEvent.keyDown(document, init)
+    expect(e.store.getSnapshot().open).toBe(false)
+    cleanup()
+    fireEvent.keyDown(document, { key: '1', code: 'Digit1', ctrlKey: true })
+    expect(e.store.getSnapshot().open).toBe(false)
   })
 
   it('carries the attention count as a badge, urgent while someone waits, and on the rail', () => {

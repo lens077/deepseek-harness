@@ -13,7 +13,7 @@
     - button "Today"
     - button "Last 7 days"
     - button "All"
-  - text: since 9/1/2026, {{clock}} 1 to handle
+  - text: since {{date}}, {{clock}} 1 to handle
   - checkbox "Show handled"
   - text: Show handled
   - heading "Finished, unread 1" [level=3]
@@ -25,4 +25,4 @@
     - button "Add todo"
     - button "Pin"
     - button "Tomorrow"
-  - paragraph: j/k move · Enter open · e handled · t todo · p pin · s snooze until tomorrow
+  - paragraph: j/k move · Enter open · e handled · t todo · p pin · s snooze until tomorrow · Ctrl+1 toggle
