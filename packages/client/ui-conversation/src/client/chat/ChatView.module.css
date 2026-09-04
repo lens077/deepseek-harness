@@ -354,12 +354,19 @@
   cursor: default;
 }
 
+/*
+ * Hangs from the rail's top edge, level with the search entry that opened it,
+ * and may grow down only as far as the composer: the rail starts at
+ * `96px + max(0, 50vh - 266px)` and the composer reserves its own height
+ * plus 16px, so a long list is capped and scrolls rather than being pushed
+ * off the top of the viewport or under the composer.
+ */
 .questionPanel {
   position: absolute;
+  top: 0;
   right: 0;
-  bottom: 0;
   width: min(360px, calc(100vw - 48px));
-  max-height: min(560px, calc(100vh - var(--dsh-composer-height, 152px) - 72px));
+  max-height: min(560px, calc(100vh - var(--dsh-composer-height, 152px) - 112px - max(0px, 50vh - 266px)));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -535,6 +542,13 @@
 
   .navigationStack {
     position: static;
+  }
+
+  /* The rail sits just above the composer here, so the panel opens upward. */
+  .questionPanel {
+    top: auto;
+    bottom: 0;
+    max-height: min(560px, calc(100vh - var(--dsh-composer-height, 152px) - 72px));
   }
 
   .toBottom {

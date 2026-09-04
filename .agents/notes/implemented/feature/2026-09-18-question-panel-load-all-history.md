@@ -34,4 +34,5 @@ This is a different operation from search, and the cost the search note quantifi
 
 - `QuestionNavigator` takes `loadingAll` and `onLoadAll`; two navigator tests pin the offer's presence and its busy state, and two `ChatView` tests pin the loop's completion and its stop on a page that made no progress.
 - `.questionLoadAll` has a renderer again, styled as a peer of the search entry and the arrows; the busy state swaps the icon for a spinner and disables the entry rather than dimming it.
+- `.questionPanel` hangs from the rail's top edge, level with the search entry, and its height is capped at the composer from that origin; anchored to the rail's bottom, a whole-session list at common viewport heights was pushed off the top of the viewport. The narrow layout keeps the bottom anchor because its rail sits just above the composer.
 - The honest-search note's consequence that the button was removed is superseded by this note: search still never loads the session, and the load is an explicit request.
