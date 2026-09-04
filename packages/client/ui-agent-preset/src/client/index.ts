@@ -1,14 +1,15 @@
 /**
  * Agent-preset surface plugin, browser half — four surfaces over one roster:
  * a General-settings row for the default preset, a chip on the new-session
- * screen for the session about to start, a read-only label in the session
- * header, and a settings section that manages the roster (copy, delete,
+ * screen for the session about to start, a read-only label in the composer
+ * tool row, and a settings section that manages the roster (copy, delete,
  * default, and the way into a preset's own files).
  *
  * A running session keeps the composition it began with (the host refuses to
  * adopt an existing session under a different preset). That is what splits
  * the choice from the display: the General row and the hero chip are both
- * before-the-fact, while the header only reports what a session already runs.
+ * before-the-fact, while the composer label only reports what a session
+ * already runs.
  */
 
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
@@ -97,7 +98,7 @@ export function apply(ctx: ClientContext): void {
   // render and simply hides the button while no flow exists.
   let creatorDraft: (() => void) | undefined
 
-  // The new-session chip and the header label: one controller, because the
+  // The new-session chip and the composer label: one controller, because the
   // staged choice belongs to the flow rather than to any one session.
   ctx.inject(['slots', 'conversation', 'sessions', 'workspaces'], (scope: ClientContext) => {
     const api = (scope.get('connection') as ConnectionHandle).api
@@ -168,9 +169,10 @@ export function apply(ctx: ClientContext): void {
         inject: seatInjected,
       }, AgentPresetSeat)
       const label = scope.slots.register({
-        name: 'conversation.session.header.actions',
+        name: 'conversation.input.right',
         id: 'agent-preset',
-        // Static session context occupies the header's leading negative-order band.
+        // Static session context leads the trailing group, ahead of any
+        // control a later plugin seats before the model select.
         order: -10,
         locale: 'settings.agentPreset',
         inject: labelInjected,
@@ -184,7 +186,7 @@ export function apply(ctx: ClientContext): void {
         chip()
         label()
       }
-    }, 'ui-agent-preset: new-session chip and header label')
+    }, 'ui-agent-preset: new-session chip and composer label')
   })
 
   const sectionInjected = (): AgentPresetSectionInjected => ({

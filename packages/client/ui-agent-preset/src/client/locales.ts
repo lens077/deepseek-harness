@@ -1,4 +1,4 @@
-/** Locale bundles for the agent-preset settings row, hero chip, header label, and management section. */
+/** Locale bundles for the agent-preset settings row, hero chip, composer label, and management section. */
 
 /** Locale keys these surfaces render. */
 export type AgentPresetSettingsKey =

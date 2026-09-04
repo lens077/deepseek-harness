@@ -80,7 +80,7 @@ describe('list store projection', () => {
     // A confirmed switch moves the preset alone: the row keeps its updatedAt,
     // title, running, and blank bits, so an identity guard blind to the preset
     // would serve the old row forever — and every reader (the hero chip's own
-    // no-op check, the header label) would keep the composition it replaced.
+    // no-op check, the composer label) would keep the composition it replaced.
     b.svc.noteAgentPreset(sid('s1'), 'minimal')
     await Promise.resolve()
 

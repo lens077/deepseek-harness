@@ -67,7 +67,7 @@ export class AgentPresetSeatController {
     /** The session the hero is about to hand over to, when there is one. */
     private readonly currentSession: () => SeatSessionSummary | undefined,
     /**
-     * Publish an applied switch into the session list, so the header label
+     * Publish an applied switch into the session list, so the composer label
      * moves with the composition instead of waiting for the next full list
      * refresh. Optional: a harness that renders no list omits it.
      */

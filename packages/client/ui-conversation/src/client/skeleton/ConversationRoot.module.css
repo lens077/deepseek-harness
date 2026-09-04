@@ -88,8 +88,12 @@
   line-height: 20px;
 }
 
+/* Ancestor crumbs cap at 220px so a deep lineage never starves the current
+   title; the current title itself takes whatever width the row has left and
+   ellipsizes only when even that runs out (.crumbCurrent below). */
 .crumb {
   max-width: 220px;
+  min-width: 0;
   overflow: hidden;
   padding: 4px 8px;
   border: none;
@@ -113,9 +117,16 @@
 }
 
 .crumbCurrent {
+  max-width: none;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
   cursor: default;
+}
+
+/* Ancestors keep their own width; only the current segment yields when the
+   header row is narrower than the full title. */
+.crumbSeg:not(:last-child) {
+  flex: none;
 }
 
 .headerActions {

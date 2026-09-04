@@ -2,7 +2,7 @@
 /**
  * The three conversation-adjacent surfaces: the General-settings row naming the
  * default for later sessions, the new-session chip naming the next one's, and
- * the session header's read-only label. The split is the host's rule — a
+ * the composer tool row's read-only label. The split is the host's rule — a
  * session's history is produced under its preset's tools, so the choice is
  * only ever offered before one starts.
  */
@@ -365,7 +365,7 @@ describe('the chip introduce cue', () => {
   })
 })
 
-describe('the session-header label', () => {
+describe('the composer label', () => {
   it('names the preset the session runs, and never offers a switch', async () => {
     const { load } = renderLabel({ blank: false, agentPreset: 'standard' })
 
@@ -376,9 +376,19 @@ describe('the session-header label', () => {
   })
 
   it('falls back to the id, and to the generic hint, when metadata is absent', () => {
-    renderLabel({ blank: true, agentPreset: 'mine' })
+    renderLabel({ blank: false, agentPreset: 'mine' })
 
     expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
+  })
+
+  it('stays out of the composer while the session is blank', async () => {
+    // The hero chip still owns the choice on a blank session; a second copy
+    // beside the model select would read as a control that is not one.
+    const { load, view } = renderLabel({ blank: true, agentPreset: 'standard' })
+
+    expect(view.container.firstChild).toBeNull()
+    await act(async () => { await Promise.resolve() })
+    expect(load).not.toHaveBeenCalled()
   })
 
   it('shows the id until the roster resolves it', () => {
@@ -395,7 +405,7 @@ describe('the session-header label', () => {
     cleanup()
 
     // A session the list has not caught up to is the same answer: a deployment
-    // that composes no presets must not pay for a roster read per header.
+    // that composes no presets must not pay for a roster read per composer.
     const unknown = renderLabel(undefined)
     expect(unknown.view.container.firstChild).toBeNull()
     await act(async () => { await Promise.resolve() })

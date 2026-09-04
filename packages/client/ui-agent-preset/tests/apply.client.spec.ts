@@ -1,6 +1,6 @@
 /**
  * Registration: the General row, the settings section, the new-session chip,
- * and the header label all come from one apply, and each defers until the slot
+ * and the composer label all come from one apply, and each defers until the slot
  * it fills has been declared. A pushed settings change refreshes the surfaces
  * that are already showing, so a default set from one converges the other.
  */
@@ -140,7 +140,7 @@ function declareConversation(slots: SlotRegistry): () => void {
     name: 'conversation',
     children: {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
-      'conversation.session.header.actions': { kind: 'list', scope: 'session' },
+      'conversation.input.right': { kind: 'list', scope: 'session' },
     },
   } as never, () => null)
 }
@@ -302,7 +302,7 @@ describe('ui-agent-preset apply', () => {
     expect(calls.length - before).toBe(1)
   })
 
-  it('registers the new-session chip and the header label, and drops both on disposal', async () => {
+  it('registers the new-session chip and the composer label, and drops both on disposal', async () => {
     const { ctx, slots } = await bench()
     declareRoot(slots)
     const conversation = declareConversation(slots)
@@ -314,12 +314,12 @@ describe('ui-agent-preset apply', () => {
 
     const chip = slots.entries('conversation.hero.agentPreset')[0]!
     expect(chip.component).toBe(AgentPresetSeat)
-    const label = slots.entries('conversation.session.header.actions')[0]!
+    const label = slots.entries('conversation.input.right')[0]!
     expect(label.component).toBe(AgentPresetLabel)
     expect(label.options).toMatchObject({ id: 'agent-preset', order: -10 })
     await fiber.dispose()
     expect(slots.entries('conversation.hero.agentPreset')).toHaveLength(0)
-    expect(slots.entries('conversation.session.header.actions')).toHaveLength(0)
+    expect(slots.entries('conversation.input.right')).toHaveLength(0)
     expect(slots.entries('settings.section')).toHaveLength(0)
     conversation()
   })
@@ -484,7 +484,7 @@ describe('ui-agent-preset apply', () => {
     expect(calls.filter(call => call === 'select:minimal')).toHaveLength(spent)
   })
 
-  it('gives the header label the same roster the General row reads', async () => {
+  it('gives the composer label the same roster the General row reads', async () => {
     const { ctx, slots } = await bench()
     declareRoot(slots)
     declareConversation(slots)
@@ -492,7 +492,7 @@ describe('ui-agent-preset apply', () => {
     ctx.provide('sessions', sessionsDouble({ byId: {} }) as never)
     ctx.provide('workspaces', workspacesDouble() as never)
     await ctx.plugin({ inject: [...inject, 'conversation', 'sessions', 'workspaces'], apply }).await()
-    const label = (slots.entries('conversation.session.header.actions')[0]!
+    const label = (slots.entries('conversation.input.right')[0]!
       .inject as unknown as () => AgentPresetLabelInjected)()
     const row = (slots.entries('settings.general.item')[0]!
       .inject as unknown as () => AgentPresetRowInjected)()
