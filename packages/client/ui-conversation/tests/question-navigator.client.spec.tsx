@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * Question navigator acceptance: the rail is stepping plus one standing
- * search entry — it redraws no question list of its own — and every list
- * the search panel shows says what it covers, so an empty result never
- * speaks for the whole session on the loaded window's authority alone.
+ * Question navigator acceptance: the rail is one standing search entry on
+ * top, a load-all entry under it while earlier history is unloaded, then
+ * stepping — it redraws no question list of its own — and every list the
+ * search panel shows says what it covers, so an empty result never speaks
+ * for the whole session on the loaded window's authority alone.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -62,12 +63,14 @@ function searchFor(text: string): void {
 }
 
 describe('question search entry', () => {
-  it('is a standing button beside the arrows: the rail redraws no list until it is asked', () => {
+  it('is a standing button above the arrows: the rail redraws no list until it is asked', () => {
     renderNavigator()
     expect(searchEntry()).toBeTruthy()
     expect(screen.getByRole('button', { name: zh['chat.questions.previous'] })).toBeTruthy()
     expect(screen.getByRole('button', { name: zh['chat.questions.next'] })).toBeTruthy()
-    expect(screen.getAllByRole('button')).toHaveLength(3)
+    expect(screen.getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([
+      zh['chat.questions.search'], zh['chat.questions.previous'], zh['chat.questions.next'],
+    ])
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(searchEntry())
     expect(screen.getByRole('dialog', { name: zh['chat.questions.history'] })).toBeTruthy()
@@ -97,27 +100,30 @@ describe('question search entry', () => {
     expect(screen.getByRole('status').textContent).toBe(zh['chat.questions.windowOnlyIdle'])
   })
 
-  it('offers to load the whole session beside the partial-window notice, and only then', () => {
+  it('offers to load the whole session on the rail, right under search, only while pages are unloaded', () => {
     const { props } = renderNavigator({ hasMore: true })
-    fireEvent.click(searchEntry())
+    // Standing on the rail with the panel closed: the search it serves need
+    // not be open first, and its order says what it belongs to.
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([
+      zh['chat.questions.search'], zh['chat.questions.loadAll'], zh['chat.questions.previous'], zh['chat.questions.next'],
+    ])
     fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.loadAll'] }))
     expect(props.onLoadAll).toHaveBeenCalledOnce()
     cleanup()
     renderNavigator({ hasMore: false })
-    fireEvent.click(searchEntry())
     expect(screen.queryByRole('button', { name: zh['chat.questions.loadAll'] })).toBeNull()
   })
 
   it('shows the load-all request as busy until the last page lands', () => {
     renderNavigator({ hasMore: true, loadingAll: true })
-    fireEvent.click(searchEntry())
     const busy = screen.getByRole('button', { name: zh['chat.questions.loadingAll'] })
     expect((busy as HTMLButtonElement).disabled).toBe(true)
+    expect(busy.getAttribute('aria-busy')).toBe('true')
     cleanup()
     // The final page clears hasMore before the request settles: the busy
-    // label stays until the loop itself reports completion.
+    // entry stays until the loop itself reports completion.
     renderNavigator({ hasMore: false, loadingAll: true })
-    fireEvent.click(searchEntry())
     expect(screen.getByRole('button', { name: zh['chat.questions.loadingAll'] })).toBeTruthy()
   })
 })

@@ -1342,10 +1342,10 @@ describe('ChatView', () => {
   it('load-all pages until no earlier history remains, then settles', () => {
     const h = makeHarness({ nodes: [user(5, 'later'), user(6, 'latest')], hasMore: true })
     const view = render(<h.ChatView {...h.props} />)
-    fireEvent.click(view.getByLabelText('搜索历史提问'))
-    fireEvent.click(view.getByText('加载全部历史'))
+    // The entry stands on the rail; no panel needs opening first.
+    fireEvent.click(view.getByLabelText('加载全部历史'))
     expect(h.loadOlder).toHaveBeenCalledTimes(1)
-    expect(view.getByText('正在加载全部历史…')).toBeTruthy()
+    expect(view.getByLabelText('正在加载全部历史…')).toBeTruthy()
     // First page lands: the head moved, and more remains, so the next page is issued.
     act(() => { h.set({ loadingOlder: true }) })
     act(() => { h.set({ nodes: [user(3, 'old'), user(5, 'later'), user(6, 'latest')], loadingOlder: false }) })
@@ -1354,22 +1354,21 @@ describe('ChatView', () => {
     act(() => { h.set({ loadingOlder: true }) })
     act(() => { h.set({ nodes: [user(1, 'first'), user(3, 'old'), user(5, 'later'), user(6, 'latest')], hasMore: false, loadingOlder: false }) })
     expect(h.loadOlder).toHaveBeenCalledTimes(2)
-    expect(view.queryByText('正在加载全部历史…')).toBeNull()
-    expect(view.queryByText('加载全部历史')).toBeNull()
+    expect(view.queryByLabelText('正在加载全部历史…')).toBeNull()
+    expect(view.queryByLabelText('加载全部历史')).toBeNull()
   })
 
   it('load-all stops after a page that moved the head nowhere instead of looping', () => {
     const h = makeHarness({ nodes: [user(5, 'later'), user(6, 'latest')], hasMore: true })
     const view = render(<h.ChatView {...h.props} />)
-    fireEvent.click(view.getByLabelText('搜索历史提问'))
-    fireEvent.click(view.getByText('加载全部历史'))
+    fireEvent.click(view.getByLabelText('加载全部历史'))
     expect(h.loadOlder).toHaveBeenCalledTimes(1)
     // The page failed: the request settled, the head is unchanged, and more still remains.
     act(() => { h.set({ loadingOlder: true }) })
     act(() => { h.set({ loadingOlder: false }) })
     expect(h.loadOlder).toHaveBeenCalledTimes(1)
     // The offer returns, so the reader can retry deliberately.
-    expect(view.getByText('加载全部历史')).toBeTruthy()
+    expect(view.getByLabelText('加载全部历史')).toBeTruthy()
   })
 
   it('shows open error and loading states', () => {

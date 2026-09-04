@@ -12,7 +12,7 @@ The earlier `onLoadAll` had been removed with that note because it lied — it p
 
 ## Decision
 
-The panel offers **Load all history** beside its partial-window notice, exactly while `hasMore` holds or a load-all is in flight. One press sets a `loadingAll` request in `ChatView`; an effect issues the existing anchored `loadOlder` path again each time a page lands and more remains, and clears the request when the session has no earlier events. The list and the stepping arrows then cover every question, and the offer disappears with the notice.
+The rail carries a **Load all history** entry directly under its search entry, exactly while `hasMore` holds or a load-all is in flight; it stands whether or not the panel is open, because the search it feeds is what its position says it serves. One press sets a `loadingAll` request in `ChatView`; an effect issues the existing anchored `loadOlder` path again each time a page lands and more remains, and clears the request when the session has no earlier events. The list and the stepping arrows then cover every question, and the entry leaves the rail with the panel's notice.
 
 The loop stops on a page that settled without moving the window's head seq. The runtime keeps `hasMore` true after a failed page, so a loop keyed on `hasMore` alone would retry a persistent failure without end; keyed on progress, a failed or empty page ends the request and restores the offer, and the reader retries deliberately.
 
@@ -33,5 +33,5 @@ This is a different operation from search, and the cost the search note quantifi
 ## Consequences
 
 - `QuestionNavigator` takes `loadingAll` and `onLoadAll`; two navigator tests pin the offer's presence and its busy state, and two `ChatView` tests pin the loop's completion and its stop on a page that made no progress.
-- `.questionLoadAll` has a renderer again, styled as the transcript's "load earlier" button.
+- `.questionLoadAll` has a renderer again, styled as a peer of the search entry and the arrows; the busy state swaps the icon for a spinner and disables the entry rather than dimming it.
 - The honest-search note's consequence that the button was removed is superseded by this note: search still never loads the session, and the load is an explicit request.

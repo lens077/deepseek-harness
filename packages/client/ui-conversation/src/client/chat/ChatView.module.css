@@ -463,27 +463,9 @@
   line-height: 18px;
 }
 
-/* Same chrome as the transcript's "load earlier" button: it is the same
-   paging path, requested for the whole session at once. */
-.questionLoadAll {
-  flex: none;
-  align-self: flex-start;
-  margin: 0 8px;
-  border: none;
-  border-radius: 14px;
-  padding: 4px 12px;
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary);
-  background: var(--dsw-alias-interactive-bg-hover-solid);
-  cursor: pointer;
-}
-
-.questionLoadAll:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-/* Matches the arrow buttons: searching is a peer of stepping through questions. */
+/* Matches the arrow buttons: searching and loading the whole history are
+   peers of stepping through questions. */
+.questionLoadAll,
 .questionSearchEntry {
   display: grid;
   place-items: center;
@@ -500,6 +482,20 @@
 
 .questionSearchEntry[data-panel-open] {
   color: var(--dsw-alias-state-business-primary);
+}
+
+/* Busy rather than dimmed: the request is in flight, not unavailable. */
+.questionLoadAll:disabled {
+  cursor: default;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.questionLoadAllSpinner {
+  animation: dsh-question-load-all-spin 700ms linear infinite;
+}
+
+@keyframes dsh-question-load-all-spin {
+  to { transform: rotate(360deg); }
 }
 
 .toBottom {
@@ -523,6 +519,7 @@
 
 .toBottom:hover,
 .questionSearchEntry:hover,
+.questionLoadAll:not(:disabled):hover,
 .questionArrow:not(:disabled):hover {
   background: var(--dsw-alias-button-floating-hover);
 }
@@ -548,6 +545,10 @@
 @media (prefers-reduced-motion: reduce) {
   .flowItem {
     transition: none;
+  }
+
+  .questionLoadAllSpinner {
+    animation: none;
   }
 }
 

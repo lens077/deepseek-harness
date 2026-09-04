@@ -1,13 +1,16 @@
 /**
- * The transcript's question rail: previous and next stepping, plus one
- * standing entry that opens the question search panel. The rail redraws no
- * question index of its own — the panel lists only what a query returns, and
- * every list it shows says what it covers, because the loaded window is a
- * suffix of the session and a filtered suffix is never the whole answer.
+ * The transcript's question rail, top to bottom: the standing entry that opens
+ * the question search panel, the load-all entry that pages the whole session
+ * in while earlier history is still unloaded, then previous and next stepping.
+ * The rail redraws no question index of its own — the panel lists only what a
+ * query returns, and every list it shows says what it covers, because the
+ * loaded window is a suffix of the session and a filtered suffix is never the
+ * whole answer. Load-all sits directly under search because it is the remedy
+ * for that: once every page is in, the list and the arrows cover every question.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  IconChevronDownOutline14, IconChevronUpOutline14, IconSearchOutline16,
+  IconChevronDownOutline14, IconChevronUpOutline14, IconDownloadOutline16, IconLoadingOutline16, IconSearchOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { SearchQuestions } from '../contract/question-search.ts'
@@ -142,14 +145,6 @@ export function QuestionNavigator({
           {notice !== null && (
             <p className={css.questionSearchNotice} role="status" aria-live="polite">{notice}</p>
           )}
-          {/* The remedy sits beside the admission: while earlier pages are
-              unloaded, one press pages the whole session in, after which the
-              list and the stepping arrows cover every question. */}
-          {(hasMore || loadingAll) && (
-            <button type="button" className={css.questionLoadAll} disabled={loadingAll} onClick={onLoadAll}>
-              {loadingAll ? t('chat.questions.loadingAll') : t('chat.questions.loadAll')}
-            </button>
-          )}
           <div className={css.questionList} aria-busy={searching || undefined}>
             {rows.map(row => (
               <button
@@ -173,13 +168,7 @@ export function QuestionNavigator({
           </div>
         </div>
       )}
-      <button type="button" className={css.questionArrow} disabled={current <= 0 && !hasMore} aria-label={t('chat.questions.previous')} onClick={onPrevious}>
-        <IconChevronUpOutline14 />
-      </button>
-      <button type="button" className={css.questionArrow} disabled={current >= questions.length - 1} aria-label={t('chat.questions.next')} onClick={onNext}>
-        <IconChevronDownOutline14 />
-      </button>
-      {/* Searching history is a standing entry beside the arrows, the one
+      {/* Searching history is a standing entry above the arrows, the one
           control the rail's reduction to stepping left room for: it opens a
           list only on request, so nothing is redrawn while the reader steps. */}
       <button
@@ -192,6 +181,28 @@ export function QuestionNavigator({
         onClick={() => { setOpen(value => !value) }}
       >
         <IconSearchOutline16 />
+      </button>
+      {/* The remedy sits under the search it serves: while earlier pages are
+          unloaded, one press pages the whole session in, after which the
+          list and the stepping arrows cover every question. The entry leaves
+          with the last page, so its presence alone says the window is partial. */}
+      {(hasMore || loadingAll) && (
+        <button
+          type="button"
+          className={css.questionLoadAll}
+          disabled={loadingAll}
+          aria-busy={loadingAll || undefined}
+          aria-label={loadingAll ? t('chat.questions.loadingAll') : t('chat.questions.loadAll')}
+          onClick={onLoadAll}
+        >
+          {loadingAll ? <IconLoadingOutline16 className={css.questionLoadAllSpinner} /> : <IconDownloadOutline16 />}
+        </button>
+      )}
+      <button type="button" className={css.questionArrow} disabled={current <= 0 && !hasMore} aria-label={t('chat.questions.previous')} onClick={onPrevious}>
+        <IconChevronUpOutline14 />
+      </button>
+      <button type="button" className={css.questionArrow} disabled={current >= questions.length - 1} aria-label={t('chat.questions.next')} onClick={onNext}>
+        <IconChevronDownOutline14 />
       </button>
     </div>
   )

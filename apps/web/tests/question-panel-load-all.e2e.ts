@@ -116,11 +116,12 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     expect(loadedBefore).toBeGreaterThan(0)
     expect(loadedBefore).toBeLessThan(TURNS)
 
-    await panel.getByRole('button', { name: 'Load all history' }).click()
+    // The load-all entry stands on the rail under the search entry, outside the panel.
+    await page.getByRole('button', { name: 'Load all history' }).click()
     // Three pages land one after another; the loop settles when nothing earlier remains.
     await expect.poll(() => page.getByText('question 1', { exact: true }).count(), { timeout: 20_000 }).toBe(1)
-    await expect.poll(() => panel.getByRole('button', { name: 'Loading all history…' }).count(), { timeout: 10_000 }).toBe(0)
-    expect(await panel.getByRole('button', { name: 'Load all history' }).count()).toBe(0)
+    await expect.poll(() => page.getByRole('button', { name: 'Loading all history…' }).count(), { timeout: 10_000 }).toBe(0)
+    expect(await page.getByRole('button', { name: 'Load all history' }).count()).toBe(0)
     expect(await panel.getByRole('status').count()).toBe(0)
     expect(await questionRows().count()).toBe(TURNS)
     // The transcript's own paging offer is gone with the last page.
