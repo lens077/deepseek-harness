@@ -35,12 +35,14 @@ export interface ISessions {
    */
   readonly searchResultLimit: number
   /**
-   * Select a session as current.
+   * Navigate to a session as current. Every successful request emits
+   * `sessions/navigated`, including a request for the already-current session.
    * @param id - session id (must exist in the list; unknown ids fail loud).
    */
   open(id: SessionId): void
   /**
-   * Open a healthy catalog child through its exact direct-parent address.
+   * Navigate to a healthy catalog child through its exact direct-parent
+   * address, then emit `sessions/navigated`.
    * @param address - catalog-derived parent and child ids.
    */
   openSubagent(address: SubagentAddress): void

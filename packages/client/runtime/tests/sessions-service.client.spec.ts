@@ -186,6 +186,20 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     expect(b.svc.list.getSnapshot().current).toBe('s1') // failed open leaves the selection alone
   })
 
+  it('emits a navigation intent for every successful open, including the current session', async () => {
+    const b = bench()
+    await feedList(b, [{ id: 's1' }])
+    const navigated = vi.fn()
+    b.ctx.on('sessions/navigated', navigated)
+
+    b.svc.open(sid('s1'))
+    b.svc.open(sid('s1'))
+    expect(navigated.mock.calls).toEqual([['s1'], ['s1']])
+
+    expect(() => { b.svc.open(sid('ghost')) }).toThrow(/unknown session ghost/)
+    expect(navigated).toHaveBeenCalledTimes(2)
+  })
+
   it('clear() blanks list.current and the persisted selection', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', {
@@ -379,6 +393,30 @@ describe('slot-store scope prune hook', () => {
 })
 
 describe('catalog-addressed navigation', () => {
+  it('emits navigation only after a catalog child opens successfully', async () => {
+    const b = bench()
+    b.api.onSubagentList = () => Promise.resolve(ok({
+      entries: [{
+        kind: 'child', id: sid('child'), mode: 'continuable', label: 'Child',
+        activity: 'inactive', hasChildren: false,
+      }] as never[],
+      parentAvailable: true,
+    }))
+    await feedList(b, [{ id: 'root' }])
+    await b.svc.refreshSubagents(sid('root'))
+    const navigated = vi.fn()
+    b.ctx.on('sessions/navigated', navigated)
+    const address = {
+      parentSessionId: sid('root'), childSessionId: sid('child'), mode: 'continuable' as const,
+    }
+
+    b.svc.openSubagent(address)
+    expect(navigated).toHaveBeenCalledWith('child')
+
+    expect(() => { b.svc.openSubagent({ ...address, mode: 'one-shot' }) }).toThrow(/not a healthy catalog child/)
+    expect(navigated).toHaveBeenCalledTimes(1)
+  })
+
   it('uses catalog labels for a listed addressed route', async () => {
     const b = bench()
     b.api.onSubagentList = (payload) => {

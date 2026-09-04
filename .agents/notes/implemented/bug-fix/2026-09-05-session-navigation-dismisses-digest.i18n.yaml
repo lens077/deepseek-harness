@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-05-session-navigation-dismisses-digest.md
+2026-09-05-session-navigation-dismisses-digest.md: 4ef031e9bba19380f6518812bcefe13ca023957d
+2026-09-05-session-navigation-dismisses-digest.zh.md: b0c382c874fb1fdda14fc951c4a03a5fe475a5c5

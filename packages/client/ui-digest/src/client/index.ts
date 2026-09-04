@@ -199,9 +199,11 @@ export function apply(ctx: ClientContext): void {
     recount()
   })
 
-  // The panel's bound store actions, captured when its inject factory runs,
-  // so a todo added from the session browser can open the list.
+  // The panel's bound store actions arrive with its root-scoped slot entry.
+  // Session navigation dismisses the whole-center surface even when the
+  // already-current Session was requested, while a browser todo can open it.
   let viewActions: BoundActions<ReturnType<typeof createDigestStore>> | undefined
+  ctx.on('sessions/navigated', () => { viewActions?.close() })
 
   // The session browser's menus add todos through this seat; the wording
   // follows what the inbox card would write, and the panel opens on the list.

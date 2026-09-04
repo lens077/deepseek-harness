@@ -407,9 +407,9 @@ export class TestSessions implements ISessions {
   }
 
   /**
-   * Service-level selection call (recorded, then applied to the list store
-   * synchronously — inject callbacks call this outside any act window; the
-   * store notify is microtask-batched so the next stabilized step observes it).
+   * Service-level navigation call: record it, apply the list selection, and
+   * emit the production `sessions/navigated` intent. Store notification stays
+   * microtask-batched so the next stabilized step observes the selection.
    * @param id - session id.
    */
   open(id: SessionId): void {
@@ -419,9 +419,14 @@ export class TestSessions implements ISessions {
       draft.current = id
       draft.currentAddress = undefined
     })
+    this.rootCtx.emit('sessions/navigated', id)
   }
 
-  /** Open an existing fixture through its catalog address. */
+  /**
+   * Open an existing fixture through its catalog address and emit the
+   * navigation intent.
+   * @param address - fixture child and its direct parent.
+   */
   openSubagent(address: SubagentAddress): void {
     this.calls.push({ method: 'openSubagent', args: [address] })
     this.require(address.childSessionId)
@@ -429,6 +434,7 @@ export class TestSessions implements ISessions {
       draft.current = address.childSessionId
       draft.currentAddress = address
     })
+    this.rootCtx.emit('sessions/navigated', address.childSessionId)
   }
 
   /** Resolve the current fixture's retained catalog address. */

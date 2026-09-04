@@ -159,6 +159,14 @@ declare module '@deepseek-ai/cordis' {
      */
     'slots/changed'(key: string): void
     /**
+     * An explicit request to navigate to a Session succeeded. This is an
+     * intent notification, so reopening the already-current Session also
+     * emits it even though the selection value stays unchanged.
+     * @mode emit
+     * @param sessionId - the Session requested by the caller.
+     */
+    'sessions/navigated'(sessionId: SessionId): void
+    /**
      * A connection generation was (re-)established. Wire-derived caches must
      * treat their state as stale and repull (commands directory; the queue
      * mirrors reset themselves through the session resync path).

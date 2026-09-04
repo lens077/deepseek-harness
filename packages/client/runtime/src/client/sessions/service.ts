@@ -379,19 +379,24 @@ export class SessionRuntime implements ISessions {
   }
 
   /**
-   * Select a listed or retained catalog-addressed session as current.
+   * Navigate to a listed or retained catalog-addressed session as current.
+   * Every successful request publishes `sessions/navigated`, even when the
+   * same session remains current.
    * @param id - listed or addressed session id.
    */
   open(id: SessionId): void {
     this.manager.select(id)
+    this.rootCtx.emit('sessions/navigated', id)
   }
 
   /**
-   * Open a healthy catalog child through its direct-parent address.
+   * Navigate to a healthy catalog child through its direct-parent address and
+   * publish `sessions/navigated` after selection succeeds.
    * @param address - catalog-derived parent and child ids.
    */
   openSubagent(address: SubagentAddress): void {
     this.manager.selectSubagent(address)
+    this.rootCtx.emit('sessions/navigated', address.childSessionId)
   }
 
   /**

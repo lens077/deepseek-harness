@@ -44,7 +44,8 @@ export interface SessionsPort {
    */
   delete(sessionId: SessionId): Promise<readonly SessionId[]>
   /**
-   * Select a session as current.
+   * Navigate to a session as current and emit `sessions/navigated` after a
+   * successful request, including when the session is already current.
    * @param id - session id (must exist in the list store).
    */
   open(id: SessionId): void

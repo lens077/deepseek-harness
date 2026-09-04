@@ -152,6 +152,26 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('project-todos')
   })
 
+  it('closes the panel on repeated session navigation and releases the listener on teardown', async () => {
+    const b = await bench()
+    await b.runtime.sessions.add({ id: 's1' }, { current: false })
+    b.runtime.renderRoot()
+    const entry = b.ctx.slots.entries('center.overlay').find(e => e.options.id === 'digest')
+    const instance = b.runtime.storeOf('center.overlay') as unknown as {
+      actions: { open: () => void }
+      store: { getSnapshot: () => { open: boolean } }
+    }
+    ;(entry!.inject as unknown as (actions: unknown) => unknown)(instance.actions)
+    instance.actions.open()
+    b.runtime.sessions.open('s1' as SessionId)
+    expect(instance.store.getSnapshot().open).toBe(false)
+
+    instance.actions.open()
+    await b.feature.dispose()
+    b.runtime.sessions.open('s1' as SessionId)
+    expect(instance.store.getSnapshot().open).toBe(true)
+  })
+
   it('reads the project scan on demand, adopts pushes, and re-reads after a reset only once warm', async () => {
     const b = await bench()
     await b.runtime.flush()

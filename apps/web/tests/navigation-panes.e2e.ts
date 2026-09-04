@@ -207,6 +207,21 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await page.getByRole('heading', { name: 'Navigation Summary' }).waitFor({ timeout: 15_000 })
   }, 60_000)
 
+  it.skipIf(MODE === 'record')('clicking the selected sidebar session dismisses the digest and reveals its chat', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-digest-selected-session'))
+    await ensureSeedOpen(page)
+    const selected = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]')
+    await expect.poll(() => selected.count(), { timeout: 10_000 }).toBe(1)
+
+    await page.getByRole('button', { name: /^Digest/ }).click()
+    const digest = page.getByRole('region', { name: 'Digest', exact: true })
+    await digest.waitFor({ timeout: 15_000 })
+
+    await selected.click()
+    await expect.poll(() => digest.count(), { timeout: 5_000 }).toBe(0)
+    await page.getByText('FIRST_DONE', { exact: true }).waitFor({ timeout: 15_000 })
+  }, 60_000)
+
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
     // The API baselines can settle before React commits their projection. The
