@@ -129,11 +129,14 @@
 }
 
 /* Left-to-right card flow: cards fill the row, then wrap. The panel owns the
-   whole center column, so the grid gets real horizontal space. */
+   whole center column, so the grid gets real horizontal space. Cards align
+   to the row's top rather than stretching to its tallest member: one long
+   reply must not pad every neighbour with empty space. */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 /* The top edge carries the status colour — green once the turn completed.
@@ -155,12 +158,16 @@
   max-height: calc(100cqh - 36px);
 }
 
-/* The scrolling middle of a card, between the pinned head and actions. It
-   scrolls on the layer-1 card surface, so its thumb takes the l2 elevation
-   tokens (see ui-theme styles/scrollbar.css). */
+/* The scrolling middle of a card, between the pinned head and actions. A
+   fixed cap keeps every card a glanceable preview whatever the column count
+   — a long reply scrolls here instead of turning its row into a page — while
+   the card's own viewport cap above still wins on a short window. It scrolls
+   on the layer-1 card surface, so its thumb takes the l2 elevation tokens
+   (see ui-theme styles/scrollbar.css). */
 .cardBody {
   flex: 1 1 auto;
   min-height: 0;
+  max-height: 264px;
   display: flex;
   flex-direction: column;
   gap: 4px;
