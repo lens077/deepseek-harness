@@ -8,9 +8,10 @@
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { ShellRunResult, CollectedOutput } from '@deepseek-ai/dsh-shell'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SANDBOX_UNAVAILABLE, SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, SandboxExecutionPolicy, SandboxMode, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
@@ -21,6 +22,10 @@ import { classifyDenial, classifyRunnerFailure, isRunnerSpawnFailure } from '../
 import type { Config } from '@deepseek-ai/dsh-bash-sandbox'
 
 const spillDir = mkdtempSync(join(tmpdir(), 'dsh-bash-sandbox-spec-'))
+
+afterAll(() => {
+  rmSync(spillDir, { recursive: true, force: true })
+})
 
 /** One recorded provider call: the argv handed over and the policy it rode with. */
 interface ConfineCall {
@@ -62,6 +67,7 @@ async function setup(
     }
   }
   const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(FakeSandboxProvider)
   await ctx.plugin(SandboxPolicyService, {
     ...mode !== undefined ? { mode } : {},
@@ -83,7 +89,7 @@ function runResult(exitCode: number | null, stderr: string): ShellRunResult {
 }
 
 function executionPolicy(mode: SandboxMode, workspaceRoot = resolve(process.cwd())): SandboxExecutionPolicy {
-  return { mode, workspaceRoots: [workspaceRoot] }
+  return { mode, workspaceRoot }
 }
 
 describe('the provider hand-off', () => {
@@ -94,7 +100,7 @@ describe('the provider hand-off', () => {
     expect(result.sandbox).toEqual({ mode: 'read-only', denied: false, enforcement: 'full' })
     expect(calls).toEqual([{
       argv: ['bash', '-c', 'echo \'a b\' "c\'d"'],
-      policy: { mode: 'read-only', workspaceRoots: [resolve(process.cwd())] },
+      policy: { mode: 'read-only', workspaceRoot: resolve(process.cwd()) },
     }])
   })
 
@@ -141,17 +147,17 @@ describe('the provider hand-off', () => {
     }
   })
 
-  it('workspace-write rides the policy, its primary root falling back to process.cwd() when not configured', async () => {
+  it('workspace-write rides the policy, workspaceRoot falling back to process.cwd() when not configured', async () => {
     const { bash, calls } = await setup({ mode: 'workspace-write' })
     const result = await bash.run(bash.resolve({ command: 'true' }))
     expect(result.sandbox).toEqual({ mode: 'workspace-write', denied: false, enforcement: 'full' })
-    expect(calls[0]?.policy).toEqual({ mode: 'workspace-write', workspaceRoots: [resolve(process.cwd())] })
+    expect(calls[0]?.policy).toEqual({ mode: 'workspace-write', workspaceRoot: resolve(process.cwd()) })
   })
 
   it('an explicit workspaceRoot on the policy wins', async () => {
     const { calls, bash } = await setup({ mode: 'workspace-write', workspaceRoot: '/ws', cwd: tmpdir() })
     await bash.run(bash.resolve({ command: 'true' }))
-    expect(calls[0]?.policy.workspaceRoots[0]).toBe(resolve('/ws'))
+    expect(calls[0]?.policy.workspaceRoot).toBe(resolve('/ws'))
   })
 
   it('the provider is consulted per wrap (no caching in the consumer): run and start each hand off', async () => {
@@ -516,12 +522,17 @@ describe('result facts', () => {
 
   it('reports a real permission failure as a sandbox denial with the mode it ran under', async () => {
     const { bash } = await setup()
-    const lockedDir = join(mkdtempSync(join(tmpdir(), 'dsh-sandbox-denied-')), 'locked')
-    mkdirSync(lockedDir)
-    chmodSync(lockedDir, 0o555)
-    const result = await bash.run(bash.resolve({ command: `echo x > ${lockedDir}/f` }))
-    expect(result.exitCode).not.toBe(0)
-    expect(result.sandbox).toEqual({ mode: 'read-only', denied: true, enforcement: 'full' })
+    const deniedRoot = mkdtempSync(join(tmpdir(), 'dsh-sandbox-denied-'))
+    try {
+      const lockedDir = join(deniedRoot, 'locked')
+      mkdirSync(lockedDir)
+      chmodSync(lockedDir, 0o555)
+      const result = await bash.run(bash.resolve({ command: `echo x > ${lockedDir}/f` }))
+      expect(result.exitCode).not.toBe(0)
+      expect(result.sandbox).toEqual({ mode: 'read-only', denied: true, enforcement: 'full' })
+    } finally {
+      rmSync(deniedRoot, { recursive: true, force: true })
+    }
   })
 
   it('carries the provider\'s partial-enforcement fact through unchanged', async () => {

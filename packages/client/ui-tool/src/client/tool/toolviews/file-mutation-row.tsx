@@ -1,67 +1,28 @@
-// File-mutation toolview registrant: the keyed toolview hole for the `edit`
-// and `write` tools. The row composes the shared ToolRow (chrome, running
-// sweep, whole-row expand) and feeds it the applied diff as ToolRow's `diff`
-// card material, so the change renders as two aligned before/after columns in
-// the expanded body — the same unified interaction every other card row has.
-// The body opens on arrival only where the reader asked for that and there is a
-// prior side to compare against. The summary stays a path link (the file-tool
-// interaction) that opens through the host; an errored mutation (write/edit
-// return no diff on `result.isError`) keeps the model-facing error text on
-// ToolRow's Output section, its first line in the collapsed summary.
-
 import type { Context } from '@deepseek-ai/cordis'
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import { hasPriorContent, IconEditOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatFileDiffExpansion } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { IconEditOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
 import { diffCardModel } from '../models/diff-card-model.ts'
 import { toolRowModel } from '../models/tool-call-model.ts'
 import { ToolRow } from '../components/ToolRow.tsx'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 
-/**
- * The reader's inline-diff preference, from the optional `chatFileDiffs`
- * provider. Absent provider resolves to `none`, which is this row's own
- * long-standing default, so the seat costs nothing when unoccupied.
- */
-export interface FileMutationRowInjected {
-  hooks: { diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> }
-}
-
-/** Full row props: the toolview runtime share, the locale seat, and the preference. */
-type FileMutationRowProps =
-  ToolCallViewProps & PropsLocale<'conversation'> & InjectFace<FileMutationRowInjected>
+type FileMutationRowProps = ToolCallViewProps & PropsLocale<'conversation'>
 
 /**
- * File-mutation row: icon + {Edit,Write} · {path} in the shared ToolRow chrome,
- * with the applied diff as the row's collapsed-by-default card body. The
- * summary is a path link (a file tool's interaction); the host's `openFile`
- * resolves it against the session cwd, so this passes the tool's own path
- * verbatim. An errored mutation has no diff card, so ToolRow surfaces the
- * model-facing error text through its Output section and its first line in the
- * collapsed summary instead.
+ * Lets users expand an applied file diff and open the reported path.
  */
-export function FileMutationRow({
-  toolName, block, cwd, home, openFile, inspect, useDiffExpansion, t,
-}: FileMutationRowProps) {
+export function FileMutationRow({ toolName, block, cwd, home, openFile, inspect, t }: FileMutationRowProps) {
   const model = toolRowModel(toolName, block, cwd, home)
   const diff = diffCardModel(block)
-  // `all` is the only mode that opens a row: the other two exist to keep the
-  // flow scannable, and a turn's rows are where it gets long fastest. A create
-  // stays closed whatever the mode — its left column is all padding, so opening
-  // it spends the whole row on a wall with no comparison in it.
-  const openOnArrival = useDiffExpansion(mode => mode === 'all')
   return (
     <ToolRow
-      initiallyExpanded={diff !== null && openOnArrival && hasPriorContent(diff.card.diffs)}
       t={t}
       variant={model.variant}
       toolName={toolName}
       icon={<IconEditOutline16 size={14} />}
-      title={model.title}
+      title={t(model.titleKey)}
       summary={model.summary}
-      body={null}
       output={model.output}
       errorSummary={model.errorSummary}
       diff={diff}
@@ -73,30 +34,14 @@ export function FileMutationRow({
   )
 }
 
-/**
- * The file-mutation rows as a plain registrant plugin following the chat
- * toolview declaration across independent activation and reload lifetimes.
- */
+/** Registers the edit and write conversation rows. */
 export const fileMutationToolview = {
   name: 'file-mutation-toolview',
   inject: ['slots'],
-  /**
-   * Register the file-mutation row into the Tool-owned keyed view slot
-   * under both mutation tool names.
-   * @param ctx - registrant context (disposal rides ctx.effect inside slots.register).
-   */
   apply(ctx: Context): void {
-    // One stable source resolved lazily: the provider is optional AND may be
-    // composed after this registrant, so reading it at registration time would
-    // freeze the row on the absent default.
-    const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
-      getSnapshot: () => ctx.get('chatFileDiffs')?.expansion.getSnapshot() ?? 'none',
-      subscribe: listener => ctx.get('chatFileDiffs')?.expansion.subscribe(listener) ?? (() => {}),
-    }
-    const inject = (): FileMutationRowInjected => ({ hooks: { diffExpansion } })
     ctx.slots.inject('tool.call.toolview', function* () {
-      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'edit', locale: NS, inject }, FileMutationRow)
-      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'write', locale: NS, inject }, FileMutationRow)
+      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'edit', locale: NS }, FileMutationRow)
+      yield ctx.slots.register({ name: 'tool.call.toolview', key: 'write', locale: NS }, FileMutationRow)
     })
   },
 }

@@ -44,12 +44,12 @@
  * @module @deepseek-ai/dsh-sandbox-windows-acl/runner
  */
 
-import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { win32 } from './ffi.ts'
 import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
-import { tempWriteSid, workspaceRootsWriteSid } from './workspace-sid.ts'
+import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
 
 const RUNNER_SIGNATURE = 'windows-acl-run'
 const RUNNER_FAILURE_EXIT = 127
@@ -63,7 +63,7 @@ function fail(detail: string): never {
 }
 
 interface ParsedArgs {
-  workspaces: string[]
+  workspace: string
   temp: string
   mode: 'read-only' | 'workspace-write'
   writeSid: string | undefined
@@ -73,7 +73,7 @@ interface ParsedArgs {
 }
 
 function parseArgs(raw: string[]): ParsedArgs {
-  const workspaces: string[] = []
+  let workspace: string | undefined
   let temp: string | undefined
   let mode: string | undefined
   let writeSid: string | undefined
@@ -89,7 +89,7 @@ function parseArgs(raw: string[]): ParsedArgs {
     const value = raw[index]
     if (value === undefined) fail(`missing value after ${token}`)
     switch (token) {
-      case '--workspace': workspaces.push(value); break
+      case '--workspace': workspace = value; break
       case '--temp': temp = value; break
       case '--mode': mode = value; break
       case '--write-sid': writeSid = value; break
@@ -97,13 +97,13 @@ function parseArgs(raw: string[]): ParsedArgs {
       default: fail(`unknown argument: ${token}`)
     }
   }
-  if (workspaces.length === 0) fail('missing --workspace')
+  if (workspace === undefined) fail('missing --workspace')
   if (temp === undefined) fail('missing --temp')
   if (mode !== 'read-only' && mode !== 'workspace-write') fail(`unknown mode: ${String(mode)}`)
   const argv = raw.slice(index)
   const command = argv[0]
   if (command === undefined) fail('missing command after --')
-  return { workspaces, temp, mode, writeSid, tempWriteSid: parsedTempWriteSid, command, args: argv.slice(1) }
+  return { workspace, temp, mode, writeSid, tempWriteSid: parsedTempWriteSid, command, args: argv.slice(1) }
 }
 
 function requireDirectory(label: string, path: string): void {
@@ -114,12 +114,10 @@ function requireDirectory(label: string, path: string): void {
 
 async function main(): Promise<number> {
   const parsed = parseArgs(process.argv.slice(2))
-  // Every directory is validated in both modes: a provider bug that passes a
-  // bogus root must fail loudly at the runner boundary, never mid-child.
-  for (const workspace of parsed.workspaces) requireDirectory('--workspace', workspace)
+  // Both directories are validated in both modes: a provider bug that passes
+  // a bogus root must fail loudly at the runner boundary, never mid-child.
+  requireDirectory('--workspace', parsed.workspace)
   requireDirectory('--temp', parsed.temp)
-  const workspaces = parsed.workspaces.map(workspace => realpathSync.native(workspace))
-  if (new Set(workspaces).size !== workspaces.length) fail('duplicate canonical --workspace directory')
 
   const seamManaged = parsed.writeSid !== undefined || parsed.tempWriteSid !== undefined
   if (parsed.mode === 'read-only' && seamManaged) {
@@ -129,7 +127,7 @@ async function main(): Promise<number> {
     fail('workspace-write requires --write-sid and --temp-write-sid together')
   }
   if (parsed.mode === 'workspace-write') {
-    for (const workspace of workspaces) assertTempRootOutsideWorkspace(workspace, parsed.temp)
+    assertTempRootOutsideWorkspace(parsed.workspace, parsed.temp)
   }
 
   const api = await win32()
@@ -148,9 +146,9 @@ async function main(): Promise<number> {
     let writeSid: string | undefined
     let privateTempSid: string | undefined
     if (parsed.mode === 'workspace-write') {
-      writeSid = workspaceRootsWriteSid(workspaces)
+      writeSid = workspaceWriteSid(parsed.workspace)
       if (seamManaged) {
-        if (parsed.writeSid !== writeSid) fail('--write-sid does not match the complete --workspace set')
+        if (parsed.writeSid !== writeSid) fail('--write-sid does not match --workspace')
         privateTempDir = parsed.temp
         privateTempSid = tempWriteSid(privateTempDir)
         if (parsed.tempWriteSid !== privateTempSid) fail('--temp-write-sid does not match --temp')
@@ -161,7 +159,7 @@ async function main(): Promise<number> {
       }
     }
     sandbox = new AclSandbox({
-      writableDirs: parsed.mode === 'workspace-write' ? workspaces : [],
+      writableDirs: parsed.mode === 'workspace-write' ? [parsed.workspace] : [],
       tempDir: privateTempDir,
       mode: parsed.mode,
       ...writeSid === undefined ? {} : { writeSid },

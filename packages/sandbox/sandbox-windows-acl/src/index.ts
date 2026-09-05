@@ -11,7 +11,7 @@
  * and LOCAL are absent from both lists — see the seam's dual-list contract
  * in `packages/sandbox/sandbox-local` and the package README's Modes section
  * for the complete boundary). The write SID is the per-WORKSPACE identity
- * ({@link workspaceRootsWriteSid}): deterministic from the canonical workspace
+ * ({@link workspaceWriteSid}): deterministic from the canonical workspace
  * path, so the workspace-root ACE materializes once per workspace per
  * machine and every later provision hits the exact-ACE skip — the
  * grant-reuse story the per-session random SID paid a full tree propagation
@@ -42,9 +42,9 @@
 
 import { existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { Win32Error } from '@deepseek-ai/dsh-win32-process'
 
 import { grantWrite, revokeWrite } from './acl.ts'
-import { Win32Error } from './errors.ts'
 import { allocPtrSlot, decodePtr, isNullPtr, throwLastError, win32 } from './ffi.ts'
 import type { NativePtr, Win32Bindings } from './ffi.ts'
 import { assertPrivateTempDisjoint } from './path-boundary.ts'
@@ -52,12 +52,9 @@ import { drainPipe, spawnSandboxed, spawnSandboxedInherited, waitForExit } from 
 import { createRestrictedToken, findLogonSid, makeWellKnownSid, openCurrentProcessToken, setTokenDefaultDaclGrant } from './token.ts'
 import * as abi from './win32-abi.ts'
 
-export { quoteArg } from './spawn.ts'
 export { AclWriteGrant } from './grant.ts'
 export { assertTempRootOutsideWorkspace } from './path-boundary.ts'
-export { tempWriteSid, workspaceRootsWriteSid } from './workspace-sid.ts'
-export { Win32Error } from './errors.ts'
-
+export { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
 /** Construction options: the workspace/temp allowlists and their distinct SID identities. */
 export interface AclSandboxOptions {
   /** Directories the confined child may write into (must exist and be caller-owned). */
@@ -71,7 +68,7 @@ export interface AclSandboxOptions {
   /**
    * The write SID forming the workspace-write allowlist: REQUIRED under
    * workspace-write, ignored (and must be absent) under read-only. Callers
-   * derive it from the workspace via {@link workspaceRootsWriteSid} — the identity
+   * derive it from the workspace via {@link workspaceWriteSid} — the identity
    * is per workspace, not per sandbox instance, so the workspace-root ACE
    * outlives every instance and later provisions hit the exact-ACE skip.
    */
@@ -191,7 +188,7 @@ export class AclSandbox {
     this.writeSid = options.writeSid
     this.tempWriteSid = options.tempWriteSid
     if (this.mode === 'workspace-write' && this.writeSid === undefined) {
-      throw new Error('AclSandbox workspace-write requires a write SID — derive it from the workspace via workspaceRootsWriteSid()')
+      throw new Error('AclSandbox workspace-write requires a write SID — derive it from the workspace via workspaceWriteSid()')
     }
     if (this.mode === 'workspace-write' && this.tempDirOption === undefined) {
       throw new Error('AclSandbox workspace-write requires an explicit private temp directory or null')

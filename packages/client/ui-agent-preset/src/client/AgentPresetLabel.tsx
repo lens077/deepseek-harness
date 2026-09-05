@@ -1,26 +1,25 @@
 /**
- * The composer tool row's agent-preset label.
+ * The session header's agent-preset label.
  *
  * Read-only by construction: a session's composition is fixed once its
- * conversation starts, and the label only shows after that. Offering a
- * control here would promise a switch the host refuses; naming what the
+ * conversation starts, and a header is only worth reading after that. Offering
+ * a control here would promise a switch the host refuses; naming what the
  * session runs is the honest affordance, and the choice itself lives on the
- * new-session screen ({@link AgentPresetSeat}). It sits in the tool row beside
- * the model select, next to the other per-session run facts, so the session
- * title keeps the header width to itself.
+ * new-session screen ({@link AgentPresetSeat}).
  */
 
 import { useEffect } from 'react'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconAgentPresetOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-// Type-only: pulls the ui-conversation SlotMap merge (the composer tool row).
+// Type-only: pulls the ui-conversation SlotMap merge (the header actions).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import type { AgentPresetSettingsState } from './settings-store.ts'
 import { presetDisplayText } from './locales.ts'
 import css from './AgentPresetLabel.module.css'
 
-/** Registration-side business face for the composer label. */
+/** Registration-side business face for the header label. */
 export interface AgentPresetLabelInjected {
   hooks: {
     /** Roster snapshot bound by the renderer as useAgentPresets. */
@@ -32,25 +31,23 @@ export interface AgentPresetLabelInjected {
 
 /** Full component props. */
 export type AgentPresetLabelProps =
-  PropsRuntime<'conversation.input.right'>
+  PropsRuntime<'conversation.session.header.actions'>
   & PropsLocale<'settings.agentPreset'>
   & InjectFace<AgentPresetLabelInjected>
 
 /**
- * Render this session's agent-preset name in the composer tool row.
+ * Render this session's agent-preset name beside its title.
  * @param props - composed slot props.
- * @returns the label, or null while the session is blank (the new-session
- * chip still owns the choice) or records no preset.
+ * @returns the label, or null when the session records no preset.
  */
 export function AgentPresetLabel({
   sessionId, useSessions, useAgentPresets, load, t,
 }: AgentPresetLabelProps) {
-  const summary = useSessions(state => state.byId[sessionId])
+  const preset = useSessions((state) => {
+    const value = state.byId[sessionId]?.projectionValues?.agentPreset
+    return typeof value === 'string' ? value : undefined
+  })
   const options = useAgentPresets(state => state.options)
-  // A blank session still shows the hero chip, which already names the staged
-  // preset and lets the user change it; a second copy in the composer would
-  // read as a control that is not one.
-  const preset = summary === undefined || summary.blank ? undefined : summary.agentPreset
 
   useEffect(() => {
     // Deployments that compose no presets never label anything, so the roster
@@ -65,7 +62,7 @@ export function AgentPresetLabel({
   return (
     <span className={css.label} title={text?.description ?? t('headerHint')}>
       <IconAgentPresetOutline16 size={14} className={css.icon} />
-      <span className={css.name}>{text?.name ?? preset}</span>
+      {text?.name ?? preset}
     </span>
   )
 }

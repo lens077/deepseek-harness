@@ -2,16 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import InvariantRegistry, { InvariantError } from '@deepseek-ai/dsh-invariants'
-import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import * as SandboxPolicyInvariant from '@deepseek-ai/dsh-sandbox-policy/invariant'
 
 async function setup(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(InvariantRegistry, { enabled: true })
-  // The invariant reads the policy owner's primary root to check directory
-  // events, so it activates only once the policy service is composed in.
-  await ctx.plugin(SandboxPolicyService, { workspaceRoot: process.cwd() })
   await ctx.plugin(SandboxPolicyInvariant)
   return ctx
 }
@@ -48,7 +44,6 @@ describe('sandbox-policy invariants', () => {
     await ctx.plugin(SessionStore)
     ctx.sessions.create().append('sandbox/mode', { mode: 'host-root' as never })
     await ctx.plugin(InvariantRegistry, { enabled: true })
-    await ctx.plugin(SandboxPolicyService, { workspaceRoot: process.cwd() })
 
     await expect(ctx.plugin(SandboxPolicyInvariant).then(() => undefined)).rejects.toMatchObject({
       code: 'INVARIANT',

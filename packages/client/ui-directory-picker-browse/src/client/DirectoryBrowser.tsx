@@ -40,8 +40,7 @@ import {
   Button, IconCheckOutline16, IconChevronRightOutline14, IconEditOutline16, IconFolderClose16, IconFolderOpen16,
   IconPlusOutline16, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { DirectoryEntry, DirectoryListing } from '@deepseek-ai/dsh-client-runtime/client'
-import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
+import type { DirectoryEntry, DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { Translate } from '@deepseek-ai/dsh-client-locale/client'
 import css from './DirectoryBrowser.module.css'
 
@@ -49,11 +48,18 @@ import css from './DirectoryBrowser.module.css'
 export interface DirectoryBrowserProps {
   /** Dialog visibility (owner-local; closed unmounts nothing but resets on reopen). */
   open: boolean
-  /** Owner-specific title; omission uses the Workspace-directory default. */
-  title?: string
-  /** List one directory level (absent path = the Host home directory); the signal aborts a superseded scan on the wire. */
+  /**
+   * List one directory level (absent path = the Host home directory); the
+   * signal aborts a superseded scan on the wire. A rejection may carry
+   * `{ rpcError: { message: string } }`; the dialog prefers that Host
+   * business message over the ordinary Error text.
+   */
   listDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>
-  /** Create one child directory under an existing parent. */
+  /**
+   * Create one child directory under an existing parent. A rejection may
+   * carry `{ rpcError: { message: string } }`; the dialog prefers that Host
+   * business message over the ordinary Error text.
+   */
   createDirectory: (path: string, name: string) => Promise<string>
   /** The operator confirmed a directory (the selection, else the listed level). */
   onOpen: (path: string) => void
@@ -65,9 +71,13 @@ export interface DirectoryBrowserProps {
   t: Translate
 }
 
-/** Failure text: the Host business message when typed, else the throw's text. */
+/** Failure text from the injected directory operation. */
 function failureText(error: unknown): string {
-  if (error instanceof DirectoryBrowseError) return error.rpcError.message
+  if (error !== null && typeof error === 'object' && 'rpcError' in error) {
+    const rpcError = error.rpcError
+    if (rpcError !== null && typeof rpcError === 'object' && 'message' in rpcError
+      && typeof rpcError.message === 'string') return rpcError.message
+  }
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -184,10 +194,9 @@ function readDraft(
  * orphan it. A prefix narrows the level only while some row it would actually
  * show matches — a tail nobody matches is a name being spelled, not a demand
  * for an empty pane, so the level shows whole and its hidden rows return to
- * obeying the toggle. Counting only displayable rows is what keeps that true:
- * were a hidden row ever to match a prefix that does not reveal it (today
- * `hidden` means dot-prefixed, so it cannot), the level would narrow to
- * nothing.
+ * obeying the toggle. Counting only displayable rows keeps that true because
+ * every hidden name is dot-prefixed, and a matching prefix therefore reveals
+ * it; otherwise the level could narrow to nothing.
  */
 function visibleEntries(
   entries: readonly DirectoryEntry[],
@@ -261,7 +270,7 @@ function LevelColumn({ entries, selectedPath, busy, onPick, showHidden, filterPr
  * @param props - owner-controlled browser props.
  * @returns the dialog element (null while closed, via Modal).
  */
-export function DirectoryBrowser({ open, title, listDirectory, createDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps) {
+export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps) {
   // Miller state: the listed level, the selected row in it, and the selected
   // folder's own listing (the right column; null while nothing is selected).
   const [parent, setParent] = useState<DirectoryListing | null>(null)
@@ -281,7 +290,6 @@ export function DirectoryBrowser({ open, title, listDirectory, createDirectory, 
   const [pathDraft, setPathDraft] = useState<string | null>(null)
   // Show-hidden toggle state (pure client-side filter, reset on each open).
   const [showHidden, setShowHidden] = useState(false)
-  // Create-folder state: null = closed; a string = the nested dialog's draft.
   const [folderDraft, setFolderDraft] = useState<string | null>(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -760,7 +768,7 @@ export function DirectoryBrowser({ open, title, listDirectory, createDirectory, 
       // adoption pins the flow — dismissing it would leave the owner's
       // createWorkspace to land after an apparent cancel.
       onClose={() => { if (folderDraft === null && !busy) onClose() }}
-      title={title ?? t('browser.title')}
+      title={t('browser.title')}
       className={clsx(css.dialog)}
       headless
     >
@@ -808,7 +816,7 @@ export function DirectoryBrowser({ open, title, listDirectory, createDirectory, 
         }}
       >
         <div className={css.header}>
-          <h2 className={css.title}>{title ?? t('browser.title')}</h2>
+          <h2 className={css.title}>{t('browser.title')}</h2>
           <div className={css.crumbBar}>
             {pathDraft === null
               ? (

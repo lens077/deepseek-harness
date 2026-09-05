@@ -17,6 +17,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { FsError, FsTargetKey } from '@deepseek-ai/dsh-fs'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
 
@@ -29,6 +30,7 @@ let fiber: Awaited<ReturnType<Context['plugin']>>
 
 async function boot(mode: SandboxMode): Promise<void> {
   ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SandboxPolicyService, { mode, workspaceRoot: workspace })
   fiber = await ctx.plugin(SandboxedFileSystem, { cwd: workspace })
   fs = ctx.fs as SandboxedFileSystem
@@ -98,9 +100,14 @@ describe('workspace-write containment', () => {
   })
 
   it('a write to the platform temp area lands (parity with the bash runner grant)', async () => {
-    const path = join(await mkdtemp(join(tmpdir(), 'dsh-fssbx-tmp-')), 'temp.txt')
-    await fs.writeText(await target(path), 'temp')
-    expect(await readFile(path, 'utf8')).toBe('temp')
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-fssbx-tmp-'))
+    try {
+      const path = join(dir, 'temp.txt')
+      await fs.writeText(await target(path), 'temp')
+      expect(await readFile(path, 'utf8')).toBe('temp')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it('an absolute path outside the workspace is denied, no file created', async () => {
@@ -171,6 +178,7 @@ describe('workspace-write with the filesystem root as the workspace (a root endi
     // A degenerate but valid config: the filesystem root containing the target.
     // It exercises the separator-suffixed-root branch on POSIX and Windows.
     const rootCtx = new Context()
+    await rootCtx.plugin(SessionProjectionRegistry)
     await rootCtx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: parse(base).root })
     const rootFiber = await rootCtx.plugin(SandboxedFileSystem, { cwd: workspace })
     const rootFs = rootCtx.fs as SandboxedFileSystem
@@ -199,7 +207,7 @@ describe('the per-call policy override (escalation)', () => {
     await boot('read-only')
     const path = join(workspace, 'escalated.txt')
     // Default read-only would deny; the per-call workspace-write policy allows it (contained).
-    await fs.writeText(await target(path), 'granted', undefined, undefined, { mode: 'workspace-write', workspaceRoots: [workspace] })
+    await fs.writeText(await target(path), 'granted', undefined, undefined, { mode: 'workspace-write', workspaceRoot: workspace })
     expect(await readFile(path, 'utf8')).toBe('granted')
     // A neighboring plain call still runs under the read-only default.
     await expect(fs.writeText(await target(join(workspace, 'plain.txt')), 'x'))
@@ -209,7 +217,7 @@ describe('the per-call policy override (escalation)', () => {
   it('a danger-full-access stamp bypasses the fence for that call', async () => {
     await boot('read-only')
     const path = join(outside, 'granted-full.txt')
-    await fs.writeText(await target(path), 'full', undefined, undefined, { mode: 'danger-full-access', workspaceRoots: [workspace] })
+    await fs.writeText(await target(path), 'full', undefined, undefined, { mode: 'danger-full-access', workspaceRoot: workspace })
     expect(await readFile(path, 'utf8')).toBe('full')
   })
 })

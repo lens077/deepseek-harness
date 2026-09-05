@@ -5,7 +5,7 @@
  */
 
 import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-landlock-run'
-import { canonicalPath, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 
 /**
@@ -15,13 +15,9 @@ import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
  */
 export function bwrapProfileArgs(policy: SandboxPolicy): string[] {
   const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent']
-  const roots = writableRoots(policy)
-  if (roots.length > 0) {
+  if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')
-    const canonicalTmp = canonicalPath('/tmp')
-    for (const root of roots) {
-      if (root !== canonicalTmp) args.push('--bind', root, root)
-    }
+    args.push('--bind', policy.workspaceRoot, policy.workspaceRoot)
   }
   return args
 }
@@ -32,7 +28,11 @@ export function bwrapProfileArgs(policy: SandboxPolicy): string[] {
  * @returns launcher grant arguments before the trailing separator and command argv.
  */
 export function landlockProfileArgs(policy: SandboxPolicy): string[] {
-  return landlockGrantArgs({ readOnly: ['/'], readWrite: ['/dev/null', ...writableRoots(policy)] })
+  const readWrite = ['/dev/null']
+  if (policy.mode === 'workspace-write') {
+    readWrite.push('/tmp', policy.workspaceRoot)
+  }
+  return landlockGrantArgs({ readOnly: ['/'], readWrite })
 }
 
 /** Quote one path as an SBPL string literal. */

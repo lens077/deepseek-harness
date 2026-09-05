@@ -27,8 +27,13 @@ class FakeInspector implements ProcessInspector {
 
   foregroundPgid() { return this.pgid }
   isStdinWaiting() { return this.waiting }
-  processTree() { return this.members }
-  processSession() { return [] }
+  snapshot() {
+    return {
+      tree: () => this.members,
+      session: () => [],
+      alive: (identity: ProcessIdentity) => this.alive.has(identity.pid),
+    }
+  }
   isAlive(identity: ProcessIdentity) { return this.alive.has(identity.pid) }
   signalGroup(pgid: number, signal: TerminalSignal) {
     if (this.throwGroup) throw new Error('group failed')
@@ -148,6 +153,310 @@ async function initialize(session: LocalPtySession, terminal: FakeTerminal): Pro
 }
 
 describe('LocalPtySession readiness and output', () => {
+  it('answers split cursor-position queries before publishing prompt readiness', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    const responseGate = Promise.withResolvers<undefined>()
+    terminal.write = async (data) => {
+      terminal.writes.push(data)
+      await responseGate.promise
+    }
+
+    let initialized = false
+    const pending = session.initialize().then(() => { initialized = true })
+    terminal.emitData('\x1b]133;D;0\x07dsh> \x1b[')
+    terminal.emitData('6n')
+    await vi.advanceTimersByTimeAsync(20)
+
+    expect(terminal.writes).toContain('\x1b[1;6R')
+    expect(initialized).toBe(false)
+    responseGate.resolve(undefined)
+    await vi.advanceTimersByTimeAsync(10)
+    await pending
+    expect(session.motd).toBe('dsh> ')
+  })
+
+  it('drains terminal replies before caller input and re-inspects after concurrent output', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+    const firstInspection = Promise.withResolvers<{ processGroupId: number; inputWaiting: boolean }>()
+    const secondInspection = Promise.withResolvers<{ processGroupId: number; inputWaiting: boolean }>()
+    let inspections = 0
+    terminal.inspectForeground = async () => {
+      inspections += 1
+      if (inspections === 1) return await firstInspection.promise
+      if (inspections === 2) return await secondInspection.promise
+      return { processGroupId: 456, inputWaiting: false }
+    }
+    const responseGate = Promise.withResolvers<undefined>()
+    terminal.write = async (data) => {
+      terminal.writes.push(data)
+      if (data === '\x1b[1;6R') await responseGate.promise
+    }
+
+    const operation = session.startSend({ text: 'caller input', submit: true })
+    await Promise.resolve()
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(0)
+    firstInspection.resolve({ processGroupId: 456, inputWaiting: true })
+    await Promise.resolve()
+
+    expect(terminal.writes).toEqual(['\x1b[1;6R'])
+    responseGate.resolve(undefined)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(inspections).toBe(2)
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(0)
+    secondInspection.resolve({ processGroupId: 456, inputWaiting: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(inspections).toBe(3)
+    expect(terminal.writes).toEqual(['\x1b[1;6R', '\x1b[1;6R', 'caller input\r'])
+
+    terminal.emitData('\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    expect((await operation.done).waitReason).toBe('stdin_read')
+  })
+
+  it('drains a terminal reply that is pending when caller input starts', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+    const responseGate = Promise.withResolvers<undefined>()
+    terminal.write = async (data) => {
+      terminal.writes.push(data)
+      if (data === '\x1b[1;6R') await responseGate.promise
+    }
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(0)
+
+    const operation = session.startSend({ text: 'caller input', submit: true })
+    await Promise.resolve()
+    expect(terminal.writes).toEqual(['\x1b[1;6R'])
+    responseGate.resolve(undefined)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(terminal.writes).toEqual(['\x1b[1;6R', 'caller input\r'])
+
+    terminal.emitData('\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    expect((await operation.done).waitReason).toBe('stdin_read')
+  })
+
+  it('resamples readiness foreground state after protocol activity during inspection', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+    const operation = session.startSend({ text: '', submit: false })
+    await Promise.resolve()
+    await Promise.resolve()
+    const internal = session as unknown as {
+      stopReadinessPolling(): void
+      pollReadiness(operation: TerminalSendOperation): Promise<void>
+      settleActive(reason: 'timeout'): void
+    }
+    internal.stopReadinessPolling()
+    await vi.advanceTimersByTimeAsync(20)
+
+    const firstInspection = Promise.withResolvers<{ processGroupId: number; inputWaiting: boolean }>()
+    let inspections = 0
+    terminal.inspectForeground = async () => {
+      inspections += 1
+      return inspections === 1
+        ? await firstInspection.promise
+        : { processGroupId: 456, inputWaiting: false }
+    }
+    const polling = internal.pollReadiness(operation)
+    await Promise.resolve()
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(0)
+    firstInspection.resolve({ processGroupId: 456, inputWaiting: true })
+    await polling
+
+    expect(inspections).toBe(2)
+    expect((operation as unknown as { settled: boolean }).settled).toBe(false)
+    internal.settleActive('timeout')
+    expect((await operation.done).waitReason).toBe('timeout')
+  })
+
+  it('retains send ownership while a failed inspection drains a terminal reply', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+    const operation = session.startSend({ text: '', submit: false })
+    await Promise.resolve()
+    await Promise.resolve()
+    const internal = session as unknown as {
+      stopReadinessPolling(): void
+      pollReadiness(operation: TerminalSendOperation): Promise<void>
+    }
+    internal.stopReadinessPolling()
+
+    const inspection = Promise.withResolvers<{ processGroupId: number; inputWaiting: boolean }>()
+    terminal.inspectForeground = async () => await inspection.promise
+    const responseGate = Promise.withResolvers<undefined>()
+    terminal.write = async (data) => {
+      terminal.writes.push(data)
+      await responseGate.promise
+    }
+    const polling = internal.pollReadiness(operation)
+    await Promise.resolve()
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(0)
+    inspection.reject(new Error('inspection failed with reply pending'))
+    await Promise.resolve()
+
+    expect(() => session.startSend({ text: 'successor', submit: true })).toThrow('active send')
+    responseGate.resolve(undefined)
+    await polling
+    await expect(operation.done).rejects.toThrow('inspection failed with reply pending')
+  })
+
+  it('retains pre-write ownership when inspection fails with a terminal reply pending', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+    const inspection = Promise.withResolvers<{ processGroupId: number; inputWaiting: boolean }>()
+    terminal.inspectForeground = async () => await inspection.promise
+    const responseGate = Promise.withResolvers<undefined>()
+    terminal.write = async (data) => {
+      terminal.writes.push(data)
+      await responseGate.promise
+    }
+
+    const operation = session.startSend({ text: 'must not execute', submit: true })
+    await Promise.resolve()
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(0)
+    inspection.reject(new Error('pre-write inspection failed with reply pending'))
+    await Promise.resolve()
+
+    expect(() => session.startSend({ text: 'successor', submit: true })).toThrow('active send')
+    responseGate.resolve(undefined)
+    await expect(operation.done).rejects.toThrow('pre-write inspection failed with reply pending')
+    expect(terminal.writes).toEqual(['\x1b[1;6R'])
+  })
+
+  it('retains a timed-out send until its terminal-protocol response settles', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+    const responseGate = Promise.withResolvers<undefined>()
+    terminal.write = async (data) => {
+      terminal.writes.push(data)
+      await responseGate.promise
+    }
+
+    const operation = session.startSend({ text: '', submit: false })
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(100)
+    expect((await operation.done).waitReason).toBe('timeout')
+    expect(() => session.startSend({ text: 'successor', submit: true })).toThrow('active send')
+
+    responseGate.resolve(undefined)
+    await vi.advanceTimersByTimeAsync(0)
+    const successor = session.startSend({ text: '', submit: false })
+    terminal.emitData('\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    expect((await successor.done).waitReason).toBe('stdin_read')
+  })
+
+  it('contains terminal emulator and protocol-response failures', async () => {
+    const responseTerminal = new FakeTerminal()
+    responseTerminal.throwWrite = true
+    const responseSession = new LocalPtySession(responseTerminal, config())
+    const responseOperation = responseSession.startSend({ text: '', submit: false })
+    responseTerminal.emitData('\x1b[6n')
+    await expect(responseOperation.done).rejects.toThrow('write failed')
+    expect(responseSession.status()).toEqual({ kind: 'exited', exitCode: null, signal: null })
+
+    const emulatorTerminal = new FakeTerminal()
+    const emulatorSession = new LocalPtySession(emulatorTerminal, config())
+    const emulatorOperation = emulatorSession.startSend({ text: '', submit: false })
+    const emulator = (emulatorSession as unknown as {
+      emulator: { write(data: string, callback?: () => void): void }
+    }).emulator
+    emulator.write = () => { throw new Error('emulator failed') }
+    emulatorTerminal.emitData('output')
+    await expect(emulatorOperation.done).rejects.toThrow('emulator failed')
+    expect(emulatorSession.status()).toEqual({ kind: 'exited', exitCode: null, signal: null })
+  })
+
+  it('ignores terminal-protocol failures after closing starts and drains changing queues', async () => {
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config())
+    const internal = session as unknown as {
+      closing: boolean
+      emulator: { write(data: string, callback?: () => void): void }
+      emulatorWrites: Promise<void>
+      responseWrites: Promise<void>
+      drainTerminalProtocol(): Promise<void>
+      closeEmulator(): void
+    }
+    internal.closing = true
+    terminal.throwWrite = true
+    terminal.emitData('\x1b[6n')
+    await internal.emulatorWrites
+    await internal.responseWrites
+    expect(session.status()).toEqual({ kind: 'running' })
+
+    internal.emulator.write = () => { throw new Error('late emulator failure') }
+    terminal.emitData('late output')
+    await internal.emulatorWrites
+    expect(session.status()).toEqual({ kind: 'running' })
+
+    const first = Promise.withResolvers<undefined>()
+    internal.emulatorWrites = first.promise
+    const draining = internal.drainTerminalProtocol()
+    internal.emulatorWrites = Promise.resolve()
+    first.resolve(undefined)
+    await draining
+    internal.closeEmulator()
+    internal.closeEmulator()
+    terminal.emitData('after emulator close')
+    expect(session.status()).toEqual({ kind: 'running' })
+  })
+
+  it('coalesces terminal output that arrives while an emulator parse is pending', async () => {
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config())
+    const writes: Array<{ data: string; done: () => void }> = []
+    const internal = session as unknown as {
+      emulator: { write(data: string, callback?: () => void): void }
+      emulatorWrites: Promise<void>
+      closeEmulator(): void
+    }
+    internal.emulator.write = (data, callback) => {
+      writes.push({ data, done: callback ?? (() => {}) })
+    }
+
+    terminal.emitData('first')
+    terminal.emitData('second')
+    terminal.emitData('third')
+    await Promise.resolve()
+    expect(writes.map(write => write.data)).toEqual(['first'])
+
+    writes[0]!.done()
+    await Promise.resolve()
+    expect(writes.map(write => write.data)).toEqual(['first', 'secondthird'])
+    writes[1]!.done()
+    await internal.emulatorWrites
+    internal.closeEmulator()
+  })
+
   it('lets queued terminal output run before the first post-write readiness poll', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()
@@ -171,71 +480,6 @@ describe('LocalPtySession readiness and output', () => {
     terminal.emitData('\x1b]133;D;0\x07dsh> ')
     await vi.advanceTimersByTimeAsync(10)
     expect((await operation.done).waitReason).toBe('stdin_read')
-  })
-
-  // A consumer needing a collision-resistant prompt declares it at spawn, and readiness
-  // compares against that prompt. Comparing against the module default instead poisons the
-  // prompt tail on every prompt, so each command falls back to silence-based settling —
-  // `idleSilenceMs + handoffGraceMs` per command wherever the platform cannot probe stdin
-  // waits, which is every macOS host (`MacProcessInspector.isStdinWaiting` returns false).
-  it('settles on the prompt the session was spawned with', async () => {
-    vi.useFakeTimers()
-    const terminal = new FakeTerminal()
-    const prompt = '__DSH_PERSISTENT_BASH_PROMPT__ '
-    // The fake inspector reports waiting = false, keeping the exact stdin probe out of
-    // the way exactly as macOS does.
-    const session = new LocalPtySession(terminal, config(), prompt)
-
-    const startup = session.initialize()
-    terminal.emitData(`\x1b]133;D;0\x07${prompt}`)
-    await vi.advanceTimersByTimeAsync(10)
-    await startup
-
-    const operation = session.startSend({ text: 'pwd', submit: true })
-    // Let the write settle first: readiness seen before it is deliberately discarded.
-    await vi.advanceTimersByTimeAsync(0)
-    terminal.emitData(`/tmp\r\n\x1b]133;D;0\x07${prompt}`)
-    await vi.advanceTimersByTimeAsync(10)
-    expect((await operation.done).waitReason).toBe('stdin_read')
-  })
-
-  // The tail poison is deliberate. It rejects two prompts that are not this send's
-  // completion: the previous prompt trailed by the echoed command, and a child prompt.
-  // Foreground ownership cannot reject either one, so the text match carries that weight.
-  it('falls back to silence when the observed prompt is not the session prompt', async () => {
-    vi.useFakeTimers()
-    const terminal = new FakeTerminal()
-    const session = new LocalPtySession(terminal, config())
-    await initialize(session, terminal)
-
-    const operation = session.startSend({ text: 'pwd', submit: true })
-    await vi.advanceTimersByTimeAsync(0)
-    terminal.emitData('/tmp\r\n\x1b]133;D;0\x07__DSH_PERSISTENT_BASH_PROMPT__ ')
-    await vi.advanceTimersByTimeAsync(10)
-    await vi.advanceTimersByTimeAsync(60)
-    expect((await operation.done).waitReason).toBe('inferred_idle')
-  })
-
-  // An interactive child inherits PROMPT_COMMAND and emits the marker on every one of its
-  // own prompts. Job control keeps it in its own process group, so repeated markers must
-  // never settle the send while it owns the terminal.
-  it('ignores repeated markers emitted by a child that keeps the foreground', async () => {
-    vi.useFakeTimers()
-    const terminal = new FakeTerminal()
-    const inspector = terminal.inspector
-    const session = makeSession(terminal, inspector, config())
-    await initialize(session, terminal)
-
-    const operation = session.startSend({ text: 'bash -i', submit: true })
-    let settled = false
-    void operation.done.then(() => { settled = true })
-    await vi.advanceTimersByTimeAsync(0)
-    inspector.pgid = 999
-    for (let round = 0; round < 3; round += 1) {
-      terminal.emitData('\x1b]133;D;0\x07dsh> ')
-      await vi.advanceTimersByTimeAsync(10)
-      expect(settled).toBe(false)
-    }
   })
 
   it('discards prompt readiness observed during asynchronous pre-write inspection', async () => {
@@ -1060,6 +1304,7 @@ describe('LocalPtySession readiness and output', () => {
     await Promise.resolve()
     await Promise.resolve()
     inspection.resolve({ processGroupId: 456, inputWaiting: false })
+    await vi.advanceTimersByTimeAsync(0)
     await stalePoll
     await vi.advanceTimersByTimeAsync(10)
 
@@ -1255,6 +1500,7 @@ describe('LocalPtySession bounds, signals, and teardown', () => {
       message: 'PTY cleanup failed (survivor)',
       cause: terminal.terminateError,
     })
+    expect((session as unknown as { emulatorClosed: boolean }).emulatorClosed).toBe(true)
     expect(terminal.kills).toEqual([])
 
     terminal.terminateError = undefined

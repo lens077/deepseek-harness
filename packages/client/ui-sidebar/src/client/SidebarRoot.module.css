@@ -33,7 +33,7 @@
    class whenever the pointer is not inside (SidebarRoot.tsx owns the linger),
    and rebinding ui-theme's indirection pair to `transparent` takes the thumb
    out of every scroll region nested under it — the workspace browser's
-   session list today. `transparent` rather than `display: none` on the bar:
+   session list. `transparent` rather than `display: none` on the bar:
    the reservation (`scrollbar-gutter: stable` on the list) stays in force, so
    revealing the thumb never reflows a row. Rebinding contract and the two
    rendering paths it reaches: ui-theme's README. */
@@ -124,23 +124,13 @@
   cursor: pointer;
 }
 
-/* Identity stacks the brand row over the fork tagline; both fit the 44px
-   logo row content box (20px row + 2px gap + 14px tagline). */
-.brandIdentity {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-
 /* Mark and name are independent slots; the shell owns their shared baseline,
    spacing, and height so either occupant can vary in width. */
-.brandRow {
+.brandIdentity {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 20px;
+  height: 24px;
   min-width: 0;
 }
 
@@ -156,35 +146,34 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  height: 20px;
-  font-size: 15px;
+  height: 24px;
+  font-size: 18px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 24px;
   letter-spacing: 0.04em;
 }
 
-/* Any occupant artwork scales to the row height; width follows its aspect. */
-.brandName svg {
-  height: 20px;
-  width: auto;
-}
-
 .fallbackBrandName {
-  font-size: 14px;
+  font-size: 17px;
   letter-spacing: 0px;
   white-space: nowrap;
 }
 
-.brandTagline {
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
-  font-weight: 400;
-  line-height: 14px;
-  letter-spacing: 0;
+.localBuildBrand {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  height: 24px;
   white-space: nowrap;
-  text-overflow: ellipsis;
+}
+
+.localBuildTitle {
+  font-size: 12px;
+  line-height: 13px;
+  letter-spacing: 0;
 }
 
 .iconButton {
@@ -196,6 +185,7 @@
   height: 28px;
   border: none;
   border-radius: 50%;
+  corner-shape: round;
   padding: 0;
   background: transparent;
   cursor: pointer;
@@ -238,18 +228,20 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.buildRevision {
+.buildVersion {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 3px;
+  height: 10px;
+  padding: 0 3px;
+  border-radius: 2px;
   color: var(--dsw-alias-label-primary-inverted);
   background: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 8px;
+  font-size: 6px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 10px;
+  white-space: nowrap;
 }
 
 /* New Session: 38px bar, 12px radius (figma 133:7634 geometry, squared-off
@@ -264,7 +256,7 @@
   padding: 8px 16px;
   margin: 0 2px 8px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 12px;
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
@@ -302,27 +294,6 @@
 
 .collapsed .newSessionLabel {
   max-width: 0;
-}
-
-/* Navigation seat: whole-surface entries under New Session. Always mounted so
-   the browsing region below never shifts as entries come and go; the entries
-   own their own row chrome. */
-.navArea {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.navArea:not(:empty) {
-  margin-bottom: 8px;
-}
-
-.collapsed .navArea {
-  align-items: flex-start;
-}
-
-.railIn .navArea {
-  animation: rail-in 150ms var(--ds-ease-in-out) backwards;
 }
 
 /* Region seat: always mounted so the foot never moves. Its trailing margin
@@ -380,7 +351,6 @@
   .fading > *,
   .railIn .iconButton,
   .railIn .newSession,
-  .railIn .navArea,
   .railIn .footArea,
   .railIn .regionArea {
     transition: none;

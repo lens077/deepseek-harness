@@ -6,13 +6,21 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type {} from '@deepseek-ai/dsh-typert-protocol'
 
 /**
  * Identifies one workspace record. A generated uuid, never the path: path
  * normalization rewrites paths, and a reference anchor must stay stable.
  */
 export type WorkspaceId = Branded<'WorkspaceId'>
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    /** No registration carries that Workspace identity. */
+    'workspace/not-found': { readonly workspaceId: WorkspaceId }
+  }
+}
 
 /**
  * One workspace: a stable id over an existing directory, a display title, and
@@ -31,7 +39,7 @@ export interface Workspace {
    */
   readonly path: string
 
-  /** Display title. Defaults to `basename(path)` at create; duplicates are allowed. */
+  /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
 
   /** ISO-8601 creation instant, stamped at create and never rewritten. */
@@ -51,15 +59,6 @@ export interface Workspace {
   readonly sessionIds: readonly SessionId[]
 
   /**
-   * Nested display placement over the flat account: child session id →
-   * parent session id. An entry is served only while BOTH ends pass the
-   * membership filter of {@link sessionIds}; grouping surfaces render an
-   * unmapped (or unservable-parent) session as a top-level row. Sibling
-   * order among a parent's children follows the flat account order.
-   */
-  readonly nestedUnder: Readonly<Record<string, SessionId>>
-
-  /**
    * Replace the display title durably.
    * @param title - New title; any string, duplicates across workspaces allowed.
    * @returns resolution after durability.
@@ -74,26 +73,10 @@ export interface Workspace {
    * header cwd must resolve to an existing directory equal to {@link path};
    * unknown ids, missing or invalid cwd values, and mismatches reject without
    * writing.
-   *
-   * `options.nestUnder` additionally records nested display placement under
-   * an accounted parent, decided on the write chain: an unaccounted parent,
-   * a self-parent, or a parent chain reaching back to the session itself
-   * rejects without writing. Re-attaching an accounted session with
-   * `nestUnder` re-parents it durably.
    * @param sessionId - The session to record.
-   * @param options - Optional nested placement under an accounted parent.
    * @returns resolution after durability.
    */
-  attachSession(sessionId: SessionId, options?: { nestUnder?: SessionId }): Promise<void>
-
-  /**
-   * Prepend several sessions in one durable record update. Every new id is
-   * validated before the write; any invalid cwd rejects the complete batch.
-   * Batch attachment creates no nested-placement entries.
-   * @param sessionIds - Sessions to account, in their resulting display order.
-   * @returns resolution after durability.
-   */
-  attachSessions(sessionIds: readonly SessionId[]): Promise<void>
+  attachSession(sessionId: SessionId): Promise<void>
 
   /**
    * Move an accounted session within the manual order, DOM-insertBefore-like:
@@ -118,14 +101,6 @@ export interface Workspace {
    * @returns resolution after durability.
    */
   detachSession(sessionId: SessionId): Promise<void>
-
-  /**
-   * Remove several sessions in one durable record update. Any surviving child
-   * whose nested parent is removed is promoted to top level.
-   * @param sessionIds - Sessions to remove from this account.
-   * @returns resolution after durability.
-   */
-  detachSessions(sessionIds: readonly SessionId[]): Promise<void>
 
   /**
    * Live directory check, uncached: whether {@link path} currently exists and

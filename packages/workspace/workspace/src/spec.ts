@@ -1,12 +1,13 @@
 /**
  * The workspace domain declaration: record schema and the `defineDomain` spec
- * the registry opens. The zod schema is the durable-boundary validator today
- * and the direct source of the RPC wire projection in a later phase.
+ * the registry opens. The zod schema validates the shipped format at the
+ * durability boundary and is the direct source of a future RPC wire projection.
  * @module @deepseek-ai/dsh-workspace/src/spec
  */
 
 import { z } from 'zod'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceId } from './types.ts'
 
@@ -16,16 +17,12 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
  * stamped at create; `sessionIds` is the ordered ownership account (array
- * order is display order); `nestedUnder` maps an accounted child session to
- * the accounted session it displays under (nested-fork placement — an
- * organization fact, distinct from header lineage); timestamps are ISO-8601
- * strings. Defaulted so records written before the field parse unchanged.
+ * order is display order); timestamps are ISO-8601 strings.
  */
 export const workspaceRecord = z.object({
   path: z.string(),
   title: z.string(),
-  sessionIds: z.array(z.string().transform(SessionId)),
-  nestedUnder: z.record(z.string(), z.string().transform(SessionId)).default({}),
+  sessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -41,13 +38,6 @@ export type WorkspaceRecord = z.infer<typeof workspaceRecord>
 const workspacePendingMutation = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('create'), workspaceId }),
   z.object({ operation: z.literal('delete'), workspaceId }),
-  z.object({
-    operation: z.literal('delete-sessions'),
-    sessionIds: z.array(z.string().transform(SessionId)).min(1).refine(
-      ids => new Set(ids).size === ids.length,
-      { message: 'session deletion marker repeats a session id' },
-    ),
-  }),
 ])
 
 /**
@@ -62,7 +52,7 @@ const workspacePendingMutation = z.discriminatedUnion('operation', [
 export const workspaceDomainState = z.object({
   initialized: z.boolean(),
   workspaceIds: z.array(workspaceId),
-  archivedSessionIds: z.array(z.string().transform(SessionId)).default([]),
+  archivedSessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))).default([]),
   pendingMutation: workspacePendingMutation.optional(),
 })
 

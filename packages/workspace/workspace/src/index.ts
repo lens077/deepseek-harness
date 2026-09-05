@@ -7,7 +7,6 @@
 
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
-import { basename } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
@@ -15,8 +14,8 @@ import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
 
-export { WorkspaceMembershipInvalidError, WorkspaceMoveInvalidError } from './entity.ts'
-import { realpathNormalize } from './paths.ts'
+export { WorkspaceMoveInvalidError } from './entity.ts'
+import { defaultWorkspaceTitle, realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 import type { Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
@@ -45,46 +44,10 @@ export function WorkspaceId(id: string): WorkspaceId {
 export class WorkspaceUnknownSessionError extends Error {
   /**
    * @param sessionId - The unknown session id.
-   * @param operation - Destructive or archival operation that required it.
    */
-  constructor(
-    readonly sessionId: SessionId,
-    readonly operation: 'archive' | 'delete' = 'archive',
-  ) {
-    super(`cannot ${operation} session '${sessionId}': live sessions and session persistence hold no such session`)
+  constructor(readonly sessionId: SessionId) {
+    super(`cannot archive session '${sessionId}': live sessions and session persistence hold no such session`)
     this.name = 'WorkspaceUnknownSessionError'
-  }
-}
-
-/** Permanent deletion named one or more identities that still have live Session owners. */
-export class WorkspaceSessionLiveError extends Error {
-  /**
-   * @param sessionId - Requested cascade root.
-   * @param liveSessionIds - Complete live subset of the planned cascade.
-   */
-  constructor(
-    readonly sessionId: SessionId,
-    readonly liveSessionIds: readonly SessionId[],
-  ) {
-    super(`cannot delete session '${sessionId}' while cascade sessions are live: ${liveSessionIds.join(', ')}`)
-    this.name = 'WorkspaceSessionLiveError'
-  }
-}
-
-/** A new Session attempted to reuse or descend from an in-process deletion tombstone. */
-export class WorkspaceSessionDeletingError extends Error {
-  /**
-   * @param sessionId - New session identity rejected by the deletion reservation.
-   * @param parentSessionId - Deleted or deleting parent identity, when applicable.
-   */
-  constructor(
-    readonly sessionId: SessionId,
-    readonly parentSessionId?: SessionId,
-  ) {
-    super(parentSessionId === undefined
-      ? `cannot create session '${sessionId}' while that identity is being permanently deleted`
-      : `cannot create session '${sessionId}' from permanently deleted parent '${parentSessionId}'`)
-    this.name = 'WorkspaceSessionDeletingError'
   }
 }
 
@@ -112,21 +75,11 @@ interface BootstrapGroup {
   readonly newestAt: number
 }
 
-/** Caller-owned capability for quiescently retiring an admissible live subset. */
-type RetireSessionsForDelete = (sessionIds: readonly SessionId[]) => Promise<void>
-
 const sameIds = (left: readonly WorkspaceId[], right: readonly WorkspaceId[]): boolean =>
   left.length === right.length && left.every((id, index) => id === right[index])
 
 const compareHeaders = (left: SessionHeader, right: SessionHeader): number =>
   right.createdAt - left.createdAt || String(left.id).localeCompare(String(right.id))
-
-/** Immutable identity fields that must agree between live and durable observations. */
-const sameSessionIdentity = (left: SessionHeader, right: SessionHeader): boolean =>
-  left.id === right.id
-  && left.createdAt === right.createdAt
-  && left.cwd === right.cwd
-  && left.parentSession === right.parentSession
 
 /**
  * Durable workspace registry. Startup waits for `sessionPersistence`, builds
@@ -145,17 +98,12 @@ export class WorkspaceRegistry extends Service {
   private readonly headers = new Map<SessionId, SessionHeader>()
   private readonly sessionPaths = new Map<SessionId, string>()
   private readonly invalidSessionPaths = new Map<SessionId, string>()
-  /** Identities reserved by a durable deletion marker that has not committed cleanup. */
-  private readonly deletingSessionIds = new Set<SessionId>()
-  /** Connection-process tombstones that reject delayed creates after deletion commits. */
-  private readonly deletedSessionIds = new Set<SessionId>()
   private operationTail: Promise<void> = Promise.resolve()
 
   private readonly host: WorkspaceEntityHost = {
     table: () => this.requireTable(),
     sessionPath: id => this.sessionPaths.get(id),
     readSessionHeader: id => this.readSessionHeader(id),
-    assertSessionAttachable: id => this.assertSessionAttachable(id),
     rememberSessionPath: (id, path) => {
       this.sessionPaths.set(id, path)
       this.invalidSessionPaths.delete(id)
@@ -164,16 +112,6 @@ export class WorkspaceRegistry extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'workspaceRegistry')
-    ctx.on('session/created', (session) => {
-      const parent = session.header.parentSession
-      if (this.deletingSessionIds.has(session.id) || this.deletedSessionIds.has(session.id)) {
-        throw new WorkspaceSessionDeletingError(session.id)
-      }
-      if (parent !== undefined
-        && (this.deletingSessionIds.has(parent) || this.deletedSessionIds.has(parent))) {
-        throw new WorkspaceSessionDeletingError(session.id, parent)
-      }
-    })
   }
 
   /** Open the domain, finish bootstrap when required, and rebuild the ordered cache. */
@@ -183,16 +121,15 @@ export class WorkspaceRegistry extends Service {
     this.table = domain.table('workspaces')
     this.global = domain.global
     this.state = domain.global.get()
-    this.rememberPendingSessionDeletion(this.state)
 
     await this.recoverPendingMutation()
     this.validateStoredState(this.state)
     if (!this.state.initialized) {
-      const headers = await this.ctx.sessionPersistence.list()
+      const headers = await this.listStoredHeaders()
       await this.replaceHeaderIndex(headers)
       await this.bootstrap(headers)
     } else if (this.table.size > 0) {
-      await this.replaceHeaderIndex(await this.ctx.sessionPersistence.list())
+      await this.replaceHeaderIndex(await this.listStoredHeaders())
     }
 
     await this.indexLiveSessions()
@@ -202,13 +139,13 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
-   * Create or reuse a workspace for an existing directory. The path is
-   * canonicalized through `fs.realpath`; a nonexistent path rejects with the
-   * original error and a non-directory rejects. Repeated calls for the same
-   * canonical path return the existing entity without changing its title.
+   * Create or reuse a workspace for an existing directory. The fully qualified
+   * path is canonicalized through `fs.realpath`; a relative, nonexistent, or
+   * non-directory path rejects. Repeated calls for the same canonical path
+   * return the existing entity without changing its title.
    * A newly created workspace is prepended to the durable registry order.
    * Different canonical paths may share a display title.
-   * @param path - Existing directory to own, in any path spelling.
+   * @param path - Existing directory to own, in a fully qualified path spelling.
    * @param title - Display title used only when a new record is created.
    * @returns the existing or newly durable workspace.
    */
@@ -297,36 +234,6 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
-   * Exact child-first ids held by an in-progress durable Session deletion.
-   * Host streams use this only to derive a committed deletion frame when the
-   * marker clears; an absent marker needs no replay frame because list is the
-   * connection baseline.
-   * @returns the pending cascade, or `undefined` when none exists.
-   */
-  get pendingSessionDeletionIds(): readonly SessionId[] | undefined {
-    const pending = this.requireState().pendingMutation
-    return pending?.operation === 'delete-sessions' ? pending.sessionIds : undefined
-  }
-
-  /**
-   * Permanently delete a stored Session and every transitive fork/subagent
-   * descendant, child first. Live targets reject unless the caller supplies an
-   * exact disposer capability; the registry reserves the full subtree before
-   * invoking it, then requires every target to leave the live store. The durable
-   * marker makes physical deletion, Workspace account pruning, archive cleanup,
-   * and index cleanup restartable.
-   * @param sessionId - Root identity whose complete lineage subtree is removed.
-   * @param retire - Optional exact capability that may retire the reported live subset.
-   * @returns the deterministic child-first deleted ids.
-   */
-  deleteSession(
-    sessionId: SessionId,
-    retire?: RetireSessionsForDelete,
-  ): Promise<readonly SessionId[]> {
-    return this.enqueueOperation(() => this.deleteSessionCascade(sessionId, retire))
-  }
-
-  /**
    * Archive one session durably. The session must exist (live or in session
    * persistence); its workspace accounting — or lack of one — is irrelevant.
    * An already archived id resolves without writing.
@@ -334,185 +241,16 @@ export class WorkspaceRegistry extends Service {
    * @returns resolution after durability.
    */
   archiveSession(sessionId: SessionId): Promise<void> {
-    return this.archiveSessions([sessionId])
-  }
-
-  /**
-   * Archive several sessions in one registry-state write. Every id is validated
-   * before mutation, so an unknown Session rejects the complete selection.
-   * @param sessionIds - Sessions to add to the archive set.
-   * @returns resolution after durability.
-   */
-  archiveSessions(sessionIds: readonly SessionId[]): Promise<void> {
     return this.enqueueOperation(async () => {
+      // The chain slot serializes against every other registry write, so this
+      // check-then-write pair cannot interleave with another archive.
+      if (this.requireState().archivedSessionIds.includes(sessionId)) return
+      if (!(await this.sessionKnown(sessionId))) {
+        throw new WorkspaceUnknownSessionError(sessionId)
+      }
       const state = this.requireState()
-      const archived = new Set(state.archivedSessionIds)
-      const additions = [...new Set(sessionIds)].filter(sessionId => !archived.has(sessionId))
-      for (const sessionId of additions) {
-        if (!(await this.sessionKnown(sessionId))) throw new WorkspaceUnknownSessionError(sessionId)
-      }
-      if (additions.length === 0) return
-      await this.setState({ ...state, archivedSessionIds: [...state.archivedSessionIds, ...additions] })
+      await this.setState({ ...state, archivedSessionIds: [...state.archivedSessionIds, sessionId] })
     })
-  }
-
-  /**
-   * Remove one session from the archive set durably. An id outside the set
-   * resolves without writing, including an unknown id: archive membership is
-   * the operation's authority, so stale entries always remain clearable.
-   * @param sessionId - The session to unarchive.
-   * @returns resolution after durability, or immediately for an absent id.
-   */
-  unarchiveSession(sessionId: SessionId): Promise<void> {
-    return this.enqueueOperation(async () => {
-      const state = this.requireState()
-      if (!state.archivedSessionIds.includes(sessionId)) return
-      await this.setState({
-        ...state,
-        archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
-      })
-    })
-  }
-
-  private async deleteSessionCascade(
-    sessionId: SessionId,
-    retire: RetireSessionsForDelete | undefined,
-  ): Promise<readonly SessionId[]> {
-    const sessionIds = await this.sessionDeletionOrder(sessionId)
-    for (const id of sessionIds) this.deletingSessionIds.add(id)
-    const sessions = this.ctx.get('sessions')
-    try {
-      const liveSessionIds = sessions === undefined
-        ? []
-        : sessionIds.filter(id => sessions.get(id) !== undefined)
-      if (liveSessionIds.length > 0) {
-        if (retire === undefined) throw new WorkspaceSessionLiveError(sessionId, liveSessionIds)
-        await retire(liveSessionIds)
-        const remaining = liveSessionIds.filter(id => sessions?.get(id) !== undefined)
-        if (remaining.length > 0) throw new WorkspaceSessionLiveError(sessionId, remaining)
-      }
-
-      const state = this.requireState()
-      await this.setState({
-        ...state,
-        pendingMutation: { operation: 'delete-sessions', sessionIds: [...sessionIds] },
-      })
-    } catch (error) {
-      for (const id of sessionIds) this.deletingSessionIds.delete(id)
-      throw error
-    }
-    await this.completeSessionDeletion(sessionIds)
-    return sessionIds
-  }
-
-  /** Build one live-preferred lineage corpus and return deterministic post-order. */
-  private async sessionDeletionOrder(rootId: SessionId): Promise<SessionId[]> {
-    const persisted = await this.ctx.sessionPersistence.list()
-    const corpus = new Map<SessionId, SessionHeader>()
-    for (const header of persisted) corpus.set(header.id, header)
-    const sessions = this.ctx.get('sessions')
-    if (sessions !== undefined) {
-      for (const session of sessions.list()) {
-        const stored = corpus.get(session.id)
-        if (stored !== undefined && !sameSessionIdentity(stored, session.header)) {
-          throw new Error(`session deletion found conflicting live and persisted headers for '${session.id}'`)
-        }
-        corpus.set(session.id, session.header)
-      }
-    }
-    for (const [id, header] of this.headers) {
-      if (!corpus.has(id)) corpus.set(id, header)
-    }
-    const root = corpus.get(rootId)
-    if (root === undefined) throw new WorkspaceUnknownSessionError(rootId, 'delete')
-    for (const header of corpus.values()) this.headers.set(header.id, header)
-
-    const children = new Map<SessionId, SessionHeader[]>()
-    for (const header of corpus.values()) {
-      if (header.parentSession === undefined) continue
-      const siblings = children.get(header.parentSession)
-      if (siblings === undefined) children.set(header.parentSession, [header])
-      else siblings.push(header)
-    }
-    for (const siblings of children.values()) {
-      siblings.sort((left, right) => left.createdAt - right.createdAt
-        || String(left.id).localeCompare(String(right.id)))
-    }
-
-    const visiting = new Set<SessionId>()
-    const visited = new Set<SessionId>()
-    const ordered: SessionId[] = []
-    const visit = (id: SessionId): void => {
-      if (visiting.has(id)) {
-        throw new Error(`session deletion found a parentSession cycle at '${id}'`)
-      }
-      if (visited.has(id)) return
-      visiting.add(id)
-      for (const child of children.get(id) ?? []) visit(child.id)
-      visiting.delete(id)
-      visited.add(id)
-      ordered.push(id)
-    }
-    visit(root.id)
-    return ordered
-  }
-
-  /** Finish one marker-owned cascade idempotently, including every registry-owned index. */
-  private async completeSessionDeletion(sessionIds: readonly SessionId[]): Promise<void> {
-    for (const id of sessionIds) this.deletingSessionIds.add(id)
-    const sessions = this.ctx.get('sessions')
-    const liveSessionIds = sessions === undefined
-      ? []
-      : sessionIds.filter(id => sessions.get(id) !== undefined)
-    if (liveSessionIds.length > 0) {
-      const root = sessionIds.at(-1)
-      if (root === undefined) throw new Error('session deletion marker contains no session ids')
-      throw new WorkspaceSessionLiveError(root, liveSessionIds)
-    }
-    for (const id of sessionIds) await this.ctx.sessionPersistence.delete(id)
-    await this.removeSessionAccounting(new Set(sessionIds))
-
-    const state = this.requireState()
-    await this.setState({
-      initialized: state.initialized,
-      workspaceIds: state.workspaceIds,
-      archivedSessionIds: state.archivedSessionIds.filter(id => !this.deletingSessionIds.has(id)),
-    })
-    for (const id of sessionIds) {
-      this.headers.delete(id)
-      this.sessionPaths.delete(id)
-      this.invalidSessionPaths.delete(id)
-      this.deletingSessionIds.delete(id)
-      this.deletedSessionIds.add(id)
-    }
-  }
-
-  /** Remove target ids from every durable Workspace account in one write per affected record. */
-  private async removeSessionAccounting(sessionIds: ReadonlySet<SessionId>): Promise<void> {
-    const table = this.requireTable()
-    for (const [workspaceId, snapshot] of table.entries()) {
-      const remaining = snapshot.sessionIds.filter(id => !sessionIds.has(id))
-      if (remaining.length === snapshot.sessionIds.length) continue
-      const record = await table.update(workspaceId, current => ({
-        ...current,
-        sessionIds: current.sessionIds.filter(id => !sessionIds.has(id)),
-        nestedUnder: Object.fromEntries(Object.entries(current.nestedUnder)
-          .filter(([child, parent]) => !sessionIds.has(child as SessionId) && !sessionIds.has(parent))),
-        updatedAt: new Date().toISOString(),
-      }))
-      this.entities.get(workspaceId)?.replaceRecord(record)
-    }
-  }
-
-  private assertSessionAttachable(id: SessionId): void {
-    if (this.deletingSessionIds.has(id) || this.deletedSessionIds.has(id)) {
-      throw new WorkspaceSessionDeletingError(id)
-    }
-  }
-
-  private rememberPendingSessionDeletion(state: WorkspaceDomainState): void {
-    if (state.pendingMutation?.operation !== 'delete-sessions') return
-    for (const id of state.pendingMutation.sessionIds) this.deletingSessionIds.add(id)
   }
 
   /**
@@ -524,7 +262,7 @@ export class WorkspaceRegistry extends Service {
   private async sessionKnown(id: SessionId): Promise<boolean> {
     if (this.ctx.get('sessions')?.get(id) !== undefined) return true
     if (this.headers.has(id)) return true
-    await this.indexHeaders(await this.ctx.sessionPersistence.list())
+    await this.indexHeaders(await this.listStoredHeaders())
     return this.headers.has(id)
   }
 
@@ -532,7 +270,7 @@ export class WorkspaceRegistry extends Service {
    * Resolve by canonical directory path without creating or mutating a
    * workspace. A missing path rejects during `realpath`; an existing unowned
    * directory returns `undefined`.
-   * @param path - Existing directory path in any spelling.
+   * @param path - Existing directory path in a fully qualified spelling.
    * @returns the workspace owning the canonical path, when one exists.
    */
   async resolveByPath(path: string): Promise<Workspace | undefined> {
@@ -548,7 +286,7 @@ export class WorkspaceRegistry extends Service {
       if (entity.path === canonical) return entity
     }
 
-    const workspaceName = title ?? basename(canonical)
+    const workspaceName = title ?? defaultWorkspaceTitle(canonical)
     const table = this.requireTable()
     const state = this.requireState()
     const id = WorkspaceId(randomUUID())
@@ -557,7 +295,6 @@ export class WorkspaceRegistry extends Service {
       path: canonical,
       title: workspaceName,
       sessionIds: [],
-      nestedUnder: {},
       createdAt: now,
       updatedAt: now,
     }
@@ -671,10 +408,6 @@ export class WorkspaceRegistry extends Service {
     const state = this.requireState()
     const pending = state.pendingMutation
     if (pending === undefined) return
-    if (pending.operation === 'delete-sessions') {
-      await this.completeSessionDeletion(pending.sessionIds)
-      return
-    }
     if (state.workspaceIds.includes(pending.workspaceId)) {
       throw new Error(
         `workspace domain is inconsistent: pending ${pending.operation} workspace `
@@ -725,9 +458,8 @@ export class WorkspaceRegistry extends Service {
         const createdAt = new Date(group.newestAt).toISOString()
         const record: WorkspaceRecord = {
           path: group.path,
-          title: basename(group.path),
+          title: defaultWorkspaceTitle(group.path),
           sessionIds,
-          nestedUnder: {},
           createdAt,
           updatedAt: createdAt,
         }
@@ -856,6 +588,12 @@ export class WorkspaceRegistry extends Service {
     }
   }
 
+  /** Every stored session's header, projected from the persistence snapshot listing. */
+  private async listStoredHeaders(): Promise<SessionHeader[]> {
+    const snapshots = await this.ctx.sessionPersistence.list()
+    return snapshots.map(snapshot => snapshot.header)
+  }
+
   private async indexLiveSessions(): Promise<void> {
     const sessions = this.ctx.get('sessions')
     if (sessions === undefined) return
@@ -880,7 +618,6 @@ export class WorkspaceRegistry extends Service {
   }
 
   private async readSessionHeader(id: SessionId): Promise<SessionHeader> {
-    this.assertSessionAttachable(id)
     const live = this.ctx.get('sessions')?.get(id)
     if (live !== undefined) {
       this.headers.set(id, live.header)
@@ -889,7 +626,7 @@ export class WorkspaceRegistry extends Service {
     const cached = this.headers.get(id)
     if (cached !== undefined) return cached
 
-    const headers = await this.ctx.sessionPersistence.list()
+    const headers = await this.listStoredHeaders()
     await this.indexHeaders(headers)
     const header = this.headers.get(id)
     if (header === undefined) {

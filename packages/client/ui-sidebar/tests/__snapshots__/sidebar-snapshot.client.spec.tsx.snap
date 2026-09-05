@@ -61,14 +61,6 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
       />
     </button>
     <div
-      class="navArea"
-    >
-      <div
-        data-slot="sidebar.nav.entry"
-        style="display: contents;"
-      />
-    </div>
-    <div
       class="regionArea"
     >
       <div
@@ -122,49 +114,44 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
           class="brandIdentity"
         >
           <span
-            class="brandRow"
+            class="brandMark"
           >
-            <span
-              class="brandMark"
+            <div
+              data-slot="sidebar.brand.mark"
+              style="display: contents;"
             >
-              <div
-                data-slot="sidebar.brand.mark"
-                style="display: contents;"
-              >
-                <svg
-                  aria-hidden="true"
-                  data-content="965fe321"
-                  fill="none"
-                  height="14.715025906735749"
-                  viewBox="0 0 23.16 17.04"
-                  width="20"
-                />
-              </div>
-            </span>
-            <span
-              class="brandName"
-            >
-              <div
-                data-slot="sidebar.brand.name"
-                style="display: contents;"
-              >
-                <span
-                  class="fallbackBrandName"
-                >
-                  Sumery DSH Pro
-                </span>
-                <span
-                  class="buildRevision"
-                >
-                  abc1234
-                </span>
-              </div>
-            </span>
+              <svg
+                aria-hidden="true"
+                data-content="965fe321"
+                fill="none"
+                height="17.6580310880829"
+                viewBox="0 0 23.16 17.04"
+                width="24"
+              />
+            </div>
           </span>
           <span
-            class="brandTagline"
+            class="brandName"
           >
-            Forked from official DSH with more personalized features
+            <div
+              data-slot="sidebar.brand.name"
+              style="display: contents;"
+            >
+              <span
+                class="localBuildBrand"
+              >
+                <span
+                  class="localBuildTitle"
+                >
+                  DSH Local Build
+                </span>
+                <span
+                  class="buildVersion"
+                >
+                  1.2.3-rc.4-abc1234-dirty
+                </span>
+              </span>
+            </div>
           </span>
         </span>
       </button>
@@ -203,14 +190,6 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         New Session
       </span>
     </button>
-    <div
-      class="navArea"
-    >
-      <div
-        data-slot="sidebar.nav.entry"
-        style="display: contents;"
-      />
-    </div>
     <div
       class="regionArea"
     >
@@ -265,49 +244,44 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
           class="brandIdentity"
         >
           <span
-            class="brandRow"
+            class="brandMark"
           >
-            <span
-              class="brandMark"
+            <div
+              data-slot="sidebar.brand.mark"
+              style="display: contents;"
             >
-              <div
-                data-slot="sidebar.brand.mark"
-                style="display: contents;"
-              >
-                <svg
-                  aria-hidden="true"
-                  data-content="965fe321"
-                  fill="none"
-                  height="14.715025906735749"
-                  viewBox="0 0 23.16 17.04"
-                  width="20"
-                />
-              </div>
-            </span>
-            <span
-              class="brandName"
-            >
-              <div
-                data-slot="sidebar.brand.name"
-                style="display: contents;"
-              >
-                <span
-                  class="fallbackBrandName"
-                >
-                  Sumery DSH Pro
-                </span>
-                <span
-                  class="buildRevision"
-                >
-                  abc1234
-                </span>
-              </div>
-            </span>
+              <svg
+                aria-hidden="true"
+                data-content="965fe321"
+                fill="none"
+                height="17.6580310880829"
+                viewBox="0 0 23.16 17.04"
+                width="24"
+              />
+            </div>
           </span>
           <span
-            class="brandTagline"
+            class="brandName"
           >
-            基于官方DSH分叉，改进更多个性化功能
+            <div
+              data-slot="sidebar.brand.name"
+              style="display: contents;"
+            >
+              <span
+                class="localBuildBrand"
+              >
+                <span
+                  class="localBuildTitle"
+                >
+                  DSH 本地构建
+                </span>
+                <span
+                  class="buildVersion"
+                >
+                  1.2.3-rc.4-abc1234-dirty
+                </span>
+              </span>
+            </div>
           </span>
         </span>
       </button>
@@ -346,14 +320,6 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         新会话
       </span>
     </button>
-    <div
-      class="navArea"
-    >
-      <div
-        data-slot="sidebar.nav.entry"
-        style="display: contents;"
-      />
-    </div>
     <div
       class="regionArea"
     >

@@ -9,7 +9,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { DiffCallView, DiffResultView, ToolResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import { computeHunkDiffs, diffsFromMeta } from './diff.ts'
 import { remediateFsError } from './error.ts'
 import { sessionResolveOptions } from './session-cwd.ts'
@@ -76,7 +75,7 @@ export function formatEditOutput(displayPath: string, replaceAll: boolean): stri
 export function applyEditTool(ctx: Context, sandbox: FsSandboxController): void {
   ctx.systemPrompt.section({
     name: 'tool:edit',
-    order: 102,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_EDIT'),
     text: 'Use the edit tool for targeted changes to existing UTF-8 text files. It replaces literal old_string with new_string; by default old_string must appear exactly once. If old_string appears multiple times, provide a more specific old_string or set replace_all to true. Read the file first (the default fs-observation-policy requires it), unless you just created or edited it in this session.',
   })
 
@@ -114,7 +113,7 @@ export function applyEditTool(ctx: Context, sandbox: FsSandboxController): void 
       // Resolve the per-call sandbox policy (approved mode > session override
       // > backend default, plus the session cwd root) BEFORE anything executes.
       const sandboxPolicy = await sandbox.resolvePolicy('edit', args, exec)
-      const target = await ctx.fs.resolve(input.filePath, sessionResolveOptions(exec, input.filePath, sandboxPolicy?.workspaceRoots[0]))
+      const target = await ctx.fs.resolve(input.filePath, sessionResolveOptions(exec, input.filePath, sandboxPolicy?.workspaceRoot))
       // Single-slot decision: the policy plugin returns { version: vObserved } or
       // throws FS_NOT_OBSERVED; the bare default is undefined (unconditional edit).
       // No stat — the bare default never manufactures a version basis. The intent
@@ -133,11 +132,10 @@ export function applyEditTool(ctx: Context, sandbox: FsSandboxController): void 
         )
       } catch (error: unknown) {
         // A sandbox denial becomes the shared [sandbox: …] marker (the model
-        // recognizes it from bash); stale/not-observed failures gain their
-        // model-facing remedy; anything else passes through.
-        throw remediateFsError(sandbox.mapError(error, sandboxPolicy))
+        // recognizes it from bash); guarded mutation failures receive their
+        // stable model-facing diagnostic; anything else passes through.
+        throw remediateFsError(sandbox.mapError(error, sandboxPolicy), target.displayPath)
       }
-      // Record the present observation (a no-op when no policy plugin listens).
       ctx.emit('fs/observed', target, { kind: 'present', version: outcome.version }, exec)
       return {
         path: target.displayPath,

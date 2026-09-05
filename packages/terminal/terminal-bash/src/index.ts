@@ -8,10 +8,11 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { TerminalBackendCleanupError } from '@deepseek-ai/dsh-terminal'
-import type { TerminalBackend, TerminalBackendSpawnSpec } from '@deepseek-ai/dsh-terminal'
+import type { TerminalBackend, TerminalBackendSpawnSpec, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
 import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
-import { effectiveSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import { ENCODING_PREAMBLE } from '@deepseek-ai/dsh-pwsh-local'
 import { type Config, type ResolvedConfig, resolveConfig, type ShellDialect, validateConfig } from './config.ts'
 import { LocalPtySession } from './session.ts'
@@ -22,12 +23,13 @@ export type { Config as TerminalLocalConfig } from './config.ts'
 
 /** Cordis plugin name. */
 export const name = 'terminal-bash'
-/** Required services: PTY registry, shared confinement policy, and process substrate. */
-export const inject = ['terminals', 'sandboxPolicy', 'subprocess']
+/** Required services: terminal registry, shared confinement policy, projection registry, and process substrate. */
+export const inject = ['terminals', 'sandboxPolicy', 'sessionProjections', 'subprocess']
 
 interface SandboxModeFenceState {
   pty: Context['terminals']
   sandboxPolicy: Context['sandboxPolicy']
+  sessionProjections: Context['sessionProjections']
 }
 
 const sandboxModeFences = new WeakMap<Agent, SandboxModeFenceState>()
@@ -37,15 +39,21 @@ function ensureSandboxModeFence(ctx: Context, owner: Agent): void {
   if (existing !== undefined) {
     existing.pty = ctx.terminals
     existing.sandboxPolicy = ctx.sandboxPolicy
+    existing.sessionProjections = ctx.sessionProjections
     return
   }
-  const state: SandboxModeFenceState = { pty: ctx.terminals, sandboxPolicy: ctx.sandboxPolicy }
+  const state: SandboxModeFenceState = {
+    pty: ctx.terminals,
+    sandboxPolicy: ctx.sandboxPolicy,
+    sessionProjections: ctx.sessionProjections,
+  }
   sandboxModeFences.set(owner, state)
   owner.ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName !== 'session/event') return
     const [session, event] = args as [Session, SessionEvent]
     if (session !== owner.session || event.type !== 'sandbox/mode') return
-    const currentMode = effectiveSandboxMode(session.events) ?? state.sandboxPolicy.defaultMode
+    const folded = state.sessionProjections.stateOf(session, 'sandboxMode') ?? null
+    const currentMode = folded ?? state.sandboxPolicy.defaultMode
     if (event.data.mode === currentMode || !state.pty.hasOwnerActivity(owner)) return
     throw new Error(
       `cannot change sandbox mode from "${currentMode}" to "${event.data.mode}" while persistent terminal sessions are open or being created; wait for creation to settle and close them first`,
@@ -66,19 +74,16 @@ function childEnvironment(spec: TerminalBackendSpawnSpec, dialect: ShellDialect)
   }
   if (dialect === 'pwsh') {
     // pwsh ignores PS1/PROMPT_COMMAND; its prompt is installed by the startup
-    // bootstrap instead, and NO_COLOR keeps the renderer quiet. A declared
-    // promptText is bash-only for the same reason.
+    // bootstrap instead, and NO_COLOR keeps the renderer quiet.
     return { ...common, NO_COLOR: '1' }
   }
-  const prompt = spec.promptText ?? CONTROLLED_PROMPT
   return {
     ...common,
-    PS1: prompt,
+    PS1: CONTROLLED_PROMPT,
     // Re-asserting PS1 after the marker keeps prompt readiness working when a
     // command overwrote the shell variable: bash runs PROMPT_COMMAND before
     // rendering each prompt, so an override never survives to the next prompt.
-    // It must re-assert the same spawn-declared prompt the session matches on.
-    PROMPT_COMMAND: `printf "\\033]133;D;%s\\007" "$?"; PS1='${prompt}'`,
+    PROMPT_COMMAND: `printf "\\033]133;D;%s\\007" "$?"; PS1='${CONTROLLED_PROMPT}'`,
     BASH_SILENCE_DEPRECATION_WARNING: '1',
   }
 }
@@ -109,52 +114,59 @@ function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutio
 async function startupSession(
   session: LocalPtySession,
   dialect: ShellDialect,
+  timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
+  let startupOperation: TerminalSendOperation | undefined
   const start = async (): Promise<void> => {
     if (dialect === 'bash') {
       await session.initialize(signal)
       return
     }
-    // pwsh cannot install its prompt from the environment: write the prompt
-    // function through the session and wait for the first marker prompt,
-    // which is also the readiness contract of the bash initialize path. The
-    // first send also pins UTF-8 output (the shared pwsh-local preamble)
-    // before anything runs: the session decode path treats PTY bytes as
-    // UTF-8, and an un-pinned console writes its host code page for
-    // non-ASCII output. The banner-to-prompt gap can outlast the silence
-    // bound, so the wait loops over follow-up sends until the controlled
-    // prompt is actually visible (in the viewport or the retained scrollback
-    // when it landed between sends), bounded by the send deadline.
+    // pwsh cannot install its prompt from the environment. Write the prompt
+    // function through the session, pin UTF-8 output before user input, and
+    // accept only backend stdin_read evidence; echoed setup source containing
+    // the printable prompt is not readiness. Follow-up sends bridge silence
+    // settlements during startup, while one absolute deadline bounds them.
     let viewport = ''
     for (;;) {
       const first = viewport.length === 0
-      const operation = session.startSend({
+      startupOperation = session.startSend({
         text: first ? ENCODING_PREAMBLE + PWSH_PROMPT_SETUP : '',
         submit: first,
         ...signal !== undefined ? { signal } : {},
       })
-      const result = await operation.done
+      const result = await startupOperation.done
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
       viewport = result.viewport
-      const scrollback = session.read({ offset: 0, count: 20 }).text
-      if (viewport.includes(CONTROLLED_PROMPT) || scrollback.includes(CONTROLLED_PROMPT)) break
+      if (result.waitReason === 'stdin_read') break
     }
     session.motd = viewport
   }
-  if (signal === undefined) {
-    await start()
-    return
+  const races: Promise<void>[] = []
+  let onAbort: (() => void) | undefined
+  if (signal !== undefined) {
+    const aborted = Promise.withResolvers<never>()
+    onAbort = () => { aborted.reject(signal.reason) }
+    signal.addEventListener('abort', onAbort, { once: true })
+    races.push(aborted.promise)
   }
-  const aborted = Promise.withResolvers<never>()
-  const onAbort = (): void => { aborted.reject(signal.reason) }
-  signal.addEventListener('abort', onAbort, { once: true })
+  let deadlineTimer: NodeJS.Timeout | undefined
+  if (dialect === 'pwsh') {
+    const deadline = Promise.withResolvers<never>()
+    deadlineTimer = setTimeout(() => {
+      startupOperation?.cancel()
+      deadline.reject(new Error('PTY shell did not reach readiness before startup timeout'))
+    }, timeoutMs)
+    races.push(deadline.promise)
+  }
   try {
-    signal.throwIfAborted()
-    await Promise.race([start(), aborted.promise])
+    signal?.throwIfAborted()
+    await Promise.race([start(), ...races])
   } finally {
-    signal.removeEventListener('abort', onAbort)
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
+    if (signal !== undefined && onAbort !== undefined) signal.removeEventListener('abort', onAbort)
   }
 }
 
@@ -171,8 +183,7 @@ export class BashTerminalBackend implements TerminalBackend {
     private readonly createSession: (
       terminal: SubprocessTerminalHandle,
       config: ResolvedConfig,
-      promptText: string,
-    ) => LocalPtySession = (terminal, config, promptText) => new LocalPtySession(terminal, config, promptText),
+    ) => LocalPtySession = (terminal, config) => new LocalPtySession(terminal, config),
   ) {
     this.type = config.backendType
   }
@@ -185,22 +196,16 @@ export class BashTerminalBackend implements TerminalBackend {
     if (argv[0] === undefined) throw new Error('terminal-bash: sandbox returned empty argv')
     const terminal = await this.spawnTerminal({
       argv,
-      cwd: spec.cwd ?? policy.workspaceRoots[0],
+      cwd: spec.cwd ?? policy.workspaceRoot,
       env: childEnvironment(spec, this.config.shellDialect),
       rows: this.config.rows,
       cols: this.config.cols,
       graceMs: this.config.disposeGraceMs,
       signal: spec.signal,
     })
-    // pwsh installs CONTROLLED_PROMPT via its startup bootstrap and cannot take
-    // a per-session prompt from the environment, so a declared promptText only
-    // takes effect (and is only matched) under the bash dialect.
-    const sessionPrompt = this.config.shellDialect === 'bash'
-      ? spec.promptText ?? CONTROLLED_PROMPT
-      : CONTROLLED_PROMPT
-    const session = this.createSession(terminal, this.config, sessionPrompt)
+    const session = this.createSession(terminal, this.config)
     try {
-      await startupSession(session, this.config.shellDialect, spec.signal)
+      await startupSession(session, this.config.shellDialect, this.config.timeoutMs, spec.signal)
       return session
     } catch (error) {
       try {

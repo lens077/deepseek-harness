@@ -14,18 +14,13 @@ import {
   Button, IconFolderClose16, IconPlusOutline16, Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  WorkspaceId, WorkspaceListState, WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  WorkspaceId, WorkspaceSnapshot, WorkspaceView,
+} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
 import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
-
-/** Normalize an unknown UI-operation rejection for localized error copy. */
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason)
-}
 
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
@@ -36,7 +31,7 @@ export interface WorkspacePickFlowProps {
   /** The anchor button element — the popover's placement anchor. */
   anchorRef?: RefObject<HTMLElement | null> | undefined
   /** Selector hook over the workspace list (framework standard hook). */
-  useWorkspaces: <S>(selector: (state: WorkspaceListState) => S) => S
+  useWorkspaces: <S>(selector: (state: WorkspaceSnapshot) => S) => S
   /** Adopt a picked host directory as a real Workspace. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
   /** Bound occupancy selector hook for this surface's directory-flow hole (empty leaves the surface with no add action). */
@@ -133,7 +128,7 @@ export function WorkspacePickFlow({
       setFlowOpen(false)
       onPick(workspace.workspaceId)
     }).catch((reason: unknown) => {
-      setModalError(errorMessage(reason))
+      setModalError(reason instanceof Error ? reason.message : String(reason))
       setFlowOpen(false)
       setErrorOpen(true)
     })
@@ -230,70 +225,27 @@ export function WorkspacePickFlow({
 export function WorkspacePicker({
   open,
   anchorRef,
-  useSessions,
   useWorkspaces,
   selectedId,
   onPick,
-  onStartScratch,
   onClose,
   createWorkspace,
   useDirectoryFlow,
   renderSlot,
   t,
 }: WorkspacePickerProps) {
-  const currentSessionId = useSessions(state => state.current)
-  const [startingScratch, setStartingScratch] = useState(false)
-  const [scratchError, setScratchError] = useState<string | null>(null)
-  // The secondary action is available before materialization and while a blank
-  // Workspace session is selected. Once the current blank is already
-  // Ungrouped, repeating the same action would only mint an invisible shell.
-  const scratchAvailable = currentSessionId === undefined || selectedId !== undefined
-  const startScratch = (): void => {
-    onClose()
-    setStartingScratch(true)
-    setScratchError(null)
-    void onStartScratch().then(
-      () => { setStartingScratch(false) },
-      (reason: unknown) => {
-        setStartingScratch(false)
-        setScratchError(errorMessage(reason))
-      },
-    )
-  }
-
   return (
-    <>
-      {scratchAvailable && (
-        <div className={css.scratch}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={css.scratchAction}
-            disabled={startingScratch}
-            aria-busy={startingScratch}
-            onClick={startScratch}
-          >
-            {t(startingScratch ? 'scratch.starting' : 'scratch.start')}
-          </Button>
-          {scratchError !== null && (
-            <span className={css.scratchError} role="alert" title={t('scratch.failed', { message: scratchError })}>
-              {t('scratch.failed', { message: scratchError })}
-            </span>
-          )}
-        </div>
-      )}
-      <WorkspacePickFlow
-        t={t}
-        open={open}
-        anchorRef={anchorRef}
-        useWorkspaces={useWorkspaces}
-        createWorkspace={createWorkspace}
-        useDirectoryFlow={useDirectoryFlow}
-        renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}
-        selectedId={selectedId}
-        onPick={onPick}
-        onClose={onClose}
-      />
-    </>
+    <WorkspacePickFlow
+      t={t}
+      open={open}
+      anchorRef={anchorRef}
+      useWorkspaces={useWorkspaces}
+      createWorkspace={createWorkspace}
+      useDirectoryFlow={useDirectoryFlow}
+      renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}
+      selectedId={selectedId}
+      onPick={onPick}
+      onClose={onClose}
+    />
   )
 }

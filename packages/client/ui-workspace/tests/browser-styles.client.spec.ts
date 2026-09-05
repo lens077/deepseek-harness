@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const css = readFileSync(fileURLToPath(new URL('../src/client/WorkspaceBrowser.module.css', import.meta.url)), 'utf8')
+const css = readFileSync(fileURLToPath(new URL('../src/client/rows/WorkspaceBrowser.module.css', import.meta.url)), 'utf8')
 const rowsCss = readFileSync(fileURLToPath(new URL('../src/client/rows/Rows.module.css', import.meta.url)), 'utf8')
 
 /**
@@ -45,8 +45,8 @@ describe('WorkspaceBrowser.module.css list', () => {
 
   it('counts the themed scrollbar inside the shell trailing inset', () => {
     expect(root?.get('--dsh-session-list-edge-inset')).toBe('var(--dsh-sidebar-inline-padding)')
-    expect(root?.get('--dsh-session-list-scrollbar-width')).toBe('12px')
-    expect(root?.get('--dsh-session-list-scrollbar-offset')).toBe('0px')
+    expect(root?.get('--dsh-session-list-scrollbar-width')).toBe('8px')
+    expect(root?.get('--dsh-session-list-scrollbar-offset')).toBe('2px')
     expect(root?.get('padding-right')).toBe('var(--dsh-session-list-edge-inset)')
     expect(listArea?.get('margin-left')).toBe('-4px')
     expect(listArea?.get('padding-left')).toBe('4px')
@@ -62,15 +62,11 @@ describe('WorkspaceBrowser.module.css list', () => {
       '- var(--dsh-session-list-scrollbar-offset)',
       ')',
     ].join(' '))
-    expect(declarations('.list::-webkit-scrollbar')?.get('width'))
-      .toBe('var(--dsh-session-list-scrollbar-width)')
-    expect(declarations('.list::-webkit-scrollbar-thumb')?.get('min-height')).toBe('48px')
-    expect(declarations('.list::-webkit-scrollbar-thumb')?.get('border-radius')).toBe('6px')
+    expect(declarations('.list::-webkit-scrollbar')).toBeUndefined()
   })
 
   it('reserves the scrollbar whether or not the list overflows', () => {
     expect(list!.get('scrollbar-gutter')).toBe('stable')
-    expect(list!.get('scrollbar-width')).toBe('auto')
   })
 
   it('keeps 2px between rows and 4px between workspace groups', () => {

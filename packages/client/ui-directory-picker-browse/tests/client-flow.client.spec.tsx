@@ -2,8 +2,8 @@
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { DirectoryListing } from '@deepseek-ai/dsh-client-runtime/client'
+import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import type { DirectoryFlowOwnerProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
@@ -17,9 +17,7 @@ usePinnedBrowserLanguages('zh-CN')
 
 afterEach(cleanup)
 
-const HOLES = [
-  'conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow', 'sidebar.workspaces.sessionDirectoryFlow',
-] as const
+const HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow'] as const
 
 const HOME = '/home/u'
 const homeListing: DirectoryListing = {
@@ -36,7 +34,7 @@ async function bench() {
   ctx.provide('locale', new LocaleRuntime(ctx))
   const listDirectory = vi.fn(async (): Promise<DirectoryListing> => homeListing)
   const createDirectory = vi.fn(async (path: string, name: string) => `${path}/${name}`)
-  ctx.provide('workspaces', { listDirectory, createDirectory } as never)
+  ctx.provide('uiWorkspace', { listDirectory, createDirectory } as never)
   const slots = ctx.get('slots') as SlotRegistry
   const declare = () => slots.register({
     name: 'root',
@@ -55,7 +53,7 @@ function owner(overrides: Partial<DirectoryFlowOwnerProps> = {}): DirectoryFlowO
 
 describe('directory-picker-browse client half', () => {
   it('declares the services it drives', () => {
-    expect(inject).toEqual(['slots', 'workspaces', 'locale'])
+    expect(inject).toEqual(['slots', 'uiWorkspace', 'locale'])
   })
 
   it('fills both directory-flow holes for declarations before or after apply, and leaves with its fiber', async () => {
@@ -110,15 +108,14 @@ describe('directory-picker-browse client half', () => {
     try {
       // The rival subscribes first, so synchronous declaration notifications
       // let it occupy the pair before this provider's waiting injection runs.
-      b.slots.inject(HOLES[0], () => b.slots.inject(HOLES[1], () => b.slots.inject(HOLES[2], function* () {
+      b.slots.inject(HOLES[0], () => b.slots.inject(HOLES[1], function* () {
         yield b.slots.register({ name: HOLES[0] } as never, () => null)
         yield b.slots.register({ name: HOLES[1] } as never, () => null)
-        yield b.slots.register({ name: HOLES[2] } as never, () => null)
-      })))
+      }))
       await b.ctx.plugin({ inject: [...inject], apply }).await()
       b.declare()
       await new Promise(resolve => setTimeout(resolve, 20))
-      // The rival keeps every hole; this provider rolled back wholesale and
+      // The rival keeps both holes; this provider rolled back wholesale and
       // surfaced the conflict on the fail-loud channel — no partial mix.
       for (const hole of HOLES) expect(b.slots.entries(hole)).toHaveLength(1)
       expect(rejections.map(String).join('\n')).toContain('already has a registration')
@@ -227,8 +224,6 @@ describe('directory-picker-browse client half', () => {
 })
 
 describe('directory-picker-browse node half', () => {
-  // The invariant companion is mounted by the vitest-wide invariant host on
-  // every Context this suite creates; its registration is covered there.
   it('the node apply is an inert loader seat', () => {
     expect(() => { nodeApply() }).not.toThrow()
   })
