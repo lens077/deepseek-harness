@@ -268,6 +268,83 @@
   white-space: nowrap;
 }
 
+/* Full-text expand toggle. A 22px round icon button sized to the pill's 6px
+   end padding; on the left it precedes the ordinal, so the pill's start
+   padding shrinks to match the end. */
+.questionBar[data-expand-side='left'] {
+  padding-left: 4px;
+}
+
+.questionBar[data-expand-side='right'] {
+  padding-right: 4px;
+}
+
+.questionBarExpand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+.questionBar[data-expand-side='right'] .questionBarMeta {
+  padding-right: 0;
+}
+
+.questionBarExpand:hover,
+.questionBar[data-expanded] .questionBarExpand {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+/* The expanded question hangs below the pill inside the bar's absolutely
+   positioned box, so it shares the bar's width and centering and costs the
+   flow nothing. Bounded height keeps a very long question scrollable inside
+   the panel rather than covering the transcript. */
+.questionBarPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
+  max-height: min(50vh, 420px);
+  overflow: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  animation: dsh-question-panel-in 140ms ease;
+}
+
+@keyframes dsh-question-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.questionBarPanelText {
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xs-13);
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .questionBarPanel {
+    animation: none;
+  }
+}
+
 /* Ordinary flow content, unlike the bar: it belongs to one completed turn and
    scrolls away with it. Start-aligned and kept to one line so a linear read
    passes it as a caption rather than a card. The negative bottom margin closes
@@ -308,7 +385,7 @@
 .navigationRail {
   position: fixed;
   top: 96px;
-  right: max(24px, calc((100vw - var(--dsh-chat-content-width)) / 2 - 76px));
+  right: 8px;
   bottom: calc(var(--dsh-composer-height, 152px) + 16px);
   z-index: 8;
   width: 44px;
@@ -320,6 +397,7 @@
 .navigationStack {
   position: absolute;
   top: max(0px, calc(50vh - 266px));
+  right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -349,7 +427,8 @@
   cursor: pointer;
 }
 
-.questionArrow:disabled {
+.questionArrow:disabled,
+.questionSearchEntry:disabled {
   opacity: 0.35;
   cursor: default;
 }
@@ -507,7 +586,7 @@
 
 .toBottom {
   position: fixed;
-  right: max(24px, calc((100vw - var(--dsh-chat-content-width)) / 2 - 76px));
+  right: 8px;
   bottom: calc(var(--dsh-composer-height, 152px) + 16px);
   display: flex;
   align-items: center;
@@ -525,7 +604,7 @@
 }
 
 .toBottom:hover,
-.questionSearchEntry:hover,
+.questionSearchEntry:not(:disabled):hover,
 .questionLoadAll:not(:disabled):hover,
 .questionArrow:not(:disabled):hover {
   background: var(--dsw-alias-button-floating-hover);
@@ -535,7 +614,7 @@
   .navigationRail {
     position: fixed;
     top: auto;
-    right: 12px;
+    right: 8px;
     bottom: calc(var(--dsh-composer-height, 152px) + 16px);
     width: 44px;
   }

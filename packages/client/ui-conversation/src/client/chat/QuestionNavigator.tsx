@@ -7,6 +7,8 @@
  * loaded window is a suffix of the session and a filtered suffix is never the
  * whole answer. Load-all sits directly under search because it is the remedy
  * for that: once every page is in, the list and the arrows cover every question.
+ * Before the loaded window contains a question, the rail stays visible with
+ * search and stepping disabled so load-all remains reachable.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
@@ -101,9 +103,12 @@ export function QuestionNavigator({
     }
   }, [open, questions, searchQuestions, trimmed])
 
-  // A lone question has nowhere to step and nothing to search among, so the
-  // rail stays empty rather than showing disabled controls.
-  if (questions.length <= 1) return null
+  const hasQuestions = questions.length > 0
+
+  // A complete lone question has nowhere to step or search. An incomplete
+  // window keeps the rail mounted even before its first question so load-all
+  // remains reachable.
+  if (questions.length <= 1 && !hasMore && !loadingAll) return null
 
   // Which rows to show, and what the view is entitled to claim about them.
   // `notice` is non-null exactly when the list on screen is not the whole
@@ -175,6 +180,7 @@ export function QuestionNavigator({
         type="button"
         className={css.questionSearchEntry}
         data-panel-open={open || undefined}
+        disabled={!hasQuestions}
         aria-label={t('chat.questions.search')}
         aria-expanded={open}
         aria-controls={panelId}
@@ -198,10 +204,10 @@ export function QuestionNavigator({
           {loadingAll ? <IconLoadingOutline16 className={css.questionLoadAllSpinner} /> : <IconDownloadOutline16 />}
         </button>
       )}
-      <button type="button" className={css.questionArrow} disabled={current <= 0 && !hasMore} aria-label={t('chat.questions.previous')} onClick={onPrevious}>
+      <button type="button" className={css.questionArrow} disabled={!hasQuestions || (current <= 0 && !hasMore)} aria-label={t('chat.questions.previous')} onClick={onPrevious}>
         <IconChevronUpOutline14 />
       </button>
-      <button type="button" className={css.questionArrow} disabled={current >= questions.length - 1} aria-label={t('chat.questions.next')} onClick={onNext}>
+      <button type="button" className={css.questionArrow} disabled={!hasQuestions || current >= questions.length - 1} aria-label={t('chat.questions.next')} onClick={onNext}>
         <IconChevronDownOutline14 />
       </button>
     </div>

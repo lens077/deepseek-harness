@@ -20,7 +20,13 @@ export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'queue'
 /** Where a question-navigation shortcut is suppressed: editable regions, text inputs only, or nowhere. */
 export type QuestionShortcutFocusPolicy = 'editable' | 'text' | 'always'
 
-/** Durable question-navigation preference: one binding per direction plus the focus policy. */
+/** Which end of the sticky question bar carries the full-text expand toggle. */
+export type QuestionBarExpandSide = 'left' | 'right'
+
+/** Expand-toggle placements accepted at settings and input boundaries. */
+export const QUESTION_BAR_EXPAND_SIDES = ['left', 'right'] as const satisfies readonly QuestionBarExpandSide[]
+
+/** Durable question-navigation preference: one binding per direction, the focus policy, and the bar's expand-toggle side. */
 export interface QuestionNavigationSettings {
   /** Shortcut string for the previous question, in `Modifier+Key` form. */
   previousShortcut: string
@@ -28,6 +34,8 @@ export interface QuestionNavigationSettings {
   nextShortcut: string
   /** Focus condition under which both bindings are ignored. */
   focusPolicy: QuestionShortcutFocusPolicy
+  /** End of the sticky question bar that carries the full-text expand toggle. */
+  expandButtonSide: QuestionBarExpandSide
 }
 
 /** Non-macOS defaults; the policy substitutes Meta for Ctrl when the platform is a Mac. */
@@ -35,6 +43,7 @@ export const DEFAULT_QUESTION_NAVIGATION_SETTINGS: QuestionNavigationSettings = 
   previousShortcut: 'Ctrl+ArrowUp',
   nextShortcut: 'Ctrl+ArrowDown',
   focusPolicy: 'editable',
+  expandButtonSide: 'right',
 }
 
 /** Durable conversation section shared by the Host schema and the browser scope. */
@@ -51,5 +60,6 @@ export const ConversationSettingsSchema: z<ConversationSettings> = z.object({
     previousShortcut: z.string().default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.previousShortcut),
     nextShortcut: z.string().default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.nextShortcut),
     focusPolicy: z.union(['editable', 'text', 'always']).default('editable'),
+    expandButtonSide: z.union([...QUESTION_BAR_EXPAND_SIDES]).default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.expandButtonSide),
   }).default(DEFAULT_QUESTION_NAVIGATION_SETTINGS),
 })

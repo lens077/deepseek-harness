@@ -45,6 +45,10 @@ export function QuestionShortcutRow({
     { value: 'text', label: 'settings.questions.focus.text' },
     { value: 'always', label: 'settings.questions.focus.always' },
   ]
+  const expandSideOptions: readonly { value: QuestionNavigationSettings['expandButtonSide']; label: ConversationKey }[] = [
+    { value: 'right', label: 'settings.questions.expandSide.right' },
+    { value: 'left', label: 'settings.questions.expandSide.left' },
+  ]
   return (
     <div className={css.row}>
       <div className={css.heading}>
@@ -60,6 +64,15 @@ export function QuestionShortcutRow({
         {focusOptions.map(option => (
           <label key={option.value} className={css.radio}>
             <input type="radio" checked={settings.focusPolicy === option.value} onChange={() => { setQuestionNavigation({ ...settings, focusPolicy: option.value }) }} />
+            {t(option.label)}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset data-question-expand-side="">
+        <legend>{t('settings.questions.expandSide.title')}</legend>
+        {expandSideOptions.map(option => (
+          <label key={option.value} className={css.radio}>
+            <input type="radio" checked={settings.expandButtonSide === option.value} onChange={() => { setQuestionNavigation({ ...settings, expandButtonSide: option.value }) }} />
             {t(option.label)}
           </label>
         ))}

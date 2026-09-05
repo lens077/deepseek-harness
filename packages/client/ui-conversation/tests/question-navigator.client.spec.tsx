@@ -88,7 +88,28 @@ describe('question search entry', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('renders nothing for a lone question, which has nowhere to step and nothing to search among', () => {
+  it('keeps load-all usable before the loaded window contains a question', () => {
+    const { props } = renderNavigator({ questions: [], hasMore: true })
+    const search = searchEntry() as HTMLButtonElement
+    const previous = screen.getByRole('button', { name: zh['chat.questions.previous'] }) as HTMLButtonElement
+    const next = screen.getByRole('button', { name: zh['chat.questions.next'] }) as HTMLButtonElement
+    const loadAll = screen.getByRole('button', { name: zh['chat.questions.loadAll'] }) as HTMLButtonElement
+    expect(search.disabled).toBe(true)
+    expect(previous.disabled).toBe(true)
+    expect(next.disabled).toBe(true)
+    expect(loadAll.disabled).toBe(false)
+
+    fireEvent.click(search)
+    fireEvent.click(previous)
+    fireEvent.click(next)
+    fireEvent.click(loadAll)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(props.onPrevious).not.toHaveBeenCalled()
+    expect(props.onNext).not.toHaveBeenCalled()
+    expect(props.onLoadAll).toHaveBeenCalledOnce()
+  })
+
+  it('renders nothing for a complete lone question, which has nowhere to step and nothing to search among', () => {
     const { container } = renderNavigator({ questions: [QUESTIONS[0]!] })
     expect(container.innerHTML).toBe('')
   })

@@ -904,7 +904,9 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     hookContext: '',
     slotInject: '',
     declaredBy: 'an entry in \'conversation\' (client-ui-conversation), so it exists while that entry is mounted',
-    occupants: [],
+    occupants: [
+      'client-ui-agent-preset AgentPresetLabel id \'agent-preset\'',
+    ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.right\', () => ctx.slots.register(\n      { name: \'conversation.input.right\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/client/ui-conversation/src/client/contract/slots.ts:247',
@@ -1045,7 +1047,6 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     slotInject: '',
     declaredBy: 'an entry in \'conversation.session.header\' (client-ui-conversation), so it exists while that entry is mounted',
     occupants: [
-      'client-ui-agent-preset AgentPresetLabel id \'agent-preset\'',
       'client-ui-jobs JobListAction id \'job-list\'',
     ],
     replaceRisk: 'none',

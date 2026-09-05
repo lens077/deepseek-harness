@@ -21,6 +21,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import type { QuestionNavigationSettings } from '../src/submission-settings.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -162,6 +163,11 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     read: () => savedScroll,
   }
   const forkAt = vi.fn()
+  // Live preference source, as the policy publishes it; question-bar tests
+  // move the expand toggle through it.
+  const questionNavigation = createSnapshotStore<QuestionNavigationSettings>({
+    previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right',
+  })
   // Selection rides the REAL chat store (same construction path as
   // production; the view reads it through the PropsStore useStore share).
   const chat = createChatStore().create()
@@ -292,16 +298,14 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     // Absent file provider by default; question-bar tests override both.
     turnFiles: () => [],
     turnFilesAvailable: () => false,
-    questionNavigation: () => ({
-      previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable',
-    }),
+    useQuestionNavigation: bindSnapshotSelector(questionNavigation),
     // Mirrors the real lookup chain (conversation namespace, then common).
     t,
   }
   const setSelection = (next: SelectionTarget | null): void => { chat.actions.select(next) }
   return {
     set, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
-    chatScroll, forkAt, setSelection, toolOwners, chat,
+    chatScroll, forkAt, setSelection, toolOwners, chat, questionNavigation,
   }
 }
 
@@ -1618,6 +1622,55 @@ describe('current-question bar', () => {
     readerScroll(scroller, 600)
     fireEvent.click(view.getByRole('button', { name: /当前提问/ }))
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+  })
+
+  it('expands the full question below the bar and collapses it on Escape or an outside press', () => {
+    const long = 'line one of a long question\nline two with more detail'
+    const h = makeHarness({
+      nodes: [user(1, long), assistant(2, 'answer')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    readerScroll(placeRows(view, ['fixture:user:1'], 1), 600)
+    expect(view.container.querySelector('[data-question-bar-panel]')).toBeNull()
+
+    const toggle = view.getByRole('button', { name: '展开提问全文' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle)
+    const panel = view.container.querySelector('[data-question-bar-panel]') as HTMLElement
+    expect(panel.textContent).toBe(long)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle.getAttribute('aria-controls')).toBe(panel.id)
+    expect(view.getByRole('button', { name: '收起提问全文' })).toBe(toggle)
+
+    fireEvent.pointerDown(panel)
+    expect(view.container.querySelector('[data-question-bar-panel]')).not.toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(view.container.querySelector('[data-question-bar-panel]')).toBeNull()
+
+    fireEvent.click(view.getByRole('button', { name: '展开提问全文' }))
+    expect(view.container.querySelector('[data-question-bar-panel]')).not.toBeNull()
+    fireEvent.pointerDown(document.body)
+    expect(view.container.querySelector('[data-question-bar-panel]')).toBeNull()
+  })
+
+  it('places the expand toggle on the side the preference names, right by default', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'do the thing'), assistant(2, 'answer')],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    readerScroll(placeRows(view, ['fixture:user:1'], 1), 600)
+    const bar = view.container.querySelector('[data-question-bar]') as HTMLElement
+    const isToggle = (child: Element): boolean => child.hasAttribute('data-question-bar-expand')
+    expect(bar.dataset['expandSide']).toBe('right')
+    expect(isToggle(bar.lastElementChild as Element)).toBe(true)
+
+    act(() => { h.questionNavigation.set({ ...h.questionNavigation.getSnapshot(), expandButtonSide: 'left' }) })
+    expect(bar.dataset['expandSide']).toBe('left')
+    expect(isToggle(bar.firstElementChild as Element)).toBe(true)
   })
 
   it('reveals a requested question once its row is loaded, paging back until then', () => {

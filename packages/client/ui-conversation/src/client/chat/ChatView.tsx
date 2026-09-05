@@ -162,7 +162,7 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, actions, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, turnFiles, turnFilesAvailable, questionNavigation: readQuestionNavigation, searchQuestions, t,
+  fileMentions, turnFiles, turnFilesAvailable, useQuestionNavigation, searchQuestions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -230,11 +230,9 @@ export function ChatView({
   const [questionAbove, setQuestionAbove] = useState(false)
   const [highlightedQuestion, setHighlightedQuestion] = useState<string | null>(null)
   const pendingQuestionMoveRef = useRef<'previous' | null>(null)
-  const questionNavigation = readQuestionNavigation?.() ?? {
-    previousShortcut: navigator.platform.toLocaleLowerCase().includes('mac') ? 'Meta+ArrowUp' : 'Ctrl+ArrowUp',
-    nextShortcut: navigator.platform.toLocaleLowerCase().includes('mac') ? 'Meta+ArrowDown' : 'Ctrl+ArrowDown',
-    focusPolicy: 'editable' as const,
-  }
+  // One subscription to the whole preference: the shortcut effect and the
+  // question bar both read it, and the policy replaces the object on change.
+  const questionNavigation = useQuestionNavigation(settings => settings)
   const questions = useMemo(
     () => questionEntries(order, nodeStore, t('chat.questions.image')),
     [nodeStore, order, t],
@@ -628,12 +626,16 @@ export function ChatView({
             measures through `scrollHeight`. */}
         <div className={css.questionBarDock}>
           {barQuestion !== undefined && (
+            // Keyed by question so the expanded full text collapses when the
+            // reader moves on to the next question's answer.
             <QuestionBar
+              key={barQuestion.key}
               text={barQuestion.text}
               number={currentQuestion + 1}
               summary={barSummary}
               files={barTurn === undefined ? [] : turnFiles(barTurn)}
               filesKnown={turnFilesAvailable()}
+              expandSide={questionNavigation.expandButtonSide}
               onSelect={() => { jumpToQuestion(currentQuestion) }}
               t={t}
             />

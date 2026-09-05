@@ -485,7 +485,7 @@ export function apply(ctx: Context): void {
         fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
         turnFiles: turn => ctx.get('chatFileDiffs')?.forTurn(sessionId, turn) ?? [],
         turnFilesAvailable: () => ctx.get('chatFileDiffs') !== undefined,
-        questionNavigation: () => questionNavigationPolicy.settings.getSnapshot(),
+        hooks: { questionNavigation: questionNavigationPolicy.settings },
         openFile: (path) => {
           const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
           return workspaces.openPath(resolveWorkspacePath(cwd, path))

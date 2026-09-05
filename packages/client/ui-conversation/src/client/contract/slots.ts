@@ -7,9 +7,10 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   CommandNode, CompactionSummaryNode, ConversationSnapshot, ConversationTurnDataMap,
-  ObservableSnapshot, PendingInteraction, PendingWait, SessionId, ToolCallBlock,
+  ObservableSnapshot, PendingInteraction, PendingWait, SessionId, SnapshotStore, ToolCallBlock,
   TurnLocation, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import type { QuestionNavigationSettings } from '../../submission-settings.ts'
 import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -974,15 +975,15 @@ export interface ChatViewInjected {
   turnFiles: (turn: number) => readonly ChatTurnFileChange[]
   /** Whether a file provider is composed in, which decides if an empty file list means anything. */
   turnFilesAvailable: () => boolean
-  /** Read the live global question-navigation shortcut preference. */
-  questionNavigation: () => import('../../submission-settings.ts').QuestionNavigationSettings
+  /** Live global question-navigation preference (shortcuts, focus policy, question-bar expand side), bound as `useQuestionNavigation`. */
+  hooks: { questionNavigation: SnapshotStore<QuestionNavigationSettings> }
 }
 
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
   & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
-  & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
+  & PropsStore<ChatStore> & InjectFace<ChatViewInjected> & PropsLocale<'conversation'>
 
 /** Full props of the attachment plugin's composer entry. */
 export type ComposerAttachmentsProps =

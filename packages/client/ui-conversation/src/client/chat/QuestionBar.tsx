@@ -10,9 +10,10 @@
 // end of a long completed turn, where the reader's eye already is when the
 // answer lands.
 
-import { useEffect, useState } from 'react'
-import { IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from 'react'
+import { IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatTurnFileChange, ChatViewSlotProps } from '../contract/slots.ts'
+import type { QuestionBarExpandSide } from '../../submission-settings.ts'
 import type { TurnOutcome, TurnRecap, TurnSummary } from './turn-summary.ts'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
@@ -47,12 +48,37 @@ function fileTitle(files: readonly ChatTurnFileChange[]): string {
 }
 
 /**
+ * Collapse the expanded full-text panel on Escape or on a pointer press
+ * outside the bar. The panel is transient reading aid, not a mode: any
+ * gesture that moves attention elsewhere closes it.
+ */
+function useDismiss(active: boolean, root: RefObject<HTMLElement | null>, dismiss: () => void): void {
+  useEffect(() => {
+    if (!active) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') dismiss()
+    }
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (target instanceof Node && root.current?.contains(target)) return
+      dismiss()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [active, dismiss, root])
+}
+
+/**
  * Render the current question's summary bar.
- * @param props - the current question, its turn summary, that turn's changed files, and the jump action.
+ * @param props - the current question, its turn summary, that turn's changed files, the expand-toggle side, and the jump action.
  * @returns the bar, or null when there is no question to report.
  */
 export function QuestionBar({
-  text, number, summary, files, filesKnown, onSelect, t,
+  text, number, summary, files, filesKnown, expandSide, onSelect, t,
 }: {
   /** The current question's display text. */
   text: string
@@ -64,6 +90,8 @@ export function QuestionBar({
   files: readonly ChatTurnFileChange[]
   /** Whether a file provider answered at all; false suppresses the chip rather than claiming zero. */
   filesKnown: boolean
+  /** Which end of the bar carries the full-text expand toggle. */
+  expandSide: QuestionBarExpandSide
   /** Scroll the transcript to this question. */
   onSelect: () => void
   /** The owning view's locale seat. */
@@ -71,15 +99,43 @@ export function QuestionBar({
 }) {
   const elapsedMs = useElapsedMs(summary)
   const outcome = summary?.outcome ?? null
+  const [expanded, setExpanded] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const panelId = useId()
+  const collapse = useCallback(() => { setExpanded(false) }, [])
+  useDismiss(expanded, rootRef, collapse)
+  const toggle = (
+    <button
+      type="button"
+      className={css.questionBarExpand}
+      data-question-bar-expand=""
+      aria-expanded={expanded}
+      aria-controls={panelId}
+      aria-label={t(expanded ? 'chat.questionBar.collapse' : 'chat.questionBar.expand')}
+      title={t(expanded ? 'chat.questionBar.collapse' : 'chat.questionBar.expand')}
+      onClick={() => { setExpanded(current => !current) }}
+    >
+      {expanded
+        ? <IconChevronUpOutline14 aria-hidden="true" />
+        : <IconChevronDownOutline14 aria-hidden="true" />}
+    </button>
+  )
   return (
     // Not a live region: the transcript already carries this question, and the
     // turn-status row owns the session's one `role="status"`. The bar is a
-    // visual shortcut whose semantics live on its button.
-    <div className={css.questionBar} data-question-bar="">
+    // visual shortcut whose semantics live on its buttons.
+    <div
+      ref={rootRef}
+      className={css.questionBar}
+      data-question-bar=""
+      data-expand-side={expandSide}
+      data-expanded={expanded ? '' : undefined}
+    >
+      {expandSide === 'left' && toggle}
       <button
         type="button"
         className={css.questionBarMain}
-        title={text}
+        title={expanded ? undefined : text}
         aria-label={`${t('chat.questionBar.label')}: ${text} — ${t('chat.questionBar.jump')}`}
         onClick={onSelect}
       >
@@ -101,6 +157,15 @@ export function QuestionBar({
           <span className={css.questionBarClock}>{formatRunDuration(elapsedMs, t)}</span>
         )}
       </span>
+      {expandSide === 'right' && toggle}
+      {expanded && (
+        // The panel hangs below the pill inside the same absolutely positioned
+        // box, so it inherits the bar's width and centering and adds no flow
+        // height (the dock is zero-height for the follow and paging logic).
+        <div id={panelId} className={css.questionBarPanel} data-question-bar-panel="">
+          <div className={css.questionBarPanelText}>{text}</div>
+        </div>
+      )}
     </div>
   )
 }
