@@ -1,6 +1,10 @@
-/** Busy-Enter preference stored in the Host user-settings document. */
+/** Composer keyboard preferences stored in the Host user-settings document. */
 
 import z from '@deepseek-ai/schemastery'
+import { SEND_SHORTCUT_PATTERN } from './send-shortcut.ts'
+import type { SendShortcut } from './send-shortcut.ts'
+
+export type { SendShortcut } from './send-shortcut.ts'
 
 /** Settings namespace owned by the conversation plugin. */
 export const CONVERSATION_SETTINGS_NAMESPACE = 'ui-conversation'
@@ -21,9 +25,12 @@ export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'queue'
 export interface ConversationSettings {
   /** Delivery mode for plain Enter while the addressed agent is busy. */
   busyEnter: BusyEnterBehavior
+  /** Keyboard gesture required to send a message. */
+  sendShortcut: SendShortcut
 }
 
 /** Durable conversation schema; also the wire envelope the browser scope validates against. */
 export const ConversationSettingsSchema: z<ConversationSettings> = z.object({
   [BUSY_ENTER_FIELD]: z.union([...BUSY_ENTER_BEHAVIORS]).default(DEFAULT_BUSY_ENTER_BEHAVIOR),
+  sendShortcut: z.string().pattern(SEND_SHORTCUT_PATTERN).default('enter'),
 })

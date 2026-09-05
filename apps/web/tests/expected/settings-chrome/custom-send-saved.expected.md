@@ -1,0 +1,5 @@
+- text: 发送消息快捷键 Ctrl + Alt + S 发送，Enter 或 Shift + Enter 换行。
+- 'button "发送消息快捷键: 自定义：Ctrl + Alt + S"':
+  - text: 自定义：Ctrl + Alt + S
+  - img
+- button "恢复默认（Enter 发送）"

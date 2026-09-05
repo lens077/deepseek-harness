@@ -73,6 +73,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
       file: new File([Uint8Array.of(1)], `${id}.png`, { type: 'image/png' }),
       previewUrl: `blob:${id}`,
     })),
+    resolveGesture: event => event.key === 'Enter' && !event.shiftKey ? 'enter' : null,
     resolveSubmitMode: () => 'queue',
     toggleCommandMenu: vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),

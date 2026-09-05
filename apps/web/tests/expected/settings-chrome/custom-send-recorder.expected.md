@@ -1,0 +1,11 @@
+- text: 发送消息快捷键 Enter 发送，Shift + Enter 换行。
+- 'button "发送消息快捷键: Enter"':
+  - text: Enter
+  - img
+- text: 录制发送快捷键
+- textbox "录制发送快捷键":
+  - /placeholder: 在此按下组合键
+  - text: Ctrl + Alt + S
+- paragraph: 使用 Ctrl、Cmd 或 Alt 搭配其他按键，可同时按住 Shift。录制后点击保存；Esc 取消。部分组合键可能被系统或浏览器占用。
+- button "取消"
+- button "保存快捷键"

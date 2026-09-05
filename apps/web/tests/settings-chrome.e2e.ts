@@ -19,11 +19,13 @@ import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot, writeComposerDraft } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/settings-chrome', import.meta.url))
 const DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'dialog.expected.md')
 const PLUGINS_EXPECTED = join(SNAPSHOT_DIR, 'plugins.expected.md')
+const CUSTOM_RECORDER_EXPECTED = join(SNAPSHOT_DIR, 'custom-send-recorder.expected.md')
+const CUSTOM_SAVED_EXPECTED = join(SNAPSHOT_DIR, 'custom-send-saved.expected.md')
 // The English fallback surface: a browser naming no shipped language.
 const DIALOG_EN_EXPECTED = join(SNAPSHOT_DIR, 'dialog-en.expected.md')
 const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$="ui-settings"]'
@@ -448,6 +450,115 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
+  it('persists the send shortcut across reload', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-send-shortcut'))
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: '发送消息快捷键: Enter', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Ctrl / Cmd + Enter', exact: true }).click()
+    await dialog.getByRole('button', { name: '发送消息快捷键: Ctrl / Cmd + Enter', exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'), { timeout: 5_000 })
+      .toMatch(/sendShortcut: mod-enter/)
+    await page.keyboard.press('Escape')
+
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const reloaded = page.getByRole('dialog', { name: '设置' })
+    await reloaded.getByRole('button', { name: '发送消息快捷键: Ctrl / Cmd + Enter', exact: true }).waitFor({ timeout: 10_000 })
+    expect(await reloaded.getByText('仅在智能体运行时生效；Ctrl / Cmd + Enter 使用所选发送方式。', { exact: true }).count()).toBe(1)
+
+    await reloaded.getByRole('button', { name: '发送消息快捷键: Ctrl / Cmd + Enter', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Enter', exact: true }).click()
+    await reloaded.getByRole('button', { name: '发送消息快捷键: Enter', exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'), { timeout: 5_000 })
+      .toMatch(/sendShortcut: enter/)
+    await page.keyboard.press('Escape')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
+  it('records and explicitly saves a custom send shortcut across reload', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-custom-send-shortcut'))
+    const settingsPath = join(scaffold.harnessHome, 'settings.yaml')
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.getByRole('button', { name: '发送消息快捷键: Enter', exact: true }).click()
+    await page.getByRole('menuitem', { name: '自定义…', exact: true }).click()
+    const recorder = dialog.getByRole('textbox', { name: '录制发送快捷键', exact: true })
+    await recorder.waitFor({ timeout: 10_000 })
+    const save = dialog.getByRole('button', { name: '保存快捷键', exact: true })
+    expect(await save.isDisabled()).toBe(true)
+    await recorder.press('Control+Alt+s')
+    await expect.poll(() => recorder.inputValue(), { timeout: 5_000 }).toBe('Ctrl + Alt + S')
+    expect(await save.isEnabled()).toBe(true)
+    expect(await readFile(settingsPath, 'utf8')).toMatch(/sendShortcut: enter/)
+    const recordingSnapshot = await captureStableAria(page, '[data-send-shortcut-settings]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(CUSTOM_RECORDER_EXPECTED, recordingSnapshot, MODE)
+
+    await save.click()
+    const customName = '发送消息快捷键: 自定义：Ctrl + Alt + S'
+    await dialog.getByRole('button', { name: customName, exact: true }).waitFor({ timeout: 10_000 })
+    expect(await recorder.count()).toBe(0)
+    await expect.poll(() => readFile(settingsPath, 'utf8'), { timeout: 5_000 }).toMatch(/sendShortcut: Ctrl\+Alt\+S/)
+    await page.keyboard.press('Escape')
+
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const reloaded = page.getByRole('dialog', { name: '设置' })
+    await reloaded.getByRole('button', { name: customName, exact: true }).waitFor({ timeout: 10_000 })
+    const savedSnapshot = await captureStableAria(page, '[data-send-shortcut-settings]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(CUSTOM_SAVED_EXPECTED, savedSnapshot, MODE)
+    await page.keyboard.press('Escape')
+    await connectFreshWorkspaceZh(page, scaffold.workspaceCwd, 'custom-send-shortcut')
+    const prompts: { mode: string; content: { type: string; text?: string }[] }[] = []
+    const promptPattern = '**/api/session/prompt'
+    await page.route(promptPattern, async (route) => {
+      const envelope = route.request().postDataJSON() as {
+        rpcId: string
+        payload: { args: { request: { mode: string; content: { type: string; text?: string }[] } } }
+      }
+      prompts.push(envelope.payload.args.request)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          type: 'server-response', rpcId: envelope.rpcId,
+          result: { ok: true, value: { accepted: true } },
+        }),
+      })
+    })
+    try {
+      const composer = page.locator('[data-composer-input][contenteditable="true"]')
+      await writeComposerDraft(page, composer, 'First line')
+      await composer.press('Enter')
+      await page.keyboard.type('Second line')
+      await expect.poll(() => composer.innerText(), { timeout: 5_000 }).toBe('First line\nSecond line')
+      await composer.press('Control+Enter')
+      expect(prompts).toHaveLength(0)
+      await Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname === '/api/session/prompt'),
+        composer.press('Control+Alt+s'),
+      ])
+      expect(prompts).toHaveLength(1)
+      expect(prompts[0]?.mode).toBe('queue')
+      expect(prompts[0]?.content).toEqual([{ type: 'text', text: 'First line\nSecond line' }])
+    } finally {
+      await page.unroute(promptPattern)
+    }
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    await reloaded.getByRole('button', { name: '恢复默认（Enter 发送）', exact: true }).click()
+    await reloaded.getByRole('button', { name: '发送消息快捷键: Enter', exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(() => readFile(settingsPath, 'utf8'), { timeout: 5_000 }).toMatch(/sendShortcut: enter/)
+    await page.keyboard.press('Escape')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
   it('persists the busy-state Enter behavior across reload and a distinct port', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-enter-behavior'))
     await page.getByRole('button', { name: '设置', exact: true }).click()
@@ -458,7 +569,7 @@ describe('web e2e: settings modal and General preferences', () => {
     await dialog.getByRole('button', { name: '插话发送' }).waitFor({ timeout: 10_000 })
     expect(await page.evaluate(() => localStorage.getItem('dsh.conversation.busyEnter'))).toBeNull()
     await expect.poll(async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'), { timeout: 5_000 })
-      .toMatch(/ui-conversation:\n\s+busyEnter: steer/)
+      .toMatch(/ui-conversation:\n(?:[ \t]+[^\n]*\n)*?[ \t]+busyEnter: steer/)
     await page.keyboard.press('Escape')
 
     const warningStart = tripwire.warnings.length
@@ -492,7 +603,7 @@ describe('web e2e: settings modal and General preferences', () => {
     await reloaded.getByRole('button', { name: '排队发送' }).waitFor({ timeout: 10_000 })
     expect(await page.evaluate(() => localStorage.getItem('dsh.conversation.busyEnter'))).toBeNull()
     await expect.poll(async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'), { timeout: 5_000 })
-      .toMatch(/ui-conversation:\n\s+busyEnter: queue/)
+      .toMatch(/ui-conversation:\n(?:[ \t]+[^\n]*\n)*?[ \t]+busyEnter: queue/)
     await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
@@ -635,6 +746,9 @@ describe('web e2e: settings modal and General preferences', () => {
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['dialog-en.expected.md', 'dialog.expected.md', 'plugins.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      'custom-send-recorder.expected.md', 'custom-send-saved.expected.md',
+      'dialog-en.expected.md', 'dialog.expected.md', 'plugins.expected.md',
+    ])
   })
 })

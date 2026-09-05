@@ -23,15 +23,17 @@ describe('keymap keydown routing', () => {
       arbitrate: () => 'pass',
       space: () => false,
       dismissPopup: () => {},
+      resolveGesture: event => event.key !== 'Enter' || event.shiftKey === true
+        ? null : event.ctrlKey === true || event.metaKey === true ? 'accelerated' : 'enter',
       canSubmit: () => true,
       submit,
       intakeFiles: () => {},
       pasteText: () => {},
     })
     fireEvent.keyDown(root, { key: 'Enter' })
-    expect(submit).toHaveBeenCalledWith(false)
+    expect(submit).toHaveBeenCalledWith('enter')
     fireEvent.keyDown(root, { key: 'Enter', metaKey: true })
-    expect(submit).toHaveBeenCalledWith(true)
+    expect(submit).toHaveBeenCalledWith('accelerated')
   })
 
   it('routes Tab through arbitration and passes when unconsumed', () => {
@@ -49,6 +51,8 @@ describe('keymap keydown routing', () => {
       arbitrate,
       space: () => false,
       dismissPopup: () => {},
+      resolveGesture: event => event.key !== 'Enter' || event.shiftKey === true
+        ? null : event.ctrlKey === true || event.metaKey === true ? 'accelerated' : 'enter',
       canSubmit: () => true,
       submit: () => {},
       intakeFiles: () => {},

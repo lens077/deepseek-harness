@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-06-configurable-composer-send-shortcut.md
+2026-09-06-configurable-composer-send-shortcut.md: 33c00898df8712f2e1a07009f5f57789bae08218
+2026-09-06-configurable-composer-send-shortcut.zh.md: 92275391e2f1fc5cd59586d837e81a3d55cc15c6

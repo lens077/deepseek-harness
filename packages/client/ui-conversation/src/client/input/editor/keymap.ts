@@ -15,10 +15,12 @@
 import type { LexicalEditor } from 'lexical'
 import {
   COMMAND_PRIORITY_CRITICAL, KEY_ARROW_DOWN_COMMAND, KEY_ARROW_UP_COMMAND, KEY_ENTER_COMMAND,
-  KEY_ESCAPE_COMMAND, KEY_SPACE_COMMAND, KEY_TAB_COMMAND, PASTE_COMMAND,
+  KEY_DOWN_COMMAND, KEY_ESCAPE_COMMAND, KEY_SPACE_COMMAND, KEY_TAB_COMMAND, PASTE_COMMAND,
 } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
 import type { ArbitrateKey, ArbitrateOutcome } from '../../contract/input.ts'
+import type { ComposerSubmitGesture } from '../../contract/composer-submission.ts'
+import type { ShortcutKeyEvent } from '../../../send-shortcut.ts'
 
 /** The bar-supplied behavior behind each intercepted gesture. */
 export interface ComposerKeymapHandlers {
@@ -28,10 +30,12 @@ export interface ComposerKeymapHandlers {
   space(): boolean
   /** Dismiss the popupSelect shell (Escape layering: an open overlay closes first). */
   dismissPopup(): void
-  /** Whether Enter may submit right now (locked/busy states refuse). */
+  /** Match a keydown against the selected send shortcut. */
+  resolveGesture(event: ShortcutKeyEvent): ComposerSubmitGesture | null
+  /** Whether the composer may submit right now (locked/busy states refuse). */
   canSubmit(): boolean
-  /** The Enter gesture after every guard passed; `accelerated` = Ctrl/Cmd held. */
-  submit(accelerated: boolean): void
+  /** The matched send gesture after keyboard guards passed. */
+  submit(gesture: ComposerSubmitGesture): void
   /** Pasted files (image intake). */
   intakeFiles(files: readonly File[]): void
   /** Pasted plain text (sanitized insertion through the shell). */
@@ -65,6 +69,20 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     composingUntil = Date.now() + 10
   }
   const recentlyComposing = (): boolean => composing || Date.now() < composingUntil
+  const resolveGesture = (event: KeyboardEvent | null): ComposerSubmitGesture | null => handlers.resolveGesture({
+    key: event?.key ?? 'Enter',
+    code: event?.code ?? 'Enter',
+    ctrlKey: event?.ctrlKey === true,
+    metaKey: event?.metaKey === true,
+    altKey: event?.altKey === true,
+    shiftKey: event?.shiftKey === true,
+    altGraph: event?.getModifierState('AltGraph') === true,
+  })
+  const submit = (event: KeyboardEvent | null, gesture: ComposerSubmitGesture): boolean => {
+    event?.preventDefault()
+    if (event?.repeat !== true && handlers.canSubmit()) handlers.submit(gesture)
+    return true
+  }
 
   const arrow = (key: ArbitrateKey) => (event: KeyboardEvent | null): boolean => {
     const inComposition = event !== null && isComposingEvent(event, recentlyComposing)
@@ -82,6 +100,11 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
       root?.addEventListener('compositionstart', onCompositionStart)
       root?.addEventListener('compositionend', onCompositionEnd)
     }),
+    editor.registerCommand(KEY_DOWN_COMMAND, (event) => {
+      if (event.key === 'Enter' || isComposingEvent(event, recentlyComposing)) return false
+      const gesture = resolveGesture(event)
+      return gesture === null ? false : submit(event, gesture)
+    }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow('up'), COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow('down'), COMMAND_PRIORITY_CRITICAL),
     // Tab acts only when the trigger menu has a highlighted completion;
@@ -107,25 +130,22 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
       return false
     }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ENTER_COMMAND, (event) => {
-      // Shift+Enter is the native line break UNCONDITIONALLY — decided before
-      // the IME guard so a composition-closing Shift+Enter still breaks the line.
-      if (event?.shiftKey === true) return false
+      // Bare Shift+Enter always belongs to the editor, including during composition.
+      if (event?.shiftKey === true && !event.ctrlKey && !event.metaKey && !event.altKey) return false
       if (event !== null && isComposingEvent(event, recentlyComposing)) {
         // The IME consumes this Enter (candidate pick); neither submit nor
         // break the line. No preventDefault: the browser owns the gesture.
         return true
       }
+      const gesture = resolveGesture(event)
+      if (event?.shiftKey === true && gesture === null) return false
       // Menu-open Enter picks the highlight through arbitration; a
       // no-highlight menu passes down to the submit gesture.
       if (handlers.arbitrate('enter', false) !== 'pass') {
         event?.preventDefault()
         return true
       }
-      event?.preventDefault()
-      if (event?.repeat === true) return true // held-down Enter must not machine-gun sends
-      if (!handlers.canSubmit()) return true
-      handlers.submit(event?.ctrlKey === true || event?.metaKey === true)
-      return true
+      return gesture === null ? false : submit(event, gesture)
     }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(PASTE_COMMAND, (event) => {
       // Duck-typed: the payload union includes InputEvent, and test engines

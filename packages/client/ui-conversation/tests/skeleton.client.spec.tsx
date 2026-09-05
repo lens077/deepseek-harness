@@ -254,6 +254,7 @@ function mount(
           retryFileUpload={undefined}
           removeAttachment={() => {}}
           resolveDraftAttachments={() => []}
+          resolveGesture={event => event.key === 'Enter' && !event.shiftKey ? 'enter' : null}
           resolveSubmitMode={() => 'queue'}
           toggleCommandMenu={vi.fn()}
           useNotices={bindSnapshotSelector(wiring.notices)}

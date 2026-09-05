@@ -20,6 +20,7 @@ import type {
 } from './input.ts'
 import type { createConversationStore } from '../stores.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
+import type { ShortcutKeyEvent } from '../../send-shortcut.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
 
@@ -291,6 +292,8 @@ export interface ComposerBarInjected {
   resolveDraftAttachments: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
   /** Restart one failed file upload; absent without a session. */
   retryFileUpload: ((id: DraftAttachmentId) => void) | undefined
+  /** Resolve a keydown into a send gesture, or null for ordinary editor behavior. */
+  resolveGesture: (event: ShortcutKeyEvent) => ComposerSubmitGesture | null
   resolveSubmitMode: (
     running: boolean,
     gesture: ComposerSubmitGesture,

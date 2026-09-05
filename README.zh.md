@@ -6,6 +6,12 @@
 
 这是 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的个人 fork。上游是该项目的真相源；本仓库与 DeepSeek AI 无关联，也不承诺任何支持。
 
+### 发送消息快捷键
+
+打开 **设置 → 通用设置 → 发送消息快捷键**，可选择 Enter、Ctrl/Cmd+Enter 或其他预设。需要自定义时，选择 **自定义…**，按下组合键（例如 Ctrl+Alt+S），再点击 **保存快捷键**。按 Esc 或点击取消可放弃录制；**恢复默认**可切回 Enter 发送。
+
+默认使用 Enter 发送。选择自定义组合键后，普通 Enter 和 Shift+Enter 用于换行，只有设置的组合键才会发送。设置在刷新后仍然保留，输入法确认候选词不会触发发送。常用编辑和浏览器快捷键不可用于发送，其他组合键也可能被系统或浏览器占用。支持的按键及排队、插话行为详见[输入框文档](packages/client/ui-conversation/README.zh.md#shell-and-standard-props)。
+
 ### 汇总：跨所有工作区，哪些会话需要你
 
 ![工作日里的收件箱：九个工作区中一个失败/中断的会话和一个完成未读的会话，带时间窗与状态筛选、工作区 chip 和卡片操作；会话名与正文已打码](docs/user/guide/inbox-overview.png)

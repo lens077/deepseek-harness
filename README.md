@@ -6,6 +6,12 @@ English | [中文](README.zh.md)
 
 This is a personal fork of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). Upstream is the source of truth for the project; this repository is not affiliated with DeepSeek AI and carries no support commitment.
 
+### Message sending shortcuts
+
+Open **Settings → General → Send message shortcut** to choose Enter, Ctrl/Cmd+Enter, or another preset. To use a custom combination, select **Custom…**, press the keys (for example, Ctrl+Alt+S), and click **Save shortcut**. Escape or Cancel discards the recording; **Restore default** returns to Enter-to-send.
+
+Enter-to-send is the default. With a custom combination selected, ordinary Enter and Shift+Enter insert newlines, and only the configured combination sends. Preferences survive refreshes; IME confirmation does not send. Common editing and browser shortcuts are reserved, and the OS or browser may intercept other combinations. See the [composer documentation](packages/client/ui-conversation/README.md#shell-and-standard-props) for supported keys and Queue/Steer behavior.
+
 ### The inbox: what needs you, across every workspace
 
 ![The inbox on a working day: one failed/interrupted session and one finished-unread session across nine workspaces, with the time-window and status filters, the workspace chips, and the card actions; session names and text are blurred](docs/user/guide/inbox-overview.png)

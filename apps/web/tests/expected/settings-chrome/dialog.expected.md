@@ -44,7 +44,11 @@
   - button "Compact":
     - text: Compact
     - img
-  - text: 繁忙时 Enter 键行为 仅在智能体运行时生效；Cmd/Ctrl+Enter 使用另一行为
-  - button "排队发送":
+  - text: 发送消息快捷键 Enter 发送，Shift + Enter 换行。
+  - 'button "发送消息快捷键: Enter"':
+    - text: Enter
+    - img
+  - text: 繁忙时发送方式 仅在智能体运行时生效；Cmd/Ctrl+Enter 使用另一行为
+  - 'button "繁忙时发送方式: 排队发送"':
     - text: 排队发送
     - img

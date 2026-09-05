@@ -42,7 +42,7 @@ export type InputBarProps = ComposerBarProps
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
   retryFileUpload,
-  resolveSubmitMode, toggleCommandMenu, stop, command, t,
+  resolveGesture, resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useFileUploads, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -262,11 +262,11 @@ export const InputBar = memo(function InputBar({
   // The keymap handlers read live bar state through this ref so the editor
   // registration survives re-renders without re-arming per keystroke.
   const gate = useRef({
-    locked, machineBusy, canSteerQueue, running, subagent, resolveSubmitMode,
+    locked, machineBusy, canSteerQueue, running, subagent, resolveGesture, resolveSubmitMode,
     intakeFiles, uploadsPending, showToast, t,
   })
   gate.current = {
-    locked, machineBusy, canSteerQueue, running, subagent, resolveSubmitMode,
+    locked, machineBusy, canSteerQueue, running, subagent, resolveGesture, resolveSubmitMode,
     intakeFiles, uploadsPending, showToast, t,
   }
 
@@ -279,13 +279,14 @@ export const InputBar = memo(function InputBar({
         return keyboard.space()
       },
       dismissPopup: () => { keyboard.dismissPopup() },
+      resolveGesture: event => gate.current.resolveGesture(event),
       canSubmit: () => !gate.current.locked && !gate.current.machineBusy,
-      submit: (accelerated) => {
+      submit: (gesture) => {
         const g = gate.current
         // Empty-draft accelerated Enter acts on the queue instead of the
         // (empty) draft: the machine rejects empty drafts, so the gesture
         // steers every still-pending queued message into the running turn.
-        if (accelerated && g.canSteerQueue) {
+        if (gesture === 'accelerated' && g.canSteerQueue) {
           keyboard.steerQueue()
           return
         }
@@ -295,7 +296,7 @@ export const InputBar = memo(function InputBar({
         }
         keyboard.submit(g.resolveSubmitMode(
           g.running,
-          accelerated ? 'accelerated' : 'enter',
+          gesture,
           g.subagent === null,
         ))
       },

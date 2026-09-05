@@ -22,6 +22,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { ComposerSubmissionPolicy } from '../src/client/input/submission-policy.ts'
+import type { SendShortcut } from '../src/submission-settings.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps,
@@ -92,6 +94,7 @@ interface BenchOptions {
   addFiles?: (files: readonly File[]) => string | null
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
+  sendShortcut?: SendShortcut
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
 }
 
@@ -156,6 +159,9 @@ function bench(over?: BenchOptions) {
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
     return null
   }) as never
+  const policy = new ComposerSubmissionPolicy()
+  policy.setBusyEnter(over?.busyEnter ?? 'queue')
+  policy.setSendShortcut(over?.sendShortcut ?? 'enter')
   const props: InputBarProps = {
     sessionId: SID,
     SessionProvider: ({ children }) => children,
@@ -186,11 +192,8 @@ function bench(over?: BenchOptions) {
       const attachment = over?.attachments?.find(candidate => candidate.id === id)
       return attachment === undefined ? [] : [attachment]
     }),
-    resolveSubmitMode: (running, gesture, steeringAvailable) => {
-      if (!running || !steeringAvailable) return 'queue'
-      const preferred = over?.busyEnter ?? 'queue'
-      return gesture === 'enter' ? preferred : preferred === 'queue' ? 'steer' : 'queue'
-    },
+    resolveGesture: event => policy.resolveGesture(event),
+    resolveSubmitMode: (running, gesture, steeringAvailable) => policy.resolve(running, gesture, steeringAvailable),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
@@ -219,7 +222,7 @@ function bench(over?: BenchOptions) {
   const interruptButton = view.container.querySelector<HTMLButtonElement>('button[aria-label="停止生成"]')
   return {
     view, textarea, button, interruptButton, props, sink, shell, wiring: shell, session, stop, removeAttachment, slotCalls,
-    menuLauncher,
+    menuLauncher, policy,
     steerQueue: over?.steerQueue,
     get placeholder() { return placeholderOf(view.container) },
     get inputDisabled() { return textarea.getAttribute('aria-disabled') === 'true' },
@@ -713,6 +716,134 @@ describe('Enter semantics', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('configurable send shortcut', () => {
+  it.each(['ctrlKey', 'metaKey'] as const)('keeps Enter for newlines and sends with %s', async (modifier) => {
+    const { textarea, shell, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 'Enter', [modifier]: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('adopts changes without remounting the composer and keeps Shift+Enter for newlines', async () => {
+    const { textarea, shell, sink, policy } = bench({ draft: 'hello' })
+    policy.setSendShortcut('mod-enter')
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true, ctrlKey: true })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    expect(sink).not.toHaveBeenCalled()
+    policy.setSendShortcut('enter')
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it.each(['queue', 'steer'] as const)('uses the busy %s preference with the required chord', (busyEnter) => {
+    const { textarea, sink } = bench({ draft: 'hello', running: true, sendShortcut: 'mod-enter', busyEnter })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], busyEnter, expect.any(AbortSignal))
+  })
+
+  it('protects IME confirmation and held-down chords in modifier mode', () => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, isComposing: true })
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true, keyCode: 229 })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, repeat: true })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it('leaves the send button independent of the shortcut', () => {
+    const { button, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+  })
+})
+
+describe('custom send shortcuts', () => {
+  it.each([
+    ['Ctrl+Shift+Enter', { key: 'Enter', ctrlKey: true, shiftKey: true }],
+    ['Meta+Shift+Enter', { key: 'Enter', metaKey: true, shiftKey: true }],
+    ['Meta+Enter', { key: 'Enter', metaKey: true }],
+    ['Alt+Enter', { key: 'Enter', altKey: true }],
+    ['Ctrl+Alt+S', { key: 'ß', code: 'KeyS', ctrlKey: true, altKey: true }],
+    ['Ctrl+Alt+ArrowUp', { key: 'ArrowUp', ctrlKey: true, altKey: true }],
+    ['Ctrl+Space', { key: ' ', code: 'Space', ctrlKey: true }],
+  ] as const)('sends exactly once with %s', (sendShortcut, event) => {
+    const { textarea, sink } = bench({ draft: 'custom draft', sendShortcut })
+    fireEvent.keyDown(textarea, event)
+    expect(sink).toHaveBeenCalledExactlyOnceWith('custom draft', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('keeps Enter and bare Shift+Enter as native newlines under a custom chord', async () => {
+    const { textarea, sink, shell } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Shift+Enter' })
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n\n') })
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('does not submit when a custom chord is missing a modifier or has an extra one', () => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Alt+S' })
+    for (const event of [
+      { key: 's', ctrlKey: true },
+      { key: 's', metaKey: true, altKey: true },
+      { key: 's', ctrlKey: true, altKey: true, shiftKey: true },
+      { key: 'Enter', ctrlKey: true },
+    ]) fireEvent.keyDown(textarea, event)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it.each(['Ctrl+Alt+S', 'Ctrl+Shift+Enter'])('blocks IME and repeat sends for %s', (sendShortcut) => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut })
+    const chord = sendShortcut === 'Ctrl+Alt+S'
+      ? { key: 's', code: 'KeyS', ctrlKey: true, altKey: true }
+      : { key: 'Enter', ctrlKey: true, shiftKey: true }
+    fireEvent.keyDown(textarea, { ...chord, isComposing: true })
+    fireEvent.keyDown(textarea, { ...chord, keyCode: 229 })
+    fireEvent.keyDown(textarea, { ...chord, repeat: true })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.compositionStart(textarea)
+    fireEvent.keyDown(textarea, chord)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('rejects AltGraph and accepts a subsequent genuine Ctrl+Alt chord', () => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Alt+S' })
+    const altGraph = new KeyboardEvent('keydown', { key: 's', code: 'KeyS', ctrlKey: true, altKey: true, bubbles: true })
+    Object.defineProperty(altGraph, 'getModifierState', { value: (key: string) => key === 'AltGraph' })
+    fireEvent(textarea, altGraph)
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 's', code: 'KeyS', ctrlKey: true, altKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it.each(['queue', 'steer'] as const)('uses the preferred busy %s delivery for custom sends', (busyEnter) => {
+    const { textarea, sink } = bench({ draft: 'hello', running: true, busyEnter, sendShortcut: 'Ctrl+Alt+S' })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true, altKey: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], busyEnter, expect.any(AbortSignal))
+  })
+
+  it('switches custom bindings without remounting and never steers an empty queue via a custom chord', () => {
+    const steerQueue = vi.fn()
+    const { textarea, sink, policy, shell } = bench({ running: true, queue: [row('q-1')], steerQueue, sendShortcut: 'Meta+Enter' })
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    expect(steerQueue).not.toHaveBeenCalled()
+    expect(sink).not.toHaveBeenCalled()
+    policy.setSendShortcut('Ctrl+Alt+S')
+    writeDraft(shell, 'hello')
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true, altKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+    expect(steerQueue).not.toHaveBeenCalled()
   })
 })
 

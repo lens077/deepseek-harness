@@ -1,8 +1,4 @@
-/**
- * Composer submission policy. It owns the live busy-Enter
- * preference and resolves keyboard gestures into queue/steer delivery modes;
- * Host and Agent keep the actual delivery-window authority.
- */
+/** Composer keyboard preferences and queue/steer delivery policy. */
 import {
   createSnapshotStore, type SnapshotStore,
 } from '@deepseek-ai/dsh-client-store'
@@ -11,25 +7,25 @@ import type {
   BusyEnterBehavior, ComposerSubmitGesture, InputSubmitMode,
 } from '../contract/composer-submission.ts'
 import { BUSY_ENTER_FIELD, DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
-import type { ConversationSettings } from '../../submission-settings.ts'
+import type { ConversationSettings, SendShortcut } from '../../submission-settings.ts'
+import { matchesSendShortcut, type ShortcutKeyEvent } from '../../send-shortcut.ts'
 
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 
 /**
- * Busy-Enter policy used by both the composer inject face and its Settings row.
- * Direct `steer` is intentionally best-effort: AgentLoop turns a closed-window
- * submission into the next waking Queue item.
+ * Keyboard policy shared by the composer and General Settings.
+ * AgentLoop turns a closed-window steer submission into the next waking Queue item.
  */
 export class ComposerSubmissionPolicy {
-  /** Reactive preference source for the Settings row. */
+  /** Reactive busy-state delivery preference. */
   readonly busyEnter: SnapshotStore<BusyEnterBehavior> = createSnapshotStore(DEFAULT_BUSY_ENTER_BEHAVIOR)
+  /** Reactive send shortcut preference. */
+  readonly sendShortcut: SnapshotStore<SendShortcut> = createSnapshotStore('enter')
   private readonly host: SettingsScope<ConversationSettings> | undefined
 
   /**
-   * @param host - durable preference scope owned by the providing plugin;
-   * absent compositions stay process-local. The adoption subscription shares
-   * the scope's plugin lifetime — a disposed scope never publishes again, so
-   * the policy needs no release hook.
+   * @param host - durable preference scope; absent compositions stay process-local.
+   * The adoption subscription shares the scope's plugin lifetime.
    */
   constructor(host?: SettingsScope<ConversationSettings>) {
     this.host = host
@@ -40,26 +36,34 @@ export class ComposerSubmissionPolicy {
   }
 
   /**
-   * Resolve one keyboard gesture without changing state.
-   * @param running - whether the addressed agent currently reports busy.
-   * @param gesture - plain Enter or the Cmd/Ctrl-accelerated chord.
-   * @param steeringAvailable - whether this session transport supports steering.
-   * @returns Queue outside steer-capable busy state; otherwise the preferred mode or its opposite.
+   * Classify a keydown against the current shortcut without changing state.
+   * @param event - keyboard facts after editor composition guarding.
+   * @returns the matched delivery gesture, or null for ordinary editor behavior.
    */
-  resolve(
-    running: boolean,
-    gesture: ComposerSubmitGesture,
-    steeringAvailable: boolean,
-  ): InputSubmitMode {
+  resolveGesture(event: ShortcutKeyEvent): ComposerSubmitGesture | null {
+    const shortcut = this.sendShortcut.getSnapshot()
+    if (!matchesSendShortcut(shortcut, event)) return null
+    if (shortcut !== 'enter' && shortcut !== 'mod-enter') return 'custom'
+    return event.ctrlKey === true || event.metaKey === true ? 'accelerated' : 'enter'
+  }
+
+  /**
+   * Resolve delivery for a send gesture without changing state.
+   * @param running - whether the addressed agent currently reports busy.
+   * @param gesture - preset Enter gesture or an explicitly matched custom chord.
+   * @param steeringAvailable - whether this session transport supports steering.
+   * @returns Queue when idle or steering is unavailable; otherwise the preferred mode,
+   * except that Ctrl/Cmd+Enter selects its opposite in Enter-to-send mode.
+   */
+  resolve(running: boolean, gesture: ComposerSubmitGesture, steeringAvailable: boolean): InputSubmitMode {
     if (!running || !steeringAvailable) return 'queue'
     const preferred = this.busyEnter.getSnapshot()
-    if (gesture === 'enter') return preferred
+    if (gesture !== 'accelerated' || this.sendShortcut.getSnapshot() !== 'enter') return preferred
     return preferred === 'queue' ? 'steer' : 'queue'
   }
 
   /**
-   * Change the plain-Enter behavior used during busy state; the live value
-   * publishes before the durable write starts.
+   * Publish and persist the busy-state delivery preference.
    * @param behavior - Queue or Steer.
    */
   setBusyEnter(behavior: BusyEnterBehavior): void {
@@ -69,12 +73,23 @@ export class ComposerSubmissionPolicy {
   }
 
   /**
-   * Adopt the scope's accepted durable behavior without writing it back.
-   * @param host - the constructor-narrowed scope driving this adoption.
+   * Publish and persist the send shortcut preference.
+   * @param shortcut - validated legacy preset or canonical custom chord.
+   */
+  setSendShortcut(shortcut: SendShortcut): void {
+    if (this.sendShortcut.getSnapshot() === shortcut) return
+    this.sendShortcut.set(shortcut)
+    void this.host?.set('sendShortcut', shortcut)
+  }
+
+  /**
+   * Adopt accepted durable preferences without writing them back.
+   * @param host - the scope driving adoption.
    */
   private adopt(host: SettingsScope<ConversationSettings>): void {
     const section = host.getSnapshot().value
-    if (section === undefined || this.busyEnter.getSnapshot() === section.busyEnter) return
+    if (section === undefined) return
     this.busyEnter.set(section.busyEnter)
+    this.sendShortcut.set(section.sendShortcut)
   }
 }

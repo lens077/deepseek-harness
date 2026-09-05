@@ -44,7 +44,11 @@
   - button "Compact":
     - text: Compact
     - img
-  - text: Enter behavior while busy Busy only; Cmd/Ctrl+Enter uses the other behavior
-  - button "Queue":
+  - text: Send message shortcut Enter sends; Shift + Enter inserts a newline.
+  - 'button "Send message shortcut: Enter"':
+    - text: Enter
+    - img
+  - text: Send behavior while busy Busy only; Cmd/Ctrl+Enter uses the other behavior
+  - 'button "Send behavior while busy: Queue"':
     - text: Queue
     - img

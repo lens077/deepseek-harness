@@ -33,6 +33,8 @@
 
 .selector {
   display: inline-flex;
+  flex-shrink: 0;
+  white-space: nowrap;
   align-items: center;
   gap: 12px;
   height: 36px;
@@ -51,6 +53,109 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.selector:focus-visible,
+.recordInput:focus-visible,
+.reset:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+}
+
 .chevron {
   flex: none;
+}
+
+.shortcutGroup {
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.shortcutGroup > .row {
+  border-bottom: none;
+  flex-wrap: wrap;
+}
+
+.shortcutGroup .rowText {
+  flex: 1 1 180px;
+  padding-right: 12px;
+}
+
+.shortcutGroup .selector {
+  max-width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 7px 14px;
+  white-space: normal;
+  text-align: left;
+}
+
+.recorder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.recorder p {
+  margin: 0;
+}
+
+.recordInput {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.recordInput::placeholder {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.recordActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reset {
+  margin-bottom: 16px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reset:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rowText,
+  .shortcutGroup .rowText {
+    flex: initial;
+    padding-right: 0;
+  }
 }

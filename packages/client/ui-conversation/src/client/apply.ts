@@ -33,7 +33,7 @@ import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { resolveActiveView } from './view-selection.ts'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
-import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
+import { CONVERSATION_SETTINGS_NAMESPACE, ConversationSettingsSchema, type ConversationSettings } from '../submission-settings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -122,9 +122,11 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-conversation: dictionaries')
   const t = ctx.locale.bind(NS)
   const conversationStore = createConversationStore()
-  const submissionPolicy = new ComposerSubmissionPolicy(
-    ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
-  )
+  const conversationSettings = ctx.settingsScope.bind<ConversationSettings>({
+    namespace: CONVERSATION_SETTINGS_NAMESPACE,
+    decode: section => ConversationSettingsSchema(section as ConversationSettings),
+  })
+  const submissionPolicy = new ComposerSubmissionPolicy(conversationSettings)
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -132,8 +134,9 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     order: 20,
     locale: NS,
     inject: (): EnterBehaviorRowInjected => ({
-      hooks: { busyEnter: submissionPolicy.busyEnter },
+      hooks: { busyEnter: submissionPolicy.busyEnter, sendShortcut: submissionPolicy.sendShortcut },
       setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
+      setSendShortcut: (shortcut) => { submissionPolicy.setSendShortcut(shortcut) },
     }),
   }, EnterBehaviorRow))
 
@@ -311,6 +314,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           removeAttachment: undefined,
           resolveDraftAttachments: undefined,
           retryFileUpload: undefined,
+          resolveGesture: event => submissionPolicy.resolveGesture(event),
           resolveSubmitMode: (running, gesture, steeringAvailable) =>
             submissionPolicy.resolve(running, gesture, steeringAvailable),
           toggleCommandMenu: undefined,
@@ -349,6 +353,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         retryFileUpload: (id) => {
           if (sessions.binding(sessionId) !== undefined) conversation.retryFileUpload(sessionId, id)
         },
+        resolveGesture: event => submissionPolicy.resolveGesture(event),
         resolveSubmitMode: (running, gesture, steeringAvailable) =>
           submissionPolicy.resolve(running, gesture, steeringAvailable),
         toggleCommandMenu: inputTriggers === undefined
