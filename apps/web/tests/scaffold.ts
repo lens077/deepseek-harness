@@ -1466,7 +1466,7 @@ export async function captureExpandedTurnProcessAria(
           host.scrollTop = host.scrollHeight
           return host.scrollHeight - host.clientHeight - host.scrollTop
         })
-        return Math.abs(distanceFromBottom) <= 1 && await backToBottom.count() === 0
+        return Math.abs(distanceFromBottom) <= 1 && await backToBottom.isDisabled()
       }, { timeout: 10_000 }).toBe(true)
     }
     return await captureStableAria(page, selector, workspaceCwd)

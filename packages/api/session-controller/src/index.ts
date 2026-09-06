@@ -7,10 +7,11 @@ import type {} from '@deepseek-ai/dsh-client-file-upload'
 import { canOpenNativePath, openNativePath } from '@deepseek-ai/dsh-native-command'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
-import type { SessionObservation } from '@deepseek-ai/dsh-session-query'
+import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   ApiSessionAgentController,
+  ApiSessionNotFound,
   inspectApiSession,
   type ApiSessionAgentResult,
 } from './agent.ts'
@@ -43,6 +44,8 @@ import type {
   SessionPageRequest,
   SessionPromptRequest,
   SessionPromptValue,
+  SessionQuestionSearchRequest,
+  SessionQuestionSearchValue,
   SessionRenameRequest,
   SessionRenameValue,
   SessionSearchRequest,
@@ -52,6 +55,11 @@ import type {
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
 } from './types.ts'
+import {
+  SESSION_QUESTION_RESULT_LIMIT,
+  SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
+} from './types.ts'
+import { truncateUnicodeCodePoints } from './list.ts'
 
 export type * from './types.ts'
 export { ApiSessionNotFound } from './agent.ts'
@@ -339,6 +347,61 @@ export class SessionController extends TypertRemoteService {
   @Remote('attachment')
   attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue> {
     return this.commands.attachment(request)
+  }
+
+  /**
+   * Search all current user questions in one readable Session.
+   * @param request - Session identity and literal question text query.
+   * @param signal - cancellation for authorization and provider work.
+   * @returns bounded hits plus whether the page is complete.
+   */
+  @Remote('searchQuestions')
+  async searchQuestions(
+    request: SessionQuestionSearchRequest,
+    signal: AbortSignal,
+  ): Promise<SessionQuestionSearchValue> {
+    try {
+      await this.inspect(request.sessionId, signal)
+      signal.throwIfAborted()
+      const page = await this.ctx.sessionQuery.searchEvents({
+        sessionId: request.sessionId,
+        query: request.query,
+        filters: [
+          { kind: 'type', values: ['user/message'] },
+          { kind: 'surface', values: ['current'] },
+        ],
+        limit: SESSION_QUESTION_RESULT_LIMIT,
+      }, { signal })
+      signal.throwIfAborted()
+      if (page.items.length > SESSION_QUESTION_RESULT_LIMIT) {
+        throw new Error(
+          `question search provider returned ${String(page.items.length)} items; maximum is ${String(SESSION_QUESTION_RESULT_LIMIT)}`,
+        )
+      }
+      const items = page.items.flatMap(hit => (
+        hit.sessionId === request.sessionId
+        && hit.surface === 'current'
+        && hit.type === 'user/message'
+          ? [{
+            seq: hit.seq,
+            time: hit.time,
+            snippet: truncateUnicodeCodePoints(
+              hit.snippet,
+              SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
+            ),
+          }]
+          : []
+      ))
+      return { items, complete: page.nextCursor === undefined }
+    } catch (error: unknown) {
+      if (signal.aborted || (error instanceof SessionQueryError && error.code === 'SESSION_QUERY_ABORTED')) {
+        throw new RemoteError('gateway/cancelled', 'question search was aborted', {})
+      }
+      if (error instanceof ApiSessionNotFound) {
+        throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId })
+      }
+      throw new RemoteError('gateway/internal', `question search failed: ${String(error)}`, {})
+    }
   }
 
   /**

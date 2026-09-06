@@ -21,4 +21,6 @@ export interface TurnProcessViewEntry {
 export interface ChatStoreState {
   selection: SelectionTarget | null
   turnProcesses: TurnProcessViewEntry[]
+  /** Cross-surface question reveal request held until the Chat view consumes it. */
+  reveal: { seq: number; nonce: number } | null
 }

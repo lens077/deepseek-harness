@@ -662,7 +662,7 @@ describe('web e2e: long Chat scroll contract', () => {
         await expectBottom(world.page)
 
         await wheelTranscript(world.page, -1_200)
-        await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).waitFor({ timeout: 10_000 })
+        await expect.poll(() => world.page.getByRole('button', { name: 'Back to bottom', exact: true }).isEnabled(), { timeout: 10_000 }).toBe(true)
         const awayAnchor = await visibleFlowAnchor(world.page)
         const chunksBeforeRelease = world.assistantFrames.filter(frame => frame.type === 'chunk').length
         await writeFile(releasePath, 'release\n')
@@ -852,17 +852,17 @@ describe('web e2e: long Chat scroll contract', () => {
       await lastToolRow.focus()
       await world.page.keyboard.press('End')
       await expectBottom(world.page)
-      await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+      await expect.poll(() => backToBottom.isDisabled(), { timeout: 10_000 }).toBe(true)
       for (let press = 0; press < 3; press += 1) {
         await world.page.keyboard.press('PageUp')
         await nextPaint(world.page)
       }
-      await backToBottom.waitFor({ timeout: 10_000 })
+      await expect.poll(() => backToBottom.isEnabled(), { timeout: 10_000 }).toBe(true)
       await expect.poll(async () => (await scrollGeometry(world.page)).distanceFromBottom, { timeout: 10_000 })
         .toBeGreaterThan(100)
       await world.page.keyboard.press('End')
       await expectBottom(world.page)
-      await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+      await expect.poll(() => backToBottom.isDisabled(), { timeout: 10_000 }).toBe(true)
       assertClean(world)
     })
   }, 180_000)
@@ -893,7 +893,7 @@ describe('web e2e: long Chat scroll contract', () => {
         // release bottom ownership, exactly like a wheel scroll would, even
         // while streaming keeps re-asserting the floor between frames.
         await flingTranscript(world.page, -900)
-        await backToBottom.waitFor({ timeout: 10_000 })
+        await expect.poll(() => backToBottom.isEnabled(), { timeout: 10_000 }).toBe(true)
         const awayAnchor = await visibleFlowAnchor(world.page)
         const chunksBeforeRelease = world.assistantFrames.filter(frame => frame.type === 'chunk').length
         await writeFile(releasePath, 'release\n')
@@ -916,7 +916,7 @@ describe('web e2e: long Chat scroll contract', () => {
           await flingTranscript(world.page, 1_600)
         }
         await expectBottom(world.page)
-        await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+        await expect.poll(() => backToBottom.isDisabled(), { timeout: 10_000 }).toBe(true)
         const chunksAtRepin = world.assistantFrames.filter(frame => frame.type === 'chunk').length
         await expect.poll(
           () => world.assistantFrames.filter(frame => frame.type === 'chunk').length,

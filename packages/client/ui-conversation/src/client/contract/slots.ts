@@ -23,6 +23,7 @@ import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submissi
 import type { ShortcutKeyEvent } from '../../send-shortcut.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
+import type { QuestionNavigationSettings } from '../../submission-settings.ts'
 
 /** Browser-owned draft attachment that has not crossed the durable Host boundary. */
 export type ComposerAttachment = ComposerImageAttachment | ComposerFileAttachment
@@ -241,6 +242,26 @@ export interface ConvViewOwnerProps {
 }
 
 /** Base props of one target-owned Conversation View entry. */
+/** Client service owning question-navigation settings and mutations. */
+export interface QuestionNavigationService {
+  /** Live keyboard and question-bar settings. */
+  readonly settings: ObservableSnapshot<QuestionNavigationSettings>
+  /**
+   * Replace the complete question-navigation preference.
+   * @param settings - complete replacement preference.
+   */
+  set(settings: QuestionNavigationSettings): void
+  /** Restore platform defaults. */
+  reset(): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Question-navigation settings shared with the Chat presentation plugin. */
+    questionNavigation: QuestionNavigationService
+  }
+}
+
 export type ConvViewProps = PropsRuntime<'conversation.view'>
 
 /** Business callbacks injected into the resident Conversation shell. */

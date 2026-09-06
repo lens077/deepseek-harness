@@ -1,17 +1,20 @@
 // An enclosing `[data-conversation-scroll]` owns scrolling when present;
 // otherwise this view owns it. Each row subscribes to one stable node key.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import type {
   ConversationTimelineSnapshot, RenderMessageImages,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
-import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { TurnNavigator } from './TurnNavigator.tsx'
+import { QuestionBar, TurnRecapRow } from './QuestionBar.tsx'
+import { QuestionNavigator } from './QuestionNavigator.tsx'
+import { buildQuestionTurnIndex, buildTurnRecaps, questionEntries, type TurnRecap } from './turn-summary.ts'
 import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
@@ -202,12 +205,26 @@ function TurnStatus({ startTime, t }: {
 
 type ChatNodeListProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey'> & {
   readonly order: readonly string[]
+  readonly recaps: ReadonlyMap<string, TurnRecap>
+  readonly onSelectQuestion: (key: string) => void
 }
 
-const ChatNodeList = memo(function ChatNodeList({ order, ...seatProps }: ChatNodeListProps) {
-  return order.map(nodeKey => (
-    <ChatNodeSeat key={nodeKey} nodeKey={nodeKey} {...seatProps} />
-  ))
+const ChatNodeList = memo(function ChatNodeList({ order, recaps, onSelectQuestion, ...seatProps }: ChatNodeListProps) {
+  return order.map((nodeKey) => {
+    const recap = recaps.get(nodeKey)
+    return (
+      <Fragment key={nodeKey}>
+        {recap !== undefined && (
+          <TurnRecapRow
+            recap={recap}
+            onSelect={() => { onSelectQuestion(recap.key) }}
+            t={seatProps.t}
+          />
+        )}
+        <ChatNodeSeat nodeKey={nodeKey} {...seatProps} />
+      </Fragment>
+    )
+  })
 })
 
 /**
@@ -216,8 +233,9 @@ const ChatNodeList = memo(function ChatNodeList({ order, ...seatProps }: ChatNod
  */
 export function ChatView({
   useSession, useChat, useChatNode, useChatNodeProcess, useSessions, useStore, actions, renderSlot,
-  sessionId, openFile, loadOlder, loadThrough, loadImage, openView, chatScroll, forkAt, fileMentions,
-  useTranscriptView, useProjection, t,
+  sessionId, openFile, loadOlder, loadThrough, loadAll, searchQuestions, loadImage, openView,
+  chatScroll, forkAt, fileMentions, turnFiles, turnFilesAvailable,
+  useTranscriptView, useQuestionNavigation, useProjection, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
   const nodeStore = useChat(s => s.nodes)
@@ -233,6 +251,18 @@ export function ChatView({
     [turnNavigationItems, turnOutline],
   )
   const timeline = useChat(s => s.timeline)
+  const questions = useMemo(
+    () => questionEntries(order, nodeStore, t('chat.questions.image')),
+    [nodeStore, order, t],
+  )
+  const questionTurns = useMemo(
+    () => buildQuestionTurnIndex(questions, timeline),
+    [questions, timeline],
+  )
+  const recaps = useMemo(
+    () => buildTurnRecaps(order, nodeStore, questionTurns),
+    [nodeStore, order, questionTurns],
+  )
   const inbox = useSession(s => s.queue)
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
@@ -242,6 +272,7 @@ export function ChatView({
   const hasMore = useSession(s => s.hasMore)
   const loadingOlder = useSession(s => s.loadingOlder)
   const selectedCallId = useStore(s => s.selection?.callId)
+  const reveal = useStore(s => s.reveal)
   const compactTranscript = useTranscriptView(mode => mode === 'compact')
   const inspectCall = useCallback((callId: string) => {
     openView('trajectory', callId)
@@ -313,6 +344,9 @@ export function ChatView({
   const [activeTurn, setActiveTurn] = useState<number | null>(
     () => turnNavigationItems.at(-1)?.turn ?? null,
   )
+  const [questionAbove, setQuestionAbove] = useState(false)
+  const [loadingAll, setLoadingAll] = useState(false)
+  const [pendingQuestionSeq, setPendingQuestionSeq] = useState<number | null>(null)
   /** Last position delivered or written on the main thread. */
   const observedTopRef = useRef(0)
   /** Paging anchor: semantic row/position at click, updated by reader scrolls
@@ -750,6 +784,121 @@ export function ChatView({
       : { key: landed.dataset.chatAnchorKey, top: flowTop(landed, el) }
   }, [loadingOlder, loadThrough])
 
+  const navigateToQuestion = useCallback((index: number): void => {
+    const question = questions[index]
+    const local = listRef.current
+    if (question === undefined || local === null) return
+    const row = anchorElement(local, question.key)
+    if (row === null) return
+    const turn = questionTurns.turnOfQuestion.get(question.key) ?? activeTurn ?? 0
+    landOnRowRef.current(local, scrollerOf(local), row, turn)
+  }, [activeTurn, questionTurns, questions])
+
+  const navigateToQuestionKey = useCallback((key: string): void => {
+    const index = questions.findIndex(question => question.key === key)
+    if (index >= 0) navigateToQuestion(index)
+  }, [navigateToQuestion, questions])
+
+  useEffect(() => {
+    if (pendingQuestionSeq === null) return
+    const index = questions.findIndex(question => question.node.seq === pendingQuestionSeq)
+    if (index < 0) return
+    navigateToQuestion(index)
+    setPendingQuestionSeq(null)
+  }, [navigateToQuestion, pendingQuestionSeq, questions])
+
+  const navigateToQuestionSeq = useCallback((seq: number): void => {
+    const loaded = questions.findIndex(question => question.node.seq === seq)
+    if (loaded >= 0) {
+      navigateToQuestion(loaded)
+      return
+    }
+    setPendingQuestionSeq(seq)
+    void loadThrough(seq as SessionSeq).catch(() => { setPendingQuestionSeq(null) })
+  }, [loadThrough, navigateToQuestion, questions])
+
+  const activeQuestionIndex = activeTurn === null
+    ? Math.max(0, questions.length - 1)
+    : questionTurns.byTurn.get(activeTurn)?.questionIndex ?? Math.max(0, questions.length - 1)
+
+  useEffect(() => {
+    const local = listRef.current
+    if (local === null || questions.length === 0) {
+      setQuestionAbove(false)
+      return
+    }
+    const scrollport = scrollerOf(local)
+    const update = (): void => {
+      const active = questions[activeQuestionIndex]
+      if (active === undefined) {
+        setQuestionAbove(false)
+        return
+      }
+      const row = anchorElement(local, active.key)
+      if (row === null) {
+        setQuestionAbove(false)
+        return
+      }
+      setQuestionAbove(row.getBoundingClientRect().bottom < scrollport.getBoundingClientRect().top)
+    }
+    update()
+    scrollport.addEventListener('scroll', update, { passive: true })
+    return () => { scrollport.removeEventListener('scroll', update) }
+  }, [activeQuestionIndex, questions])
+
+  useEffect(() => {
+    if (reveal === null || openState !== 'open') return
+    navigateToQuestionSeq(reveal.seq)
+    actions.clearReveal()
+  }, [actions, navigateToQuestionSeq, openState, reveal])
+
+  const loadAllQuestions = useCallback((): void => {
+    if (loadingAll) return
+    setLoadingAll(true)
+    void loadAll().finally(() => { setLoadingAll(false) })
+  }, [loadAll, loadingAll])
+
+  const activeQuestion = questions[activeQuestionIndex]
+  const activeSummary = activeTurn === null ? undefined : questionTurns.byTurn.get(activeTurn)
+  const activeFiles = activeTurn === null ? [] : turnFiles(activeTurn)
+  const questionNavigation = useQuestionNavigation(value => value)
+
+  useEffect(() => {
+    const shortcutOf = (event: KeyboardEvent): string => {
+      const modifiers = [
+        event.metaKey && 'Meta',
+        event.ctrlKey && 'Ctrl',
+        event.shiftKey && 'Shift',
+        event.altKey && 'Alt',
+      ].filter(Boolean)
+      const key = event.key.length === 1 ? event.key.toLocaleUpperCase() : event.key
+      return [...modifiers, key].join('+')
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target
+      const textInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+      const editable = textInput || (target instanceof HTMLElement && target.isContentEditable)
+      if (questionNavigation.focusPolicy === 'editable' && editable) return
+      if (questionNavigation.focusPolicy === 'text' && textInput) return
+      const shortcut = shortcutOf(event)
+      const previous = shortcut === questionNavigation.previousShortcut
+      const next = shortcut === questionNavigation.nextShortcut
+      if (!previous && !next) return
+      event.preventDefault()
+      if (previous) {
+        if (activeQuestionIndex > 0) navigateToQuestion(activeQuestionIndex - 1)
+        else if (hasMore && !loadingOlder) loadOlderAnchored()
+      } else if (activeQuestionIndex < questions.length - 1) {
+        navigateToQuestion(activeQuestionIndex + 1)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [
+    activeQuestionIndex, hasMore, loadOlderAnchored, loadingOlder,
+    navigateToQuestion, questionNavigation, questions.length,
+  ])
+
   return (
     <div className={css.root}>
       <div ref={listRef} className={css.scroll}>
@@ -760,6 +909,43 @@ export function ChatView({
           onNavigate={navigateToTurn}
           t={t}
         />
+        <QuestionNavigator
+          questions={questions}
+          current={activeQuestionIndex}
+          hasMore={hasMore}
+          loadingAll={loadingAll}
+          onPrevious={() => {
+            if (activeQuestionIndex > 0) navigateToQuestion(activeQuestionIndex - 1)
+            else if (hasMore) loadOlderAnchored()
+          }}
+          onNext={() => { navigateToQuestion(activeQuestionIndex + 1) }}
+          onSelect={navigateToQuestion}
+          onSelectSeq={navigateToQuestionSeq}
+          onLoadAll={loadAllQuestions}
+          searchQuestions={searchQuestions}
+          atBottom={atBottom}
+          onToBottom={() => {
+            const local = listRef.current
+            /* v8 ignore next -- ref-null guard: the rail only renders alongside the mounted list. */
+            if (local !== null) toBottom(scrollerOf(local))
+          }}
+          t={t}
+        />
+        <div className={css.questionBarDock}>
+          {activeQuestion !== undefined && questionAbove && (
+            <QuestionBar
+              key={activeQuestion.key}
+              text={activeQuestion.text}
+              number={activeQuestionIndex + 1}
+              summary={activeSummary ?? null}
+              files={activeFiles}
+              filesKnown={turnFilesAvailable()}
+              expandSide={questionNavigation.expandButtonSide}
+              onSelect={() => { navigateToQuestion(activeQuestionIndex) }}
+              t={t}
+            />
+          )}
+        </div>
         <div ref={columnRef} className={css.column} data-chat-flow="">
           {openState === 'loading' && <div className={css.hint}>{t('chat.loadingHistory')}</div>}
           {openState === 'error' && openError !== null && (
@@ -776,6 +962,8 @@ export function ChatView({
           )}
           <ChatNodeList
             order={order}
+            recaps={recaps}
+            onSelectQuestion={navigateToQuestionKey}
             useChatNode={useChatNode}
             useChatNodeProcess={useChatNodeProcess}
             historyIncomplete={hasMore}
@@ -816,22 +1004,6 @@ export function ChatView({
             />
           ))}
         </div>
-        {!atBottom && (
-          <div className={css.toBottomSlot}>
-            <button
-              type="button"
-              className={css.toBottom}
-              aria-label={t('chat.toBottom')}
-              onClick={() => {
-                const local = listRef.current
-                /* v8 ignore next -- ref-null guard: the button only renders alongside the mounted list. */
-                if (local !== null) toBottom(scrollerOf(local))
-              }}
-            >
-              <IconChevronDownOutline14 />
-            </button>
-          </div>
-        )}
       </div>
       {fileOpenError !== null && (
         <FileOpenErrorDialog

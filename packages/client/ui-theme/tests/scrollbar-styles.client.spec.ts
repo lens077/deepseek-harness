@@ -124,7 +124,7 @@ const SURFACE_PROPERTIES = ['background', 'background-color']
  * so something a scrollbar can sit against. `--dsw-alias-button-*`,
  * `--dsw-alias-interactive-*`, and `--dsw-alias-markdown-*` reach the same dark
  * elevation rungs while naming a control or an inline span, which no scroll
- * container renders its bar against (ChatView's floating `.toBottom` pill,
+ * container renders its bar against (ChatView's floating `.questionArrow` rail pills,
  * CodeBlock's banner). Family, not geometry: a floating button legitimately
  * carries a radius, a shadow, and a fixed size, so shape cannot separate them.
  */
@@ -502,7 +502,7 @@ describe('elevated surface rebinds', () => {
     // which. What keeps that from over-reporting is the token FAMILY: only
     // `--dsw-alias-bg-*` and `--dsw-specific-*` name a surface, so a floating
     // button or an inline code span reaching the same rung is out of scope
-    // (ChatView's `.toBottom`, CodeBlock's banner). Geometry cannot make that
+    // (ChatView's `.questionArrow`, CodeBlock's banner). Geometry cannot make that
     // call — a floating button carries a radius, a shadow, and a fixed size.
     for (const [file, surfaces] of sheetSurfaces) {
       if (!surfaces.scrolls || surfaces.rebindsElevation) continue

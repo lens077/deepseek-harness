@@ -16,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {
   ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, DetailsInjected,
-  TurnTailOwnerProps,
+  ChatReveal, TurnTailOwnerProps,
 } from './contract/slots.ts'
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
@@ -44,7 +44,7 @@ const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
 /** Services required by the Chat target and its presentation registrations. */
 export const inject = [
   'slots', 'sessions', 'uiSession', 'uiConversation', 'layout', 'locale',
-  'settingsScope', 'remote', 'remote.session',
+  'settingsScope', 'questionNavigation', 'remote', 'remote.session',
 ]
 
 /**
@@ -75,6 +75,15 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-chat: dictionaries')
   const t = ctx.locale.bind(NS)
   const chatStore = createChatStore()
+  const revealActions = new Map<SessionId, BoundActions<typeof chatStore>>()
+  const pendingReveals = new Map<SessionId, number>()
+  ctx.provide('chatReveal', {
+    reveal: (sessionId, seq) => {
+      const bound = revealActions.get(sessionId)
+      if (bound === undefined) pendingReveals.set(sessionId, seq)
+      else bound.requestReveal(seq)
+    },
+  } satisfies ChatReveal)
   const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
   const transcriptView = new TranscriptViewPolicy(
     ctx.settingsScope.bind<ChatSettings>({ namespace: CHAT_SETTINGS_NAMESPACE }),
@@ -108,8 +117,17 @@ export function apply(ctx: Context): void {
         if (binding === undefined) throw new Error(`ui-chat: unknown session "${sessionId}"`)
         const session = binding.session
         const chat = chatSource(binding)
+        revealActions.set(sessionId, actions)
+        const pendingReveal = pendingReveals.get(sessionId)
+        if (pendingReveal !== undefined) {
+          pendingReveals.delete(sessionId)
+          actions.requestReveal(pendingReveal)
+        }
         return {
-          hooks: { transcriptView: transcriptView.mode },
+          hooks: {
+            transcriptView: transcriptView.mode,
+            questionNavigation: ctx.questionNavigation.settings,
+          },
           keyedHooks: {
             chatNode: key => chat.getSnapshot().nodes.source(key),
             chatNodeProcess: key => chat.getSnapshot().nodes.processSource(key),
@@ -128,6 +146,14 @@ export function apply(ctx: Context): void {
           },
           loadOlder: () => { void session.loadOlder() },
           loadThrough: seq => session.loadThrough(seq),
+          loadAll: async () => {
+            while (session.getSnapshot().hasMore) await session.loadOlder()
+          },
+          searchQuestions: async (query, signal) => {
+            const result = await ctx.remote.session.searchQuestions({ sessionId, query }, signal)
+            if (!result.ok) throw new Error(result.error.message)
+            return { hits: result.value.items, complete: result.value.complete }
+          },
           loadImage: Object.assign(
             (attachment: ImageAttachmentRef) => ctx.uiConversation.imageUrl(sessionId, attachment),
             { peek: (attachment: ImageAttachmentRef) => ctx.uiConversation.peekImageUrl(sessionId, attachment) },
@@ -139,6 +165,8 @@ export function apply(ctx: Context): void {
             },
             read: () => chatScrollPositions.get(sessionId) ?? null,
           },
+          turnFiles: turn => ctx.get('chatFileDiffs')?.forTurn(sessionId, turn) ?? [],
+          turnFilesAvailable: () => ctx.get('chatFileDiffs') !== undefined,
           forkAt: (seq) => {
             ctx.sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })
               .then((childId) => { ctx.sessions.open(childId) })

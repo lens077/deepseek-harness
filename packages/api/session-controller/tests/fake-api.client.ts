@@ -149,6 +149,8 @@ export class FakeApiClient {
   onCancel: (payload: unknown) => Promise<RemoteResult<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
   onOpenWorkspacePath: (payload: unknown) => Promise<RemoteResult<{ opened: true }>> =
     () => Promise.resolve(ok({ opened: true as const }))
+  onSearchQuestions: (payload: unknown) => Promise<RemoteResult<{ items: readonly never[]; complete: boolean }>> =
+    () => Promise.resolve(ok({ items: [], complete: true }))
 
   private readonly followConns = new Map<SessionId, ValueStreamConn<SessionFollowFrame>[]>()
   private readonly controlConns: ValueStreamConn<SessionControlFrame>[] = []
@@ -236,6 +238,11 @@ export class FakeApiClient {
           'session.openWorkspacePath',
           payload,
           this.onOpenWorkspacePath(payload),
+        ),
+        searchQuestions: payload => this.record(
+          'session.searchQuestions',
+          payload,
+          this.onSearchQuestions(payload),
         ),
         page: request => this.page(request),
         follow: (request, signal) => this.openFollow(request, signal),

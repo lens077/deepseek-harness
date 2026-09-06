@@ -176,6 +176,9 @@ export interface SessionSearchItem {
 /** Maximum number of Sessions returned by one search. */
 export const SESSION_SEARCH_RESULT_LIMIT = 20
 
+/** Maximum question hits returned by one within-Session search. */
+export const SESSION_QUESTION_RESULT_LIMIT = 50
+
 /** Maximum search snippet length in Unicode code points. */
 export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 
@@ -253,6 +256,26 @@ export interface SessionSearchRequest {
 export interface SessionSearchValue {
   readonly items: readonly SessionSearchItem[]
   readonly hasMore: boolean
+}
+
+/** Search one Session's complete current user-question index. */
+export interface SessionQuestionSearchRequest {
+  readonly sessionId: SessionId
+  readonly query: string
+}
+
+/** One matching user question addressed by its durable event sequence. */
+export interface SessionQuestionSearchItem {
+  readonly seq: number
+  readonly time: number
+  readonly snippet: string
+}
+
+/** Bounded within-Session question search result. */
+export interface SessionQuestionSearchValue {
+  readonly items: readonly SessionQuestionSearchItem[]
+  /** False when the provider has additional matches beyond this page. */
+  readonly complete: boolean
 }
 
 /** Session creation or explicit-id adoption request. */

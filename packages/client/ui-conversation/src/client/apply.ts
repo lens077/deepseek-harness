@@ -24,6 +24,9 @@ import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './contract/composer-blocks.ts'
 import { InputHub } from './input/hub.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
+import { QuestionShortcutRow } from './settings/QuestionShortcutRow.tsx'
+import type { QuestionShortcutRowInjected } from './settings/QuestionShortcutRow.tsx'
+import { QuestionNavigationPolicy } from './input/question-navigation-policy.ts'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
@@ -133,6 +136,8 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     decode: section => ConversationSettingsSchema(section as ConversationSettings),
   })
   const submissionPolicy = new ComposerSubmissionPolicy(conversationSettings)
+  const questionNavigation = new QuestionNavigationPolicy(conversationSettings)
+  ctx.provide('questionNavigation', questionNavigation)
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -145,6 +150,18 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       setSendShortcut: (shortcut) => { submissionPolicy.setSendShortcut(shortcut) },
     }),
   }, EnterBehaviorRow))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'question-shortcuts',
+    order: 30,
+    locale: NS,
+    inject: (): QuestionShortcutRowInjected => ({
+      hooks: { questionNavigation: questionNavigation.settings },
+      setQuestionNavigation: (settings) => { questionNavigation.set(settings) },
+      resetQuestionNavigation: () => { questionNavigation.reset() },
+    }),
+  }, QuestionShortcutRow))
+
 
   const viewTabs = (): ViewTab[] => {
     const tabs: ViewTab[] = []

@@ -57,7 +57,7 @@ export type {
   ConversationStore, ConvViewOwnerProps, ConvViewProps, EmptyWorkspaceOwnerProps,
   HeroAgentPresetOwnerProps, HeroBrandMarkOwnerProps, InputControlOwnerProps, InputZone,
   MessageImageLoader, MessageImageSource, MessageImagesOwnerProps, RenderMessageImages, UseConversation,
-  UseConversationViews,
+  UseConversationViews, QuestionNavigationService,
 } from './contract/slots.ts'
 export type {
   ArbitrateKey, ArbitrateOutcome, BeginCommandRequest, CommandClaim, ConsumeTokenRequest,
@@ -66,6 +66,12 @@ export type {
   SubmitOutcome, TokenSpan,
 } from './contract/input.ts'
 export type { ComposerBlock, ComposerBlocks } from './contract/composer-blocks.ts'
+export type {
+  QuestionBarExpandSide, QuestionNavigationSettings, QuestionShortcutFocusPolicy,
+} from '../submission-settings.ts'
+export type {
+  QuestionSearchHit, QuestionSearchPage, SearchQuestions,
+} from './contract/question-search.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

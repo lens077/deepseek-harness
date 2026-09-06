@@ -4,7 +4,7 @@ import { createChatStore } from '../src/client/stores.ts'
 describe('createChatStore', () => {
   it('starts without a selected Chat target', () => {
     const store = createChatStore().create()
-    expect(store.store.getSnapshot()).toEqual({ selection: null, turnProcesses: [] })
+    expect(store.store.getSnapshot()).toEqual({ selection: null, turnProcesses: [], reveal: null })
   })
 
   it('selects and clears one Chat details target', () => {
@@ -22,6 +22,16 @@ describe('createChatStore', () => {
     const second = handle.create()
     first.actions.select({ turnSeq: 1 })
     expect(second.store.getSnapshot().selection).toBeNull()
+  })
+
+  it('records repeated reveal requests and clears the consumed one', () => {
+    const store = createChatStore().create()
+    store.actions.requestReveal(7)
+    expect(store.store.getSnapshot().reveal).toEqual({ seq: 7, nonce: 1 })
+    store.actions.requestReveal(7)
+    expect(store.store.getSnapshot().reveal).toEqual({ seq: 7, nonce: 2 })
+    store.actions.clearReveal()
+    expect(store.store.getSnapshot().reveal).toBeNull()
   })
 
   it('stores only manually expanded Turn-process answers', () => {

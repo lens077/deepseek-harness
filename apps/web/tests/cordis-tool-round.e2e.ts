@@ -203,9 +203,9 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     ).toBe(3)
     await page.locator('[data-conversation-scroll]').evaluate((host) => { host.scrollTop = host.scrollHeight })
     await expect.poll(
-      async () => page.getByRole('button', { name: 'Back to bottom', exact: true }).count(),
+      async () => page.getByRole('button', { name: 'Back to bottom', exact: true }).isDisabled(),
       { timeout: 10_000 },
-    ).toBe(0)
+    ).toBe(true)
     await page.mouse.move(0, 0)
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)

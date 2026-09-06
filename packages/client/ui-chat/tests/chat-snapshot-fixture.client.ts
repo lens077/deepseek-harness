@@ -296,16 +296,21 @@ export function chatSnapshotFixture(input: {
   for (const turn of [...turnNumbers].sort((left, right) => left - right)) {
     const timing = legacy.turnTimings.get(turn)
     const endSeq = legacy.turnEnds.get(turn)
+    const firstNodeSeq = legacy.nodes
+      .filter(node => 'turn' in node && node.turn === turn)
+      .reduce<number | undefined>((first, node) => first === undefined ? node.seq : Math.min(first, node.seq), undefined)
     const previousData = previous?.timeline.turns.get(turn)?.data
     const data = previousData instanceof FixtureTurnDataStore ? previousData : new FixtureTurnDataStore()
     turnData.set(turn, data)
     turns.set(turn, {
       turn,
       start: timing === undefined ? undefined : {
-        type: 'turn/start', seq: Math.max(0, (endSeq ?? 1) - 1), time: timing.startTime, turn,
+        type: 'turn/start', seq: Math.max(0, (firstNodeSeq ?? endSeq ?? 1) - 1), time: timing.startTime,
+        data: { turn },
       } as never,
       end: timing?.endTime === undefined || endSeq === undefined ? undefined : {
-        type: 'turn/end', seq: endSeq, time: timing.endTime, turn, reason: 'completed',
+        type: 'turn/end', seq: endSeq, time: timing.endTime,
+        data: { turn, reason: { kind: 'completed' } },
       } as never,
       status: endSeq === undefined ? 'open' : 'closed',
       steps: EMPTY,

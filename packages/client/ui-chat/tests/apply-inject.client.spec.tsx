@@ -87,6 +87,19 @@ async function bench() {
 }
 
 describe('Chat inject API', () => {
+  it('holds a question reveal until the Session Chat store is available', async () => {
+    const b = await bench()
+    b.runtime.ctx.chatReveal.reveal(ROOT, 41)
+    const { instance } = b.chatViewApi(ROOT)
+    expect(instance.store.getSnapshot().reveal).toEqual({ seq: 41, nonce: 1 })
+
+    instance.actions.clearReveal()
+    b.runtime.ctx.chatReveal.reveal(ROOT, 42)
+    expect(instance.store.getSnapshot().reveal).toEqual({ seq: 42, nonce: 1 })
+    await b.runtime.dispose()
+    expect(b.runtime.ctx.get('chatReveal')).toBeUndefined()
+  })
+
   it('loads older history and forks through the Session Controller', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(ROOT)

@@ -3,7 +3,8 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type {
   CommandNode, CompactionSummaryNode, ConversationLocationDataStore, ConversationTurnDataMap,
-  MessageImageLoader, MessageImagesOwnerProps, RenderMessageImages, ToolCallBlock, TurnLocation,
+  MessageImageLoader, MessageImagesOwnerProps, RenderMessageImages, SearchQuestions,
+  QuestionNavigationSettings, ToolCallBlock, TurnLocation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   InjectFace, KeyedSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
@@ -109,9 +110,9 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Optional prose file-mention provider. */
     chatFileMentions: ChatFileMentions
-    /** Optional Session file-change provider. */
+    /** Optional Session file-change provider; consumers resolve it with ctx.get. */
     chatFileDiffs: ChatFileDiffs
-    /** Optional question-reveal provider. */
+    /** Optional question-reveal provider owned by ui-chat. */
     chatReveal: ChatReveal
   }
 }
@@ -188,6 +189,8 @@ export interface ChatViewInjected {
   hooks: {
     /** Persisted completed-Turn transcript presentation. */
     transcriptView: SnapshotStore<TranscriptViewMode>
+    /** Live question-navigation shortcuts and question-bar placement. */
+    questionNavigation: ObservableSnapshot<QuestionNavigationSettings>
   }
   keyedHooks: {
     /** Resolve the stable source for one Chat Node key. */
@@ -200,6 +203,10 @@ export interface ChatViewInjected {
   loadOlder: () => void
   /** Jump loader: page history back through seq; resolves when the window covers it. */
   loadThrough: (seq: SessionSeq) => Promise<void>
+  /** Page the complete Session history into the current window. */
+  loadAll: () => Promise<void>
+  /** Search the complete current-question index for this Session. */
+  searchQuestions: SearchQuestions
   loadImage: MessageImageLoader
   chatScroll: {
     save: (position: ChatScrollPosition | null) => void
@@ -207,6 +214,10 @@ export interface ChatViewInjected {
   }
   forkAt: (seq: number) => void
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /** Changed files for one Turn, empty when no provider is composed. */
+  turnFiles: (turn: number) => readonly ChatTurnFileChange[]
+  /** Whether the optional file-change provider is currently composed. */
+  turnFilesAvailable: () => boolean
 }
 
 /** Full Chat view props. */

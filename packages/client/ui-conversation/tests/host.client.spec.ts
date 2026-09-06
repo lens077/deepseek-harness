@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { ConversationSettingsSchema, type ConversationSettings } from '../src/submission-settings.ts'
 import {
-  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, apply,
+  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, DEFAULT_QUESTION_NAVIGATION_SETTINGS, apply,
 } from '@deepseek-ai/dsh-client-ui-conversation'
 
 class MemorySettings extends SettingsProvider {
@@ -16,10 +16,18 @@ class MemorySettings extends SettingsProvider {
 
 describe('ui-conversation host', () => {
   it('defaults the send shortcut when reading existing conversation settings', () => {
-    // This parser input deliberately omits the send shortcut that the schema must default.
+    // These parser inputs deliberately omit fields that the schema must default.
     expect(ConversationSettingsSchema({ busyEnter: 'steer' } as ConversationSettings)).toEqual({
       busyEnter: 'steer',
       sendShortcut: 'enter',
+      questionNavigation: DEFAULT_QUESTION_NAVIGATION_SETTINGS,
+    })
+    const questionNavigation = {
+      previousShortcut: 'Alt+ArrowUp', nextShortcut: 'Alt+ArrowDown',
+      focusPolicy: 'always', expandButtonSide: 'left',
+    }
+    expect(ConversationSettingsSchema({ busyEnter: 'queue', questionNavigation } as ConversationSettings)).toEqual({
+      busyEnter: 'queue', sendShortcut: 'enter', questionNavigation,
     })
   })
 
@@ -32,6 +40,7 @@ describe('ui-conversation host', () => {
     const defaults = {
       busyEnter: DEFAULT_BUSY_ENTER_BEHAVIOR,
       sendShortcut: 'enter',
+      questionNavigation: DEFAULT_QUESTION_NAVIGATION_SETTINGS,
     }
     expect(ctx.settings.get(ns)).toEqual(defaults)
     await ctx.settings.update(ns, { busyEnter: 'steer' })
