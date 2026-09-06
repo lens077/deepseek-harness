@@ -249,7 +249,9 @@ export class SessionCommandController {
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
       const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
-      await this.ctx.agents.create({
+      // Controller-owned like every other Web-published Agent: permanent
+      // deletion retires live targets only through the owning handle.
+      await this.agents.createSeeded({
         sessionId: childId,
         seed: source.events.slice(0, cut),
         inheritedEventCount: cut,
@@ -272,12 +274,16 @@ export class SessionCommandController {
       )
     }
     if (workspace !== undefined) {
+      // Nested placement needs the source accounted in the attached
+      // Workspace; a subagent source reached through an ancestor takes the
+      // sibling slot (documented on SessionForkRequest.placement).
+      const nestUnder = request.placement === 'nested' && workspace.sessionIds.includes(source.header.id)
+        ? source.header.id
+        : undefined
       try {
-        if (request.placement === 'nested') {
-          await workspace.attachSession(childId, { nestUnder: source.header.id })
-        } else {
-          await workspace.attachSession(childId)
-        }
+        await (nestUnder === undefined
+          ? workspace.attachSession(childId)
+          : workspace.attachSession(childId, { nestUnder }))
       } catch (error) {
         throw new RemoteError(
           'session/workspace-attach-failed',

@@ -20,13 +20,34 @@ function request<P>(payload: P): P {
   return payload
 }
 
+/** Workspace registry double: listing plus the delete cascade's live-retire handshake. */
+function workspaceRegistry(ctx: Context, workspaces: readonly Workspace[]): {
+  readonly list: () => readonly Workspace[]
+  readonly deleteSession: (
+    sessionId: SessionId,
+    retire: (liveSessionIds: readonly SessionId[]) => Promise<void>,
+  ) => Promise<readonly SessionId[]>
+} {
+  return {
+    list: () => workspaces,
+    deleteSession: async (sessionId, retire) => {
+      const live = ctx.agents.get(sessionId) === undefined ? [] : [sessionId]
+      if (live.length > 0) await retire(live)
+      if (ctx.agents.get(sessionId) !== undefined) {
+        throw new Error(`cannot delete session '${sessionId}' while cascade sessions are live`)
+      }
+      return [sessionId]
+    },
+  }
+}
+
 async function composed(workspaces: readonly Workspace[] = []): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt, { persona: '' })
   await ctx.plugin(AgentRegistry)
   installSessionReadTestServices(ctx)
-  ctx.provide('workspaceRegistry', { list: () => workspaces } as never)
+  ctx.provide('workspaceRegistry', workspaceRegistry(ctx, workspaces) as never)
   ctx.agents.setFactory({
     createAgent: async (ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle> => {
       const session = ctx.sessions.create(options.sessionId, {
@@ -40,8 +61,14 @@ async function composed(workspaces: readonly Workspace[] = []): Promise<Context>
       const agentCtx = ownerCtx.extend({ agent })
       Object.assign(agent, { id: session.id, session, status: 'idle', ctx: agentCtx })
       await options.setup?.(agentCtx)
-      ctx.agents.register(agent)
-      return { agent, dispose: () => Promise.resolve() }
+      const unregister = ctx.agents.register(agent)
+      return {
+        agent,
+        dispose: () => {
+          unregister()
+          return Promise.resolve()
+        },
+      }
     },
     resume: () => Promise.reject(new Error('fork test sources are live')),
   })
@@ -143,6 +170,69 @@ describe('sessions.fork', () => {
       cwd: '/proj',
     })
     expect(ctx.sessions.get(response.value.sessionId)?.header.origin).toBeUndefined()
+    await ctx.fiber.dispose()
+  })
+
+  it('accounts a placement=nested fork under its accounted source', async () => {
+    const accounted: SessionId[] = []
+    const attachSession = vi.fn<(sessionId: SessionId, options?: { nestUnder?: SessionId }) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const workspace = { sessionIds: accounted, attachSession } as unknown as Workspace
+    const ctx = await composed([workspace])
+    const source = liveAgent(ctx, 'session-nest-source', 1)
+    accounted.push(source.id)
+
+    const response = await remote(ctx).fork(request({ sessionId: source.id, placement: 'nested' }))
+
+    expect(response.ok).toBe(true)
+    if (!response.ok) return
+    expect(attachSession).toHaveBeenCalledWith(response.value.sessionId, { nestUnder: source.id })
+    await ctx.fiber.dispose()
+  })
+
+  it('degrades placement=nested to the sibling slot for a source the Workspace does not account', async () => {
+    const accounted: SessionId[] = []
+    const attachSession = vi.fn<(sessionId: SessionId, options?: { nestUnder?: SessionId }) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const workspace = { sessionIds: accounted, attachSession } as unknown as Workspace
+    const ctx = await composed([workspace])
+    const owner = liveAgent(ctx, 'session-nest-owner', 1)
+    accounted.push(owner.id)
+    const child = liveAgent(ctx, 'session-nest-subagent', 1, 'none', {
+      parentSession: owner.id,
+      origin: 'subagent',
+    })
+    vi.spyOn(ctx.sessionQuery, 'traceSession').mockResolvedValue({
+      target: { header: child.header, live: true, persisted: false },
+      ancestors: [{ header: owner.header, live: true, persisted: false }],
+      descendants: [],
+      complete: true,
+      root: { header: owner.header, live: true, persisted: false },
+    })
+
+    const response = await remote(ctx).fork(request({ sessionId: child.id, placement: 'nested' }))
+
+    expect(response.ok ? null : response.error).toBeNull()
+    if (!response.ok) return
+    expect(attachSession).toHaveBeenCalledTimes(1)
+    expect(attachSession).toHaveBeenCalledWith(response.value.sessionId)
+    await ctx.fiber.dispose()
+  })
+
+  it('publishes the fork child under controller ownership so permanent deletion can retire it', async () => {
+    const ctx = await composed()
+    const source = liveAgent(ctx, 'session-delete-source', 1)
+    const proxy = remote(ctx)
+    const forked = await proxy.fork(request({ sessionId: source.id }))
+    expect(forked.ok).toBe(true)
+    if (!forked.ok) return
+    const childId = forked.value.sessionId
+    expect(ctx.agents.get(childId)).toBeDefined()
+
+    const deleted = await proxy.delete(request({ sessionId: childId }))
+
+    expect(deleted).toEqual({ ok: true, value: { sessionIds: [childId] } })
+    expect(ctx.agents.get(childId)).toBeUndefined()
     await ctx.fiber.dispose()
   })
 

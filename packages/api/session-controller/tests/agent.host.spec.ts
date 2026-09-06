@@ -456,3 +456,28 @@ describe('ApiSession create or adoption', () => {
     expect(() => composition.setup(new Context())).toThrow('Agent setup has no scoped Agent')
   })
 })
+
+describe('ApiSession retirement before permanent deletion', () => {
+  it('disposes owned live Agents, skips cold identities, and refuses foreign live Agents', async () => {
+    const { ctx, agents } = await harness()
+    const ownedMeta = header('retire-owned')
+    const owned = agent(ctx, ownedMeta)
+    const dispose = vi.fn(() => {
+      unregister()
+      return Promise.resolve()
+    })
+    vi.spyOn(ctx.agents, 'create').mockResolvedValue({ agent: owned, dispose })
+    const unregister = ctx.agents.register(owned)
+    await expect(agents.createSeeded({ sessionId: ownedMeta.id })).resolves.toBe(owned)
+    const foreignMeta = header('retire-foreign')
+    ctx.agents.register(agent(ctx, foreignMeta))
+
+    await agents.retire([SessionId('retire-cold'), ownedMeta.id])
+
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(ctx.agents.get(ownedMeta.id)).toBeUndefined()
+    await expect(agents.retire([foreignMeta.id]))
+      .rejects.toThrow('is live but not owned by the Session Controller')
+    expect(ctx.agents.get(foreignMeta.id)).toBeDefined()
+  })
+})

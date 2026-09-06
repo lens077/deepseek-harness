@@ -349,7 +349,12 @@ export interface SessionRenameValue {
 export interface SessionForkRequest {
   readonly sessionId: SessionId
   readonly atSeq?: number
-  /** Place the child beside or beneath its source in Workspace presentation. */
+  /**
+   * Place the child beside (`sibling`, the default) or beneath (`nested`) its
+   * source in Workspace presentation. `nested` requires the source itself to
+   * be accounted in the attached Workspace; a subagent source attached
+   * through an ancestor takes the sibling slot instead of failing the fork.
+   */
   readonly placement?: 'sibling' | 'nested'
 }
 

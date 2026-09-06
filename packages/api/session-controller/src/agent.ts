@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {
-  Agent, AgentHandle, AgentOptions, AgentSetup,
+  Agent, AgentHandle, AgentOptions, AgentSetup, CreateAgentOptions,
   ModelSelection as AgentModelSelection, ModelSelectionRef,
 } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
@@ -147,7 +147,7 @@ export class ApiSessionAgentController {
 
   /** @param ctx - Host context carrying Agent, model, persistence, and Typert services. */
   constructor(private readonly ctx: Context) {
-    ctx.on('session/disposed', session => { this.handles.delete(session.id) })
+    ctx.on('session/disposed', (session) => { this.handles.delete(session.id) })
     ctx.typert.lookups.configure('agent', async (sessionId: SessionId) => {
       const found = await this.resolveAgent(sessionId)
       if ('error' in found) throw found.error
@@ -179,6 +179,17 @@ export class ApiSessionAgentController {
       await handle.dispose()
       this.handles.delete(sessionId)
     }
+  }
+
+  /**
+   * Publish one seeded ordinary Session (a fork child) under this controller's
+   * ownership so {@link retire} can later dispose it for permanent deletion.
+   * @param options - complete creation options; the caller resolves the seed,
+   *   lineage metadata, model route, and composition.
+   * @returns the live Agent.
+   */
+  async createSeeded(options: CreateAgentOptions): Promise<Agent> {
+    return this.own(await this.ctx.agents.create(options))
   }
 
   /** Retain the teardown capability for an Agent this controller published. */
