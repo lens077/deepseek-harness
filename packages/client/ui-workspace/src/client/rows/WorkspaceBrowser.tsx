@@ -28,6 +28,8 @@ import {
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
+import { MobileWorkspaceBrowser } from './MobileWorkspaceBrowser.tsx'
+import mobileCss from './MobileWorkspaceBrowser.module.css'
 import css from './WorkspaceBrowser.module.css'
 
 /**
@@ -831,7 +833,46 @@ function SearchResults({
  * @param props - composed slot props (shell owner share + store + injected actions).
  * @returns the region element tree.
  */
-export function WorkspaceBrowser({
+export function WorkspaceBrowser(props: WorkspaceBrowserProps) {
+  return props.mobile ? <MobileWorkspaceRegion {...props} /> : <DesktopWorkspaceBrowser {...props} />
+}
+
+function MobileWorkspaceRegion(props: WorkspaceBrowserProps) {
+  const [managing, setManaging] = useState(false)
+  const toggle = useRef<HTMLButtonElement>(null)
+  return (
+    <div className={mobileCss.region} data-managing={managing || undefined}>
+      <button
+        ref={toggle}
+        type="button"
+        className={mobileCss.manage}
+        aria-label={props.t(managing ? 'mobile.browse' : 'mobile.manage')}
+        aria-expanded={managing}
+        onClick={() => {
+          setManaging(value => !value)
+          toggle.current?.focus()
+        }}
+      >
+        {managing ? <IconCloseFill14 /> : <IconSearchOutline16 />}
+      </button>
+      <div className={mobileCss.browse} hidden={managing}>
+        <MobileWorkspaceBrowser {...props} />
+      </div>
+      {managing && (
+        <DesktopWorkspaceBrowser
+          {...props}
+          wide
+          open={(id) => {
+            props.open(id)
+            props.onSessionOpened?.()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function DesktopWorkspaceBrowser({
   wide,
   expandSidebar,
   useSessions,

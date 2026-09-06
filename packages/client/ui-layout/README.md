@@ -25,7 +25,9 @@ This package provides the shell layout of the Web GUI: a three-column AppFrame w
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin at the root slot; it then renders the app frame around whatever occupies the sidebar, conversation, and details columns. Users resize the sidebar by dragging its invisible hit strip and the details panel by dragging its floating pill; when the window narrows, only details shrinks, then auto-closes. A closed sidebar retains a 56px control rail; details closes to zero width.
+Mount this plugin at the root slot; it then renders the app frame around whatever occupies the sidebar, conversation, and details columns. Users resize the sidebar by dragging its invisible hit strip and the details panel by dragging its floating pill; when the window narrows, only details shrinks, then auto-closes. On desktop, a closed sidebar retains a 56px control rail; details closes to zero width.
+
+Below 768px, the frame presents one full-width phone surface between the header and fixed bottom navigation, and hides drag handles. It uses `100dvh`; standalone and fullscreen display modes add the bottom safe-area inset, while ordinary browser mode adds no extra inset. The frame owns transient phone navigation and passes it to the sidebar and center overlay; desktop panel geometry remains separate.
 
 ### Theme presentation
 

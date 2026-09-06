@@ -22,6 +22,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import css from './SidebarRoot.module.css'
+import { MobileSidebar } from './MobileSidebar.tsx'
 
 /** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
 const COLLAPSE_SETTLE_MS = 150
@@ -49,7 +50,12 @@ function localBuildVersion(): string | undefined {
  * @param props - composed slot props (runtime share + injected callbacks, contract/slots.ts).
  * @returns the sidebar element tree.
  */
-export function SidebarRoot({
+export function SidebarRoot(props: SidebarRootComponentProps) {
+  return props.mobileView === undefined ? <DesktopSidebarRoot {...props} /> : <MobileSidebar {...props} />
+}
+
+/** Desktop shell retains its independent collapse and scrollbar behavior. */
+function DesktopSidebarRoot({
   collapsed,
   width,
   startSession,

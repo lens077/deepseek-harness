@@ -1,0 +1,18 @@
+- region "Overview":
+  - heading "Overview" [level=2]
+  - button "Close digest":
+    - img
+  - combobox "View":
+    - option "Inbox" [selected]
+    - option "Todos"
+    - option "Project todos"
+    - option "Timeline"
+  - combobox "Time range":
+    - option "Since last review" [selected]
+    - option "Today"
+    - option "Last 7 days"
+    - option "All"
+  - group
+  - heading "Seen, not handled 1" [level=3]
+  - article:
+    - 'button "NavScenario: first run bash to"'

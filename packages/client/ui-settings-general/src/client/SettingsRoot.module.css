@@ -225,6 +225,86 @@
   overflow-y: auto;
 }
 
+@media (max-width: 767px) {
+  .panel {
+    flex-direction: column;
+    width: calc(100vw - 24px);
+    max-width: none;
+    height: calc(100dvh - 24px);
+    border-radius: 20px;
+  }
+
+  .nav {
+    width: 100%;
+    min-width: 0;
+    gap: 12px;
+    padding: 16px 12px 0;
+  }
+
+  .navTitle {
+    min-height: 28px;
+    padding: 0 48px 0 4px;
+  }
+
+  .navList {
+    flex-direction: row;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 8px;
+  }
+
+  .navCell {
+    flex: none;
+    min-height: 44px;
+  }
+
+  .content {
+    min-height: 0;
+    width: 100%;
+  }
+
+  .header {
+    height: auto;
+    min-height: 44px;
+    padding: 0 16px 8px;
+    align-items: center;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .options {
+    min-width: 0;
+    padding: 0 16px 20px;
+    overscroll-behavior: contain;
+  }
+}
+
+:global([data-mobile]) .navTitle {
+  font-size: var(--dsh-mobile-title-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .navCell {
+  min-height: var(--dsh-mobile-control-size);
+  font-size: var(--dsh-mobile-font-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .close {
+  width: var(--dsh-mobile-control-size);
+  height: var(--dsh-mobile-control-size);
+}
+
 /* Visually-hidden text seat (close button accessible name from slot content). */
 .hiddenLabel {
   position: absolute;

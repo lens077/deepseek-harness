@@ -86,6 +86,7 @@ type SessionSlotProps = ComponentProps<typeof ConversationSession>
 
 const useChat: SessionSlotProps['useChat'] = () => { throw new Error('unused') }
 const useTrajectory: SessionSlotProps['useTrajectory'] = () => { throw new Error('unused') }
+const useTaskFlow: SessionSlotProps['useTaskFlow'] = () => { throw new Error('unused') }
 
 function workspace(id = 'w1'): WorkspaceView {
   return {
@@ -191,8 +192,10 @@ function mount(
           useSession={useSession}
           useConversation={useConversation}
           useConversationViews={useConversationViews}
+          useTabsLeading={selector => selector([])}
           useChat={useChat}
           useTrajectory={useTrajectory}
+          useTaskFlow={useTaskFlow}
           useSessions={props.useSessions}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
@@ -218,6 +221,7 @@ function mount(
           useConversationViews={useConversationViews}
           useChat={useChat}
           useTrajectory={useTrajectory}
+          useTaskFlow={useTaskFlow}
           useSessions={props.useSessions}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
@@ -297,6 +301,7 @@ function mount(
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
+    useRailSeat: selector => selector([]),
     useInput,
     inputActions,
     renderSlot,
@@ -370,20 +375,26 @@ describe('ConversationRoot resident composer', () => {
     expect(seat('conversation.input.plan')).toEqual({ locked: true })
   })
 
-  it('lets the no-workspace posture win over a block', () => {
-    // Picking a workspace is the earlier prerequisite; naming a model first
-    // would send the user somewhere they cannot act yet.
+  it('keeps model selection available for an Ungrouped blank session with a resolved cwd', () => {
     const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, {
       summaryBlank: true,
       composerBlock: { reason: 'select a model first' },
     })
     const box = b.view.getByRole('textbox')
-    expect(box.getAttribute('aria-disabled')).not.toBe('true')
-    expect(box.getAttribute('contenteditable')).not.toBe('true')
-    expect(box.getAttribute('aria-haspopup')).toBe('menu')
-    expect(box.getAttribute('data-placeholder')).not.toBe('select a model first')
+    expect(box.getAttribute('aria-disabled')).toBe('true')
+    expect(box.getAttribute('data-placeholder')).toBe('select a model first')
+    expect(box.getAttribute('aria-haspopup')).not.toBe('menu')
     const modelSeat = b.seatOwners.filter(call => call.key === 'conversation.input.model').at(-1)?.owner
-    expect(modelSeat).toEqual({ locked: true })
+    expect(modelSeat).toEqual({ locked: false })
+  })
+
+  it('accepts a first prompt in an Ungrouped scratch session', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, { summaryBlank: true })
+    const box = b.view.getByRole('textbox')
+    expect(box.getAttribute('contenteditable')).toBe('true')
+    expect(box.getAttribute('aria-haspopup')).not.toBe('menu')
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(b.sink).toHaveBeenCalled()
   })
 
   it('keeps composer text in the machine, mirrors to the Conversation store, and submits through the sink', () => {

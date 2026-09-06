@@ -175,7 +175,7 @@ export function apply(ctx: ClientContext): void {
       // conversation business actions belong to their registrants.
       inject: (actions: PanelActions): AppFrameInjected => {
         layout.attachPanels(actions)
-        return { hooks: { badge } }
+        return { hooks: { badge, mobileAppearance: ctx.theme.mobile.appearance } }
       },
     }, AppFrame)
     return () => {

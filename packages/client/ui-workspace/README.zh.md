@@ -87,6 +87,8 @@ Workspace 与 Session 悬浮卡片会复制对应行被截断的值：激活 Wor
 
 -----
 
+手机端**工作区**打开全宽 Workspace 列表，并在存在未分组会话时显示未分组条目。选择 Workspace 后显示其 Session 列表；**返回**回到 Workspace 列表，选择 Session 则打开对话。逐层浏览使用共享的 Session 投影与排序，而不是另一份 Workspace 记账。顶部的纯图标**搜索与管理**控件打开共享管理浏览器；无障碍名称说明操作，不占用单独的文字行。
+
 <a id="model-experience"></a>
 ## 模型体验
 

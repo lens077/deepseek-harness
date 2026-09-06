@@ -87,6 +87,8 @@ These pages cover the sidebar host, the hero surface, and the picking backends.
 
 -----
 
+On phones, **Workspaces** opens a full-width Workspace list with an Ungrouped group when present. Selecting a Workspace shows its Session list; **Back** returns to the Workspace list, and selecting a Session opens the conversation. The drill-down uses the shared Session projection and ordering rather than a second Workspace account. Its header's icon-only **Search and manage** control opens the shared management browser; its accessible name identifies the action without a separate text row.
+
 <a id="model-experience"></a>
 ## Model Experience
 

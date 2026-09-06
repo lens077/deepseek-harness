@@ -31,7 +31,7 @@ adapter 把每个 `SessionEventLikeEntry` 直接交给 assembler。外层 `type`
 
 shell 选择解析出 target 或 target source 收到首个 subscriber 时，该 target 进入 active 状态。assembler 从当前 Context 对它执行一次 replace，并使它参与后续增量 flush；创建 source 不会激活 target，取消订阅也不会停用 target。
 
-target package 通过 declaration merge 扩展 snapshot 与 Location data map，再调用 `ctx.uiConversation.events.register(...)` 和 `ctx.uiConversation.views.register(...)`。target 通过 `ctx.uiConversation.binding(binding).target(targetId)` 读取其 Session-owned source。注册属于 Cordis effect，返回的 disposer 从同一个 registry 移除 contribution。
+target package 通过 declaration merge 扩展 snapshot 与 Location data map，再调用 `ctx.uiConversation.events.register(...)` 和 `ctx.uiConversation.views.register(...)`。target 通过 `ctx.uiConversation.binding(binding).target(targetId)` 读取其 Session-owned source。注册属于 Cordis effect，返回的 disposer 从同一个 registry 移除 contribution。 shell 之外的入口（例如输入框上方的 dock 条）通过 `ctx.uiConversation.openView(sessionId, view, focus?)` 为已挂载的 Session 选中一个 View；shell 在其 Session 主体挂载时安装该打开器，并随 Session binding 释放，因此未挂载的 Session 会拒绝该调用。
 
 <a id="shell-and-standard-props"></a>
 ## Shell 与标准 props
@@ -43,6 +43,8 @@ View 选择规则固定：有效且已注册的持久化选择优先，其次是
 Session 首次绑定或缓存的 Session 成为 current 时，shell 会在渲染前读取持久化 View 偏好，激活已注册的偏好 View 或 Chat fallback，并在后续 tab 或 focus 选择写入 store 前先激活对应 target。blank Session 仍不渲染 `conversation.view` slot；未选中的 target 不会激活。
 
 常驻 composer 在无 Session 与有 Session 之间保持挂载。无 Session 时，同一个编辑器表面保持 inert，Workspace picker 连接 blank Session。该表面是 shell 所有的 Lexical 编辑器：引用 chip 是携带 owner 序列化身份的原子 decorator 节点（提交时经 owner codec 展开），已认领的 slash command 保持为带样式的行首文本，文件夹文本引用以图标前缀携带文件夹图形，草稿的剪贴板投影镜像到逐 Session Conversation store。Queue 操作通过 scoped `ctx.conversation` service 寻址准确的 queue occurrence；queue 预览经 `ui-primitives` 的共享行内引用投影渲染已发送文本（wire 会话形式折叠为其标签），并按原始附件顺序展示本地或持久化的图片和文件。图片使用缩略图，文件使用紧凑的名称与大小卡片。编辑态展示字面发送文本，持久化缩略图通过会话图片 URL 缓存解析。Composer 键盘偏好保存在 Host-backed `ui-conversation` settings namespace。
+
+已经物化且具有已解析 cwd 的临时 Session 不需要加入 Workspace 即可启用 composer；常规模型与交互阻塞条件仍然适用。宽度小于 768px 时，对话使用可用全宽并隐藏转录区缩放手柄。shell 的文件展开控件初始关闭，打开时将常驻文件栏覆盖在对话上，而不是预留侧栏宽度。
 
 设置 > 通用提供 `sendShortcut` 选项：`enter`（默认值）、`mod-enter`（Ctrl/Cmd+Enter）、Alt+Enter、Ctrl+Shift+Enter、Cmd+Shift+Enter，或自定义组合键。选择自定义，按下组合键，然后保存；Escape 或取消会丢弃录制结果，重置则恢复 Enter。显式组合键必须包含 Ctrl、Meta（显示为 Cmd）或 Alt，加上一个受支持的按键，也可包含 Shift。支持字母、数字、Enter、Space、方向键、Home、End、PageUp/PageDown 和 F1–F12，但保留的编辑与浏览器快捷键除外。Ctrl 与 Meta 不等价；修饰键必须完全匹配。操作系统或浏览器可能在 composer 收到按键前拦截其他组合键。
 

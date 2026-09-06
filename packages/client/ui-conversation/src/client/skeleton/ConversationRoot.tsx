@@ -130,8 +130,8 @@ function WidthHandle(props: {
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useSessionPendingInteraction,
-  useWorkspaces, useConversation, useInput, useComposerBlock, useRailSeat,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  useWorkspaces, useConversation, useInput, useComposerBlock,
+  renderSlot, renderSlotChain, selectWorkspace, useRailSeat, t,
 }: ConversationRootProps) {
   const railOccupied = useRailSeat(entries => entries.length > 0)
   const session = useSession(s => s)
@@ -150,6 +150,7 @@ export function ConversationRoot({
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
 
+  const [mobileRailOpen, setMobileRailOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
@@ -295,7 +296,7 @@ export function ConversationRoot({
     <div className={css.heroWorkspaceRow}>
       <WorkspaceChip
         buttonRef={pickerAnchor}
-        label={chipTitle}
+        label={chipTitle ?? (sessionId !== undefined && cwd !== undefined && cwd !== '' ? t('workspace.ungrouped') : undefined)}
         menuOpen={pickerOpen}
         onClick={() => { setPickerOpen(open => !open) }}
         t={t}
@@ -317,12 +318,9 @@ export function ConversationRoot({
     </div>
   )
 
-  // The placeholder chip ("Choose workspace") and the Workspace-trigger input travel
-  // together: no workspace picked yet (cold start, no session at all), or a
-  // blank session whose workspace vanished (deleted from the sidebar). The
-  // bar is ONE session-maybe slot rendered unconditionally — inert is a prop,
-  // not a different tree, so the textarea DOM survives the transition.
-  const inert = sessionId === undefined || (hero && chipTitle === undefined)
+  // A materialized scratch Session has a cwd without Workspace membership.
+  // Only an unresolved directory keeps the composer in its workspace-picking state.
+  const inert = sessionId === undefined || (hero && (cwd === undefined || cwd === ''))
   // A raised block is the same inert posture with the blocker's own reason:
   // one disabled textarea, never a second tree. The no-workspace state wins
   // when both hold — picking a workspace is the earlier prerequisite.
@@ -369,7 +367,6 @@ export function ConversationRoot({
       {composer}
     </div>
   )
-
   const scrollBody = (
     <div className={css.scrollBody} data-conversation-scroll="">
       {sessionId === undefined ? null : renderSlot('conversation.session', {})}
@@ -380,9 +377,18 @@ export function ConversationRoot({
   return (
     <div ref={rootResizeRef} className={css.root} data-phase={phase}>
       {sessionId === undefined ? null : renderSlot('conversation.session.header', {})}
-      <div className={css.body}>
+      <div className={css.body} data-mobile-rail-open={mobileRailOpen || undefined}>
+        {railOccupied && sessionId !== undefined && <button type="button" className={css.mobileRailToggle}
+          aria-expanded={mobileRailOpen} onClick={() => { setMobileRailOpen(open => !open) }}>
+          {t(mobileRailOpen ? 'mobile.railClose' : 'mobile.rail')}
+        </button>}
         {railOccupied && sessionId !== undefined
-          ? <div className={css.bodyRow}>{renderSlot('conversation.session.rail', {})}{scrollBody}</div>
+          ? (
+            <div className={css.bodyRow} data-rail="">
+              <div className={css.railPanel}>{renderSlot('conversation.session.rail', {})}</div>
+              {scrollBody}
+            </div>
+          )
           : scrollBody}
         {/* Width handles only while a transcript is on screen; the hero has no
             content column to size. */}

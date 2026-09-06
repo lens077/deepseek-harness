@@ -6,6 +6,10 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'mobile.back': '返回工作区列表',
+  'mobile.filter': '按名称筛选',
+  'mobile.manage': '搜索与管理',
+  'mobile.browse': '返回浏览',
   'group.ungrouped': '未分组',
   'session.new': '新会话',
   'section.workspaces': '工作区',
@@ -76,6 +80,10 @@ export type WorkspaceKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'mobile.back': 'Back to workspaces',
+  'mobile.filter': 'Filter by name',
+  'mobile.manage': 'Search & manage',
+  'mobile.browse': 'Back to browsing',
   'group.ungrouped': 'Ungrouped',
   'session.new': 'New Session',
   'section.workspaces': 'Workspaces',

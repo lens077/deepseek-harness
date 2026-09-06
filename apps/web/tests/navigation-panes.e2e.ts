@@ -15,6 +15,7 @@ import { strFromU8, unzipSync } from 'fflate'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
 import { SESSION_FORMAT_VERSION, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-session-projection-cache'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
@@ -26,6 +27,10 @@ const SEED = join(SNAPSHOT_DIR, 'session.v2.jsonl')
 const TRAJECTORY_EXPECTED = join(SNAPSHOT_DIR, 'trajectory.expected.md')
 const SEARCH_EXPECTED = join(SNAPSHOT_DIR, 'search-results.expected.md')
 const TERMINAL_EXPECTED = join(SNAPSHOT_DIR, 'terminal-card.expected.md')
+const DIGEST_EXPECTED = join(SNAPSHOT_DIR, 'digest.expected.md')
+const MOBILE_EXPECTED = join(SNAPSHOT_DIR, 'mobile-navigation.expected.md')
+const MOBILE_PENDING_EXPECTED = join(SNAPSHOT_DIR, 'mobile-pending-list.expected.md')
+const MOBILE_SMALL_EXPECTED = join(SNAPSHOT_DIR, 'mobile-small-layout.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'navigation-panes-web-e2e'
 const EXPORTED_LOG_FILE = `session.v${SESSION_FORMAT_VERSION}.jsonl`
@@ -97,7 +102,20 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       const raw = await readFile(SEED, 'utf8')
       expect(fixtureUserPrompts(raw), 'seed fixture must carry exactly the two drive prompts')
         .toEqual([PROMPT_TURN1, PROMPT_TURN2])
-      await seedSession(scaffold, raw, SEED_ID)
+      const seededId = await seedSession(scaffold, raw, SEED_ID)
+      // Direct persistence bypasses live checkpointing; warm the projection
+      // cache that a normally completed Session already owns.
+      const reader = await scaffold.ctx.sessionPersistence.open(seededId, 'read')
+      try {
+        const events = [...await reader.read()]
+        scaffold.ctx.sessionProjectionCache.coldSnapshot(
+          reader.header,
+          reader.inheritedEventCount,
+          events,
+        )
+      } finally {
+        await reader.close()
+      }
     }
     browser = await chromium.launch()
   }, 120_000)
@@ -155,6 +173,156 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     if (failures.length > 1) throw new AggregateError(failures, 'navigation e2e cleanup failed')
   })
 
+  it.skipIf(MODE === 'record')('phone navigation keeps four destinations and a usable ungrouped composer', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mobile-navigation'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    const nav = page.getByRole('navigation', { name: 'Mobile navigation' })
+    await nav.waitFor({ state: 'visible' })
+    expect(await nav.getByRole('button').allTextContents()).toEqual(['Overview', expect.stringContaining('Pending'), 'Workspaces', 'New Session'])
+    await compareOrRefreshGolden(MOBILE_EXPECTED, await captureStableAria(page, 'nav[aria-label="Mobile navigation"]', scaffold.workspaceCwd), MODE)
+    await nav.getByRole('button', { name: 'Pending', exact: false }).click()
+    const pending = page.getByRole('region', { name: 'Pending', exact: true })
+    await pending.waitFor({ state: 'visible' })
+    const compactRow = pending.locator('button[aria-expanded="false"][aria-controls]').first()
+    await compactRow.waitFor({ state: 'visible' })
+    expect(await pending.getByText(PROMPT_TURN2, { exact: true }).count()).toBe(0)
+    expect(await pending.getByRole('button', { name: 'Open session', exact: true }).count()).toBe(0)
+    const compactBounds = await compactRow.boundingBox()
+    expect(compactBounds?.height).toBeGreaterThanOrEqual(44)
+    expect(compactBounds?.height).toBeLessThanOrEqual(64)
+    const pendingSnapshot = (await captureStableAria(page, '[data-digest-panel]', scaffold.workspaceCwd))
+      .split(SEED_ID).join('{{seededId}}')
+    await compareOrRefreshGolden(MOBILE_PENDING_EXPECTED, pendingSnapshot, MODE)
+    await compactRow.click()
+    await pending.getByText(PROMPT_TURN2, { exact: true }).waitFor({ state: 'visible' })
+    await pending.getByRole('button', { name: 'Open session', exact: true }).waitFor({ state: 'visible' })
+    await pending.locator('button[aria-expanded="true"][aria-controls]').click()
+    expect(await pending.getByRole('button', { name: 'Open session', exact: true }).count()).toBe(0)
+    await pending.getByRole('button', { name: 'My todos', exact: true }).click()
+    await nav.getByRole('button', { name: 'Workspaces', exact: true }).click()
+    await page.getByRole('button', { name: /Ungrouped/ }).click()
+    const sessions = page.getByRole('list', { name: 'Sessions', exact: true })
+    const scrolling = await sessions.evaluate((list) => {
+      list.style.paddingBottom = '1200px'
+      const scroller = list.parentElement!
+      const heading = scroller.querySelector('header')!
+      const before = heading.getBoundingClientRect().top
+      scroller.scrollTop = 300
+      const result = {
+        bounded: scroller.clientHeight < scroller.scrollHeight,
+        top: scroller.scrollTop,
+        before,
+        after: heading.getBoundingClientRect().top,
+      }
+      list.style.paddingBottom = ''
+      scroller.scrollTop = 0
+      return result
+    })
+    expect(scrolling.bounded).toBe(true)
+    expect(scrolling.top).toBe(300)
+    expect(scrolling.after).toBe(scrolling.before)
+    await sessions.getByRole('button').first().click()
+    await nav.getByRole('button', { name: 'New Session', exact: true }).click()
+    await page.getByText('Ungrouped session', { exact: true }).waitFor({ state: 'visible' })
+    const input = page.locator('[data-composer-input][contenteditable="true"]')
+    await input.waitFor({ state: 'visible' })
+    const bounds = await input.boundingBox()
+    expect(bounds?.width).toBeGreaterThan(240)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await nav.waitFor({ state: 'detached' })
+  })
+
+  it.skipIf(MODE === 'record')('phone appearance settings preserve font size across layouts without changing desktop', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mobile-appearance'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    const nav = page.getByRole('navigation', { name: 'Mobile navigation' })
+    await nav.waitFor({ state: 'visible' })
+    const desktopFont = await page.evaluate(() => document.body.style.getPropertyValue('--dsh-content-font-size'))
+    const openSettings = async (): Promise<void> => {
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
+      await page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ state: 'visible' })
+    }
+    const appearance = page.locator('[data-mobile-appearance]')
+    const readFont = async (): Promise<number> => Number.parseInt(await appearance.locator('output').innerText(), 10)
+    const chooseLayout = async (layout: 'large' | 'medium' | 'small'): Promise<void> => {
+      await appearance.locator(`input[type="radio"][value="${layout}"]`).check()
+      await expect.poll(() => page.locator(`[data-mobile-layout="${layout}"]`).count()).toBe(1)
+    }
+    await openSettings()
+    await appearance.waitFor({ state: 'visible', timeout: 10_000 })
+    const initialFont = await readFont()
+    const initialLayout = await appearance.locator('input[type="radio"]:checked').inputValue()
+    const taskFlow = page.getByRole('checkbox', { name: 'Show task flow on mobile', exact: true })
+    const initialFlow = await taskFlow.isChecked()
+    try {
+      expect(initialFont).toBe(16)
+      expect(initialLayout).toBe('medium')
+      expect(initialFlow).toBe(false)
+      await chooseLayout('large')
+      await appearance.getByRole('button', { name: 'Increase mobile font size', exact: true }).click()
+      await expect.poll(readFont).toBe(17)
+      await appearance.getByRole('button', { name: 'Increase mobile font size', exact: true }).click()
+      await expect.poll(readFont).toBe(18)
+      await page.keyboard.press('Escape')
+      const row = page.locator('[data-digest-panel] button[aria-controls][aria-expanded]').first()
+      await row.waitFor({ state: 'visible' })
+      const largeHeight = (await row.boundingBox())!.height
+      expect(largeHeight).toBeGreaterThanOrEqual(52)
+      expect(await row.locator('span[title]').evaluate(element => getComputedStyle(element).fontSize)).toBe('18px')
+      await openSettings()
+      await chooseLayout('small')
+      expect(await readFont()).toBe(18)
+      await page.keyboard.press('Escape')
+      const compactToolbar = page.locator('[data-digest-compact-toolbar]')
+      await compactToolbar.waitFor({ state: 'visible' })
+      const view = compactToolbar.getByRole('combobox', { name: 'View', exact: true })
+      const windowSelect = compactToolbar.getByRole('combobox', { name: 'Time range', exact: true })
+      const viewBounds = await view.boundingBox()
+      const timeBounds = await windowSelect.boundingBox()
+      expect(Math.abs(viewBounds!.y - timeBounds!.y)).toBeLessThanOrEqual(1)
+      expect(await page.getByRole('tab', { name: /^Inbox/ }).isVisible()).toBe(false)
+      for (const button of await nav.getByRole('button').all()) {
+        expect(await button.locator(':scope > span:last-child').isVisible()).toBe(false)
+        expect(await button.getAttribute('aria-label')).toBeTruthy()
+      }
+      expect((await row.boundingBox())!.height).toBeLessThan(largeHeight)
+      await compareOrRefreshGolden(MOBILE_SMALL_EXPECTED,
+        (await captureStableAria(page, '[data-digest-panel]', scaffold.workspaceCwd)).split(SEED_ID).join('{{seededId}}'), MODE)
+      await page.reload()
+      await page.locator('[data-mobile-layout="small"]').waitFor({ state: 'visible' })
+      await openSettings()
+      await expect.poll(readFont).toBe(18)
+      await taskFlow.check()
+      await page.keyboard.press('Escape')
+      await nav.getByRole('button', { name: 'Workspaces', exact: true }).click()
+      await page.getByRole('button', { name: /Ungrouped/ }).click()
+      await page.getByRole('list', { name: 'Sessions', exact: true }).getByRole('button').first().click()
+      const dock = page.locator('[data-task-flow-dock]')
+      await dock.waitFor({ state: 'visible' })
+      await openSettings()
+      await taskFlow.uncheck()
+      await page.keyboard.press('Escape')
+      await dock.waitFor({ state: 'hidden' })
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await nav.waitFor({ state: 'detached' })
+      expect(await page.evaluate(() => document.body.style.getPropertyValue('--dsh-content-font-size'))).toBe(desktopFont)
+      await dock.waitFor({ state: 'visible' })
+    } finally {
+      await page.keyboard.press('Escape')
+      await page.setViewportSize({ width: 390, height: 844 })
+      await openSettings()
+      while (await readFont() > initialFont) {
+        const current = await readFont()
+        await appearance.getByRole('button', { name: 'Decrease mobile font size', exact: true }).click()
+        await expect.poll(readFont).toBe(current - 1)
+      }
+      await appearance.locator(`input[type="radio"][value="${initialLayout}"]`).check()
+      await taskFlow.setChecked(initialFlow)
+      await page.keyboard.press('Escape')
+    }
+  })
+
   it.skipIf(MODE !== 'record')('records the two-turn seed live through the composer', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-record'))
     const input = page.locator('[data-composer-input]').first()
@@ -176,6 +344,37 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     const calls = recorded.filter((e): e is SessionEvent & { data: { name: string } } => e.type === 'tool/call')
     expect(calls.map(e => e.data.name).sort()).toEqual(['bash', 'read', 'read'])
   }, 400_000)
+
+  it.skipIf(MODE === 'record')('lists the latest finished turn as unread and opens its session', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-digest'))
+    await page.getByRole('button', { name: /^Digest/ }).click()
+    const digest = page.getByRole('region', { name: 'Digest', exact: true })
+    await digest.waitFor({ timeout: 15_000 })
+    await digest.getByText(PROMPT_TURN2, { exact: true }).waitFor({ timeout: 15_000 })
+    await digest.locator('span').filter({ hasText: /^## Navigation Summary/ }).waitFor({ timeout: 15_000 })
+    await digest.getByText('1 to handle', { exact: true }).waitFor({ timeout: 15_000 })
+    const snapshot = (await captureStableAria(page, '[data-digest-panel]', scaffold.workspaceCwd))
+      .split(SEED_ID).join('{{seededId}}')
+    await compareOrRefreshGolden(DIGEST_EXPECTED, snapshot, MODE)
+
+    await digest.getByRole('button', { name: 'Open session', exact: true }).click()
+    await expect.poll(() => digest.count(), { timeout: 5_000 }).toBe(0)
+    await page.getByRole('heading', { name: 'Navigation Summary' }).waitFor({ timeout: 15_000 })
+  }, 60_000)
+
+  it.skipIf(MODE === 'record')('clicking the selected sidebar session dismisses the digest', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-digest-selected-session'))
+    await ensureSeedOpen(page)
+    const selected = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"][aria-selected="true"]')
+    await expect.poll(() => selected.count(), { timeout: 10_000 }).toBe(1)
+
+    await page.getByRole('button', { name: /^Digest/ }).click()
+    const digest = page.getByRole('region', { name: 'Digest', exact: true })
+    await digest.waitFor({ timeout: 15_000 })
+    await selected.click()
+    await expect.poll(() => digest.count(), { timeout: 5_000 }).toBe(0)
+    await page.getByText('FIRST_DONE', { exact: true }).waitFor({ timeout: 15_000 })
+  }, 60_000)
 
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
@@ -509,8 +708,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
 
   it.skipIf(MODE === 'record')('keeps the recorded fixture inventory exact', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
-      'session.v2.jsonl', 'search-results.expected.md', 'trajectory.expected.md',
-      'terminal-card.expected.md',
+      'digest.expected.md', 'session.v2.jsonl', 'search-results.expected.md',
+      'trajectory.expected.md', 'terminal-card.expected.md',
     ])
   })
 })

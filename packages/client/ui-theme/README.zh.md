@@ -31,6 +31,12 @@ kind: "package-reference"
 
 插件在「通用」分区注册外观偏好方块与字号步进器。步进器接受 12 至 17 px 的整数，默认值为 14 px。它以相同增量调整会话标题与基础文本，包括用户气泡与 composer 草稿；流内行的标题、摘要与表格跟随比正文低一档的字号，小号文本和代码保持固定字号。每次通过的变更都经 Host settings API 写入。连续快速变更按操作顺序携带命名空间 revision 串行写入，最新写入被拒时重新加载持久值。非 loopback 页面把两个选择都保留在进程内。
 
+### 手机外观
+
+通用设置还提供独立的手机偏好：`mobileLayout` 接受 `large`、`medium`（默认）或 `small`；`mobileFontSize` 接受 12 至 22 的整数 CSS 像素值，默认 16。改变密度会保留手机字号，两项偏好都不改变桌面 `fontSize`。主题持有的手机可观察状态提供根节点的 `data-mobile-layout` 与手机排版变量。
+
+Host-backed scope 将这些值持久化到 `ui-theme`。使用 memory 模式的远程浏览器仅将手机偏好保存在同源浏览器存储的 `dsh.mobile.appearance` 中；无效存储值重置为 schema 默认值。这种浏览器本地持久化不改变远程桌面外观仅保留在进程内的策略。
+
 ### 注册主题
 
 组合可以通过 `ctx.theme` 注册带别名 token 覆盖的第三方主题 id；覆盖层按注册顺序折入活动快照的 token 中。移除其中一个绝不会覆盖最后一个持久化的内置偏好。第三方主题 id 仍是进程内扩展，不会跨越内置 settings schema。

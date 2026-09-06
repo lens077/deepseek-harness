@@ -55,6 +55,8 @@ export interface SessionNode {
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   updatedAt: number
+  /** Optional descendant rows supplied by grouped projections. */
+  children?: readonly SessionNode[]
 }
 
 /** Session order selected by the Workspace browser. */

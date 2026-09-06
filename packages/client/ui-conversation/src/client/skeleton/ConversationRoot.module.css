@@ -97,8 +97,10 @@
   line-height: 20px;
 }
 
+/* Ancestors cap at 220px; the current title takes the remaining header width. */
 .crumb {
   max-width: 220px;
+  min-width: 0;
   overflow: hidden;
   padding: 4px 8px;
   border: none;
@@ -122,9 +124,14 @@
 }
 
 .crumbCurrent {
+  max-width: none;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
   cursor: default;
+}
+
+.crumbSeg:not(:last-child) {
+  flex: none;
 }
 
 .headerActions {
@@ -461,4 +468,115 @@
    mounted but invisible so no wrong layout flashes before the phase lands. */
 .root[data-phase='settling'] .composerSeat {
   visibility: hidden;
+}
+
+.railPanel {
+  display: contents;
+}
+
+.mobileRailToggle {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .root {
+    --dsh-chat-content-width: 100%;
+    --dsh-composer-side-clearance: 8px;
+  }
+
+  .railPanel {
+    display: none;
+  }
+
+  .mobileRailToggle {
+    display: block;
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    z-index: 12;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 0.5px solid var(--dsw-alias-border-l3);
+    border-radius: 8px;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .body[data-mobile-rail-open] .railPanel {
+    display: block;
+    position: absolute;
+    inset: 52px 0 0;
+    z-index: 11;
+    overflow: auto;
+    background: var(--dsw-alias-bg-base);
+  }
+
+  .widthHandle {
+    display: none;
+  }
+
+  .header {
+    padding-inline: 8px;
+  }
+
+  .headerUtilities {
+    margin-left: 4px;
+  }
+
+  .headerActions, .headerUtilities {
+    gap: 4px;
+  }
+
+  .tabs {
+    gap: 20px;
+    overflow-x: auto;
+  }
+
+  .heroWorkspaceRow {
+    flex-wrap: wrap;
+    padding-inline: 12px;
+  }
+}
+
+:global([data-mobile]) .root {
+  --dsh-composer-side-clearance: var(--dsh-mobile-page-padding);
+}
+
+:global([data-mobile]) .header {
+  padding: var(--dsh-mobile-row-gap) var(--dsh-mobile-page-padding) 0;
+}
+
+:global([data-mobile]) .crumb {
+  min-height: var(--dsh-mobile-control-size);
+  font-size: var(--dsh-mobile-font-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .crumbCurrent {
+  font-size: var(--dsh-mobile-title-size);
+}
+
+:global([data-mobile]) .tab,
+:global([data-mobile]) .mobileRailToggle {
+  min-height: var(--dsh-mobile-control-size);
+  font-size: var(--dsh-mobile-meta-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .headerActions button,
+:global([data-mobile]) .headerUtilities button {
+  min-width: var(--dsh-mobile-control-size);
+  min-height: var(--dsh-mobile-control-size);
+}
+
+:global([data-mobile-layout='small']) .tabs {
+  gap: 12px;
+  margin-top: 0;
+}
+
+:global([data-mobile-layout='small']) .composerStack {
+  --dsh-composer-stack-gap: 3px;
 }

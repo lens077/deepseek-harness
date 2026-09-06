@@ -54,7 +54,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-function mountFrame() {
+function mountFrame(appearance: { mobileFontSize: number; mobileLayout: 'large' | 'medium' | 'small' } = { mobileFontSize: 16, mobileLayout: 'medium' }) {
   window.innerWidth = frameWidth // first-render viewport source before the observer fires
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: unknown }[] = []
@@ -94,6 +94,8 @@ function mountFrame() {
   const element = () => (
     <AppFrame
       useStore={hookOf(instance)}
+      useBadge={selector => selector(0)}
+      useMobileAppearance={selector => selector(appearance)}
       actions={instance.actions}
       renderSlot={renderSlot}
       useSessions={useSessions}
@@ -413,6 +415,34 @@ describe('AppFrame — guard branches', () => {
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
     // Track template still reflects the last non-zero viewport.
     expect(tracks(frame)).toEqual([280, 0])
+  })
+})
+
+describe('AppFrame mobile appearance isolation', () => {
+  it('applies phone density and font only below the mobile breakpoint', () => {
+    frameWidth = 390
+    const { frame, rerenderFrame } = mountFrame({ mobileFontSize: 20, mobileLayout: 'small' })
+    expect(frame.dataset.mobileLayout).toBe('small')
+    expect(frame.style.getPropertyValue('--dsh-mobile-font-size')).toBe('20px')
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('')
+    frameWidth = 1024
+    act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
+    rerenderFrame()
+    expect(frame.dataset.mobileLayout).toBeUndefined()
+    expect(frame.style.getPropertyValue('--dsh-mobile-font-size')).toBe('')
+  })
+
+  it('changes density without replacing the independently chosen phone font', () => {
+    frameWidth = 390
+    const appearance: { mobileFontSize: number; mobileLayout: 'large' | 'medium' | 'small' } = { mobileFontSize: 18, mobileLayout: 'medium' }
+    const { frame, rerenderFrame } = mountFrame(appearance)
+    appearance.mobileLayout = 'large'
+    rerenderFrame()
+    expect(frame.dataset.mobileLayout).toBe('large')
+    appearance.mobileLayout = 'small'
+    rerenderFrame()
+    expect(frame.dataset.mobileLayout).toBe('small')
+    expect(frame.style.getPropertyValue('--dsh-mobile-font-size')).toBe('18px')
   })
 })
 

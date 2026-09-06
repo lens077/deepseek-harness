@@ -11,20 +11,23 @@
  * zero self-made hooks.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { MobileAppearance } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
+import type { MobileView } from './index.ts'
 import css from './AppFrame.module.css'
 
 /** Frame-private observable for the browser-title attention count. */
 export interface AppFrameInjected {
   hooks: {
     badge: ObservableSnapshot<number>
+    mobileAppearance: ObservableSnapshot<MobileAppearance>
   }
 }
 
@@ -41,10 +44,10 @@ export type AppFrameProps =
  * above the conversation inside the same grid cell; entries that render
  * nothing leave the conversation untouched.
  */
-function CenterColumn(props: { children?: ReactNode; overlay?: ReactNode }) {
+function CenterColumn(props: { children?: ReactNode; overlay?: ReactNode; inactive?: boolean }) {
   return (
     <div className={css.centerCol}>
-      {props.children}
+      <div className={css.conversationLayer} {...(props.inactive ? { inert: '' } : {})} aria-hidden={props.inactive || undefined}>{props.children}</div>
       <div className={css.centerOverlay}>{props.overlay}</div>
     </div>
   )
@@ -110,12 +113,14 @@ export function AppFrame({
   useStore,
   useSessions,
   useBadge,
+  useMobileAppearance,
   actions,
   renderSlot,
   SessionProvider,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
+  const appearance = useMobileAppearance(value => value)
   const badge = useBadge(value => value)
   const running = useSessions(s => s.ids.filter(id => s.byId[id]?.running === true).length)
   const detailsSession = useSessions((s) => {
@@ -128,6 +133,18 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const [mobileView, navigateMobile] = useState<MobileView>('overview')
+  const mobile = viewport < 768
+  const mobileNavigation = mobile ? { mobileView, navigateMobile } : {}
+  const currentSession = useSessions(s => s.current)
+  const previousSession = useRef(currentSession)
+  useEffect(() => {
+    if (previousSession.current === currentSession) return
+    const hadSelection = previousSession.current !== undefined
+    previousSession.current = currentSession
+    if (hadSelection) navigateMobile(view => view === 'new' ? 'new' : 'conversation')
+  }, [currentSession])
+
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
     if (detailsSession === undefined) return
@@ -196,9 +213,15 @@ export function AppFrame({
     <div
       ref={frameRef}
       className={css.frame}
-      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
+      style={{
+        gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px`,
+        ...(mobile ? { '--dsh-mobile-font-size': `${appearance.mobileFontSize}px` } : {}),
+      } as CSSProperties}
+      data-mobile={mobile || undefined}
+      data-mobile-layout={mobile ? appearance.mobileLayout : undefined}
+      data-mobile-view={mobile ? mobileView : undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
-      data-details-collapsed={cols.details === 0 || undefined}
+      data-details-collapsed={(mobile ? detailsSession === undefined || panels.details === 0 : cols.details === 0) || undefined}
       data-dragging={dragging || undefined}
     >
       <DocumentTitle
@@ -215,7 +238,8 @@ export function AppFrame({
             renders the rail UI too). */}
         {renderSlot('sidebar', {
           collapsed: sidebarCollapsed,
-          width: cols.sidebar,
+          width: mobile ? viewport : cols.sidebar,
+          ...mobileNavigation,
         })}
       </div>
       <>
@@ -224,7 +248,7 @@ export function AppFrame({
             the shell's own pending rendering. The conversation
             is session-maybe; SessionProvider withholds the strict details
             entry while no session is current. */}
-        <CenterColumn overlay={renderSlot('center.overlay', {})}>{renderSlot('conversation', {})}</CenterColumn>
+        <CenterColumn inactive={mobile && mobileView !== 'conversation' && mobileView !== 'new'} overlay={renderSlot('center.overlay', mobileNavigation)}>{renderSlot('conversation', {})}</CenterColumn>
         <DetailsColumn>
           <SessionProvider>{renderSlot('details', {})}</SessionProvider>
         </DetailsColumn>

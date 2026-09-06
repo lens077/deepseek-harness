@@ -20,6 +20,8 @@ import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
 import type { FontSizeRowInjected } from './FontSizeRow.tsx'
 import { FontSizeRow } from './FontSizeRow.tsx'
+import { MobileAppearanceRows, type MobileAppearanceRowsInjected } from './MobileAppearanceRows.tsx'
+import { MobileAppearancePolicy } from './mobile-appearance.ts'
 import { createAppearanceRowStore, createFontSizeRowStore } from './settings-store.ts'
 import { installThemeStyles } from './styles.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
@@ -33,7 +35,8 @@ export type { AppearanceRowComponentProps, AppearanceRowInjected } from './Appea
 export type { FontSizeRowComponentProps, FontSizeRowInjected } from './FontSizeRow.tsx'
 export type { AppearanceRowState, FontSizeRowState } from './settings-store.ts'
 export type { ThemeKey } from './locales.ts'
-export type { ThemePreference, ThemeSettings } from '../theme-settings.ts'
+export type { ThemePreference, ThemeSettings, MobileLayout } from '../theme-settings.ts'
+export type { MobileAppearance } from './mobile-appearance.ts'
 
 /** Namespace owning this feature's settings-row copy. */
 export const SETTINGS_NS = 'settings.theme'
@@ -158,6 +161,8 @@ const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([
 export class ThemeRuntime {
   private readonly ctx: ClientContext
   private readonly host: SettingsScope<ThemeSettings>
+  /** Independently persisted phone appearance, read through framework hooks. */
+  readonly mobile: MobileAppearancePolicy
   private themes: ThemeDefinition[] = [...BUILTIN_THEMES]
   private preference: ThemePreference
   private fontSize: number = bootstrapFontSize()
@@ -176,6 +181,7 @@ export class ThemeRuntime {
   constructor(ctx: ClientContext, host: SettingsScope<ThemeSettings>) {
     this.ctx = ctx
     this.host = host
+    this.mobile = new MobileAppearancePolicy(host)
     this.preference = DEFAULT_PREFERENCE
     // Non-browser runs (node e2e booting the client tree) have no matchMedia.
     this.media = typeof matchMedia === 'undefined' ? undefined : matchMedia('(prefers-color-scheme: dark)')
@@ -258,6 +264,7 @@ export class ThemeRuntime {
   private adopt(): void {
     const section = this.host.getSnapshot().value
     if (section === undefined) return
+    this.mobile.adopt(section)
     if (this.preference === section.preference && this.fontSize === section.fontSize) return
     this.preference = section.preference
     this.fontSize = section.fontSize
@@ -475,4 +482,16 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: fontSizeInjected,
   }, FontSizeRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'mobile-appearance',
+    order: 8,
+    locale: SETTINGS_NS,
+    inject: (): MobileAppearanceRowsInjected => ({
+      hooks: { mobileAppearance: theme.mobile.appearance },
+      setMobileFontSize: (fontSize) => { theme.mobile.setFontSize(fontSize) },
+      setMobileLayout: (layout) => { theme.mobile.setLayout(layout) },
+    }),
+  }, MobileAppearanceRows))
 }

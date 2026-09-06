@@ -105,6 +105,106 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
   b.view.rerender(<WorkspaceBrowser {...b.props} />)
 }
 
+describe('mobile WorkspaceBrowser', () => {
+  it('filters names and preserves selected Workspace across full search and management', () => {
+    mount({
+      mobile: true,
+      useSessions: hook(sessionState([summary('alpha-s', 2), summary('another', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s', 'another']), workspace('beta', [])])),
+    })
+    fireEvent.change(screen.getByRole('searchbox', { name: '按名称筛选' }), { target: { value: 'alpha' } })
+    expect(screen.queryByRole('button', { name: /beta/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    fireEvent.change(screen.getByRole('searchbox', { name: '按名称筛选' }), { target: { value: 'alpha-s' } })
+    expect(screen.queryByRole('button', { name: 'another' })).toBeNull()
+    const management = screen.getByRole('button', { name: '搜索与管理' })
+    expect(management.textContent).toBe('')
+    expect(management.querySelector('svg')).not.toBeNull()
+    fireEvent.click(management)
+    expect(screen.getByRole('button', { name: '搜索会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '添加工作区' }))
+    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '返回浏览' }))
+    expect(screen.getByRole('heading', { name: 'alpha' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'alpha-s' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'another' })).toBeNull()
+  })
+
+  it('drills into a Workspace, opens its Session, and returns focus to the Workspace list', () => {
+    const calls: string[] = []
+    mount({
+      mobile: true,
+      wide: false,
+      useSessions: hook(sessionState([summary('alpha-s', 2), summary('beta-s', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s']), workspace('beta', ['beta-s'])])),
+      open: (id) => { calls.push(id) },
+      onSessionOpened: () => { calls.push('opened') },
+    })
+    expect(screen.queryByText('alpha-s')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    expect(screen.getByRole('heading', { name: 'alpha' })).toBe(document.activeElement)
+    expect(screen.getByText('/projects/alpha')).toBeTruthy()
+    expect(screen.queryByText('beta')).toBeNull()
+    expect(screen.queryByText('beta-s')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'alpha-s' }))
+    expect(calls).toEqual(['alpha-s', 'opened'])
+    fireEvent.click(screen.getByRole('button', { name: '返回工作区列表' }))
+    expect(screen.getByRole('button', { name: /alpha/ })).toBe(document.activeElement)
+    expect(screen.getByRole('button', { name: /beta/ })).toBeTruthy()
+    expect(screen.queryByText('alpha-s')).toBeNull()
+  })
+
+  it('includes Ungrouped Sessions without exposing archived or inactive blank rows', () => {
+    const open = vi.fn()
+    mount({
+      mobile: true,
+      open,
+      useSessions: hook(sessionState([
+        summary('parent', 4), summary('child', 3), summary('loose', 2),
+        summary('archived', 1), summary('blank', 0, { blank: true }),
+      ])),
+      useWorkspaces: hook(workspaceState([{
+        ...workspace('alpha', ['parent', 'child', 'archived', 'blank']),
+      }], [sid('archived')])),
+    })
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    expect(screen.getByRole('button', { name: 'child' })).toBeTruthy()
+    expect(screen.queryByText('archived')).toBeNull()
+    expect(screen.queryByText('新会话')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '返回工作区列表' }))
+    fireEvent.click(screen.getByRole('button', { name: /未分组/ }))
+    expect(screen.getByRole('heading', { name: '未分组' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'loose' }))
+    expect(open).toHaveBeenCalledWith(sid('loose'))
+  })
+
+  it('shows empty Workspaces and returns to the list when the selected Workspace disappears', () => {
+    const b = mount({
+      mobile: true,
+      useWorkspaces: hook(workspaceState([workspace('empty', []), workspace('remaining', [])])),
+    })
+    fireEvent.click(screen.getByRole('button', { name: /empty/ }))
+    expect(screen.getByText('暂无会话')).toBeTruthy()
+    rerender(b, { useWorkspaces: hook(workspaceState([workspace('remaining', [])])) })
+    expect(screen.getByRole('heading', { name: '工作区' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /remaining/ })).toBeTruthy()
+  })
+
+  it('keeps desktop grouping preferences unchanged while showing every mobile Session', () => {
+    const items = Array.from({ length: 8 }, (_, index) => summary(`session-${index}`, index))
+    const b = mount({
+      mobile: true,
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([workspace('alpha', items.map(item => item.id))])),
+    })
+    act(() => { b.store.actions.setGroupBy('flat') })
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    for (const item of items) expect(screen.getByRole('button', { name: item.displayTitle })).toBeTruthy()
+    expect(b.store.getSnapshot().groupBy).toBe('flat')
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
+  })
+})
+
 describe('WorkspaceBrowser', () => {
   it('workspace hover card shows a POSIX home descendant as ~', () => {
     vi.useFakeTimers()

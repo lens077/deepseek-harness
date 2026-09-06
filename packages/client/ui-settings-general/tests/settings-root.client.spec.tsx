@@ -132,9 +132,16 @@ describe('SettingsRoot trigger', () => {
     expect(screen.getByRole('button', { name: 'Settings', expanded: true })).toBeTruthy()
   })
 
-  it('hands the rail state to the trigger seat', () => {
+  it('names the rail trigger from the localized header and opens every settings section', () => {
     const { renderSlot } = mount({ wide: false })
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
+    const trigger = screen.getByRole('button', { name: 'Settings Title' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: 'Settings Title' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Models' }))
+    expect(screen.getByTestId('section-models')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(document.activeElement).toBe(trigger)
   })
 
   it('shows outage, retry progress, and a two-second recovery confirmation', () => {
@@ -251,19 +258,21 @@ describe('SettingsPanel navigation', () => {
         { id: 'models', order: 10, label: 'Models' },
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
         { id: 'plugins', order: 30, label: 'Plugins' },
-        { id: 'contributed', order: 40, label: 'Contributed' },
+        { id: 'vision-toolkit', order: 35, label: 'Vision tools' },
+        { id: 'conversation-layout', order: 40, label: 'Conversation layout' },
+        { id: 'contributed', order: 50, label: 'Contributed' },
       ],
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Contributed']
+    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Vision tools', 'Conversation layout', 'Contributed']
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The three ids the shell names get their own glyph; every other section —
+    // The five ids the shell names get their own glyph; every other section —
     // including one this package never heard of — shares the gear.
-    expect(new Set(glyphs.slice(0, 4)).size).toBe(4)
-    expect(glyphs[4]).toBe(glyphs[0])
+    expect(new Set(glyphs.slice(0, 6)).size).toBe(6)
+    expect(glyphs[6]).toBe(glyphs[0])
   })
 
   it('switches the rendered section on nav click', () => {

@@ -1,6 +1,6 @@
 /** Product-wide, versioned internal-testing notice. */
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -27,13 +27,14 @@ export type WelcomeNoticeProps =
   PropsRuntime<'settings.onboarding'> & InjectFace<WelcomeNoticeInjected>
 
 /**
- * Render the current notice until its exact copy version is acknowledged.
+ * Render the notice on desktop; skip phone presentation without recording acknowledgement.
  * @param props - settings-shell owner state and welcome dependencies.
  * @returns the welcome modal or null while the step decides not to show.
  */
 export function WelcomeNotice(props: WelcomeNoticeProps): ReactNode {
   const { complete, controller, useWelcome, t } = props
   const state = useWelcome(snapshot => snapshot)
+  const [skipPresentation, setSkipPresentation] = useState(() => window.innerWidth < 768)
   const finished = useRef(false)
   const finish = useCallback((): void => {
     if (finished.current) return
@@ -42,14 +43,22 @@ export function WelcomeNotice(props: WelcomeNoticeProps): ReactNode {
   }, [complete])
 
   useEffect(() => {
-    if (state.status === 'idle') void controller.load()
-  }, [controller, state.status])
+    const onResize = (): void => {
+      if (window.innerWidth < 768) setSkipPresentation(true)
+    }
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize) }
+  }, [])
 
   useEffect(() => {
-    if (state.acknowledged) finish()
-  }, [finish, state.acknowledged])
+    if (!skipPresentation && state.status === 'idle') void controller.load()
+  }, [controller, skipPresentation, state.status])
 
-  if (state.status === 'idle' || state.status === 'loading' || state.acknowledged) return null
+  useEffect(() => {
+    if (skipPresentation || state.acknowledged) finish()
+  }, [finish, skipPresentation, state.acknowledged])
+
+  if (skipPresentation || state.status === 'idle' || state.status === 'loading' || state.acknowledged) return null
 
   const acknowledge = async (): Promise<void> => {
     if (await controller.acknowledge()) finish()

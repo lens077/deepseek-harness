@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(fileURLToPath(new URL('../src/client/rows/WorkspaceBrowser.module.css', import.meta.url)), 'utf8')
 const rowsCss = readFileSync(fileURLToPath(new URL('../src/client/rows/Rows.module.css', import.meta.url)), 'utf8')
+const mobileCss = readFileSync(fileURLToPath(new URL('../src/client/rows/MobileWorkspaceBrowser.module.css', import.meta.url)), 'utf8')
 
 /**
  * Declarations of one selector rule, keyed by property with whitespace collapsed.
@@ -32,6 +33,30 @@ function declarationsFrom(source: string, selector: string): Map<string, string>
 
 const declarations = (selector: string): Map<string, string> | undefined => declarationsFrom(css, selector)
 const rowDeclarations = (selector: string): Map<string, string> | undefined => declarationsFrom(rowsCss, selector)
+
+describe('mobile Workspace browsing density', () => {
+  const mobile = (selector: string) => declarationsFrom(mobileCss, selector)
+
+  it('separates Workspaces with a thin rule and keeps name, count, and path compact', () => {
+    expect(mobile('.list > li:has(.workspace)')?.get('border-bottom'))
+      .toBe('0.5px solid var(--dsw-alias-border-l3)')
+    expect(mobile('.workspace')?.get('padding')).toBe('10px 0')
+    expect(mobile('.identity > .count')?.get('grid-row')).toBe('1')
+    expect(mobile('.identity > .path')?.get('grid-row')).toBe('2')
+    expect(mobile('.name')?.get('font-size')).toBe('14px')
+    expect(mobile('.path')?.get('line-height')).toBe('17px')
+  })
+
+  it('keeps touch targets and search text readable without a management text row', () => {
+    for (const selector of ['.workspace', '.session', '.back', '.filter']) {
+      expect(mobile(selector)?.get('min-height')).toBe('44px')
+    }
+    expect(mobile('.manage')?.get('position')).toBe('absolute')
+    expect(mobile('.manage')?.get('width')).toBe('44px')
+    expect(mobile('.manage')?.get('height')).toBe('44px')
+    expect(mobile('.filter')?.get('font-size')).toBe('16px')
+  })
+})
 
 describe('WorkspaceBrowser.module.css list', () => {
   const root = declarations('.root')

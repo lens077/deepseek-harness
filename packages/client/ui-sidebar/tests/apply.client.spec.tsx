@@ -12,6 +12,8 @@ async function bench(declare = true) {
   await ctx.plugin(SlotRegistry).await()
   const layout = { toggleSidebar: vi.fn() }
   const uiWorkspace = { startSession: vi.fn() }
+  const sessions = { create: vi.fn(async () => 'scratch'), open: vi.fn() }
+  ctx.provide('sessions', sessions as never)
   ctx.provide('layout', layout)
   ctx.provide('uiWorkspace', uiWorkspace as never)
   ctx.provide('locale', new LocaleRuntime(ctx))
@@ -22,7 +24,7 @@ async function bench(declare = true) {
       () => null,
     )
   }
-  return { ctx, slots, layout, uiWorkspace }
+  return { ctx, slots, layout, uiWorkspace, sessions }
 }
 
 describe('ui-sidebar apply', () => {
@@ -31,7 +33,7 @@ describe('ui-sidebar apply', () => {
   })
 
   it('declares only the services it uses', () => {
-    expect(inject).toEqual(['slots', 'layout', 'uiWorkspace', 'locale'])
+    expect(inject).toEqual(['slots', 'layout', 'uiWorkspace', 'sessions', 'locale'])
   })
 
   it('registers the shell and declares its child seats', async () => {
@@ -46,7 +48,10 @@ describe('ui-sidebar apply', () => {
     // Copy rides the standard locale seat, not the inject face.
     expect(b.slots.entries('sidebar')[0]!.locale).toBe('sidebar')
     const injected = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)()
-    expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar'])
+    expect(Object.keys(injected)).toEqual(['startSession', 'startUngrouped', 'toggleSidebar'])
+    await injected.startUngrouped()
+    expect(b.sessions.create).toHaveBeenCalledWith()
+    expect(b.sessions.open).toHaveBeenCalledWith('scratch')
     // Both arms delegate to the Workspace UI's shared New Session action.
     injected.startSession('workspace' as never)
     expect(b.uiWorkspace.startSession).toHaveBeenCalledWith('workspace')

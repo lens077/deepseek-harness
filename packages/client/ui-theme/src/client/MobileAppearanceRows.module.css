@@ -1,0 +1,137 @@
+.group {
+  display: none;
+}
+
+:global([data-mobile]) .group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-block: 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0 0 4px;
+  font-size: var(--dsh-mobile-title-size);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.description {
+  display: block;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: max(13px, var(--dsh-mobile-meta-size));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.label {
+  font-size: var(--dsh-mobile-font-size);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.layouts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.layouts legend {
+  margin-bottom: 8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--dsh-mobile-control-size);
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option:has(input:checked) {
+  background: var(--dsw-alias-bg-module-platform);
+  border-color: var(--dsw-alias-label-secondary);
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+}
+
+.option input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--dsw-alias-label-primary);
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.fontRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.fontText {
+  flex: 1 1 180px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 4px;
+}
+
+.step {
+  display: grid;
+  place-items: center;
+  width: var(--dsh-mobile-control-size);
+  height: var(--dsh-mobile-control-size);
+  padding: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-module-platform);
+  cursor: pointer;
+}
+
+.step:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.step:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+}
+
+.value {
+  min-width: 4em;
+  text-align: center;
+  font-size: var(--dsh-mobile-font-size);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}

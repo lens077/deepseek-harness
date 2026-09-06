@@ -358,3 +358,29 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+:global([data-mobile]) .card {
+  gap: var(--dsh-mobile-row-gap);
+}
+
+:global([data-mobile]) .card button,
+:global([data-mobile]) .card select {
+  min-width: var(--dsh-mobile-control-size);
+  min-height: var(--dsh-mobile-control-size);
+}
+
+:global([data-mobile]) .input {
+  font-size: max(16px, var(--dsh-mobile-font-size));
+}
+
+:global([data-mobile]) .notice,
+:global([data-mobile]) .select {
+  font-size: var(--dsh-mobile-meta-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile-layout='small']) .tools,
+:global([data-mobile-layout='small']) .modes,
+:global([data-mobile-layout='small']) .trailing {
+  gap: 4px;
+}

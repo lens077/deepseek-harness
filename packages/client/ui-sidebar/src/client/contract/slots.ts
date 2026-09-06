@@ -76,6 +76,10 @@ export interface SidebarSectionOwnerProps {
   wide: boolean
   /** Rail icons request expansion; the browser rides the wide flip for focus. */
   expandSidebar: () => void
+  /** Render the phone Workspace drill-down instead of the desktop tree. */
+  mobile?: boolean
+  /** Return to the conversation after opening a Session, including the current one. */
+  onSessionOpened?: () => void
 }
 
 /**
@@ -111,6 +115,8 @@ export type SidebarRootInjected = {
    * recent Workspace, or clear into the New Session pure view when none exist.
    */
   startSession: (workspaceId?: WorkspaceId) => void
+  /** Create and open a scratch Session without Workspace membership. */
+  startUngrouped: () => Promise<void>
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
 }
