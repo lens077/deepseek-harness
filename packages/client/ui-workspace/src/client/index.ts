@@ -155,3 +155,5 @@ export function apply(ctx: Context): void {
     WorkspacePicker,
   ))
 }
+
+export type { SessionTodos } from './contract/slots.ts'

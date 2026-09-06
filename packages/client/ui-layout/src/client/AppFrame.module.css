@@ -30,10 +30,29 @@
 }
 
 .centerCol {
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Covers the center column only. The layer itself never intercepts pointer
+   events, so an empty entry list leaves the conversation fully interactive;
+   an entry that renders content opts back in and hides what is beneath it. */
+.centerOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.centerOverlay > * {
+  pointer-events: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .detailsCol {

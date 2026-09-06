@@ -1,0 +1,79 @@
+/* Geometry mirrors DiffBlock (12px radius, code-block surface, markdown
+   code-block font) so the two diff surfaces read as one family. The divergence
+   is the pane pair: two equal tracks that each scroll horizontally, with a fixed
+   line height so a row's two sides stay level even when one side is padding. */
+
+.block {
+  --dsl-sbs-radius: 12px;
+  --dsl-sbs-line-height: 22px;
+
+  margin: 16px 0;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-markdown-code-block);
+  border-radius: var(--dsl-sbs-radius);
+  overflow: hidden;
+}
+
+/* The file this block is about, drawn once above every segment. */
+.path {
+  padding: 12px 14px 0;
+  font: var(--dsw-font-markdown-code-block);
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.segment + .segment {
+  border-top: 1px solid var(--dsw-alias-separator-primary);
+}
+
+/* Provenance for one recorded change: `Turn 3 · Edit`, dim above its panes. */
+.label {
+  padding: 8px 14px 4px;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Two equal tracks; minmax(0, 1fr) lets each pane scroll instead of forcing
+   the grid wider than the column it sits in. */
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--dsw-alias-separator-primary);
+}
+
+.pane {
+  padding: 4px 14px 12px;
+  font: var(--dsw-font-markdown-code-block);
+  background: var(--dsw-alias-markdown-code-block);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Fixed height, not min-height: a padding row carries no text, and the two
+   sides only stay level while every row occupies exactly one line box. */
+.line {
+  height: var(--dsl-sbs-line-height);
+  line-height: var(--dsl-sbs-line-height);
+  white-space: pre;
+}
+
+.same {
+  color: var(--dsw-alias-label-primary);
+}
+
+.del {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.add {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+/* The other side has no line here. It draws nothing but must still occupy its
+   row, and a faint fill marks it as absent rather than blank content. */
+.pad {
+  background: var(--dsw-alias-fill-tertiary);
+}

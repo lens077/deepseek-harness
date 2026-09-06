@@ -31,7 +31,8 @@ export type { ChatStoreState, SelectionTarget, ToolCallId, TurnProcessViewEntry 
 export type { TranscriptViewRowInjected, TranscriptViewRowProps } from './settings/TranscriptViewRow.tsx'
 export type { TranscriptViewMode } from '../chat-settings.ts'
 export type {
-  AssistantActionOwnerProps, ChatFileMentions, ChatNodeOwnerProps, ChatNodeTurnDataInjected,
+  AssistantActionOwnerProps, ChatFileDiffExpansion, ChatFileDiffs, ChatFileDiffSegment,
+  ChatFileMentions, ChatReveal, ChatNodeOwnerProps, ChatNodeTurnDataInjected, ChatTurnFileChange,
   ChatNodeViewProps, ChatScrollPosition, ChatStore, ChatViewInjected, ChatViewSlotProps,
   CommandRowOwnerProps, CommandRowProps, DetailsInjected, DetailsSlotProps,
   DetailsToolOwnerProps, MessageImagesProps,

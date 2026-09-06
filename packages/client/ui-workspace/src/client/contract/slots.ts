@@ -174,3 +174,25 @@ export type WorkspacePickerProps =
   & Omit<WorkspacePickerInjected, 'hooks'>
   & DirectoryPickingHooks
   & PropsLocale<'workspace'>
+
+/**
+ * Optional todo seat, provided by a plugin that owns a durable todo list and
+ * consumed via `ctx.get('sessionTodos')`: the session browser's row and
+ * selection menus add the chosen Sessions to that list without knowing where
+ * it lives. An absent provider hides the action.
+ */
+export interface SessionTodos {
+  /**
+   * Add one todo about each Session, worded by the provider from what it
+   * knows of the Session (its newest question), and show the list.
+   * @param sessionIds - the chosen Sessions.
+   */
+  add(sessionIds: readonly SessionId[]): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Todo provider (a plugin owning a todo list); reach via ctx.get — optional. */
+    sessionTodos: SessionTodos
+  }
+}

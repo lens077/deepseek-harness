@@ -24,6 +24,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * function of what the turn already knows.
      */
     'tool.call.toolview': { kind: 'keyed'; scope: 'session'; owner: ToolCallOwnerProps }
+    /** Additive content rendered beneath one Tool call and before its child calls. */
+    'tool.call.tail': { kind: 'list'; scope: 'session'; owner: ToolCallOwnerProps }
     /**
      * Durable images of a settled image-bearing Tool call, rendered through
      * the attachment presentation plugin. The Tool layer never imports an
@@ -95,7 +97,7 @@ export type ToolHostInfoInjected = {
 
 /** Full props of the Tool call-tree renderer registered as a `tool-call` Chat Node. */
 export type ToolTreeProps = PropsRuntime<'conversation.chat.node', 'tool-call'>
-  & PropsRenderSlots<'tool.call.toolview'>
+  & PropsRenderSlots<'tool.call.toolview' | 'tool.call.tail'>
   & PropsLocale<'conversation'>
   & InjectFace<ToolHostInfoInjected>
 

@@ -1,0 +1,522 @@
+// @vitest-environment jsdom
+/**
+ * ui-digest plugin halves: the browser entry's dictionary, its two slot
+ * registrations against the real SlotRegistry (with fiber teardown proving
+ * removal — HMR safety), the inbox wiring (push adoption, reconnect re-read,
+ * the seen mark following the current session, the document badge, and the
+ * navigation callbacks, the two settings pages), and the invariant
+ * companion's ownership reservation; the node half has its own host spec.
+ */
+import { Context, Service } from '@deepseek-ai/cordis'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import InvariantRegistry from '@deepseek-ai/dsh-invariants'
+import { SlotTestRuntime, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
+import type { InboxSnapshot } from '@deepseek-ai/dsh-session-inbox/types'
+import type { ProjectTodosSnapshot } from '@deepseek-ai/dsh-project-todos/types'
+import { apply, inject } from '../src/client/index.ts'
+import type {
+  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, ProjectSettingsInjected,
+} from '../src/client/contract/slots.ts'
+import type { DigestSettings } from '../src/nav-settings.ts'
+import * as DigestInvariant from '../src/invariant.ts'
+import { en, NS, zh } from '../src/client/locales.ts'
+import { digest, inbox, mark, project, projectFile, projectItem, projectsSnapshot } from './fixtures.client.ts'
+
+let runtime: SlotTestRuntime | undefined
+
+// The viewing store persists whole-value in localStorage.
+beforeEach(() => { localStorage.clear() })
+
+afterEach(async () => {
+  await runtime?.dispose()
+  runtime = undefined
+})
+
+/** Entry ids currently registered in one list slot. */
+function entryIds(ctx: Context, slot: string): (string | undefined)[] {
+  return ctx.slots.entries(slot as never).map(entry => entry.options.id)
+}
+
+/** Boot the browser half over the test runtime declaring both target holes. */
+async function bench(initial: InboxSnapshot = inbox()) {
+  runtime = await SlotTestRuntime.create()
+  const ctx = runtime.ctx
+  const remote = new TestRemote(ctx)
+  const calls: { method: string; request: unknown }[] = []
+  let snapshot = initial
+  const carried = <T>(value: T) => Promise.resolve({ ok: true as const, value })
+  const answer = (method: string) => (request?: unknown) => {
+    calls.push({ method, request })
+    return carried(snapshot)
+  }
+  const business = (method: string) => (request?: unknown) => {
+    calls.push({ method, request })
+    return carried({ ok: true as const, value: snapshot })
+  }
+  const sessionInbox = {
+    get: answer('get'),
+    markSeen: answer('markSeen'),
+    setHandled: answer('setHandled'),
+    setPinned: answer('setPinned'),
+    markReviewed: answer('markReviewed'),
+    removeTodo: answer('removeTodo'),
+    snooze: business('snooze'),
+    addTodo: business('addTodo'),
+    updateTodo: business('updateTodo'),
+  }
+  let projects: ProjectTodosSnapshot = projectsSnapshot({ projects: [project('/tmp/root/alpha', [projectFile('/tmp/root/alpha/TODO.md', [projectItem('ship')])])] })
+  const projectTodos = {
+    get: (request?: unknown) => {
+      calls.push({ method: 'projects.get', request })
+      return carried(projects)
+    },
+    rescan: (request?: unknown) => {
+      calls.push({ method: 'projects.rescan', request })
+      return carried(projects)
+    },
+    readDocument: (request: { path: string }) => {
+      calls.push({ method: 'projects.readDocument', request })
+      return carried({ ok: true as const, value: { path: request.path, text: '- [ ] ship', mtime: 1 } })
+    },
+  }
+  const sessionRemote = {
+    openWorkspacePath: (_request: { path: string }) => carried({ opened: true as const }),
+  }
+  // The double carries no generated namespaces; the plugin reads
+  // `ctx.remote.sessionInbox` off the provided object, so attach it there and
+  // satisfy the `remote.sessionInbox` service edge separately.
+  Object.assign(remote, { sessionInbox, projectTodos, session: sessionRemote })
+  ctx.provide('remote.sessionInbox', sessionInbox as never)
+  ctx.provide('remote.projectTodos', projectTodos as never)
+  ctx.provide('remote.session', sessionRemote as never)
+  let pickDirectory = (): Promise<string | null> => Promise.resolve('/picked')
+  const uiWorkspace = {
+    connectWorkspace: async () => {
+      const current = runtime?.sessions.list.getSnapshot().current
+      if (current === undefined) throw new Error('no fixture Session available')
+      return current
+    },
+    pickDirectory: () => pickDirectory(),
+  }
+  ctx.provide('uiWorkspace', uiWorkspace as never)
+  ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
+  const settingsScope = stubSettingsScope<{ roots: string[]; files: string[]; includeWorkspaces: boolean }>()
+  const digestScope = stubSettingsScope<DigestSettings>()
+  const bound: { namespace: string }[] = []
+  ctx.provide('settingsScope', { bind: (spec: { namespace: string }) => {
+    bound.push(spec)
+    return spec.namespace === 'ui-digest' ? digestScope.scope : settingsScope.scope
+  } } as never)
+  await runtime.root.declare({
+    'sidebar.nav.entry': { kind: 'list', scope: 'root' },
+    'center.overlay': { kind: 'list', scope: 'root' },
+    'settings.section': { kind: 'list', scope: 'root' },
+  }, () => null)
+  await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
+  ctx.locale.setLocale('zh')
+  const feature = await runtime.mount({ inject: [...inject], apply })
+  const panel = (): DigestPanelInjected => {
+    const entry = ctx.slots.entries('center.overlay').find(e => e.options.id === 'digest')
+    if (entry === undefined) throw new Error('panel entry missing')
+    return (entry.inject as unknown as () => DigestPanelInjected)()
+  }
+  const nav = (): DigestNavEntryInjected => {
+    const entry = ctx.slots.entries('sidebar.nav.entry').find(e => e.options.id === 'digest')
+    if (entry === undefined) throw new Error('nav entry missing')
+    return (entry.inject as unknown as () => DigestNavEntryInjected)()
+  }
+  const settings = (): ProjectSettingsInjected => {
+    const entry = ctx.slots.entries('settings.section').find(e => e.options.id === 'project-todos')
+    if (entry === undefined) throw new Error('settings entry missing')
+    return (entry.inject as unknown as () => ProjectSettingsInjected)()
+  }
+  const digestSettings = (): DigestSettingsInjected => {
+    const entry = ctx.slots.entries('settings.section').find(e => e.options.id === 'digest')
+    if (entry === undefined) throw new Error('digest settings entry missing')
+    return (entry.inject as unknown as () => DigestSettingsInjected)()
+  }
+  return {
+    ctx,
+    runtime,
+    remote,
+    calls,
+    feature,
+    panel,
+    nav,
+    settings,
+    digestSettings,
+    settingsScope,
+    digestScope,
+    bound,
+    setSnapshot: (next: InboxSnapshot) => { snapshot = next },
+    setProjects: (next: ProjectTodosSnapshot) => { projects = next },
+    sessionRemote,
+    setPickDirectory: (next: () => Promise<string | null>) => { pickDirectory = next },
+  }
+}
+
+describe('ui-digest browser half', () => {
+  it('declares the services it binds', () => {
+    expect(inject).toEqual([
+      'slots', 'sessions', 'workspaces', 'uiWorkspace', 'uiSession', 'locale',
+      'remote', 'remote.session', 'remote.sessionInbox', 'remote.projectTodos',
+    ])
+  })
+
+  it('registers both seats, reads the inbox once, and fiber teardown removes them (HMR safety)', async () => {
+    const b = await bench()
+    expect(entryIds(b.ctx, 'sidebar.nav.entry')).toContain('digest')
+    expect(entryIds(b.ctx, 'center.overlay')).toContain('digest')
+    expect(entryIds(b.ctx, 'settings.section')).toContain('project-todos')
+    expect(entryIds(b.ctx, 'settings.section')).toContain('digest')
+    await b.runtime.flush()
+    // The project scan is not read until the tab shows.
+    expect(b.calls.map(call => call.method)).toEqual(['get'])
+    expect(b.nav().hooks.inbox).toBe(b.panel().hooks.inbox)
+    expect(b.panel().hooks.inbox.getSnapshot().status).toBe('ready')
+    await b.feature.dispose()
+    expect(entryIds(b.ctx, 'sidebar.nav.entry')).not.toContain('digest')
+    expect(entryIds(b.ctx, 'center.overlay')).not.toContain('digest')
+    expect(entryIds(b.ctx, 'settings.section')).not.toContain('project-todos')
+    expect(entryIds(b.ctx, 'settings.section')).not.toContain('digest')
+  })
+
+  it('closes the panel on repeated session navigation and releases the listener on teardown', async () => {
+    const b = await bench()
+    await b.runtime.sessions.add({ id: 's1' }, { current: false })
+    b.runtime.renderRoot()
+    const entry = b.ctx.slots.entries('center.overlay').find(e => e.options.id === 'digest')
+    const instance = b.runtime.storeOf('center.overlay') as unknown as {
+      actions: { open: () => void }
+      store: { getSnapshot: () => { open: boolean } }
+    }
+    ;(entry!.inject as unknown as (actions: unknown) => unknown)(instance.actions)
+    instance.actions.open()
+    b.runtime.sessions.open('s1' as SessionId)
+    expect(instance.store.getSnapshot().open).toBe(false)
+
+    instance.actions.open()
+    await b.feature.dispose()
+    b.runtime.sessions.open('s1' as SessionId)
+    expect(instance.store.getSnapshot().open).toBe(true)
+  })
+
+  it('reads the project scan on demand, adopts pushes, and re-reads after a reset only once warm', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    b.ctx.emit('connection/reset')
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method.startsWith('projects.'))).toEqual([])
+    const face = b.panel()
+    await face.ensureProjects()
+    expect(face.hooks.projects.getSnapshot().snapshot.projects.map(p => p.name)).toEqual(['alpha'])
+    const pushed = projectsSnapshot({ projects: [] })
+    b.remote.emit('project-todos/changed', [pushed])
+    expect(face.hooks.projects.getSnapshot().snapshot).toBe(pushed)
+    b.ctx.emit('connection/reset')
+    await b.runtime.flush()
+    await face.rescanProjects()
+    await expect(face.readProjectDocument('/tmp/root/alpha/TODO.md')).resolves.toMatchObject({ ok: true, value: { text: '- [ ] ship' } })
+    expect(b.calls.filter(call => call.method.startsWith('projects.')).map(call => call.method))
+      .toEqual(['projects.get', 'projects.get', 'projects.rescan', 'projects.readDocument'])
+  })
+
+  it('opens a project by registering the workspace, connecting a session, and prefilling the composer', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const setDraft = vi.fn()
+    b.runtime.workspaces.stub('create', (input: unknown) => Promise.resolve({
+      workspaceId: 'w1',
+      path: (input as { path: string }).path,
+      title: 'alpha',
+      sessionIds: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as never))
+    await b.runtime.sessions.add({ id: 'session-of-w1', summary: { title: 'One' } })
+    const face = b.panel()
+    // Without the composer seat the session still opens; the draft is simply not set.
+    await expect(face.openProject('/tmp/root/alpha', 'read TODO.md')).resolves.toEqual({ ok: true })
+    expect(b.runtime.workspaces.calls.map(call => call.method)).toEqual(['create'])
+    expect(b.runtime.sessions.calls.at(-1)).toEqual({ method: 'open', args: ['session-of-w1'] })
+    b.ctx.provide('conversation', { input: { for: () => ({ setDraft }) } } as never)
+    await expect(face.openProject('/tmp/root/alpha', 'read TODO.md')).resolves.toEqual({ ok: true })
+    expect(setDraft).toHaveBeenCalledWith('read TODO.md')
+    // No text, no draft; a failing create reports the reason.
+    await expect(face.openProject('/tmp/root/alpha', null)).resolves.toEqual({ ok: true })
+    expect(setDraft).toHaveBeenCalledTimes(1)
+    b.runtime.workspaces.stub('create', () => Promise.reject(new Error('missing dir')))
+    await expect(face.openProject('/nowhere', 'x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'missing dir' } })
+    b.runtime.workspaces.stub('create', vi.fn().mockRejectedValue('plain'))
+    await expect(face.openProject('/nowhere', 'x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'plain' } })
+  })
+
+  it('opens paths through the host opener and reports its failure', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const face = b.panel()
+    await expect(face.openPath('/tmp/root/alpha/TODO.md')).resolves.toEqual({ ok: true })
+    b.sessionRemote.openWorkspacePath = async () => { throw new Error('no opener') }
+    await expect(face.openPath('/x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'no opener' } })
+  })
+
+  it('binds the scan settings page to the project-todos namespace and routes its writes', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    expect(b.bound).toContainEqual({ namespace: 'project-todos' })
+    const face = b.settings()
+    expect(face.hooks.projectSettings.getSnapshot().status).toBe('loading')
+    b.settingsScope.publish({ status: 'ready', writable: true, value: { roots: ['/a'], files: ['TODO.md'], includeWorkspaces: false } })
+    expect(face.hooks.projectSettings.getSnapshot()).toEqual({ status: 'ready', writable: true, roots: ['/a'], files: ['TODO.md'], includeWorkspaces: false })
+    await face.setRoots(['/a', ' /b ', '', '/a'])
+    await face.setFiles(['TODO.md', 'notes/TODO.md'])
+    await face.setIncludeWorkspaces(true)
+    // The locale plugin shares the stub scope; only this page's writes are asserted.
+    expect(b.settingsScope.set.mock.calls.filter(call => call[0] !== 'preference')).toEqual([
+      ['roots', ['/a', '/b']], ['files', ['TODO.md', 'notes/TODO.md']], ['includeWorkspaces', true],
+    ])
+    b.setPickDirectory(() => Promise.resolve('/picked'))
+    await expect(face.pickDirectory()).resolves.toBe('/picked')
+    const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'project-todos')
+    b.ctx.locale.setLocale('zh')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(zh['settings.nav'])
+    b.ctx.locale.setLocale('en')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(en['settings.nav'])
+  })
+
+  it('binds the digest panel page to the ui-digest namespace, shares its view with the entry, and routes its writes', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const digestBinding = b.bound.find(spec => spec.namespace === 'ui-digest') as { namespace: string; decode?: (section: unknown) => unknown } | undefined
+    expect(digestBinding).toBeDefined()
+    // The decoder defaults an incomplete wire section rather than passing it through.
+    expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ navBadges: false, navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'] })
+    const face = b.digestSettings()
+    expect(face.hooks.navSettings).toBe(b.nav().hooks.navSettings)
+    expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'loading', navBadges: true, navFinishedBadge: false, writable: false })
+    b.digestScope.publish({ status: 'ready', writable: true, value: { navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'] } })
+    expect(face.hooks.navSettings.getSnapshot()).toEqual({
+      status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'],
+    })
+    await face.setNavBadges(false)
+    await face.setNavFinishedBadge(false)
+    await face.setNavBadgeOrder(['running', 'running', 'waiting'])
+    expect(b.digestScope.set.mock.calls).toEqual([
+      ['navBadges', false], ['navFinishedBadge', false], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']],
+    ])
+    const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'digest')
+    b.ctx.locale.setLocale('zh')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(zh['digestSettings.nav'])
+    b.ctx.locale.setLocale('en')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(en['digestSettings.nav'])
+    // Teardown detaches the scope and the view returns to the defaults.
+    await b.feature.dispose()
+    expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'unavailable', navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'] })
+    expect(b.digestScope.listenerCount()).toBe(0)
+  })
+
+  it('adopts pushed snapshots and re-reads after a connection reset', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const pushed = inbox({ reviewedAt: 42 })
+    b.remote.emit('session-inbox/changed', [pushed])
+    expect(b.panel().hooks.inbox.getSnapshot().snapshot).toBe(pushed)
+    b.ctx.emit('connection/reset')
+    await b.runtime.flush()
+    expect(b.calls.map(call => call.method)).toEqual(['get', 'get'])
+  })
+
+  it('marks the current session seen at its newest landed seq', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({
+      id: 's1',
+      summary: { title: 'One', projectionValues: { sessionDigest: digest({ replySeq: 9 }) } },
+    }, { current: true })
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method === 'markSeen').map(call => call.request)).toEqual([{ sessionId: 's1', seq: 9 }])
+    // A session without a landed seq, or one already covered, issues no call.
+    b.setSnapshot(inbox({ sessions: [mark('s1', { lastSeenSeq: 9 })] }))
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { lastSeenSeq: 9 })] })])
+    await b.runtime.sessions.setCurrent(undefined)
+    await b.runtime.sessions.add({ id: 's2', summary: { title: 'Two' } }, { current: true })
+    await b.runtime.flush()
+    await b.runtime.sessions.setCurrent('s1')
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method === 'markSeen')).toHaveLength(1)
+    // A question still being answered marks by its own seq.
+    await b.runtime.sessions.add({
+      id: 's3',
+      summary: { title: 'Three', projectionValues: { sessionDigest: digest({ replySeq: null, questionSeq: 4 }) } },
+    }, { current: true })
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method === 'markSeen').map(call => call.request)).toEqual([
+      { sessionId: 's1', seq: 9 }, { sessionId: 's3', seq: 4 },
+    ])
+  })
+
+  it('routes the panel verbs to the Remote and the runtime', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({ id: 's1', summary: { title: 'One' } })
+    const face = b.panel()
+    await face.setHandled('s1' as SessionId, true)
+    await face.snooze('s1' as SessionId, 5)
+    await face.setPinned('s1' as SessionId, true)
+    await face.markReviewed()
+    await face.addTodo({ sessionId: 's1' as SessionId, questionSeq: 2, text: 'x' })
+    await face.fileTodo({ sessionId: 's1' as SessionId, questionSeq: 3, text: 'y' })
+    await face.updateTodo('t' as never, { status: 'done' })
+    await face.removeTodo('t' as never)
+    await face.ensureInbox()
+    expect(b.calls.map(call => call.method)).toEqual([
+      'get', 'setHandled', 'snooze', 'setPinned', 'markReviewed', 'addTodo', 'addTodo', 'setHandled', 'updateTodo', 'removeTodo',
+    ])
+    face.openSession('s1' as SessionId)
+    expect(b.runtime.sessions.calls.at(-1)).toEqual({ method: 'open', args: ['s1'] })
+  })
+
+  it('opens a question through the chat reveal seat and continues through the composer draft', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({ id: 's1', summary: { title: 'One' } })
+    const reveal = vi.fn()
+    const setDraft = vi.fn()
+    b.ctx.provide('chatReveal', { reveal } as never)
+    b.ctx.provide('conversation', { input: { for: () => ({ setDraft }) } } as never)
+    const face = b.panel()
+    face.openQuestion('s1' as SessionId, 4)
+    expect(reveal).toHaveBeenCalledWith('s1', 4)
+    face.continueSession('s1' as SessionId, 'go on')
+    expect(setDraft).toHaveBeenCalledWith('go on')
+    expect(b.runtime.sessions.calls.filter(call => call.method === 'open')).toHaveLength(2)
+  })
+
+  it('opens a session for continuation even when the composer seat is absent', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({ id: 's1', summary: { title: 'One' } })
+    b.panel().continueSession('s1' as SessionId, 'x')
+    expect(b.runtime.sessions.calls.filter(call => call.method === 'open')).toHaveLength(1)
+  })
+
+  it('provides the session-todo seat: one worded todo per session, each marked handled, then the list opens', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({
+      id: 's1',
+      summary: { title: 'One', projectionValues: { sessionDigest: digest({ question: `  ${'q'.repeat(130)}  `, questionSeq: 3 }) } },
+    })
+    await b.runtime.sessions.add({ id: 's2', summary: { title: 'Two', displayTitle: 'Two' } })
+    const seat = b.ctx.get('sessionTodos')
+    if (seat === undefined) throw new Error('sessionTodos not provided')
+    // The panel's bound actions arrive once its inject factory runs (the outlet's job).
+    b.runtime.renderRoot()
+    const entry = b.ctx.slots.entries('center.overlay').find(e => e.options.id === 'digest')
+    const instance = b.runtime.storeOf('center.overlay') as unknown as { actions: unknown; store: { getSnapshot: () => { open: boolean; tab: string } } }
+    ;(entry!.inject as unknown as (actions: unknown) => unknown)(instance.actions)
+    seat.add(['s1' as SessionId, 's2' as SessionId, 'missing' as SessionId])
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method === 'addTodo').map(call => call.request)).toEqual([
+      { sessionId: 's1', questionSeq: 3, text: `跟进：${'q'.repeat(120)}…` },
+      { sessionId: 's2', questionSeq: null, text: '跟进：Two' },
+      { sessionId: 'missing', questionSeq: null, text: '跟进：missing' },
+    ])
+    expect(b.calls.filter(call => call.method === 'setHandled').map(call => call.request)).toEqual([
+      { sessionId: 's1', handled: true },
+      { sessionId: 's2', handled: true },
+      { sessionId: 'missing', handled: true },
+    ])
+    expect(instance.store.getSnapshot()).toMatchObject({ open: true, tab: 'todos' })
+  })
+
+  it('leaves the panel closed when every todo add fails, and before the panel is bound', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const seat = b.ctx.get('sessionTodos')!
+    seat.add(['s1' as SessionId])
+    await b.runtime.flush()
+    expect(b.calls.filter(call => call.method === 'addTodo')).toHaveLength(1)
+    b.runtime.renderRoot()
+    const entry = b.ctx.slots.entries('center.overlay').find(e => e.options.id === 'digest')
+    const instance = b.runtime.storeOf('center.overlay') as unknown as { actions: unknown; store: { getSnapshot: () => { open: boolean } } }
+    ;(entry!.inject as unknown as (actions: unknown) => unknown)(instance.actions)
+    const namespace = (b.remote as unknown as { sessionInbox: { addTodo: unknown } }).sessionInbox
+    namespace.addTodo = () => Promise.resolve({ ok: true as const, value: { ok: false as const, error: { code: 'text-blank' as const } } })
+    seat.add(['s1' as SessionId])
+    await b.runtime.flush()
+    expect(instance.store.getSnapshot().open).toBe(false)
+  })
+
+  it('copies text through the clipboard helper', async () => {
+    const b = await bench()
+    const writeText = vi.fn(async () => undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    try {
+      await expect(b.panel().copyText('brief')).resolves.toBe(true)
+      expect(writeText).toHaveBeenCalledWith('brief')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('reports the attention count into the document badge seat once it exists', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const set = vi.fn()
+    class BadgeService extends Service {
+      set = set
+      constructor(serviceCtx: Context) {
+        super(serviceCtx, 'documentBadge')
+      }
+    }
+    const badge = b.ctx.plugin(BadgeService)
+    await badge.await()
+    await b.runtime.flush()
+    expect(set).toHaveBeenLastCalledWith(0)
+    await b.runtime.sessions.add({ id: 's1', summary: { title: 'One', projectionValues: { sessionDigest: digest() } } })
+    await b.runtime.flush()
+    expect(set).toHaveBeenLastCalledWith(1)
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { handledAt: 1 })] })])
+    await b.runtime.flush()
+    expect(set).toHaveBeenLastCalledWith(0)
+    b.remote.emit('session-inbox/changed', [inbox()])
+    await b.runtime.flush()
+    expect(set).toHaveBeenLastCalledWith(1)
+    // Archived sessions leave the count.
+    b.runtime.workspaces.list.update((draft) => { draft.archivedSessionIds = ['s1' as SessionId] })
+    await b.runtime.flush()
+    expect(set).toHaveBeenLastCalledWith(0)
+    await b.feature.dispose()
+    expect(set).toHaveBeenLastCalledWith(0)
+  })
+
+  it('registers both dictionaries under its own namespace and releases them with the fiber', async () => {
+    const b = await bench()
+    const translate = b.ctx.locale.bind(NS)
+    expect(translate('nav.label')).toBe(zh['nav.label'])
+    b.ctx.locale.setLocale('en')
+    expect(translate('nav.label')).toBe(en['nav.label'])
+    await b.feature.dispose()
+    expect(translate('nav.label')).not.toBe(en['nav.label'])
+  })
+
+  it('keeps the English dictionary key-identical to the Chinese source of truth', () => {
+    expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
+  })
+})
+
+describe('ui-digest invariant companion', () => {
+  it('reserves package ownership under its declared companion name', async () => {
+    const ctx = new Context()
+    await ctx.plugin(InvariantRegistry, { enabled: true })
+    const fiber = ctx.plugin(DigestInvariant)
+    await fiber.await()
+    expect(DigestInvariant.name).toBe('client-ui-digest-invariant')
+    expect(DigestInvariant.inject).toEqual(['invariants'])
+    expect(() => { (ctx.emit as (event: string) => void)('slots/changed') }).not.toThrow()
+    await fiber.dispose()
+  })
+})

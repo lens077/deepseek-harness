@@ -178,6 +178,17 @@ interface ScopeRecord {
   session: Session
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * A caller navigates to a Session or clears the current selection, including repeated selections.
+     * @mode emit
+     * @param sessionId - requested Session, or undefined for the empty view.
+     */
+    'sessions/navigated'(sessionId: SessionId | undefined): void
+  }
+}
+
 /** Root sessions service: list store, current selection, object-layer manager, scope tree, bindings, and breadcrumb routes. */
 export class ClientSessions implements ISessions {
   /**
@@ -269,6 +280,7 @@ export class ClientSessions implements ISessions {
    */
   open(id: SessionId): void {
     this.manager.select(id)
+    this.rootCtx.emit('sessions/navigated', id)
   }
 
   /**
@@ -277,6 +289,7 @@ export class ClientSessions implements ISessions {
    */
   openSubagent(address: SubagentAddress): void {
     this.manager.selectSubagent(address)
+    this.rootCtx.emit('sessions/navigated', address.childSessionId)
   }
 
   /**
@@ -315,6 +328,7 @@ export class ClientSessions implements ISessions {
    */
   clear(): void {
     this.manager.clearSelection()
+    this.rootCtx.emit('sessions/navigated', undefined)
   }
 
   /**

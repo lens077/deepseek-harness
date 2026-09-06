@@ -13,23 +13,41 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
+  InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
+/** Frame-private observable for the browser-title attention count. */
+export interface AppFrameInjected {
+  hooks: {
+    badge: ObservableSnapshot<number>
+  }
+}
+
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'center.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
+  & InjectFace<AppFrameInjected>
 
-/** Center column grid item (session-body building block). */
-function CenterColumn(props: { children?: ReactNode }) {
-  return <div className={css.centerCol}>{props.children}</div>
+/**
+ * Center column grid item (session-body building block). `overlay` renders
+ * above the conversation inside the same grid cell; entries that render
+ * nothing leave the conversation untouched.
+ */
+function CenterColumn(props: { children?: ReactNode; overlay?: ReactNode }) {
+  return (
+    <div className={css.centerCol}>
+      {props.children}
+      <div className={css.centerOverlay}>{props.overlay}</div>
+    </div>
+  )
 }
 
 /** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
@@ -91,12 +109,15 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
 export function AppFrame({
   useStore,
   useSessions,
+  useBadge,
   actions,
   renderSlot,
   SessionProvider,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
+  const badge = useBadge(value => value)
+  const running = useSessions(s => s.ids.filter(id => s.byId[id]?.running === true).length)
   const detailsSession = useSessions((s) => {
     const current = s.current
     return current !== undefined && s.byId[current]?.blank === false ? current : undefined
@@ -107,7 +128,6 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
-
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
     if (detailsSession === undefined) return
@@ -183,6 +203,8 @@ export function AppFrame({
     >
       <DocumentTitle
         productTitle={productTitle}
+        badge={badge}
+        running={running}
         {...documentTitle === undefined ? {} : { title: documentTitle }}
       />
       <div className={css.sidebarCol}>
@@ -202,7 +224,7 @@ export function AppFrame({
             the shell's own pending rendering. The conversation
             is session-maybe; SessionProvider withholds the strict details
             entry while no session is current. */}
-        <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
+        <CenterColumn overlay={renderSlot('center.overlay', {})}>{renderSlot('conversation', {})}</CenterColumn>
         <DetailsColumn>
           <SessionProvider>{renderSlot('details', {})}</SessionProvider>
         </DetailsColumn>

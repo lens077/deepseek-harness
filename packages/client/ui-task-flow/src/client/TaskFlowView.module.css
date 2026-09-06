@@ -1,0 +1,120 @@
+/* Task-flow canvas view: a dotted pan/zoom stage with a floating toolbar. */
+
+.view {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--dsw-alias-bg-base);
+  background-image: radial-gradient(var(--dsw-alias-border-l1) 1px, transparent 1px);
+  background-size: 18px 18px;
+  user-select: none;
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.viewport.dragging { cursor: grabbing; }
+
+.stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.stage > * { background: transparent; }
+
+.toolbar {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--dsh-task-flow-font-size, 11px);
+  line-height: 1.45;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.zoom {
+  position: absolute;
+  bottom: 16px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hint {
+  position: absolute;
+  right: 20px;
+  bottom: 16px;
+  font-size: var(--dsh-task-flow-font-size, 11px);
+  line-height: 1.45;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: var(--dsh-task-flow-font-size, 11px);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.btn:hover { background: var(--dsw-alias-interactive-bg-hover-solid); }
+
+.btn.stop {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.fact {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  white-space: nowrap;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-task-flow-font-size, 11px);
+  line-height: 1.45;
+}
+
+.laneBoard {
+  min-width: 720px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow: hidden;
+}

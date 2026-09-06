@@ -82,6 +82,8 @@
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/dsh-scope": "workspace:^",
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@deepseek-ai/dsh-session-inbox": "workspace:^",
+    "@deepseek-ai/dsh-project-todos": "workspace:^"
   }
 }

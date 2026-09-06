@@ -72,6 +72,33 @@
     - id: session-stats
       name: '@deepseek-ai/dsh-session-stats'
 
+    # Newest question, closing answer, and Turn outcome for cold Session rows.
+    - id: session-digest
+      name: '@deepseek-ai/dsh-session-digest'
+
+    # Durable seen, handled, snooze, pin, and cross-workspace todo state.
+    - id: session-inbox
+      name: '@deepseek-ai/dsh-session-inbox'
+      config:
+        maxTextBytes: 4096
+
+    # Project todo documents from configured roots and registered Workspaces.
+    - id: project-todos
+      name: '@deepseek-ai/dsh-project-todos'
+      config:
+        roots: []
+        files:
+          - TODO.md
+          - TODO
+          - TODO.txt
+          - todo.md
+          - docs/TODO.md
+        includeWorkspaces: true
+        maxDepth: 2
+        maxFileBytes: 262144
+        maxItemsPerFile: 200
+        watchDebounceMs: 300
+
     # Whole-log turn outline for the chat turn rail (the turnOutline
     # projection key): every turn stays navigable before its events page in.
     - id: session-turn-outline
@@ -242,6 +269,10 @@
     - id: ui-deliverables
       name: '@deepseek-ai/dsh-client-ui-deliverables'
 
+    # Session file rail and shared inline-diff preferences.
+    - id: ui-session-files
+      name: '@deepseek-ai/dsh-client-ui-session-files'
+
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'
 
@@ -272,6 +303,10 @@
     # Background jobs: the session-header list over the jobsBySession mirror.
     - id: ui-jobs
       name: '@deepseek-ai/dsh-client-ui-jobs'
+
+    # Cross-workspace Session digest, inbox, and project todo surface.
+    - id: ui-digest
+      name: '@deepseek-ai/dsh-client-ui-digest'
 
     # Goal surface: GoalBar in the input dock over the goal session projection.
     - id: ui-goal
@@ -308,6 +343,11 @@
 
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
+
+    # Task flow: the resident strip above the composer and the Flow canvas view,
+    # folded from prompts, todo snapshots, delegated agents, and turn outcomes.
+    - id: ui-task-flow
+      name: '@deepseek-ai/dsh-client-ui-task-flow'
 
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #

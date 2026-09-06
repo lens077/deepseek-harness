@@ -441,6 +441,7 @@ export class TestSessions implements ISessions {
       draft.current = id
       draft.currentAddress = undefined
     })
+    this.rootCtx.emit('sessions/navigated', id)
   }
 
   /** Open an existing fixture through its catalog address. */
@@ -451,6 +452,7 @@ export class TestSessions implements ISessions {
       draft.current = address.childSessionId
       draft.currentAddress = address
     })
+    this.rootCtx.emit('sessions/navigated', address.childSessionId)
   }
 
   /** Resolve the current fixture's retained catalog address. */
@@ -477,6 +479,7 @@ export class TestSessions implements ISessions {
       draft.current = undefined
       draft.currentAddress = undefined
     })
+    this.rootCtx.emit('sessions/navigated', undefined)
   }
 
   /** Record a list refresh; fixture callers publish list state explicitly. */

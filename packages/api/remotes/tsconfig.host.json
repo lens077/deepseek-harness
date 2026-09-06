@@ -61,6 +61,12 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../session/session-inbox"
+    },
+    {
+      "path": "../../todo/project-todos"
     }
   ]
 }

@@ -338,6 +338,18 @@
   scrollbar-gutter: stable;
 }
 
+/* The optional Session rail sits beside the scrollport and stays resident while content scrolls. */
+.bodyRow {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.bodyRow .scrollBody {
+  min-width: 0;
+}
+
 .root[data-phase='active'] .viewArea {
   flex: 1 0 auto;
   min-height: auto;

@@ -1,0 +1,47 @@
+/* Typography and bottom padding match the view tabs beside it so the row keeps
+   one baseline. The deliberate divergence: no underline bar and no business
+   blue — those mark the SELECTED VIEW, and this control selects nothing, it
+   opens a pane. Its state reads from ink weight and the badge instead. */
+
+.button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 11px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.button:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.open {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The changed-file count. Reads as a quiet chip rather than a notification
+   badge: it is a running total, not something demanding attention. */
+.badge {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-fill-tertiary);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.spinner {
+  animation: session-files-button-spin 700ms linear infinite;
+}
+
+@keyframes session-files-button-spin {
+  to { transform: rotate(360deg); }
+}

@@ -114,6 +114,12 @@ function concreteConversation(ctx: Context): ConversationController {
 export function apply(ctx: Context, config: Config = Config({})): void {
   const sessions = ctx.sessions
   const slots = ctx.slots
+  const slotEntries = (name: 'conversation.session.rail' | 'conversation.session.tabs.leading') => ({
+    getSnapshot: () => slots.entries(name),
+    subscribe: (listener: () => void) => slots.subscribe(name, listener),
+  })
+  const railSeat = slotEntries('conversation.session.rail')
+  const tabsLeading = slotEntries('conversation.session.tabs.leading')
   // Schemastery's field default is materialized before Cordis calls apply.
   const maxConcurrentFileUploads = config.maxConcurrentFileUploads as number
   const workspaceNavigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation
@@ -221,6 +227,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     locale: NS,
     children: {
       'conversation.session': { kind: 'single', scope: 'session' },
+      'conversation.session.rail': { kind: 'single', scope: 'session' },
       'conversation.session.header': { kind: 'single', scope: 'session' },
       'conversation.composer': { kind: 'chain', scope: 'session' },
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
@@ -232,6 +239,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
+        railSeat,
       },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaceNavigation.connectWorkspace(workspaceId)
@@ -265,14 +273,25 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.view': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,
-    inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => ({
-      hooks: { conversationViews },
-      bindDraftMirror: write => inputHub.shell(sessionId).bindMirror(write),
-      openView: (view, focus) => {
+    inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => {
+      const openView = (view: string, focus: string): void => {
         activateView(sessionId, view)
         actions.openView(view, focus)
-      },
-    }),
+      }
+      uiConversation.bindViewOpener(sessionId, (view, focus) => {
+        if (focus === undefined) {
+          activateView(sessionId, view)
+          actions.setView(view)
+        } else {
+          openView(view, focus)
+        }
+      })
+      return {
+        hooks: { conversationViews },
+        bindDraftMirror: write => inputHub.shell(sessionId).bindMirror(write),
+        openView,
+      }
+    },
   }, ConversationSession)
 
   const registerConversationHeader = () => slots.register({
@@ -282,10 +301,11 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
+      'conversation.session.tabs.leading': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionHeaderInjected => ({
-      hooks: { conversationViews },
+      hooks: { conversationViews, tabsLeading },
       open: (id) => { sessions.open(id) },
       selectView: (view) => {
         activateView(sessionId, view)

@@ -168,6 +168,9 @@ interface BindingRecord {
   disposeScope: () => void
 }
 
+/** Shell-owned View selection for one mounted Session; `focus` addresses a one-shot request to the View. */
+export type ConversationViewOpener = (view: string, focus?: string) => void
+
 /** Root service owning Conversation registries and per-Session bindings. */
 export class UiConversation extends Service {
   /** Registry of event matchers and target snapshot builders. */
@@ -175,6 +178,7 @@ export class UiConversation extends Service {
   /** Registry of target View definitions. */
   readonly views: ConversationViewRegistry
   private readonly bindings = new Map<SessionId, BindingRecord>()
+  private readonly viewOpeners = new Map<SessionId, ConversationViewOpener>()
   private readonly images: HistoricalImageCache
 
   /**
@@ -233,6 +237,36 @@ export class UiConversation extends Service {
     )
     record.disposeScope = () => { void disposeScope() }
     return binding
+  }
+
+  /**
+   * Install the mounted Session shell's View opener. The opener is released
+   * with the Session Controller binding scope; a later install for the same
+   * Session replaces it.
+   * @param sessionId - Session whose shell owns View selection.
+   * @param opener - shell callback that activates and selects one registered View.
+   */
+  bindViewOpener(sessionId: SessionId, opener: ConversationViewOpener): void {
+    const owner = this.sessions.binding(sessionId)
+    if (owner === undefined) throw new Error(`uiConversation.bindViewOpener: unknown session "${sessionId}"`)
+    this.viewOpeners.set(sessionId, opener)
+    owner.ctx.effect(() => () => {
+      if (this.viewOpeners.get(sessionId) === opener) this.viewOpeners.delete(sessionId)
+    }, 'ui-conversation view opener')
+  }
+
+  /**
+   * Select and activate one registered View of a mounted Session from outside
+   * the Conversation shell, such as a composer dock entry.
+   * @param sessionId - Session whose shell performs the selection.
+   * @param view - registered `conversation.view` entry id.
+   * @param focus - optional opaque focus identity addressed to that View.
+   * @throws when the Session shell has not installed its opener.
+   */
+  openView(sessionId: SessionId, view: string, focus?: string): void {
+    const opener = this.viewOpeners.get(sessionId)
+    if (opener === undefined) throw new Error(`uiConversation.openView: session "${sessionId}" has no mounted Conversation shell`)
+    opener(view, focus)
   }
 
   /**

@@ -187,7 +187,7 @@ export function ToolRow({
   // output joins the IN/OUT card; every other variant's input does too.
   const cardBody = variant === 'code' ? null : bodyText
   return (
-    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state}>
+    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state} data-file={filePath}>
       {status !== null && <span className={css.visuallyHidden}>{status}</span>}
       <DisclosureRow
         rowClassName={css.row}

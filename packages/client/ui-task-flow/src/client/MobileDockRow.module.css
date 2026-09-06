@@ -1,0 +1,53 @@
+.row {
+  display: none;
+}
+
+:global([data-mobile]) .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  cursor: pointer;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsh-mobile-font-size);
+  line-height: 1.5;
+}
+
+.description {
+  color: var(--dsw-alias-label-secondary);
+  font-size: max(13px, var(--dsh-mobile-meta-size));
+  line-height: 1.5;
+}
+
+.control {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--dsh-mobile-control-size);
+  height: var(--dsh-mobile-control-size);
+  border-radius: 8px;
+}
+
+.control input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--dsw-alias-label-primary);
+}
+
+.row:has(input:focus-visible) {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+}

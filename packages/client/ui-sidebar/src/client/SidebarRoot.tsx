@@ -199,6 +199,12 @@ export function SidebarRoot({
         </button>
       </Tooltip>
 
+      {/* Whole-surface navigation entries sit directly under New Session, so
+          the column reads as: start work, go to a surface, then browse. */}
+      <div className={css.navArea}>
+        {renderSlot('sidebar.nav.entry', { wide })}
+      </div>
+
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
       <div className={css.regionArea}>
