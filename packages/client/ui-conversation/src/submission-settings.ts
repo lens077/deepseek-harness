@@ -50,12 +50,27 @@ export const DEFAULT_QUESTION_NAVIGATION_SETTINGS: QuestionNavigationSettings = 
   expandButtonSide: 'right',
 }
 
+/** Field carrying the conversation content-width mode. */
+export const CONTENT_WIDTH_FIELD = 'contentWidth'
+
+/** Content-width modes accepted at settings boundaries: fill the whole
+ * content area, or the draggable adaptive width with its side handles. */
+export const CONTENT_WIDTH_MODES = ['fill', 'adaptive'] as const
+
+/** How the conversation content column sizes itself. */
+export type ContentWidthMode = typeof CONTENT_WIDTH_MODES[number]
+
+/** Default keeps the conversation filling the whole content area. */
+export const DEFAULT_CONTENT_WIDTH_MODE: ContentWidthMode = 'fill'
+
 /** Durable conversation section shared by the Host schema and the browser scope. */
 export interface ConversationSettings {
   /** Delivery mode for plain Enter while the addressed agent is busy. */
   busyEnter: BusyEnterBehavior
   /** Keyboard gesture required to send a message. */
   sendShortcut: SendShortcut
+  /** Conversation content-column sizing mode. */
+  contentWidth: ContentWidthMode
   questionNavigation: QuestionNavigationSettings
 }
 
@@ -63,6 +78,7 @@ export interface ConversationSettings {
 export const ConversationSettingsSchema: z<ConversationSettings> = z.object({
   [BUSY_ENTER_FIELD]: z.union([...BUSY_ENTER_BEHAVIORS]).default(DEFAULT_BUSY_ENTER_BEHAVIOR),
   sendShortcut: z.string().pattern(SEND_SHORTCUT_PATTERN).default('enter'),
+  [CONTENT_WIDTH_FIELD]: z.union([...CONTENT_WIDTH_MODES]).default(DEFAULT_CONTENT_WIDTH_MODE),
   questionNavigation: z.object({
     previousShortcut: z.string().default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.previousShortcut),
     nextShortcut: z.string().default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.nextShortcut),

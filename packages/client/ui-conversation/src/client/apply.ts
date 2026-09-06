@@ -30,6 +30,9 @@ import { QuestionNavigationPolicy } from './input/question-navigation-policy.ts'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
+import { ContentWidthRow } from './settings/ContentWidthRow.tsx'
+import type { ContentWidthRowInjected } from './settings/ContentWidthRow.tsx'
+import { ContentWidthPolicy } from './settings/content-width-policy.ts'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
@@ -136,6 +139,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     decode: section => ConversationSettingsSchema(section as ConversationSettings),
   })
   const submissionPolicy = new ComposerSubmissionPolicy(conversationSettings)
+  const contentWidthPolicy = new ContentWidthPolicy(conversationSettings)
   const questionNavigation = new QuestionNavigationPolicy(conversationSettings)
   ctx.provide('questionNavigation', questionNavigation)
 
@@ -150,6 +154,17 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       setSendShortcut: (shortcut) => { submissionPolicy.setSendShortcut(shortcut) },
     }),
   }, EnterBehaviorRow))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'content-width',
+    order: 25,
+    locale: NS,
+    inject: (): ContentWidthRowInjected => ({
+      hooks: { contentWidthMode: contentWidthPolicy.mode },
+      setContentWidthMode: (mode) => { contentWidthPolicy.setMode(mode) },
+    }),
+  }, ContentWidthRow))
+
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'question-shortcuts',
@@ -257,6 +272,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
         railSeat,
+        contentWidthMode: contentWidthPolicy.mode,
       },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaceNavigation.connectWorkspace(workspaceId)

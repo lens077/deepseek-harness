@@ -16,22 +16,28 @@
      content + 32px at every width. Declared on the root because the
      transcript and the composer seat are sibling subtrees.
 
-     W adapts to the column, not the viewport (a collapsed sidebar widens the
-     column without resizing the window): the component publishes the column's
-     live width as --dsh-conversation-column-width (px, via ResizeObserver —
-     container-type would re-anchor the subtree's portal-free position:fixed
-     descendants) and the clamp keeps a 680px floor (a step under the figma
-     748px — the full-width reading felt wide on every screen), takes 64% of
-     wider columns, and caps at 920px for line-length
-     readability. A dragged user preference (--dsh-chat-user-width, published
-     by the width handles) replaces the adaptive term wholesale. */
+     Default (fill mode): the conversation fills the whole content area — no
+     adaptive clamp and no draggable width handles. */
+  --dsh-chat-content-width: 100%;
+  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
+  --dsh-composer-side-clearance: 16px;
+  --dsh-composer-dock-inset: 8px;
+}
+
+/* Adaptive mode (Settings-owned opt-in): W adapts to the column, not the
+   viewport (a collapsed sidebar widens the column without resizing the
+   window): the component publishes the column's live width as
+   --dsh-conversation-column-width (px, via ResizeObserver — container-type
+   would re-anchor the subtree's portal-free position:fixed descendants) and
+   the clamp keeps a 680px floor, takes 64% of wider columns, and caps at
+   920px for line-length readability. A dragged user preference
+   (--dsh-chat-user-width, published by the width handles) replaces the
+   adaptive term wholesale. */
+.root[data-width-mode='adaptive'] {
   --dsh-chat-content-width: var(
     --dsh-chat-user-width,
     clamp(680px, calc(var(--dsh-conversation-column-width, 0px) * 0.64), 920px)
   );
-  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
-  --dsh-composer-side-clearance: 16px;
-  --dsh-composer-dock-inset: 8px;
 }
 
 .header {
@@ -479,7 +485,10 @@
 }
 
 @media (max-width: 767px) {
-  .root {
+  /* Both width modes fill on mobile: the attribute form outranks the adaptive
+     clamp rule above. */
+  .root,
+  .root[data-width-mode='adaptive'] {
     --dsh-chat-content-width: 100%;
     --dsh-composer-side-clearance: 8px;
   }

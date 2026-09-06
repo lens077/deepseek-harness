@@ -122,6 +122,8 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Settings-owned content-width mode; defaults to the fill logic. */
+    widthMode?: 'fill' | 'adaptive'
   } = {},
 ) {
   const root = sid('root')
@@ -302,6 +304,7 @@ function mount(
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
     useRailSeat: selector => selector([]),
+    useContentWidthMode: selector => selector(options.widthMode ?? 'fill'),
     useInput,
     inputActions,
     renderSlot,
@@ -617,9 +620,22 @@ describe('ConversationRoot resident composer', () => {
     expect(b.view.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
-  it('publishes the column width as a px variable for the shared width axis', () => {
+  it('fill mode (default): no width handles, no published width variables', () => {
     const b = mount(sessionSnapshotOf())
     const root = b.view.container.querySelector('[data-phase]') as HTMLElement
+    expect(root.getAttribute('data-width-mode')).toBe('fill')
+    expect(b.view.container.querySelector('[data-width-handle]')).toBeNull()
+    // No root observer in fill mode: the 100% axis needs no measurements.
+    Object.defineProperty(root, 'offsetWidth', { value: 1200, configurable: true })
+    act(() => { fireResize(root) })
+    expect(root.style.getPropertyValue('--dsh-conversation-column-width')).toBe('')
+    expect(root.style.getPropertyValue('--dsh-chat-user-width')).toBe('')
+  })
+
+  it('adaptive mode publishes the column width as a px variable for the shared width axis', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { widthMode: 'adaptive' })
+    const root = b.view.container.querySelector('[data-phase]') as HTMLElement
+    expect(root.getAttribute('data-width-mode')).toBe('adaptive')
     // jsdom offsetWidth is 0 until faked: the observer publishes whatever the
     // layout reports, and the CSS clamp() floors the axis at 680px either way.
     Object.defineProperty(root, 'offsetWidth', { value: 1200, configurable: true })
@@ -630,8 +646,8 @@ describe('ConversationRoot resident composer', () => {
     expect(root.style.getPropertyValue('--dsh-chat-user-width')).toBe('')
   })
 
-  it('drag → persist → window clamp round-trip on a width handle', () => {
-    const b = mount(sessionSnapshotOf())
+  it('adaptive mode: drag → persist → window clamp round-trip on a width handle', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { widthMode: 'adaptive' })
     const root = b.view.container.querySelector('[data-phase]') as HTMLElement
     Object.defineProperty(root, 'offsetWidth', { value: 1600, configurable: true })
     act(() => { fireResize(root) })
@@ -679,8 +695,8 @@ describe('ConversationRoot resident composer', () => {
     }
   })
 
-  it('hero phase renders no width handles (no transcript to size)', () => {
-    const b = mount(sessionSnapshotOf({ blank: true }))
+  it('adaptive hero phase renders no width handles (no transcript to size)', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), undefined, undefined, { widthMode: 'adaptive' })
     expect(b.view.container.querySelector('[data-width-handle]')).toBeNull()
   })
 })

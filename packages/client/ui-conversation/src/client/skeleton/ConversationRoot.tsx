@@ -131,9 +131,14 @@ function WidthHandle(props: {
 export function ConversationRoot({
   sessionId, useSession, useSessions, useSessionPendingInteraction,
   useWorkspaces, useConversation, useInput, useComposerBlock,
-  renderSlot, renderSlotChain, selectWorkspace, useRailSeat, t,
+  renderSlot, renderSlotChain, selectWorkspace, useRailSeat,
+  useContentWidthMode, t,
 }: ConversationRootProps) {
   const railOccupied = useRailSeat(entries => entries.length > 0)
+  // Settings-owned width mode: 'fill' (default) keeps the transcript at 100%
+  // of the content area; 'adaptive' enables the clamp and the drag handles.
+  const widthMode = useContentWidthMode(mode => mode)
+  const adaptive = widthMode === 'adaptive'
   const session = useSession(s => s)
   const pendingInteraction = useSessionPendingInteraction(snapshot =>
     sessionId === undefined ? undefined : snapshot.get(sessionId))
@@ -179,11 +184,12 @@ export function ConversationRoot({
     seatObserver.current.observe(scroller)
   }, [])
 
-  // Publishes the column's live width as --dsh-conversation-column-width so
-  // the shared width axis can adapt (see the .root CSS), and re-clamps a
-  // dragged preference against the shrunken column WITHOUT rewriting the
-  // stored preference — widening the window restores it (the AppFrame
-  // sidebar-drag rule). Same callback-ref pattern as the seat observer.
+  // Adaptive mode only: publishes the column's live width as
+  // --dsh-conversation-column-width so the shared width axis can adapt (see
+  // the .root CSS), and re-clamps a dragged preference against the shrunken
+  // column WITHOUT rewriting the stored preference — widening the window
+  // restores it. In fill mode the callback ref detaches the observer and
+  // clears both variables so the 100% axis applies untouched.
   const rootEl = useRef<HTMLDivElement | null>(null)
   const rootObserver = useRef<ResizeObserver | null>(null)
   const publishWidths = useCallback((root: HTMLDivElement): void => {
@@ -201,10 +207,15 @@ export function ConversationRoot({
     rootObserver.current = null
     rootEl.current = root
     if (root === null) return
+    if (!adaptive) {
+      root.style.removeProperty('--dsh-conversation-column-width')
+      root.style.removeProperty('--dsh-chat-user-width')
+      return
+    }
     rootObserver.current = new ResizeObserver(() => { publishWidths(root) })
     rootObserver.current.observe(root)
     publishWidths(root)
-  }, [publishWidths])
+  }, [adaptive, publishWidths])
 
   // Drag plumbing for the two width handles: onStart snapshots the resolved
   // width (grabbing a clamped column must not jump back to the raw stored
@@ -375,7 +386,7 @@ export function ConversationRoot({
   )
 
   return (
-    <div ref={rootResizeRef} className={css.root} data-phase={phase}>
+    <div ref={rootResizeRef} className={css.root} data-phase={phase} data-width-mode={widthMode}>
       {sessionId === undefined ? null : renderSlot('conversation.session.header', {})}
       <div className={css.body} data-mobile-rail-open={mobileRailOpen || undefined}>
         {railOccupied && sessionId !== undefined && <button type="button" className={css.mobileRailToggle}
@@ -390,9 +401,10 @@ export function ConversationRoot({
             </div>
           )
           : scrollBody}
-        {/* Width handles only while a transcript is on screen; the hero has no
-            content column to size. */}
-        {phase === 'active' && (['left', 'right'] as const).map(side => (
+        {/* Width handles only in the adaptive Settings mode and only while a
+            transcript is on screen; the fill mode and the hero have no
+            draggable content column. */}
+        {adaptive && phase === 'active' && (['left', 'right'] as const).map(side => (
           <WidthHandle
             key={side}
             side={side}

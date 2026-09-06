@@ -23,7 +23,7 @@ import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submissi
 import type { ShortcutKeyEvent } from '../../send-shortcut.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
-import type { QuestionNavigationSettings } from '../../submission-settings.ts'
+import type { ContentWidthMode, QuestionNavigationSettings } from '../../submission-settings.ts'
 
 /** Browser-owned draft attachment that has not crossed the durable Host boundary. */
 export type ComposerAttachment = ComposerImageAttachment | ComposerFileAttachment
@@ -269,7 +269,13 @@ export interface ConversationInjected {
   /** Connect and open a blank Session in the selected Workspace. */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /** Session-addressed composer block source, or the stable absent source. */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined>; railSeat: ObservableSnapshot<readonly unknown[]> }
+  hooks: {
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    /** Live occupancy of the optional Session rail. */
+    railSeat: ObservableSnapshot<readonly unknown[]>
+    /** Live content-width mode preference (fill by default). */
+    contentWidthMode: ObservableSnapshot<ContentWidthMode>
+  }
 }
 
 /** Business callbacks injected into the strict Session body. */
