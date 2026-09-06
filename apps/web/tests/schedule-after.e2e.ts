@@ -623,7 +623,7 @@ describe.skipIf(MODE === 'record')('web e2e: active Schedule catalog', () => {
 
     browser = await chromium.launch()
     page = await browser.newPage({
-      viewport: { width: 900, height: 900 },
+      viewport: { width: 780, height: 900 },
       locale: 'en-US',
       timezoneId: AT_BROWSER_ZONE,
     })

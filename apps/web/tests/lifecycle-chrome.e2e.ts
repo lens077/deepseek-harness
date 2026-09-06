@@ -183,7 +183,12 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     await writeComposerDraft(page, input, PROMPT)
     const observeTurn = async () => {
       const originalViewport = page.viewportSize() ?? { width: 1680, height: 1000 }
-      if (MODE !== 'record') await page.setViewportSize({ width: 480, height: 1000 })
+      if (MODE !== 'record') {
+        await page.setViewportSize({ width: 480, height: 1000 })
+        await page.locator('[data-mobile="true"]').waitFor({ state: 'visible' })
+        const overview = page.getByRole('region', { name: 'Overview', exact: true })
+        if (await overview.isVisible()) await overview.getByRole('button', { name: 'Close digest', exact: true }).click()
+      }
       try {
         await input.press('Enter')
         if (MODE !== 'record') {

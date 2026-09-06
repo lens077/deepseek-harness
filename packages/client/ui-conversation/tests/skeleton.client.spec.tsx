@@ -124,6 +124,8 @@ function mount(
     viewTabs?: ViewTab[]
     /** Settings-owned content-width mode; defaults to the fill logic. */
     widthMode?: 'fill' | 'adaptive'
+    noSession?: boolean
+    railOccupied?: boolean
   } = {},
 ) {
   const root = sid('root')
@@ -294,7 +296,7 @@ function mount(
       : (opts?.fallback ?? null)
   )) as ConversationRootProps['renderSlotChain']
   const props: ConversationRootProps = {
-    sessionId: SID,
+    sessionId: options.noSession === true ? undefined : SID,
     SessionProvider: ({ children }) => children,
     useSession,
     useConversation,
@@ -303,20 +305,21 @@ function mount(
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
-    useRailSeat: selector => selector([]),
+    useRailSeat: selector => selector(options.railOccupied === true ? [{}] : []),
     useContentWidthMode: selector => selector(options.widthMode ?? 'fill'),
     useInput,
     inputActions,
     renderSlot,
     renderSlotChain,
     selectWorkspace: retargetWorkspace,
+    startScratchSession: () => Promise.resolve(),
     t,
   }
   const view = render(<ConversationRoot {...props} />)
   return {
     view, store, wiring, sink, retargetWorkspace, session, conversation, slotCalls, lineageOwners, seatOwners, open,
     pickerOwner: () => pickerOwner,
-    rerender: () => { view.rerender(<ConversationRoot {...props} />) },
+    rerender: (sessionId = props.sessionId) => { view.rerender(<ConversationRoot {...props} sessionId={sessionId} />) },
   }
 }
 
@@ -339,6 +342,25 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
+  it('preserves the composer subtree when the first session activates an occupied rail', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), undefined, undefined, {
+      noSession: true, railOccupied: true, summaryBlank: true,
+    })
+    const selectors = ['[data-conversation-scroll]', '[data-composer-seat]', '[data-composer-input]', '[aria-label="选择工作区"]']
+    const before = selectors.map(selector => b.view.container.querySelector(selector))
+    expect(before.every(node => node !== null)).toBe(true)
+    expect(b.view.queryByTestId('view-conversation.session.rail')).toBeNull()
+    expect(b.view.container.querySelector('[class*="railPanel"]')).toBeNull()
+
+    b.rerender(SID)
+
+    selectors.forEach((selector, index) => {
+      expect(b.view.container.querySelector(selector)).toBe(before[index])
+    })
+    expect(b.view.getByTestId('view-conversation.session.rail')).toBeTruthy()
+    expect(b.view.getByRole('textbox').getAttribute('contenteditable')).toBe('true')
+  })
+
   it('does not redispatch composer child slots for an unrelated Session publication', () => {
     const b = mount(sessionSnapshotOf())
     const childKeys = new Set([

@@ -724,6 +724,35 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('search') search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue>
 
 /**
+ * Read one Session's canonical writable-root list.
+ * @param request - target Session.
+ * @returns immutable primary directory and additional roots.
+ */
+@Remote('directories') async directories(request: SessionDirectoriesRequest): Promise<SessionDirectories>
+
+/**
+ * Replace one Session's complete additional writable-root list.
+ * @param request - target Session and complete requested list.
+ * @returns the canonical accepted list.
+ */
+@Remote('replaceDirectories') async replaceDirectories(request: SessionReplaceDirectoriesRequest): Promise<SessionDirectories>
+
+/**
+ * Permanently remove one Session and its complete lineage.
+ * @param request - root Session to delete.
+ * @returns child-first removed identities.
+ */
+@Remote('delete') async delete(request: SessionDeleteRequest): Promise<SessionDeleteValue>
+
+/**
+ * Search all current user questions in one readable Session.
+ * @param request - Session identity and literal question text query.
+ * @param signal - cancellation for authorization and provider work.
+ * @returns bounded hits plus whether the page is complete.
+ */
+@Remote('searchQuestions') async searchQuestions( request: SessionQuestionSearchRequest, signal: AbortSignal, ): Promise<SessionQuestionSearchValue>
+
+/**
  * Create or idempotently adopt one ordinary Session.
  * @param request - requested identity, location, and Agent preset.
  * @returns the Session identity and resolved preset when configured.

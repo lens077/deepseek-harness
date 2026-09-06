@@ -75,6 +75,8 @@ class TraceHandle implements SessionHandle {
 }
 
 class TracePersistence extends SessionPersistence {
+  delete(id: SessionIdType): Promise<boolean> { return Promise.resolve(TracePersistence.entries.delete(id)) }
+
   static entries = new Map<SessionIdType, { meta: SessionHeader; events: SessionEvent[] }>()
   static listCalls = 0
   static readCalls = 0

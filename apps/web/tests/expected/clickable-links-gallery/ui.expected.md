@@ -5,8 +5,41 @@
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files 7
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - list:
+    - listitem: a
+    - listitem:
+      - button "Go to the changes in a/style.css": style.css +0 -0
+    - listitem: b
+    - listitem:
+      - button "Go to the changes in b/style.css": style.css +0 -0
+    - listitem: docs
+    - listitem:
+      - button "Go to the changes in docs/press.md": press.md +1 -0
+    - listitem: site
+    - listitem:
+      - button "Go to the changes in site/app.js": app.js +0 -0
+    - listitem:
+      - button "Go to the changes in site/index.html": index.html +0 -0
+    - listitem:
+      - button "Go to the changes in site/report.html": report.html +0 -0
+    - listitem: src
+    - listitem:
+      - button "Go to the changes in src/tokens.css": tokens.css +1 -1
+  - separator "Drag to resize the file panel"
+- button "Back to bottom":
+  - img
+- 'button "Current question: Assemble the link gallery: write the report and styles, inspect the sources, and summarize. — Jump to this question"': "#1 Assemble the link gallery: write the report and styles, inspect the sources, and summarize."
+- text: 7 files Done {{duration}}
+- button "Show the full question":
+  - img
 - text: "Assemble the link gallery: write the report and styles, inspect the sources, and summarize. {{clock}}"
 - button "Copy":
   - img
@@ -48,8 +81,7 @@
   - text: Edit
   - button "src/tokens.css"
   - text: +1 -1
-- button "Copy"
-- text: "src/tokens.css - --inline-code: #EBEEF2; + --inline-code: #F5F5F5; └ +1 -1 · 1 file"
+- text: "src/tokens.css --inline-code: #EBEEF2; --inline-code: #F5F5F5;"
 - button "Inspect"
 - button "Tool call str_replace_editor · create" [expanded]:
   - img
@@ -168,15 +200,20 @@
 - list:
   - listitem:
     - paragraph: Footnote references stay inert superscripts. ↩
+- 'button "Answering: Assemble the link gallery: write the report and styles, inspect the sources, and summarize. — Jump to this question"':
+  - img
+  - text: "Answering #1 Assemble the link gallery: write the report and styles, inspect the sources, and summarize."
 - text: Produced
 - button "Open site/report.html": report.html
 - button "Open a/style.css": style.css
 - button "Open b/style.css": style.css
 - button "Open site/index.html": index.html
 - button "Open site/app.js": app.js
-- button "Open src/tokens.css": tokens.css
+- button "Open src/tokens.css" [expanded]: tokens.css
 - text: + 1 file
 - button "Show in folder"
+- button "Open tokens.css in the editor"
+- text: "src/tokens.css Turn 1 · edit --inline-code: #EBEEF2; --inline-code: #F5F5F5;"
 - button "Copy":
   - img
 - button "Good response":
@@ -188,9 +225,22 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}}
-- button "Back to bottom":
+- text: {{clock}} Task flow 1/1 · Elapsed {{duration}}
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
   - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Assemble the link gallery: write the report and styles, inspect the sources, an… Execution {{duration}} · 2 steps"
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img

@@ -14,6 +14,7 @@ import {
   ConversationEventRegistry, ConversationViewRegistry, type ConvViewOwnerProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { en as conversationEn, NS as CONVERSATION_NS, zh as conversationZh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
+import { QuestionNavigationPolicy } from '@deepseek-ai/dsh-client-ui-conversation/src/client/input/question-navigation-policy.ts'
 import { apply as applyChat, inject as injectChat } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { apply as applyTool, inject as injectTool } from '../src/client/apply.ts'
 import { toolChatSnapshot } from './tool-details-render.client.tsx'
@@ -104,6 +105,7 @@ async function bench(snapshot: ChatSnapshot) {
   const events = new ConversationEventRegistry(ctx)
   const views = new ConversationViewRegistry(ctx)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  ctx.provide('questionNavigation', new QuestionNavigationPolicy())
   ctx.provide('uiConversation', {
     events,
     views,

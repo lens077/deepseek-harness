@@ -36,9 +36,9 @@ Enter-to-send is the default. With a custom combination selected, ordinary Enter
 
 **What it adds.** A session file rail beside the transcript listing what the session read and changed, plus an inline side-by-side diff — before on the left, after on the right, paired line by line — that opens by default and is governed by a General setting. Descendant subagent sessions are read through the durable child catalog and merged in, one row per file with each segment labelled by the agent, turn, and tool that made it. The design, its rejected alternatives, and its known limits are recorded in [the file panel Agent Note](.agents/notes/implemented/feature/2026-08-26-web-session-file-panel.md).
 
-A `Files` control opens the rail at the head of the view tabs; a mutation row arrives with its change already open:
+A `Files` control opens the rail at the head of the view tabs; an edit with prior content arrives with its comparison open under the default setting:
 
-![The session file rail beside the transcript, with a write row expanded on arrival](docs/user/guide/session-file-rail.png)
+![The session file rail beside the transcript, with an edit comparison expanded in the flow](docs/user/guide/session-file-rail.png)
 
 Expanding a produced file compares its content before and after — one segment per recorded change, labelled with the turn and tool that made it, so a file written once and edited twice reads as the three steps it was:
 
@@ -48,7 +48,7 @@ Expanding a produced file compares its content before and after — one segment 
 
 ![The session file rail listing four changed files, each with its added and removed line totals](docs/user/guide/session-file-line-stats.png)
 
-**Question navigation.** A long conversation buries its own questions, and paged history means a visible-only index would omit the earliest ones. The Chat view derives a question index from finalized `user` Chat Nodes and drives it from a sticky control stack that shares the composer-height anchor with the back-to-bottom button: adjacent navigation, a compact marker for the current question, and a searchable full list. A jump aligns the target row to the top, respects reduced-motion preferences, and highlights the row for two seconds; moving before the loaded head requests the next older page before resolving the target, so paging keeps one authority. The feature adds no session events and does not change model-visible history.
+**Question navigation.** A long conversation buries its own questions, and paged history means a visible-only index would omit the earliest ones. The Chat view derives a question index from finalized `user` Chat Nodes and drives it from a sticky control stack that shares the composer-height anchor with the back-to-bottom button: adjacent navigation, a compact marker for the current question, and a searchable full list. A loaded jump lands the target at the transcript reading line; a search result outside the loaded window asks the Session history reader to load through its seq before landing. The feature adds no session events and does not change model-visible history.
 
 ![The question history panel, with each question's text masked](docs/user/guide/question-navigation-panel.png)
 
@@ -110,6 +110,7 @@ The new-session screen keeps the chip beside the workspace picker and shows no s
 
 **Status.** A work in progress that tracks upstream. Branches here may contain unfinished work from several parallel efforts; nothing is promised stable, and changes are not upstreamed automatically. The MIT license and every upstream notice are inherited unchanged — see [LICENSE](LICENSE).
 
+
 ---
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
@@ -138,10 +139,10 @@ The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it
 
 ### Run from source
 
-Run from this repository's source. It pulls from the official [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) regularly and resolves the merge conflicts; the repository is fully public and transparent, with no poisoning of any kind — every change is in the commit history.
+To run from a repository checkout:
 
 ```sh
-git clone https://github.com/lens077/deepseek-harness.git
+git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
@@ -149,19 +150,6 @@ pnpm dsh web
 ```
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
-
-You can of course also start from the official repository and overlay this one on top — merge this fork's `main` into the official code:
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-git remote add fork https://github.com/lens077/deepseek-harness.git
-git fetch fork
-git merge fork/main
-pnpm install
-pnpm run build
-pnpm dsh web
-```
 
 ## Community and support
 
@@ -181,6 +169,6 @@ For agents, follow [AGENTS.md](AGENTS.md).
 
 ## License
 
-[MIT](LICENSE) — the upstream license, which this fork's additions inherit unchanged.
+[MIT](LICENSE)
 
 Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

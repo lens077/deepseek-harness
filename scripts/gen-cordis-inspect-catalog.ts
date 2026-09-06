@@ -12,14 +12,20 @@ const CLIENT_OUT = 'packages/extensions/cordis-client-runner/src/client/api-cata
 const CLIENT_SERVICES: Readonly<Record<string, readonly string[]>> = {
   layout: ['toggleSidebar', 'openDetails', 'closeDetails'],
   locale: ['getLocale', 'getSnapshot', 'subscribe', 'setLocale', 'addLanguage', 'register', 'bind'],
-  sessions: ['open', 'openSubagent', 'setSubagentCatalogOpen', 'refreshSubagents', 'search', 'fork', 'scope', 'binding'],
+  sessions: [
+    'open', 'openSubagent', 'setSubagentCatalogOpen', 'refreshSubagents', 'search', 'fork',
+    'directories', 'replaceDirectories', 'delete', 'scope', 'binding',
+  ],
   slots: ['register', 'inject'],
   theme: ['getTheme', 'setTheme', 'setFontSize', 'register', 'overrideTokens'],
   uiWorkspace: [
     'connectWorkspace', 'startSession', 'archiveSession', 'pickDirectory', 'listDirectory',
     'createDirectory',
   ],
-  workspaces: ['create', 'rename', 'delete', 'insertSessionBefore', 'archiveSession'],
+  workspaces: [
+    'create', 'rename', 'delete', 'insertSessionBefore', 'archiveSession', 'archiveSessions',
+    'unarchiveSession', 'setSessionMembership',
+  ],
 }
 
 const CLIENT_EVENTS = new Set([

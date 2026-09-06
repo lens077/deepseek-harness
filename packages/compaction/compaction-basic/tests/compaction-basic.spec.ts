@@ -383,6 +383,22 @@ describe('compact configuration and defaults', () => {
     })
   })
 
+  it('resolves Astra to 900K pressure in a 1M window without changing other routes', () => {
+    const config = resolveConfig({
+      modelPolicies: [{ provider: 'openai', model: 'gpt-6-astra', thresholdRatio: 0.9 }],
+    })
+    const spec = (provider: string, model: string, contextWindow: number) =>
+      resolveCompactSpec(resolveTargetPolicy(config, { provider, model }), contextWindow)
+
+    expect(spec('openai', 'gpt-6-astra', 1_000_000)).toMatchObject({
+      contextWindow: 1_000_000,
+      thresholdTokens: 900_000,
+      retainTokens: 160_000,
+    })
+    expect(spec('openai', 'gpt-5.6-sol', 272_000).thresholdTokens).toBe(217_600)
+    expect(spec('other-gateway', 'gpt-6-astra', 1_000_000).thresholdTokens).toBe(800_000)
+  })
+
   it('inherits, clears, and replaces the summarization target as a pair', () => {
     const config = resolveConfig({
       summarizationProvider: 'default-provider',

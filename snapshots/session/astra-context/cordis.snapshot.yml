@@ -1,0 +1,20 @@
+# Adapter usage establishes pressure without a large recorded transcript.
+# A tiny image priced at 160k fills the shipped retained-tail budget.
+- id: llm-deepseek
+  disabled: true
+
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: openai
+            name: OpenAI
+            models:
+              - id: gpt-6-astra
+                contextWindow: 1000000
+                defaultMaxTokens: 128000
+                reasoningEfforts: [max]
+                defaultReasoningEffort: max
+                inputModalities: [text, image]
+                imageRequestTokens: 160000

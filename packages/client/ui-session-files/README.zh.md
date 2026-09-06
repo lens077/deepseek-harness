@@ -4,6 +4,8 @@
 
 会话文件侧栏：本会话读过和改过的文件。Node 半边只注册一个持久化 section——文件类偏好（内联 diff 展开、「文件」显示与否）——除此之外什么都不做，因为侧栏展示的每个事实都已在 session log 里。浏览器半边占据 [`dsh-client-ui-conversation`](../ui-conversation/README.zh.md) 声明的两个座位：`conversation.session.tabs.leading` 承载视图标签行首的控件，`conversation.session.rail` 承载活动视图旁的常驻面板。只有随附的 Web patch 会加载本包；移除它那一条 cordis.yml 条目即可移除两处surface，标签行与视图区回到无占位时的形状。持久化的*文件*显示偏好在运行时以同样的方式门控这两个座位，来自本包注册的「对话布局」设置分区（`RailVisibilityPolicy`，默认**显示**）：选择**隐藏**即回到同样的无占位形状——只剩对话与轨迹——而转录内的产出文件卡片属于对话内容，保持不变。
 
+文件按钮与文件栏还依赖 `conversation.chat.node` 声明。只有 Chat 存在且文件偏好为显示时才注册；该声明被移除时，两者随之消失。不含 `ui-chat` 的组合将这两个座位留空，而不提供虚假的 Chat hook。
+
 `deriveSessionFiles` 把一份会话快照折叠成两个座位共读的模型，`sessionFilesOf` 以快照为键做记忆化，使一个跑到几百步的会话按快照走一遍而不是按每次 selector 调用走一遍。词汇取自工具自身的 render intent，与 [`dsh-client-ui-deliverables`](../ui-deliverables/README.zh.md) 读的是同一来源：`card: 'diff'` 视图，或 `kind` 为 `edit` 的 `card: 'generic'` 视图，是一次修改；`kind` 为 `read` 的 `card: 'generic'` 视图是一次读取。搜索两者都不是——它产出的是命中列表，不是 agent 打开过的文件。失败调用与删除不计入，而仍在飞行中的调用以带写入标记的形式贡献其路径。
 
 模型层的已修改清单按最早在上排列，以首次记录改动的 seq 为键，于是一个文件无论被编辑多少次都保持同一条目。侧栏把这份清单画成类似 `tree` 的目录大纲，由 `railRows` 折叠：每个目录一行表头，文件缩进其下；只有单一子目录的链条折叠成一个标签（是 `src/client`，而不是 `src` 下面孤悬一个 `client`）；同层先目录后文件，各按字母序。过长的标签舍头留尾——在侧栏这个宽度上，最贴近文件的路径段才是区分各行的部分——完整路径悬停可见。每个条目携带本会话对该文件的累积 hunks，按发生顺序排列，每段标注其轮次与工具。这个排序是已记录数据支持得起的极限：整文件 before/after 从不离开宿主进程（`ToolResult` 只携带 `content`、`isError` 和 `meta`），而 `computeHunkDiffs` 丢弃了 `structuredPatch` 的行号，于是 hunks 不带任何可用来按文件位置排序、或在重叠处合并的锚点。

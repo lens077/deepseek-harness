@@ -62,7 +62,7 @@ function terminalStatusOf(reason: TurnEndReason): FlowStatus | null {
 
 function abortDetail(reason: TurnEndReason): string | undefined {
   if (reason.kind === 'aborted') return reason.reason.kind
-  if (reason.kind === 'error') return reason.error.message
+  if (reason.kind === 'error') return reason.error.code === 'AUTH' ? undefined : reason.error.message
   if (reason.kind === 'max-tokens') return 'max-tokens'
   if (reason.kind === 'blocked') return 'blocked'
   return undefined
@@ -349,6 +349,7 @@ export function buildFlowSnapshot(
         kind: 'terminal',
         title: '',
         ...detail === undefined ? {} : { detail },
+        ...end.data.reason.kind === 'error' ? { failureCode: end.data.reason.error.code } : {},
         status: terminal,
         startTime: end.time,
         endTime: end.time,

@@ -74,16 +74,19 @@ function childEnvironment(spec: TerminalBackendSpawnSpec, dialect: ShellDialect)
   }
   if (dialect === 'pwsh') {
     // pwsh ignores PS1/PROMPT_COMMAND; its prompt is installed by the startup
-    // bootstrap instead, and NO_COLOR keeps the renderer quiet.
+    // bootstrap instead, and NO_COLOR keeps the renderer quiet. A declared
+    // promptText is bash-only for the same reason.
     return { ...common, NO_COLOR: '1' }
   }
+  const prompt = spec.promptText ?? CONTROLLED_PROMPT
   return {
     ...common,
-    PS1: CONTROLLED_PROMPT,
+    PS1: prompt,
     // Re-asserting PS1 after the marker keeps prompt readiness working when a
     // command overwrote the shell variable: bash runs PROMPT_COMMAND before
     // rendering each prompt, so an override never survives to the next prompt.
-    PROMPT_COMMAND: `printf "\\033]133;D;%s\\007" "$?"; PS1='${CONTROLLED_PROMPT}'`,
+    // It must re-assert the same spawn-declared prompt the session matches on.
+    PROMPT_COMMAND: `printf "\\033]133;D;%s\\007" "$?"; PS1='${prompt}'`,
     BASH_SILENCE_DEPRECATION_WARNING: '1',
   }
 }
@@ -183,7 +186,8 @@ export class BashTerminalBackend implements TerminalBackend {
     private readonly createSession: (
       terminal: SubprocessTerminalHandle,
       config: ResolvedConfig,
-    ) => LocalPtySession = (terminal, config) => new LocalPtySession(terminal, config),
+      promptText: string,
+    ) => LocalPtySession = (terminal, config, promptText) => new LocalPtySession(terminal, config, promptText),
   ) {
     this.type = config.backendType
   }
@@ -196,14 +200,20 @@ export class BashTerminalBackend implements TerminalBackend {
     if (argv[0] === undefined) throw new Error('terminal-bash: sandbox returned empty argv')
     const terminal = await this.spawnTerminal({
       argv,
-      cwd: spec.cwd ?? policy.workspaceRoot,
+      cwd: spec.cwd ?? policy.workspaceRoots[0],
       env: childEnvironment(spec, this.config.shellDialect),
       rows: this.config.rows,
       cols: this.config.cols,
       graceMs: this.config.disposeGraceMs,
       signal: spec.signal,
     })
-    const session = this.createSession(terminal, this.config)
+    // pwsh installs CONTROLLED_PROMPT via its startup bootstrap and cannot take
+    // a per-session prompt from the environment, so a declared promptText only
+    // takes effect (and is only matched) under the bash dialect.
+    const sessionPrompt = this.config.shellDialect === 'bash'
+      ? spec.promptText ?? CONTROLLED_PROMPT
+      : CONTROLLED_PROMPT
+    const session = this.createSession(terminal, this.config, sessionPrompt)
     try {
       await startupSession(session, this.config.shellDialect, this.config.timeoutMs, spec.signal)
       return session

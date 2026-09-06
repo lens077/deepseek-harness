@@ -231,7 +231,7 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     const buttonBox = await actionButton.boundingBox()
     if (buttonBox === null) throw new Error('fork source row action has no layout box')
     await page.mouse.click(buttonBox.x + buttonBox.width / 2, buttonBox.y + buttonBox.height / 2)
-    await page.getByRole('menuitem', { name: 'Fork session' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate as sibling session', exact: true }).click()
     await expect.poll(
       () => scaffold.ctx.agents.list().filter(agent => agent.session.header.parentSession !== undefined).length,
       { timeout: 15_000 },

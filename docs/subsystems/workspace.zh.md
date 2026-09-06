@@ -268,6 +268,27 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
 /**
+ * Archive several known Sessions in one durable mutation.
+ * @param request - distinct Session identities to archive.
+ * @returns the complete resulting archive set.
+ */
+@Remote('archiveSessions') archiveSessions(request: WorkspaceArchiveSessionsRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * Remove one Session from the durable archive set.
+ * @param request - Session identity to unarchive.
+ * @returns the complete resulting archive set.
+ */
+@Remote('unarchiveSession') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * Add or remove several Sessions from one Workspace account.
+ * @param request - Workspace, Session identities, and desired membership.
+ * @returns the updated Workspace projection.
+ */
+@Remote('setSessionMembership') setSessionMembership(request: WorkspaceSetSessionMembershipRequest): Promise<WorkspaceValue>
+
+/**
  * Stream a complete Workspace baseline followed by ordered increments.
  * @param signal - generation cancellation.
  * @returns baseline followed by ordered Workspace increments.

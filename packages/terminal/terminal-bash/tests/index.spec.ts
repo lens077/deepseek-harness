@@ -226,8 +226,36 @@ describe('BashTerminalBackend startup rollback', () => {
     expect(initialized).toHaveBeenCalledWith(undefined)
     expect((ctx.sandbox as RecordingSandbox).calls).toEqual([{
       argv: ['/bin/bash', '-i'],
-      policy: { mode: 'workspace-write', sessionId: 'agent', workspaceRoot: resolve('/workspace') },
+      policy: { mode: 'workspace-write', sessionId: 'agent', workspaceRoots: [resolve('/workspace')] },
     }])
+  })
+
+  // The prompt the shell is spawned with and the prompt readiness compares against must be
+  // the same string, otherwise every command settles by silence instead of the prompt.
+  it('spawns with the caller prompt and hands the same prompt to the session', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'danger-full-access', workspaceRoot: '/tmp' })
+    let spawned: SubprocessTerminalSpawnSpec | undefined
+    const spawnTerminal = async (spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle> => {
+      spawned = spec
+      return terminalHandle()
+    }
+    const session = { initialize: vi.fn<() => Promise<void>>().mockResolvedValue(undefined) } as unknown as LocalPtySession
+    let sessionPrompt: string | undefined
+    const backend = new BashTerminalBackend(ctx, config(), spawnTerminal, (_terminal, _config, promptText) => {
+      sessionPrompt = promptText
+      return session
+    })
+
+    const promptText = '__DSH_PERSISTENT_BASH_PROMPT__ '
+    await backend.spawn({ ...spec(agent(ctx)), promptText })
+    expect(spawned?.env?.PS1).toBe(promptText)
+    expect(sessionPrompt).toBe(promptText)
+
+    await backend.spawn(spec(agent(ctx)))
+    expect(spawned?.env?.PS1).toBe('dsh> ')
+    expect(sessionPrompt).toBe('dsh> ')
   })
 
   it('resolves session mode and root together before wrapping the shell', async () => {
@@ -259,7 +287,7 @@ describe('BashTerminalBackend startup rollback', () => {
     })
     expect((ctx.sandbox as RecordingSandbox).calls).toEqual([{
       argv: ['/bin/bash', '-i'],
-      policy: { mode: 'workspace-write', sessionId: 'agent', workspaceRoot: resolve('/session-workspace') },
+      policy: { mode: 'workspace-write', sessionId: 'agent', workspaceRoots: [resolve('/session-workspace')] },
     }])
   })
 

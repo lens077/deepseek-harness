@@ -9,6 +9,7 @@ export const zh = {
   'produced.moreOne': '+ 1 个文件',
   'produced.more': '+ {count} 个文件',
   'produced.open': '打开 {name}',
+  'produced.openInEditor': '在编辑器中打开 {name}',
   'produced.showInFolder': '在文件夹中显示',
 }
 
@@ -18,6 +19,7 @@ export const en: Record<DeliverablesKey, string> = {
   'produced.moreOne': '+ 1 file',
   'produced.more': '+ {count} files',
   'produced.open': 'Open {name}',
+  'produced.openInEditor': 'Open {name} in the editor',
   'produced.showInFolder': 'Show in folder',
 }
 

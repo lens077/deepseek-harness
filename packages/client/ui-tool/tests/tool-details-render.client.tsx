@@ -22,6 +22,7 @@ const emptyTrajectory: TrajectorySnapshot = {
 
 /** Stable empty Trajectory source for DetailsPanel fixtures. */
 export const useEmptyTrajectory: DetailsSlotProps['useTrajectory'] = selector => selector(emptyTrajectory)
+export const useEmptyTaskFlow: DetailsSlotProps['useTaskFlow'] = () => { throw new Error('unused') }
 
 function jsonFixture(value: unknown): JsonValue {
   if (!isJsonValue(value)) throw new Error('tool event fixture must be lossless JSON')

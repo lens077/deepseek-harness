@@ -16,7 +16,7 @@ Hero Workspace 界面在 Workspace 选择项旁提供**不选目录，直接开�
 
 owner 将请求交给 `IWorkspaces.createScratchSession()`。`WorkspaceRuntime` 调用不带 `workspaceId` 的 `sessions.create()`，由 Host 应用默认 cwd，并让该 Session 保持在所有 `WorkspaceView.sessionIds` 记账之外。该方法返回已可寻址的 Session id，但不负责导航。`ui-conversation` 拥有导航，并让 Workspace 选择与 scratch 创建共用一条交接路径：先连接或创建目标，尽可能搬移当前空白 Session 的草稿与暂存图片 id，再调用 `sessions.open(nextId)`。
 
-编辑器是否惰性只取决于 Session 是否缺席。空白 Session 一旦实体化，无论归属 Workspace、留在 Ungrouped，还是原有 Workspace 记账已消失，都使用普通的可用输入界面。该决策部分取代 [Session scope note](../architecture/2026-07-25-web-client-session-scope-and-provide-channel.zh.md)与[编辑器 picker 入口 note](2026-08-07-workspace-picker-composer-entry.zh.md)中关于实体化路径的前提；其中的 scope、常驻 DOM 与 picker 触发决策仍然有效。
+编辑器是否惰性只取决于 Session 是否缺席。空白 Session 一旦实体化，无论归属 Workspace、留在 Ungrouped，还是原有 Workspace 记账已消失，都使用普通的可用输入界面。该决策部分取代 [Session scope note](../architecture/2026-07-25-web-client-session-scope-and-provide-channel.zh.md)与[编辑器 picker 入口 note](../../archived/feature/2026-08-07-workspace-picker-composer-entry.md)中关于实体化路径的前提；其中的 scope、常驻 DOM 与 picker 触发决策仍然有效。
 
 ## 考虑过的替代方案
 

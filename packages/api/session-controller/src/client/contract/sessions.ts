@@ -12,6 +12,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { AgentContext } from '../scope.ts'
 import type { SessionSearchResultItem } from '../sessions/manager.ts'
 import type { SessionBinding, SessionListState } from '../sessions/service.ts'
+import type { SessionDirectories } from '../../types.ts'
 import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 
@@ -85,6 +86,28 @@ export interface ISessions {
     signal: AbortSignal,
   ): Promise<RemoteResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>>
   /**
+   * Read one Session's canonical primary and additional directories.
+   * @param sessionId - Session whose directory policy is read.
+   * @returns the complete canonical directory policy.
+   */
+  directories(sessionId: SessionId): Promise<SessionDirectories>
+  /**
+   * Replace one Session's complete additional-directory list.
+   * @param sessionId - Session whose directory policy is changed.
+   * @param additionalDirectories - complete requested additional-root list.
+   * @returns the complete canonical directory policy after replacement.
+   */
+  replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): Promise<SessionDirectories>
+  /**
+   * Permanently delete a Session and its lineage.
+   * @param sessionId - root Session selected for deletion.
+   * @returns deleted Session ids in child-first order.
+   */
+  delete(sessionId: SessionId): Promise<readonly SessionId[]>
+  /**
    * Fork a session from a completed-turn prefix of the source; on resolution
    * the child is in the list store and `open()` can target it.
    * @param opts - source session id, the optional event seq anchoring the
@@ -94,7 +117,12 @@ export interface ISessions {
    * @returns the child session id.
    * @throws when the fork fails, or when a requested child-title rename fails after creation.
    */
-  fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>
+  fork(opts: {
+    sessionId: SessionId
+    atSeq?: number
+    increaseTitle?: boolean
+    placement?: 'sibling' | 'nested'
+  }): Promise<SessionId>
   /**
    * Resolve an Agent-scoped context view (use-and-discard).
    * @param id - session id.

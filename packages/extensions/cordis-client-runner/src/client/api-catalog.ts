@@ -198,7 +198,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'bounded results, or a business/transport error.',
       },
       {
-        signature: 'fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>',
+        signature: 'directories(sessionId: SessionId): Promise<SessionDirectories>',
+        description: 'Read one Session\'s canonical primary and additional directories.',
+        parameters: [{ name: 'sessionId', description: 'Session whose directory policy is read.' }],
+        returns: 'the complete canonical directory policy.',
+      },
+      {
+        signature: 'replaceDirectories( sessionId: SessionId, additionalDirectories: readonly string[], ): Promise<SessionDirectories>',
+        description: 'Replace one Session\'s complete additional-directory list.',
+        parameters: [{ name: 'sessionId', description: 'Session whose directory policy is changed.' }, { name: 'additionalDirectories', description: 'complete requested additional-root list.' }],
+        returns: 'the complete canonical directory policy after replacement.',
+      },
+      {
+        signature: 'delete(sessionId: SessionId): Promise<readonly SessionId[]>',
+        description: 'Permanently delete a Session and its lineage.',
+        parameters: [{ name: 'sessionId', description: 'root Session selected for deletion.' }],
+        returns: 'deleted Session ids in child-first order.',
+      },
+      {
+        signature: 'fork(opts: { sessionId: SessionId atSeq?: number increaseTitle?: boolean placement?: \'sibling\' | \'nested\' }): Promise<SessionId>',
         description: 'Fork a session from a completed-turn prefix of the source; on resolution the child is in the list store and `open()` can target it.',
         parameters: [{ name: 'opts', description: 'source session id, the optional event seq anchoring the cut (the boundary is the first turn/end at or after it; an in-log anchor in an open turn is unavailable rather than clipped backward), and whether to increment an inherited durable title before resolving.' }],
         returns: 'the child session id.',
@@ -376,6 +394,22 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'archiveSession(sessionId: SessionId): Promise<void>',
         description: 'Archive a Session from Workspace grouping surfaces.',
         parameters: [{ name: 'sessionId', description: 'Session to archive.' }],
+      },
+      {
+        signature: 'archiveSessions(sessionIds: readonly SessionId[]): Promise<void>',
+        description: 'Archive several Sessions in one Host mutation.',
+        parameters: [{ name: 'sessionIds', description: 'distinct Sessions to archive.' }],
+      },
+      {
+        signature: 'unarchiveSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one Session from the archive set.',
+        parameters: [{ name: 'sessionId', description: 'Session to make visible again.' }],
+      },
+      {
+        signature: 'setSessionMembership( workspaceId: WorkspaceId, sessionIds: readonly SessionId[], member: boolean, ): Promise<WorkspaceView>',
+        description: 'Add or remove several Sessions from one Workspace account.',
+        parameters: [{ name: 'workspaceId', description: 'Workspace whose membership changes.' }, { name: 'sessionIds', description: 'distinct Sessions to add or remove.' }, { name: 'member', description: 'true to add; false to remove into Ungrouped.' }],
+        returns: 'the changed Workspace.',
       },
       {
         signature: 'insertSessionBefore( workspaceId: WorkspaceId, sessionId: SessionId, beforeSessionId?: SessionId, ): Promise<WorkspaceView>',
@@ -730,6 +764,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionBinding {\n    readonly sessionId: SessionId;\n    readonly session: SessionFace;\n    readonly eventSource: SessionEventSource;\n    readonly ctx: AgentContext;\n}',
   },
   {
+    name: 'SessionDirectories',
+    declaration: 'export interface SessionDirectories {\n    readonly primaryDirectory: string;\n    readonly additionalDirectories: readonly string[];\n}',
+  },
+  {
     name: 'SessionEventChange',
     declaration: 'export type SessionEventChange = {\n    readonly kind: \'replace\';\n    readonly entries: readonly SessionEventLikeEntry[];\n} | {\n    readonly kind: \'prepend\';\n    readonly entries: readonly SessionEventLikeEntry[];\n} | {\n    readonly kind: \'append\';\n    readonly entries: readonly SessionEventLikeEntry[];\n} | {\n    readonly kind: \'settle-assistant\';\n    readonly attemptId: LlmAttemptId;\n    readonly entry?: SessionAssistantSettlementEntry;\n};',
   },
@@ -883,7 +921,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly nestedUnder?: Readonly<Record<string, SessionId>>;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
 ]
 

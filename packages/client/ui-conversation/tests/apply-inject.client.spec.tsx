@@ -148,6 +148,43 @@ describe('Conversation inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('opens a View from outside the shell through the Session-scoped opener', async () => {
+    const b = await bench()
+    const uiConversation = b.runtime.ctx.uiConversation
+    const binding = uiConversation.binding(ROOT)
+    const activate = vi.spyOn(binding, 'activate')
+    const removeChat = b.slots.register(
+      { name: 'conversation.view', id: 'chat', order: 0 },
+      (() => null) as never,
+    )
+    const removeFlow = b.slots.register(
+      { name: 'conversation.view', id: 'task-flow', order: 20 },
+      (() => null) as never,
+    )
+    await Promise.resolve()
+    expect(() => { uiConversation.openView(ROOT, 'task-flow') }).toThrow(/no mounted Conversation shell/)
+
+    const body = b.conversationApi(ROOT)
+    activate.mockClear()
+    uiConversation.openView(ROOT, 'task-flow')
+    expect(activate).toHaveBeenLastCalledWith('task-flow')
+    expect(body.instance.store.getSnapshot()).toMatchObject({ view: 'task-flow', viewRequest: null })
+
+    uiConversation.openView(ROOT, 'task-flow', 'node-1')
+    expect(body.instance.store.getSnapshot()).toMatchObject({
+      view: 'task-flow',
+      viewRequest: { view: 'task-flow', focus: 'node-1' },
+    })
+
+    expect(() => { uiConversation.bindViewOpener('missing' as SessionId, () => {}) }).toThrow(/unknown session/)
+    await b.runtime.sessions.remove(ROOT)
+    expect(() => { uiConversation.openView(ROOT, 'chat') }).toThrow(/no mounted Conversation shell/)
+
+    removeFlow()
+    removeChat()
+    await b.runtime.dispose()
+  })
+
   it('restores the selected View when a cached Session becomes current', async () => {
     const b = await bench()
     const binding = b.runtime.ctx.uiConversation.binding(ROOT)

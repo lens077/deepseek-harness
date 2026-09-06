@@ -124,13 +124,23 @@
   cursor: pointer;
 }
 
+/* Identity stacks the brand row over the fork tagline; both fit the 44px
+   logo row content box (20px row + 2px gap + 14px tagline). */
+.brandIdentity {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
 /* Mark and name are independent slots; the shell owns their shared baseline,
    spacing, and height so either occupant can vary in width. */
-.brandIdentity {
+.brandRow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 24px;
+  height: 20px;
   min-width: 0;
 }
 
@@ -146,15 +156,21 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  height: 24px;
-  font-size: 18px;
+  height: 20px;
+  font-size: 15px;
   font-weight: 600;
-  line-height: 24px;
+  line-height: 20px;
   letter-spacing: 0.04em;
 }
 
+/* Any occupant artwork scales to the row height; width follows its aspect. */
+.brandName svg {
+  height: 20px;
+  width: auto;
+}
+
 .fallbackBrandName {
-  font-size: 17px;
+  font-size: 14px;
   letter-spacing: 0px;
   white-space: nowrap;
 }
@@ -174,6 +190,18 @@
   font-size: 12px;
   line-height: 13px;
   letter-spacing: 0;
+}
+
+.brandTagline {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 14px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .iconButton {

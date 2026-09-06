@@ -231,14 +231,14 @@ export class ClientSessions implements ISessions {
    */
   constructor(
     private readonly rootCtx: Context,
-    remote: SessionRemotes,
+    private readonly remote: SessionRemotes,
   ) {
     this.selection = createSnapshotStore<SessionSelection>(
       {},
       { persist: { name: 'dsh.sessions.current' } })
     const restored = this.selection.getSnapshot()
     this.manager = new SessionManager(
-      remote,
+      this.remote,
       restored.sessionId,
       restored.subagentAddress,
     )
@@ -353,6 +353,32 @@ export class ClientSessions implements ISessions {
     return this.manager.search(query, signal)
   }
 
+  async directories(sessionId: SessionId): Promise<import('../../types.ts').SessionDirectories> {
+    const result = await this.remote.session.directories({ sessionId })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+
+  async replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): Promise<import('../../types.ts').SessionDirectories> {
+    const result = await this.remote.session.replaceDirectories({
+      sessionId,
+      additionalDirectories: [...additionalDirectories],
+    })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+
+  async delete(sessionId: SessionId): Promise<readonly SessionId[]> {
+    const result = await this.remote.session.delete({ sessionId })
+    if (!result.ok) throw new Error(result.error.message)
+    for (const deleted of result.value.sessionIds) this.manager.handleSessionRemoved(deleted)
+    this.projectList()
+    return result.value.sessionIds
+  }
+
   /**
    * Apply one Session Controller live-control frame.
    * @param frame - baseline or live control replacement.
@@ -443,6 +469,7 @@ export class ClientSessions implements ISessions {
     sessionId: SessionId
     atSeq?: number
     increaseTitle?: boolean
+    placement?: 'sibling' | 'nested'
   }): Promise<SessionId> {
     const sourceTitle = opts.increaseTitle
       ? this.list.getSnapshot().byId[opts.sessionId]?.title
@@ -453,6 +480,7 @@ export class ClientSessions implements ISessions {
       // turn/start), so the host's first-turn/end-at-or-after cut still ends
       // on that turn — never clipped back to the previous one.
       ...(opts.atSeq === undefined ? {} : { atSeq: SessionSeq(Math.floor(opts.atSeq)) }),
+      ...(opts.placement === undefined ? {} : { placement: opts.placement }),
     })
     if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
     this.projectList()

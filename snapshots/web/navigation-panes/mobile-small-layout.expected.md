@@ -13,6 +13,8 @@
     - option "Last 7 days"
     - option "All"
   - group
-  - heading "Seen, not handled 1" [level=3]
+  - heading "Finished 1" [level=3]
   - article:
-    - 'button "NavScenario: first run bash to"'
+    - 'button "NavScenario: first run bash to Unread"':
+      - text: "NavScenario: first run bash to"
+      - img "Unread"

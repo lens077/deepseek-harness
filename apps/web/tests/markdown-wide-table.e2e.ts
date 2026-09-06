@@ -275,6 +275,7 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
     // identically on every platform, which is what keeps one committed
     // golden true for all lanes.
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
+    await page.getByRole('button', { name: 'Close the file panel', exact: true }).click()
     // JS click: after the transcript scrolled to its tail, the pane's close
     // button can sit under the sticky header where a pointer click is
     // intercepted; the pane itself is scaffolding, not the behavior under
@@ -436,6 +437,7 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
       await sessionRow.click()
       await hidpiPage.getByText(TAIL_MARKER, { exact: true }).waitFor({ timeout: 15_000 })
       await hidpiPage.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
+      await hidpiPage.getByRole('button', { name: 'Close the file panel', exact: true }).click()
       await closeDetailsPane(hidpiPage)
       // The pane collapses ease over the layout transition: compare only a
       // settled reading (two consecutive equal wide-wrapper widths).

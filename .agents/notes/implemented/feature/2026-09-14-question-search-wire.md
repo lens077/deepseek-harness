@@ -40,7 +40,7 @@ The prior change could not build that transport because all six wire files were 
 
 `packages/host/apiproxy/tests/api-proxy-search.spec.ts` covers the handler: the filters and limit it sends, a complete page, an incomplete one, hits dropped for the wrong session/surface/type, refusal before the index for an unreadable session, an unmounted index, and abort mapping. Two were verified to reject an invalid implementation — returning a constant `complete: true` fails the incomplete-page test, and deleting the `historySourceFor` call fails the authorization test.
 
-`packages/client/ui-conversation/tests/chat-apply.client.spec.tsx` covers the binding: the injected `searchQuestions` reaches the session service with the session id and query and preserves `complete: false`, and a rejected search throws rather than resolving empty. Deleting the error branch in `apply.ts` fails the second.
+`packages/client/ui-chat/tests/chat-apply.client.spec.tsx` covers the binding: the injected `searchQuestions` reaches the session service with the session id and query and preserves `complete: false`, and a rejected search throws rather than resolving empty. Deleting the error branch in `apply.ts` fails the second.
 
 `packages/client/connection`'s fixture implements the operation over its own corpus, so keyless GUI scenarios exercise the real path.
 

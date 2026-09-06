@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-session-persistence` 持久存储会话的事件日志，并通过一个逐会话句柄寻址每个已存储会话：后端无关服务（`ctx.sessionPersistence`）暴露 `create`/`open`/`stat`/`list`，`create`/`open` 返回承载全部日志读写与单写者所有权的 `SessionHandle`。持久化单元就是现有 `SessionEvent` 日志——不存在另一套并行的存储消息类型——不可回放的元数据（格式版本、工作目录、血缘、种子边界）作为 `SessionHeader` 单独传输。后端拥有自己的存储，seam 拥有语义：仅追加的连续日志、以显式 `flush` 持久性屏障托底的尽力而为 append、绝不到达读取方的撕裂物理尾部、失败即关闭的存储记录校验，以及进程内排除第二个写入方。挂载随产品交付的 [JSONL 后端](../session-persistence-jsonl/README.zh.md)（每个会话一份产物），agent-loop 就会持久化并恢复会话，loop 与模型无需知道下面是哪个后端。
+`dsh-session-persistence` 持久存储 Session event log，并通过逐 Session handle 寻址每个已存储 Session。后端无关服务（`ctx.sessionPersistence`）暴露 `create`/`open`/`delete`/`stat`/`list`；`create` 与 `open` 返回承载全部日志读写与单写者所有权的 `SessionHandle`。持久化单元就是现有 `SessionEvent` 日志——不存在另一套并行的存储消息类型——不可回放的 metadata（格式版本、工作目录、lineage、seed boundary）作为 `SessionHeader` 单独传输。后端拥有自己的存储，seam 拥有仅追加连续日志、显式持久性屏障、永久删除 admission、撕裂尾部排除、失败即关闭的记录校验与进程内写入方排除。挂载随产品交付的 [JSONL 后端](../session-persistence-jsonl/README.zh.md)，agent-loop 就会持久化并恢复 Session，loop 与模型无需知道下面是哪个后端。
 
 ## 目录
 
@@ -33,12 +33,13 @@ seam 随产品交付 [JSONL](../session-persistence-jsonl/README.zh.md) 后端�
 
 ### 服务提供什么
 
-挂载后端后，五个服务方法寻址已存储会话：
+挂载后端后，service 会直接或通过 handle 寻址已存储 Session：
 
 ```text
 const handle = await ctx.sessionPersistence.create(header)     // store a new session, take write ownership
 const handle = await ctx.sessionPersistence.open(id, 'write')  // claim single-writer ownership of an existing session
 const reader = await ctx.sessionPersistence.open(id, 'read')   // observe without ownership
+const removed = await ctx.sessionPersistence.delete(id)        // permanently remove stored Session data
 const snap = await ctx.sessionPersistence.stat(id)             // header + revision (+ eventCount / sizeBytes) without a log read
 const all = await ctx.sessionPersistence.list()                // one snapshot per visible stored session
 await ctx.sessionPersistence.flush()                           // backend-wide durability barrier over every active write handle
@@ -149,7 +150,7 @@ seam 不添加提示词或 schema。恢复会将已存储的表层事件还原�
 - **写所有权仅限进程内**——provider 的写入器表只在单个后端实例内排除第二个写入方；持久的跨进程租约是计划在同一句柄形态上叠加的下一层，在它落地之前另一进程不得写入同一会话。
 - **在有活跃会话时重载后端插件会使其写入器响亮地失败**——重载后的后端无法服务旧实例签发的句柄；写入会持续失败直到会话重启，没有任何机制静默重新接管日志。
 - **只有通过句柄获取的会话才会持久化**——仅靠 `ctx.sessions.create` + `session/flush` 不存储任何内容；agent-loop 是生产环境的获取点，测试通过 `create`/`append`/`close` 播种存储。
-- **无删除或保留接口**——剪枝已存储会话属于带外后端维护。
+- **删除会立即生效且不可撤销**——调用方必须先释放 live Agent，并在调用 `delete(id)` 前计算 lineage 与 sidecar 清理；seam 只删除具名的已存储 Session。
 - **`list()` 无分页且无过滤**——它返回每个已存储会话的快照；适合本地存储，大规模时无索引。
 - **合成 closer 是唯一崩溃方案**——恢复通过写句柄追加 `interruptedTurnClosers`；没有继续中断轮次而不先关闭它的部分轮次恢复。
 

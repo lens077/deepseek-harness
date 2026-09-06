@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import SessionStore, { type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import SessionStore, { type SessionEvent } from '@deepseek-ai/dsh-session'
 import InvariantRegistry, { InvariantError } from '@deepseek-ai/dsh-invariants'
+import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as SandboxPolicyInvariant from '@deepseek-ai/dsh-sandbox-policy/invariant'
 
 async function setup(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(InvariantRegistry, { enabled: true })
+  // The invariant reads the policy owner's primary root to check directory
+  // events, so it activates only once the policy service is composed in.
+  await ctx.plugin(SandboxPolicyService, { workspaceRoot: process.cwd() })
   await ctx.plugin(SandboxPolicyInvariant)
   return ctx
 }
@@ -21,13 +27,13 @@ describe('sandbox-policy invariants', () => {
     'accepts the durable %s mode',
     async (mode) => {
       const ctx = await setup()
-      expect(() => { ctx.emit('session/event', {} as Session, modeEvent(mode)) }).not.toThrow()
+      expect(() => { ctx.emit('session/event', ctx.sessions.create(), modeEvent(mode)) }).not.toThrow()
     },
   )
 
   it('ignores unrelated event streams', async () => {
     const ctx = await setup()
-    expect(() => { ctx.emit('session/event', {} as Session, {
+    expect(() => { ctx.emit('session/event', ctx.sessions.create(), {
       type: 'turn/start', seq: 0, time: 0, data: {},
     } as SessionEvent) }).not.toThrow()
     expect(() => { ctx.emit('tools/change') }).not.toThrow()
@@ -35,15 +41,17 @@ describe('sandbox-policy invariants', () => {
 
   it('rejects and attributes an unknown durable sandbox mode', async () => {
     const ctx = await setup()
-    expect(() => { ctx.emit('session/event', {} as Session, modeEvent('host-root')) })
+    expect(() => { ctx.emit('session/event', ctx.sessions.create(), modeEvent('host-root')) })
       .toThrow(new InvariantError('@deepseek-ai/dsh-sandbox-policy', 'sandbox/mode carries unknown mode "host-root"'))
   })
 
   it('rejects an unknown mode already present on late registration', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     ctx.sessions.create().append('sandbox/mode', { mode: 'host-root' as never })
     await ctx.plugin(InvariantRegistry, { enabled: true })
+    await ctx.plugin(SandboxPolicyService, { workspaceRoot: process.cwd() })
 
     await expect(ctx.plugin(SandboxPolicyInvariant).then(() => undefined)).rejects.toMatchObject({
       code: 'INVARIANT',

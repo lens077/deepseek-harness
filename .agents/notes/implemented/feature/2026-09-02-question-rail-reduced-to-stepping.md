@@ -34,7 +34,7 @@ Compact mode goes whole rather than losing its entry. Deleting only the toggle w
 
 ## Verification
 
-`packages/client/ui-conversation/tests/chat-view.client.spec.tsx` loses its `compact mode` block wholesale; it described only removed behavior, and the repo's testing convention deletes obsolete behavior with its tests rather than adapting them. The package's remaining 30 files and 513 cases pass, and `tsc -b packages/client/ui-conversation/tsconfig.json` is clean.
+`packages/client/ui-chat/tests/chat-view.client.spec.tsx` loses its `compact mode` block wholesale; it described only removed behavior, and the repo's testing convention deletes obsolete behavior with its tests rather than adapting them. The package's remaining 30 files and 513 cases pass, and `tsc -b packages/client/ui-chat/tsconfig.json` is clean.
 
 `tsc -b tsconfig.client.json` reports one failure in `packages/client/ui-session-files/tests/tree-files.client.spec.ts` (a fixture missing the new `byTurn` field). That belongs to concurrent uncommitted work in this tree and is not touched here.
 

@@ -315,6 +315,7 @@ function panelProps(data: WorkflowRunChatData, sessions = listState(), openSessi
     useConversation: selector => selector(panelConversation),
     useChat: selector => selector(panelChat),
     useTrajectory: selector => selector(panelTrajectory),
+    useTaskFlow: () => { throw new Error('unused') },
     useInput: () => { throw new Error('unused') },
     inputActions: {
       setDraft: () => {},

@@ -36,9 +36,9 @@
 
 **它加了什么。** 转录区旁边一条会话文件侧栏，列出本会话读过和改过的文件；以及一份内联左右对照 diff——左为修改前、右为修改后，逐行配对——默认展开，并由「通用」设置里的一项控制。后代子代理会话经持久化的子会话目录读取并合并进来，每个文件一行，每段标注做出该改动的 agent、轮次与工具。设计本身、被否决的替代方案与已知限制记录在[文件面板 Agent Note](.agents/notes/implemented/feature/2026-08-26-web-session-file-panel.zh.md)。
 
-视图标签行首的 `Files` 控件打开侧栏；改写行出现时其改动已经展开：
+视图标签行首的 `Files` 控件打开侧栏；默认设置下，带有修改前内容的 edit 会在出现时展开对照：
 
-![转录区旁的会话文件侧栏，写入行出现时即已展开](docs/user/guide/session-file-rail.png)
+![转录区旁的会话文件侧栏，转录中的 edit 对照已展开](docs/user/guide/session-file-rail.png)
 
 展开一个产出文件即可对比它修改前后的内容——每次记录的改动一段，标注做出该改动的轮次与工具，于是一个「写一次、改两次」的文件读起来就是这三步：
 
@@ -48,7 +48,7 @@
 
 ![会话文件侧栏列出四个改动过的文件，每个都带新增与删除行数](docs/user/guide/session-file-line-stats.png)
 
-**提问导航。** 长会话会把自己的提问埋掉，而分页历史意味着「只索引可见部分」会漏掉最早的那些提问。于是 Chat 视图从已定稿的 `user` Chat Node 推导出一份提问索引，并由一组粘性控件驱动它——这组控件与回到底部按钮共用同一个基于输入框高度的锚点：相邻跳转、当前提问的紧凑标记，以及一份可搜索的完整列表。跳转会把目标行对齐到顶部，尊重「减少动态效果」偏好，并把该行高亮两秒；若要跳到已加载头部之前，会先请求上一页再定位目标，于是分页仍只有一个权威来源。该特性不新增任何会话事件，也不改变模型可见的历史。
+**提问导航。** 长会话会把自己的提问埋掉，而分页历史意味着「只索引可见部分」会漏掉最早的那些提问。于是 Chat 视图从已定稿的 `user` Chat Node 推导出一份提问索引，并由一组粘性控件驱动它——这组控件与回到底部按钮共用同一个基于输入框高度的锚点：相邻跳转、当前提问的紧凑标记，以及一份可搜索的完整列表。已加载的跳转会把目标放到转录阅读线；搜索结果位于已加载窗口之外时，Session history reader 会先加载到该 seq 再定位。该特性不新增任何会话事件，也不改变模型可见的历史。
 
 ![历史提问面板，其中每条提问的正文已打码](docs/user/guide/question-navigation-panel.png)
 
@@ -110,6 +110,7 @@
 
 **状态。** 跟随上游的进行中工作。这里的分支可能包含若干条并行工作的半成品；不承诺任何东西稳定，改动也不会自动回流上游。MIT 许可证与全部上游声明原样继承——见 [LICENSE](LICENSE)。
 
+
 ---
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
@@ -142,10 +143,10 @@ npx @deepseek-ai/dsh web
 
 ### 从源码运行
 
-从本仓库源码运行。本仓库会定期从官方 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 拉取并合并冲突；仓库完全公开、透明，没有任何投毒行为，每一处改动都能在提交历史里查到。
+如需从仓库源码运行：
 
 ```sh
-git clone https://github.com/lens077/deepseek-harness.git
+git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
@@ -153,19 +154,6 @@ pnpm dsh web
 ```
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
-
-当然，你也可以先从官方仓库拉取，再用本仓库覆盖上去——把本 fork 的 `main` 合并进官方代码即可：
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-git remote add fork https://github.com/lens077/deepseek-harness.git
-git fetch fork
-git merge fork/main
-pnpm install
-pnpm run build
-pnpm dsh web
-```
 
 ## 社区与支持
 
@@ -202,6 +190,6 @@ pnpm dsh web
 
 ## 许可证
 
-[MIT](LICENSE)——即上游的许可证，这个 fork 的新增部分原样继承。
+[MIT](LICENSE)
 
 第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

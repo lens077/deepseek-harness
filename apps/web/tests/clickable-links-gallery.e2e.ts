@@ -372,8 +372,10 @@ describe('web e2e: clickable links gallery', () => {
     ]) {
       const toggle = page.getByRole('button', { name: row }).first()
       await toggle.waitFor({ timeout: 10_000 })
-      const box = await toggle.boundingBox()
-      await toggle.click(box === null ? {} : { position: { x: box.width - 8, y: box.height / 2 } })
+      if (await toggle.getAttribute('aria-expanded') !== 'true') {
+        const box = await toggle.boundingBox()
+        await toggle.click(box === null ? {} : { position: { x: box.width - 8, y: box.height / 2 } })
+      }
     }
     // Both generic rows (the unclassified str_replace_editor and the unknown
     // design_tokens_sync) expand to their IN/OUT surfaces.

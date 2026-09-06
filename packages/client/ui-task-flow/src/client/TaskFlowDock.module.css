@@ -100,7 +100,7 @@
   gap: 4px;
   height: 24px;
   padding: 0 8px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
@@ -113,12 +113,14 @@
 .btn:disabled { opacity: 0.5; cursor: default; }
 
 .btn.stop {
+  border-width: 1px;
   border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
   color: var(--dsw-alias-state-error-primary);
 }
 
 .btn.accent {
+  border-width: 1px;
   border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, transparent);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
   color: var(--dsw-alias-state-business-primary);
@@ -127,11 +129,13 @@
 .btn.icon { width: 24px; padding: 0; justify-content: center; }
 
 .body {
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   overflow: auto;
   box-sizing: border-box;
   max-height: 160px;
   overscroll-behavior: contain;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .spinner {
@@ -141,6 +145,7 @@
   border: 2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 25%, transparent);
   border-top-color: var(--dsw-alias-state-business-primary);
   border-radius: 50%;
+  corner-shape: round;
   animation: dsh-flow-dock-spin 0.9s linear infinite;
 }
 

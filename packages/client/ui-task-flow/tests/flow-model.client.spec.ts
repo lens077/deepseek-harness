@@ -170,6 +170,19 @@ describe('task-flow fold', () => {
     expect(snapshot.summary.currentNodeId).toBeUndefined()
   })
 
+  it('omits provider authentication messages from the task-flow snapshot', () => {
+    const message = 'Authentication failed; credential=fixture-private-token'
+    const snapshot = snapshotOf(assemble([
+      ...SCENARIO,
+      stepEnd(26, 3, 1),
+      turnEnd(27, 3, { kind: 'error', error: { message, code: 'AUTH' } }),
+    ]))
+    const terminal = snapshot.nodes.get('end:3')
+    expect(terminal?.detail).toBeUndefined()
+    expect(terminal).toMatchObject({ status: 'error', failureCode: 'AUTH' })
+    expect(JSON.stringify([...snapshot.nodes.values()])).not.toContain(message)
+  })
+
   it('draws a steer inside an open turn as an interjection hanging off the running spine node', () => {
     const steered = [
       spliced(1, ['m1']),

@@ -6,28 +6,45 @@
     - button "1 subagent":
       - text: 1 subagent
       - img
-  - img
-  - text: Standard mode
   - button "Session log":
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
+- button "Search questions":
+  - img
+- button "Previous question":
+  - img
+- button "Next question" [disabled]:
+  - img
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
   - text: System prompt
-- text: "Explain event sourcing in one sentence.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
+- text: "Explain event sourcing in one sentence for a reader who knows databases but has not used an event log.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
 - button "Copy":
   - img
 - button "Thought for a while":
   - text: Thought for a while
   - img
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
+- 'button "Answering: Explain event sourcing in one sentence for a reader who knows databases but has not used an event log.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. — Jump to this question"':
+  - img
+  - text: "Answering #1 Explain event sourcing in one sentence for a reader who knows databases but has not used an event log.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn."
 - button "Copy":
   - img
 - button "Good response":
@@ -62,13 +79,30 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}}
+- text: "{{clock}} Task flow 2/2 · Elapsed {{duration}} · Latest branch: #2 New question Now give the same explanation to a human reader. Resolved"
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Explain event sourcing in one sentence for a reader who knows databases but has… Execution {{duration}} · 1 steps Forked from “Explain event sourcing in one sentence for a reader who knows databases but has…” ↳ #2 Now give the same explanation to a human reader. Execution {{duration}} · 1 steps"
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment" [disabled]:
   - img
 - 'button "Access mode, current: Custom"': Custom
+- img
+- text: Standard mode
 - button "6% of context used"
 - button "Send message" [disabled]
 - text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok

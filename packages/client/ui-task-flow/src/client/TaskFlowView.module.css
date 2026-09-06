@@ -69,7 +69,7 @@
   height: 28px;
   min-width: 28px;
   padding: 0 10px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
@@ -82,6 +82,7 @@
 .btn:hover { background: var(--dsw-alias-interactive-bg-hover-solid); }
 
 .btn.stop {
+  border-width: 1px;
   border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
   color: var(--dsw-alias-state-error-primary);
@@ -92,7 +93,7 @@
   align-items: center;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   white-space: nowrap;
@@ -113,7 +114,7 @@
 
 .laneBoard {
   min-width: 720px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-1);
   overflow: hidden;

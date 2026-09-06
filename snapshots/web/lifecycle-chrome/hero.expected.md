@@ -4,6 +4,9 @@
 - button "New session":
   - img
   - text: New Session
+- button "Digest":
+  - img
+  - text: Digest
 - text: Workspaces
 - button "Search sessions":
   - img
@@ -20,11 +23,16 @@
 - button "Settings":
   - img
   - text: Settings
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - text: Into the Unknown Preview
 - button "Choose workspace":
   - img
   - text: workspace
   - img
+- button "Start without a folder"
 - button "Standard mode":
   - img
   - text: Standard mode

@@ -149,6 +149,10 @@ export class FakeApiClient {
   onCancel: (payload: unknown) => Promise<RemoteResult<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
   onOpenWorkspacePath: (payload: unknown) => Promise<RemoteResult<{ opened: true }>> =
     () => Promise.resolve(ok({ opened: true as const }))
+  onDirectories: (payload: unknown) => Promise<RemoteResult<{ primaryDirectory: string; additionalDirectories: readonly string[] }>> =
+    () => Promise.resolve(ok({ primaryDirectory: '/f/ws', additionalDirectories: [] }))
+  onDelete: (payload: unknown) => Promise<RemoteResult<{ sessionIds: readonly SessionId[] }>> =
+    payload => Promise.resolve(ok({ sessionIds: [(payload as { sessionId: SessionId }).sessionId] }))
   onSearchQuestions: (payload: unknown) => Promise<RemoteResult<{ items: readonly never[]; complete: boolean }>> =
     () => Promise.resolve(ok({ items: [], complete: true }))
 
@@ -239,6 +243,13 @@ export class FakeApiClient {
           payload,
           this.onOpenWorkspacePath(payload),
         ),
+        directories: payload => this.record('session.directories', payload, this.onDirectories(payload)),
+        replaceDirectories: payload => this.record(
+          'session.replaceDirectories',
+          payload,
+          this.onDirectories(payload),
+        ),
+        delete: payload => this.record('session.delete', payload, this.onDelete(payload)),
         searchQuestions: payload => this.record(
           'session.searchQuestions',
           payload,
@@ -279,6 +290,23 @@ export class FakeApiClient {
           'workspace.archiveSession',
           payload,
           this.onWorkspaceArchiveSession(payload),
+        ),
+        archiveSessions: payload => this.record(
+          'workspace.archiveSessions',
+          payload,
+          Promise.resolve(ok({ archivedSessionIds: [...payload.sessionIds] })),
+        ),
+        unarchiveSession: payload => this.record(
+          'workspace.unarchiveSession',
+          payload,
+          Promise.resolve(ok({ archivedSessionIds: [] })),
+        ),
+        setSessionMembership: payload => this.record(
+          'workspace.setSessionMembership',
+          payload,
+          Promise.resolve(ok({ workspace: fakeWorkspace(String(payload.workspaceId), {
+            sessionIds: payload.member ? payload.sessionIds : [],
+          }) })),
         ),
         follow: signal => this.openWorkspace(signal),
       },

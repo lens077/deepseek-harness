@@ -13,7 +13,7 @@
 // path end to end.
 import { resolve } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
 
 installAssembledBootEnv()
@@ -63,7 +63,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
   if (clientBuildValue('DSH_CLIENT_BUILD_PROFILE') === 'official') {
     expect(document.querySelector('svg[viewBox="26 0 156 24"]')).not.toBeNull()
-    expect(screen.queryByText('DSH Local Build')).toBeNull()
+    expect(screen.queryByText('Sumery DSH Pro')).toBeNull()
   } else {
     expect(document.querySelector('svg[viewBox="0 0 23.16 17.04"]')).not.toBeNull()
     const version = clientBuildValue('DSH_CLIENT_VERSION')
@@ -72,7 +72,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
     const buildVersion = version
       + (commit === undefined ? '' : `-${commit}`)
       + (clientBuildValue('DSH_CLIENT_GIT_DIRTY') === 'true' ? '-dirty' : '')
-    screen.getByText('DSH Local Build')
+    screen.getByText('Sumery DSH Pro')
     screen.getByText(buildVersion)
   }
   // The compact layout dropped group session counts; the fixture workspace
@@ -115,24 +115,22 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   within(contextPanel).getByText('Tools')
   within(contextPanel).getByText('Messages')
 
-  // The write/edit turns render a real diff card through the assembled graph
-  // (the keyed FileMutationRow composing ToolRow + DiffBlock), not just the
-  // fixture's raw text. The card is collapsed by default, so expand each edit/
-  // write row first. The write turn's `hello fixture\n` proves the terminator
-  // rule end to end: a trailing newline terminates its line, so the footer reads
-  // `+1` (not a phantom `+2`) and one distinct file. The `+ ` prefix is a CSS
-  // ::before, so it is absent from textContent — assert on the line body and the
-  // footer.
+  // Mutation rows expose aligned before/after panes. The fixture write's
+  // trailing newline terminates its one content line instead of adding a row.
   const mutationRows = [...document.querySelectorAll('[data-variant="write"],[data-variant="edit"]')]
   expect(mutationRows.length).toBeGreaterThan(0)
   for (const row of mutationRows) {
     const toggle = row.querySelector('[data-expandable]')
     if (toggle !== null) act(() => { fireEvent.click(toggle) })
   }
-  const diffCards = [...document.querySelectorAll('[data-diff]')]
+  const diffCards = [...document.querySelectorAll('[data-side-by-side-diff]')]
   expect(diffCards.length).toBeGreaterThan(0)
-  const footers = diffCards.map(card => card.textContent ?? '')
-  expect(footers.some(text => text.includes('hello fixture') && text.includes('+1 -0 · 1 file'))).toBe(true)
+  const writtenFile = diffCards.find(card => card.querySelector('[data-side="new"]')?.textContent === 'hello fixture')
+  expect(writtenFile).toBeDefined()
+  const writtenLines = writtenFile!.querySelector('[data-side="new"]')!
+  expect(writtenLines.children).toHaveLength(1)
+  expect(writtenFile!.querySelector('[data-side="old"]')?.textContent).toBe('')
+  expect(writtenFile!.closest('[data-variant="write"]')?.textContent).toContain('+1 -0')
 
   // The web render intent reaches the assembled boot graph: the fixture's
   // web_search / web_fetch turns render their keyed WebRow cards, proving the
@@ -162,15 +160,22 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
 })
 
 it('boots without ui-chat and does not select another conversation view implicitly', async () => {
-  mountAssembledApp('?fixture', { exclude: ['@deepseek-ai/dsh-client-ui-chat'] })
+  const consoleErrors = vi.spyOn(console, 'error')
+  try {
+    mountAssembledApp('?fixture', { exclude: ['@deepseek-ai/dsh-client-ui-chat'] })
 
-  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
-  const boot = Reflect.get(window, '__DSH_BOOT__') as { entries: Array<{ id: string }> } | undefined
-  expect(boot?.entries.some(entry => entry.id === '@deepseek-ai/dsh-client-ui-chat')).toBe(false)
-  const sessionTitle = await within(tree).findByText('Fixture 历史会话')
-  fireEvent.click(sessionTitle)
-  await waitFor(() => {
-    expect(document.querySelector('[data-slot="conversation.session"]')).not.toBeNull()
-  }, { timeout: 10_000 })
-  expect(document.querySelector('[data-slot="conversation.view"]')).toBeNull()
+    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+    const boot = Reflect.get(window, '__DSH_BOOT__') as { entries: Array<{ id: string }> } | undefined
+    expect(boot?.entries.some(entry => entry.id === '@deepseek-ai/dsh-client-ui-chat')).toBe(false)
+    const sessionTitle = await within(tree).findByText('Fixture 历史会话')
+    fireEvent.click(sessionTitle)
+    await waitFor(() => {
+      expect(document.querySelector('[data-slot="conversation.session"]')).not.toBeNull()
+    }, { timeout: 10_000 })
+    expect(document.querySelector('[data-slot="conversation.view"]')).toBeNull()
+    expect(document.querySelectorAll('[data-slot-error]')).toHaveLength(0)
+    expect(consoleErrors.mock.calls).toEqual([])
+  } finally {
+    consoleErrors.mockRestore()
+  }
 })

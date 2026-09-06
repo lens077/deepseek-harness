@@ -4,6 +4,7 @@ import {
 } from '../src/client/index.ts'
 import type {
   WorkspaceArchiveSessionRequest,
+  WorkspaceArchiveSessionsRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
@@ -14,6 +15,8 @@ import type {
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceSetSessionMembershipRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
   WorkspaceId,
   WorkspaceView,
@@ -113,6 +116,23 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
     this.record('archiveSession', request)
     return this.onArchiveSession(request)
+  }
+
+  archiveSessions(request: WorkspaceArchiveSessionsRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    this.record('archiveSessions', request)
+    return Promise.resolve(remoteOk({ archivedSessionIds: [...request.sessionIds] }))
+  }
+
+  unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    this.record('unarchiveSession', request)
+    return Promise.resolve(remoteOk({ archivedSessionIds: [] }))
+  }
+
+  setSessionMembership(request: WorkspaceSetSessionMembershipRequest): Promise<RemoteResult<WorkspaceValue>> {
+    this.record('setSessionMembership', request)
+    return Promise.resolve(remoteOk({
+      workspace: workspace(String(request.workspaceId), request.member ? request.sessionIds : []),
+    }))
   }
 
   async *follow(_signal?: AbortSignal): AsyncGenerator<WorkspaceFollowFrame> {}

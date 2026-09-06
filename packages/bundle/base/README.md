@@ -49,6 +49,8 @@ Run `dsh --profile my-profile "your task"` and you get a working agent with mode
 
 Out of the box, every profile built on this core provides: a DeepSeek model connection (the provider and model are configurable, and you can enable extra providers from your settings), the full tool set — file editing, shell commands, web search, public HTTP(S) fetch, subagents, task and goal tracking — durable sessions that survive restarts, and the default permission policy that confines file writes to your workspace and asks before risky actions. Web fetch runs without per-call approval; its provider rejects non-public destinations. Telemetry stays off unless you opt in.
 
+The exact `openai/gpt-6-astra` route uses a 90% compaction threshold; other routes inherit the backend's 80% default. Capacity remains provider-configured: the [Astra settings guide](../../../docs/user/guide/providers.md#astra-long-context) pairs a 1M window with a 900K pressure trigger. Web disables this host backend and uses its preset-owned policy instead.
+
 ### Shell tools per platform
 
 On macOS and Linux you get the bash shell tools; on Windows you get the PowerShell twins instead, so exactly one shell stack is available per machine. The safety behavior is identical on every platform. A Windows host that prefers the unconfined PowerShell executor can switch the shell rows in its profile patch — the switch must disable both PowerShell rows and re-enable both bash rows, otherwise the profile fails to load.

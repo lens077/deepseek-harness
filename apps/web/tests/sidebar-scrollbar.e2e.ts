@@ -315,7 +315,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(metrics.gutter).toBe('stable')
     // Pin presence, not width, because the width is platform-dependent.
     expect(metrics.band).toBeGreaterThan(0)
-    expect(metrics.scrollbarEdgeOffset).toBe(2)
+    expect(metrics.scrollbarEdgeOffset).toBe(0)
     expect(metrics.rowEdgeInset).toBe(12)
     // Measure against the bar because overlay scrollbars do not move the client edge.
     expect(metrics.timeCoveredBy).toBe(0)
@@ -376,9 +376,8 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     // the hover token included.
     expect(light.standardWidth).toBe('auto')
     expect(light.standardColor).toBe('auto')
-    // The pseudo-element path is the one in force: the sheet's own 8px sizing
-    // and transparent track reached a container it never names.
-    expect(light.width).toBe('8px')
+    // The list's 12px override preserves the shared transparent track.
+    expect(light.width).toBe('12px')
     expect(light.track).toBe('rgba(0, 0, 0, 0)')
     // The resting and the hover rule each read the rebindable indirection, and
     // the two resolve to DIFFERENT colours on this list: the l1 pair arrived

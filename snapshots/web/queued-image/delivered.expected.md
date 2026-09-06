@@ -1,18 +1,32 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reply with a one-sentence description" [disabled]
-  - img
-  - text: Standard mode
   - button "Session log":
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
   - button "Jump to turn 3"
+- button "Search questions":
+  - img
+- button "Previous question":
+  - img
+- button "Next question" [disabled]:
+  - img
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -25,6 +39,9 @@
   - img
 - paragraph: partial
 - text: Stopped
+- 'button "Answering: Reply with a one-sentence description of event sourcing, then stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Reply with a one-sentence description of event sourcing, then stop."
 - button "Copy":
   - img
 - button "Good response":
@@ -75,13 +92,30 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}}
+- text: "{{clock}} Task flow 2/3 · Elapsed {{duration}} · Latest branch: #3 New question Continue with the queued comparison Resolved"
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Execution {{duration}} · 1 steps Stopped（stopped manually） Attached to “Reply with a one-sentence description of event sourcing, then stop.” ↳ #2 Compare with this screenshot Execution {{duration}} · 1 steps Forked from “Reply with a one-sentence description of event sourcing, then stop.” ↳ #3 Continue with the queued comparison Execution {{duration}} · 1 steps"
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- img
+- text: Standard mode
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

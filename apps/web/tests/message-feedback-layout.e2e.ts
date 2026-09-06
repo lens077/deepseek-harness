@@ -240,6 +240,14 @@ describe('web e2e: the feedback note editor floats above the column', () => {
    */
   const settleAt = async (width: number, editorOpen: boolean): Promise<PopoverMetrics> => {
     await page.setViewportSize({ width, height: 900 })
+    if (width < 768) {
+      const mobileFrame = page.locator('[data-mobile-view]')
+      await mobileFrame.waitFor()
+      if (await mobileFrame.getAttribute('data-mobile-view') === 'overview') {
+        await page.getByRole('button', { name: 'Close digest', exact: true }).click()
+      }
+      await page.locator('[data-mobile-view="conversation"]').waitFor()
+    }
     let previous = -1
     await expect.poll(async () => {
       const current = await page.evaluate(() =>
@@ -268,6 +276,7 @@ describe('web e2e: the feedback note editor floats above the column', () => {
     swept ??= (async () => {
       await openSeededSession()
       await page.getByText('DONE', { exact: true }).waitFor({ timeout: 30_000 })
+      await page.getByRole('button', { name: 'Close the file panel', exact: true }).click()
       // The controller defers its list read to the first hover or focus, so the
       // strip has to be touched before it can be rated.
       const like = page.getByRole('button', { name: 'Good response' }).first()

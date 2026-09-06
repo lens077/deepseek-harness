@@ -1,14 +1,22 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the ask_user_question tool to" [disabled]
-  - img
-  - text: Standard mode
   - button "Session log":
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -26,6 +34,9 @@
 - button "Copy":
   - img
 - paragraph: "Got it: BANANA and ORANGE."
+- 'button "Answering: Use the ask_user_question tool to ask me exactly one question with id \"checkpoint\", question \"Ready to continue?\", header \"Checkpoint\", and options labeled \"Yes\" and \"No\". After I answer, reply with one short sentence acknowledging my answer and stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Use the ask_user_question tool to ask me exactly one question with id \"checkpoint\", question \"Ready to continue?\", header \"Checkpoint\", and options labeled \"Yes\" and \"No\". After I answer, reply with one short sentence acknowledging my answer and stop."
 - button "Copy":
   - img
 - button "Good response":
@@ -37,13 +48,30 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}}
+- text: "{{clock}} Task flow 1/1 · Elapsed {{duration}} · Latest branch: #1 Interjection Interjection: include the word ORANGE in your final reply. Resolved"
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Use the ask_user_question tool to ask me exactly one question with id \"checkpoi… Execution {{duration}} · 2 steps Attached to “Use the ask_user_question tool to ask me exactly one question with id \"checkpoi…” ↳ #1 Interjection: include the word BANANA in your final reply. Attached to “Use the ask_user_question tool to ask me exactly one question with id \"checkpoi…” ↳ #1 Interjection: include the word ORANGE in your final reply."
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- img
+- text: Standard mode
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

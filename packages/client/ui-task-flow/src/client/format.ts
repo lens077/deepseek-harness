@@ -74,6 +74,7 @@ export function statusLabel(t: TaskFlowTranslate, status: FlowStatus): string {
  */
 export function terminalLabel(t: TaskFlowTranslate, node: FlowNode): string {
   const status = statusLabel(t, node.status)
+  if (node.failureCode === 'AUTH') return `${status} · ${t('failure.auth')}`
   if (node.detail === undefined) return status
   const key = ABORT_KEYS[node.detail]
   return key === undefined ? `${status} · ${node.detail}` : `${status}（${t(key)}）`

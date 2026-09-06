@@ -5,8 +5,18 @@
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -29,6 +39,25 @@
 - list:
   - listitem: Which color do you prefer?
 - button "Inspect"
+- 'button "Answering: Use the ask_user_question tool to ask me exactly one multi-select question with id \"color\", question \"Which color do you prefer?\", header \"Pick one\", and two options: label \"Blue\" with description \"A cool recessive hue that reads as calm and trustworthy in long reading sessions and dense dashboards.\", and label \"Green\" with description \"A restful mid-spectrum hue with the highest perceived brightness, easiest on the eye over long sessions.\" Set multi_select to true. After I answer, reply with the single word DONE and stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Use the ask_user_question tool to ask me exactly one multi-select question with id \"color\", question \"Which color do you prefer?\", header \"Pick one\", and two options: label \"Blue\" with description \"A cool recessive hue that reads as calm and trustworthy in long reading sessions and dense dashboards.\", and label \"Green\" with description \"A restful mid-spectrum hue with the highest perceived brightness, easiest on the eye over long sessions.\" Set multi_select to true. After I answer, reply with the single word DONE and stop."
+- text: Task flow 1/1 · Elapsed {{duration}}
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Use the ask_user_question tool to ask me exactly one multi-select question with… Execution {{duration}} · 1 steps"
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img

@@ -87,7 +87,7 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
 
@@ -109,7 +109,7 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     await sessionRow.click()
     // The tail page contains context and replies but no direct user question.
     await expect.poll(() => page.getByText(`reply ${TURNS}`, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    expect(await page.getByText('question 1', { exact: true }).count()).toBe(0)
+    expect(await page.locator('[data-chat-flow-kind="user"]').getByText('question 1', { exact: true }).count()).toBe(0)
 
     const search = page.getByRole('button', { name: 'Search questions' })
     const previous = page.getByRole('button', { name: 'Previous question' })
@@ -138,15 +138,18 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     await assertRailPlacement(8, true)
 
     await page.setViewportSize({ width: 600, height: 900 })
+    await page.locator('[data-mobile-view="overview"]').waitFor()
+    await page.getByRole('button', { name: 'Close digest', exact: true }).click()
+    await page.locator('[data-mobile-view="conversation"]').waitFor()
     await expect.poll(async () => {
       const narrowBox = await search.boundingBox()
       return narrowBox === null ? null : Math.round(600 - narrowBox.x - narrowBox.width)
-    }).toBe(13)
-    await assertRailPlacement(13, false)
+    }).toBe(8)
+    await assertRailPlacement(8, false)
     await page.setViewportSize({ width: 1680, height: 1000 })
 
     await loadAll.click()
-    await expect.poll(() => page.getByText('question 1', { exact: true }).count(), { timeout: 20_000 }).toBe(1)
+    await expect.poll(() => page.locator('[data-chat-flow-kind="user"]').getByText('question 1', { exact: true }).count(), { timeout: 20_000 }).toBe(1)
     await expect.poll(() => page.getByRole('button', { name: 'Loading all history…' }).count(), { timeout: 10_000 }).toBe(0)
     expect(await page.getByRole('button', { name: 'Load all history' }).count()).toBe(0)
     expect(await search.isEnabled()).toBe(true)

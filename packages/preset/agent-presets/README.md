@@ -33,6 +33,8 @@ A session composed from a preset runs the plugins that preset's `agent.cordis.ym
 
 The presets you can choose from come from two places: the presets shipped inside this package under `presets/`, and your own presets under `<dshHome>/.agent-presets`. The picker shows each preset's display name and description; a preset whose composition cannot load is listed with the reason rather than hidden, so you can see what to fix or delete.
 
+The shipped `standard`, `cordis`, and `ptc` compositions set `thresholdRatio: 0.9` only for `openai/gpt-6-astra`; other routes retain the backend's 80% default. See the [Astra settings guide](../../../docs/user/guide/providers.md#astra-long-context) for the matching 1M capacity and 900K pressure trigger. Editing these files affects new compositions, not agents already joined to an older generation.
+
 ### Minimal configuration
 
 The plugin needs a `default` preset id and scans `roots` for presets:

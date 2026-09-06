@@ -18,7 +18,7 @@ import { createChatStore } from '@deepseek-ai/dsh-client-ui-chat/src/client/stor
 import { GenericToolCard } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-chat/src/client/details/DetailsPanel.tsx'
 import { WebRow, webToolview } from '../src/client/tool/toolviews/web-row.tsx'
-import { renderToolDetails, toolChatSnapshot, useEmptyTrajectory } from './tool-details-render.client.tsx'
+import { renderToolDetails, toolChatSnapshot, useEmptyTaskFlow, useEmptyTrajectory } from './tool-details-render.client.tsx'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
@@ -240,6 +240,7 @@ describe('DetailsPanel web Output section', () => {
         useConversation={bindSnapshotSelector(conversation)}
         useChat={bindSnapshotSelector({ getSnapshot: () => snapshot, subscribe: () => () => {} })}
         useTrajectory={useEmptyTrajectory}
+        useTaskFlow={useEmptyTaskFlow}
         useInput={(() => { throw new Error('unused') })}
         inputActions={{
           setDraft: () => {},

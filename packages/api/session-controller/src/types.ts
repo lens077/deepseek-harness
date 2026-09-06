@@ -176,14 +176,19 @@ export interface SessionSearchItem {
 /** Maximum number of Sessions returned by one search. */
 export const SESSION_SEARCH_RESULT_LIMIT = 20
 
-/** Maximum question hits returned by one within-Session search. */
-export const SESSION_QUESTION_RESULT_LIMIT = 50
-
 /** Maximum search snippet length in Unicode code points. */
 export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 
+/** Maximum question hits returned by one within-Session search. */
+export const SESSION_QUESTION_RESULT_LIMIT = 50
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** An additional Session directory failed canonical filesystem validation. */
+    'session/directory-invalid': {
+      readonly path: string
+      readonly reason: 'not-absolute' | 'unavailable' | 'not-directory'
+    }
     'session/model-unavailable': { readonly provider: string; readonly model: string }
     'session/conflict': {
       readonly sessionId: SessionId
@@ -278,6 +283,32 @@ export interface SessionQuestionSearchValue {
   readonly complete: boolean
 }
 
+/** Read or replace one Session's canonical writable-root extension. */
+export interface SessionDirectoriesRequest {
+  readonly sessionId: SessionId
+}
+
+/** Canonical primary directory and ordered additional writable roots. */
+export interface SessionDirectories {
+  readonly primaryDirectory: string
+  readonly additionalDirectories: readonly string[]
+}
+
+/** Whole-list replacement for one Session's additional writable roots. */
+export interface SessionReplaceDirectoriesRequest extends SessionDirectoriesRequest {
+  readonly additionalDirectories: readonly string[]
+}
+
+/** Permanent lineage deletion request. */
+export interface SessionDeleteRequest {
+  readonly sessionId: SessionId
+}
+
+/** Identities removed by one deterministic child-first deletion. */
+export interface SessionDeleteValue {
+  readonly sessionIds: readonly SessionId[]
+}
+
 /** Session creation or explicit-id adoption request. */
 export interface SessionCreateRequest {
   readonly workspaceId?: WorkspaceId
@@ -318,6 +349,8 @@ export interface SessionRenameValue {
 export interface SessionForkRequest {
   readonly sessionId: SessionId
   readonly atSeq?: number
+  /** Place the child beside or beneath its source in Workspace presentation. */
+  readonly placement?: 'sibling' | 'nested'
 }
 
 /** Identity of a newly forked Session. */

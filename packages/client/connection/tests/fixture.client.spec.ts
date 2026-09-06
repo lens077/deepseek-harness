@@ -1631,6 +1631,18 @@ describe('fixture Connection RPC', () => {
     vi.unstubAllGlobals()
   })
 
+  it('answers the Cordis boot inventory and inspect manifest without inventing dynamic plugins', async () => {
+    const rpc = createFixtureConnectionRpc()
+    await expect(rpc.call('/api', 'dynamicCordisRunner/inventory', { args: {} }))
+      .resolves.toEqual({ ok: true, value: [] })
+    await expect(rpc.call('/api', 'dynamicCordisRunner/syncInspectManifest', { args: { providers: [] } }))
+      .resolves.toEqual({ ok: true, value: null })
+    await expect(rpc.call('/api', 'dynamicCordisRunner/inventory', { args: {} }))
+      .resolves.toEqual({ ok: true, value: [] })
+    await expect(rpc.call('/api', 'dynamicCordisRunner/unknown', { args: {} }))
+      .rejects.toThrow('fixture connection RPC endpoint "dynamicCordisRunner/unknown" is unavailable')
+  })
+
   it('covers the migrated Remote dispatch table', async () => {
     const rpc = createFixtureConnectionRpc()
     const sessions = createSessionClient(rpc)

@@ -7,18 +7,18 @@ import {
 } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  ChatSnapshot, ConversationNode, RunningToolCall, SelectionTarget, ToolResultNode,
+  ChatFileDiffExpansion, ChatSnapshot, ConversationNode, RunningToolCall, SelectionTarget, ToolResultNode,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import { CHAT_DIFF_MAX_LINES, diffCardModel } from '../src/client/tool/models/diff-card-model.ts'
+import { diffCardModel } from '../src/client/tool/models/diff-card-model.ts'
 import { createChatStore } from '@deepseek-ai/dsh-client-ui-chat/src/client/stores.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-chat/src/client/details/DetailsPanel.tsx'
 import { FileMutationRow, fileMutationToolview } from '../src/client/tool/toolviews/file-mutation-row.tsx'
-import { renderToolDetails, toolChatSnapshot, useEmptyTrajectory } from './tool-details-render.client.tsx'
+import { renderToolDetails, toolChatSnapshot, useEmptyTaskFlow, useEmptyTrajectory } from './tool-details-render.client.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
 import { zh as chatZh } from '@deepseek-ai/dsh-client-ui-chat/src/client/locale.ts'
 
@@ -172,21 +172,22 @@ describe('chat row diff body', () => {
     callId: 'c1', toolName: 'edit', block, openFile: vi.fn(), t,
   })
 
-  it('the expanded body is the applied diff, capped tighter than the panel', () => {
-    expect(CHAT_DIFF_MAX_LINES).toBeLessThan(16)
+  it('the expanded body compares the applied change in two columns', () => {
     const view = render(<GenericToolCard {...ownerProps(settled())} />)
     // Collapsed: the summary row (path) only, no diff body.
     expect(view.queryByText('hello fixture')).toBeNull()
     // The path link is not the expand control; the leading toggle is.
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
-    expect(view.container.querySelector('[data-diff]')).not.toBeNull()
-    expect(view.getByText('hello fixture')).toBeTruthy()
+    const block = view.container.querySelector('[data-side-by-side-diff]')
+    expect(block).not.toBeNull()
+    expect(block?.querySelector('[data-side="old"]')?.textContent).toBe('hello')
+    expect(block?.querySelector('[data-side="new"]')?.textContent).toBe('hello fixture')
   })
 
   it('a running diff call expands to its intended change', () => {
     const view = render(<GenericToolCard {...ownerProps(running())} />)
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
-    expect(view.container.querySelector('[data-diff]')).not.toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
   })
 
   it('a non-diff call keeps the args-JSON text body', () => {
@@ -201,7 +202,7 @@ describe('chat row diff body', () => {
       }),
     }} />)
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     expect(view.getByText(/"foo"/)).toBeTruthy()
   })
 })
@@ -216,9 +217,17 @@ describe('FileMutationRow diff card', () => {
     currentAddress: undefined,
   })
 
-  const rowProps = (block: RunningToolCall | ToolResultNode, toolName = 'edit'): FileMutationRowProps => ({
+  const expansion = (mode: ChatFileDiffExpansion = 'none') =>
+    bindSnapshotSelector(createSnapshotStore<ChatFileDiffExpansion>(mode))
+
+  const rowProps = (
+    block: RunningToolCall | ToolResultNode,
+    toolName = 'edit',
+    mode: ChatFileDiffExpansion = 'none',
+  ): FileMutationRowProps => ({
     callId: 'c1', toolName, block, openFile: vi.fn(), cwd: '/w/app',
     sessionId: SID, useSessions: bindSnapshotSelector(list()),
+    useDiffExpansion: expansion(mode),
     t,
   } as unknown as FileMutationRowProps)
 
@@ -230,12 +239,34 @@ describe('FileMutationRow diff card', () => {
   it('collapses to the summary row; expanding reveals the applied diff card', () => {
     const view = render(<FileMutationRow {...rowProps(settled())} />)
     // The diff card is collapsed by default — not in the DOM until expanded.
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-file="notes/demo.txt"]')).not.toBeNull()
     expect(view.queryByText('hello fixture')).toBeNull()
     toggleRow(view)
-    expect(view.container.querySelector('[data-diff]')).not.toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
     expect(view.getByText('hello fixture')).toBeTruthy()
-    expect(view.getByText('复制')).toBeTruthy()
+  })
+
+  it('opens an edit on arrival only under `all`', () => {
+    const all = render(<FileMutationRow {...rowProps(settled(), 'edit', 'all')} />)
+    expect(all.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
+    cleanup()
+    for (const mode of ['single', 'none'] as const) {
+      const view = render(<FileMutationRow {...rowProps(settled(), 'edit', mode)} />)
+      expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
+      cleanup()
+    }
+  })
+
+  it('leaves a create closed under `all` until the reader expands it', () => {
+    const writeArgs = '{"file_path":"notes/new.txt","content":"hello fixture\\n"}'
+    const view = render(<FileMutationRow {...rowProps(settled({
+      call: { name: 'write', argsRaw: writeArgs },
+      meta: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
+    }), 'write', 'all')} />)
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
+    toggleRow(view)
+    expect(view.container.querySelector('[data-side-by-side-diff]')).not.toBeNull()
   })
 
   it('the summary is a path link that opens the tool path through the host', () => {
@@ -256,9 +287,10 @@ describe('FileMutationRow diff card', () => {
     }), 'write')} />)
     // The collapsed row already carries the card's +/- totals beside the path.
     expect(view.getByText('+1 -0')).toBeTruthy()
-    // The footer counts live inside the collapsed diff card.
     toggleRow(view)
-    expect(view.getByText('└ +1 -0 · 1 个文件')).toBeTruthy()
+    const block = view.container.querySelector('[data-side-by-side-diff]')
+    expect(block?.querySelector('[data-side="old"]')?.textContent).toBe('')
+    expect(block?.querySelector('[data-side="new"]')?.textContent).toBe('hello fixture')
   })
 
   it('reflects the run state on its leading slot', () => {
@@ -272,9 +304,9 @@ describe('FileMutationRow diff card', () => {
   it('a mutation result with no metadata renders the summary row alone', () => {
     const view = render(<FileMutationRow {...rowProps(settled({ meta: undefined }))} />)
     // No diff material: expanding shows the args-JSON body, never a diff card.
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     toggleRow(view)
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
   })
 
   it('surfaces the result text when an errored mutation has no diff card', () => {
@@ -283,7 +315,7 @@ describe('FileMutationRow diff card', () => {
       isError: true,
       content: [{ type: 'text', text: 'old_string not found in notes/demo.txt' }],
     }))} />)
-    expect(view.container.querySelector('[data-diff]')).toBeNull()
+    expect(view.container.querySelector('[data-side-by-side-diff]')).toBeNull()
     expect(view.getByText('old_string not found in notes/demo.txt')).toBeTruthy()
   })
 
@@ -388,6 +420,7 @@ describe('DetailsPanel diff Output section', () => {
         useConversation={bindSnapshotSelector(conversation)}
         useChat={bindSnapshotSelector({ getSnapshot: () => snapshot, subscribe: () => () => {} })}
         useTrajectory={useEmptyTrajectory}
+        useTaskFlow={useEmptyTaskFlow}
         useInput={(() => { throw new Error('unused') })}
         inputActions={{
           setDraft: () => {},

@@ -14,6 +14,7 @@ The browser Chat target for Conversation assembly. It registers Chat event defin
 
 - [System prompt row](#system-prompt-row)
 - [Turn token usage](#turn-token-usage)
+- [Question navigation](#question-navigation)
 - [Turn Process Folding](#turn-process-folding)
 - [Scroll ownership](#scroll-ownership)
 - [Model Experience](#model-experience)
@@ -33,6 +34,13 @@ Chat shows a collapsed `System prompt` row for each non-empty initial or resumed
 ## Turn token usage
 
 A completed Turn shows an expandable usage row only when the loaded window includes `turn/start` and every started model attempt reports safe, exact usage. The row omits unavailable optional buckets. Incomplete or contradictory accounting hides the complete disclosure instead of presenting a partial total.
+
+-----
+
+<a id="question-navigation"></a>
+## Question navigation
+
+The question rail searches the complete Host index, loads the remaining Session history on request, and steps through loaded questions. A search result outside the current window calls `loadThrough(seq)` before landing at the transcript reading line. Once a question row scrolls above the viewport, a sticky bar names that question and the Turn outcome, elapsed time, and changed-file totals available for it. A completed Turn that spans at least four Chat rows restates its opening question immediately before the Turn tail. The optional `chatReveal` service accepts the same Session id and question seq from cross-Session surfaces; it holds a request until that Session's Chat store mounts, then uses the same loader and landing path. Shortcut and focus policy are supplied by `ui-conversation` settings.
 
 -----
 

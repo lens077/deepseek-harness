@@ -1495,6 +1495,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'authorized bounded Session search results.',
       },
       {
+        signature: '@Remote(\'directories\') async directories(request: SessionDirectoriesRequest): Promise<SessionDirectories>',
+        description: 'Read one Session\'s canonical writable-root list.',
+        parameters: [{ name: 'request', description: 'target Session.' }],
+        returns: 'immutable primary directory and additional roots.',
+      },
+      {
+        signature: '@Remote(\'replaceDirectories\') async replaceDirectories(request: SessionReplaceDirectoriesRequest): Promise<SessionDirectories>',
+        description: 'Replace one Session\'s complete additional writable-root list.',
+        parameters: [{ name: 'request', description: 'target Session and complete requested list.' }],
+        returns: 'the canonical accepted list.',
+      },
+      {
+        signature: '@Remote(\'delete\') async delete(request: SessionDeleteRequest): Promise<SessionDeleteValue>',
+        description: 'Permanently remove one Session and its complete lineage.',
+        parameters: [{ name: 'request', description: 'root Session to delete.' }],
+        returns: 'child-first removed identities.',
+      },
+      {
+        signature: '@Remote(\'searchQuestions\') async searchQuestions( request: SessionQuestionSearchRequest, signal: AbortSignal, ): Promise<SessionQuestionSearchValue>',
+        description: 'Search all current user questions in one readable Session.',
+        parameters: [{ name: 'request', description: 'Session identity and literal question text query.' }, { name: 'signal', description: 'cancellation for authorization and provider work.' }],
+        returns: 'bounded hits plus whether the page is complete.',
+      },
+      {
         signature: '@Remote(\'create\') create(request: SessionCreateRequest): Promise<SessionCreateValue>',
         description: 'Create or idempotently adopt one ordinary Session.',
         parameters: [{ name: 'request', description: 'requested identity, location, and Agent preset.' }],
@@ -1595,6 +1619,67 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'sessionInbox',
+    summary: 'Storage-domain sidecar service.',
+    description: 'Storage-domain sidecar service. It never reads a Session log: a mark on a Session that no longer exists is harmless and is filtered by the consumer that joins marks with the live Session list.',
+    methods: [
+      {
+        signature: '@Remote(\'get\') get(): InboxSnapshot',
+        description: 'Read the complete inbox state.',
+        parameters: [],
+        returns: 'every Session mark and todo plus the review boundary.',
+      },
+      {
+        signature: '@Remote(\'markSeen\') markSeen(request: InboxMarkSeenRequest): Promise<InboxSnapshot>',
+        description: 'Raise a Session\'s seen mark to `seq`. A lower or equal seq changes nothing and emits nothing.',
+        parameters: [{ name: 'request', description: 'Session and the highest seq the user had on screen.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'setHandled\') setHandled(request: InboxSetHandledRequest): Promise<InboxSnapshot>',
+        description: 'Mark or clear a Session as dealt with.',
+        parameters: [{ name: 'request', description: 'Session and the desired handled state.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'snooze\') snooze(request: InboxSnoozeRequest): Promise<InboxSnoozeResult>',
+        description: 'Hide a Session until a future time, or clear its snooze.',
+        parameters: [{ name: 'request', description: 'Session and the epoch-ms time to resurface it, or `null`.' }],
+        returns: 'the complete state, or `snooze-in-past` for a time not after now.',
+      },
+      {
+        signature: '@Remote(\'setPinned\') setPinned(request: InboxSetPinnedRequest): Promise<InboxSnapshot>',
+        description: 'Pin or unpin a Session.',
+        parameters: [{ name: 'request', description: 'Session and the desired pinned state.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'markReviewed\') markReviewed(): Promise<InboxSnapshot>',
+        description: 'Record that the user reviewed the inbox now. The next "since you left" window starts here.',
+        parameters: [],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'addTodo\') addTodo(request: InboxAddTodoRequest): Promise<InboxTodoResult>',
+        description: 'Create one todo.',
+        parameters: [{ name: 'request', description: 'target Session, optional question seq, and text.' }],
+        returns: 'the complete state, or an explicit text failure.',
+      },
+      {
+        signature: '@Remote(\'updateTodo\') updateTodo(request: InboxUpdateTodoRequest): Promise<InboxTodoResult>',
+        description: 'Change a todo\'s text or status. A request that changes nothing is a successful no-op.',
+        parameters: [{ name: 'request', description: 'todo id and the fields to replace.' }],
+        returns: 'the complete state, or an explicit failure.',
+      },
+      {
+        signature: '@Remote(\'removeTodo\') removeTodo(request: InboxRemoveTodoRequest): Promise<InboxSnapshot>',
+        description: 'Delete one todo. An absent id is a successful no-op.',
+        parameters: [{ name: 'request', description: 'todo id.' }],
+        returns: 'the complete state after the change.',
+      },
+    ],
+  },
+  {
     key: 'sessionPersistence',
     summary: 'Durable append-only session storage addressed through per-session handles.',
     description: 'Durable append-only session storage addressed through per-session handles.\n\nStorage semantics shared by every backend: events are contiguous from seq 0 and never rewritten; a torn physical tail is never returned to a reader and is truncated by the write path before its first append; reads validate current-format records only and refuse unknown vocabulary fail-closed. `append` persists best-effort; `flush` — per handle or service-wide — is the durability barrier.\n\nVisibility: a created session is observable through `stat`/`list`/`open` in this process from the moment `create` resolves, even while a backend defers physical materialization (a pure optimization); other processes see the session only once it materializes, and a session that never materialized before a crash never existed. `SessionHandle.flush` forces materialization.\n\nFreshness: once an `append` or `flush` resolves, reads started afterwards on this backend instance observe at least that prefix.',
@@ -1612,6 +1697,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'id', description: 'the stored session to open.' }, { name: 'access', description: '`read` or `write`.' }, { name: 'options', description: 'optional cancellation.' }],
         returns: 'the open handle.',
         throws: ['{SessionPersistenceNotFoundError} when the session does not exist.', '{SessionAlreadyOwnedError} for `write` when ownership is taken.'],
+      },
+      {
+        signature: 'abstract delete(id: SessionId): Promise<boolean>',
+        description: 'Permanently delete one Session\'s stored data while holding write ownership. Active writers reject deletion. The operation is not cancellable after admission.',
+        parameters: [{ name: 'id', description: 'Session whose data is removed.' }],
+        returns: 'whether stored data existed and was removed.',
+        throws: ['{SessionAlreadyOwnedError} while a write handle owns the Session.'],
       },
       {
         signature: 'abstract flush(): Promise<void>',
@@ -2912,6 +3004,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Hide one known Session from Workspace grouping surfaces.',
         parameters: [{ name: 'request', description: 'Session identity to archive.' }],
         returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'archiveSessions\') archiveSessions(request: WorkspaceArchiveSessionsRequest): Promise<WorkspaceArchiveValue>',
+        description: 'Archive several known Sessions in one durable mutation.',
+        parameters: [{ name: 'request', description: 'distinct Session identities to archive.' }],
+        returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'unarchiveSession\') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>',
+        description: 'Remove one Session from the durable archive set.',
+        parameters: [{ name: 'request', description: 'Session identity to unarchive.' }],
+        returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'setSessionMembership\') setSessionMembership(request: WorkspaceSetSessionMembershipRequest): Promise<WorkspaceValue>',
+        description: 'Add or remove several Sessions from one Workspace account.',
+        parameters: [{ name: 'request', description: 'Workspace, Session identities, and desired membership.' }],
+        returns: 'the updated Workspace projection.',
       },
       {
         signature: '@Remote({ mode: \'stream\' }) follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>',
@@ -4333,6 +4443,90 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ImageVariantId = Branded<\'ImageVariantId\'>;',
   },
   {
+    name: 'InboxAddTodoRequest',
+    declaration: 'export interface InboxAddTodoRequest {\n    readonly sessionId: SessionId;\n    readonly questionSeq: number | null;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'InboxFailure',
+    declaration: 'export type InboxFailure = InboxTextBlank | InboxTextTooLarge | InboxTodoNotFound | InboxSnoozeInPast;',
+  },
+  {
+    name: 'InboxMarkSeenRequest',
+    declaration: 'export interface InboxMarkSeenRequest {\n    readonly sessionId: SessionId;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'InboxRejected',
+    declaration: 'export interface InboxRejected<E extends InboxFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'InboxRemoveTodoRequest',
+    declaration: 'export interface InboxRemoveTodoRequest {\n    readonly id: InboxTodoId;\n}',
+  },
+  {
+    name: 'InboxSessionState',
+    declaration: 'export interface InboxSessionState {\n    readonly sessionId: SessionId;\n    readonly lastSeenSeq: number | null;\n    readonly handledAt: number | null;\n    readonly snoozedUntil: number | null;\n    readonly pinned: boolean;\n    readonly updatedAt: number;\n}',
+  },
+  {
+    name: 'InboxSetHandledRequest',
+    declaration: 'export interface InboxSetHandledRequest {\n    readonly sessionId: SessionId;\n    readonly handled: boolean;\n}',
+  },
+  {
+    name: 'InboxSetPinnedRequest',
+    declaration: 'export interface InboxSetPinnedRequest {\n    readonly sessionId: SessionId;\n    readonly pinned: boolean;\n}',
+  },
+  {
+    name: 'InboxSnapshot',
+    declaration: 'export interface InboxSnapshot {\n    readonly reviewedAt: number | null;\n    readonly sessions: readonly InboxSessionState[];\n    readonly todos: readonly InboxTodo[];\n}',
+  },
+  {
+    name: 'InboxSnoozeInPast',
+    declaration: 'export interface InboxSnoozeInPast {\n    readonly code: \'snooze-in-past\';\n    readonly until: number;\n}',
+  },
+  {
+    name: 'InboxSnoozeRequest',
+    declaration: 'export interface InboxSnoozeRequest {\n    readonly sessionId: SessionId;\n    readonly until: number | null;\n}',
+  },
+  {
+    name: 'InboxSnoozeResult',
+    declaration: 'export type InboxSnoozeResult = InboxSuccess<InboxSnapshot> | InboxRejected<InboxSnoozeInPast>;',
+  },
+  {
+    name: 'InboxSuccess',
+    declaration: 'export interface InboxSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
+    name: 'InboxTextBlank',
+    declaration: 'export interface InboxTextBlank {\n    readonly code: \'text-blank\';\n}',
+  },
+  {
+    name: 'InboxTextTooLarge',
+    declaration: 'export interface InboxTextTooLarge {\n    readonly code: \'text-too-large\';\n    readonly maxBytes: number;\n    readonly actualBytes: number;\n}',
+  },
+  {
+    name: 'InboxTodo',
+    declaration: 'export interface InboxTodo {\n    readonly id: InboxTodoId;\n    readonly sessionId: SessionId;\n    readonly questionSeq: number | null;\n    readonly text: string;\n    readonly status: InboxTodoStatus;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly doneAt: number | null;\n}',
+  },
+  {
+    name: 'InboxTodoId',
+    declaration: 'export type InboxTodoId = Branded<\'InboxTodoId\'>;',
+  },
+  {
+    name: 'InboxTodoNotFound',
+    declaration: 'export interface InboxTodoNotFound {\n    readonly code: \'todo-not-found\';\n    readonly id: InboxTodoId;\n}',
+  },
+  {
+    name: 'InboxTodoResult',
+    declaration: 'export type InboxTodoResult = InboxSuccess<InboxSnapshot> | InboxRejected<InboxTextBlank | InboxTextTooLarge | InboxTodoNotFound>;',
+  },
+  {
+    name: 'InboxTodoStatus',
+    declaration: 'export type InboxTodoStatus = \'open\' | \'done\';',
+  },
+  {
+    name: 'InboxUpdateTodoRequest',
+    declaration: 'export interface InboxUpdateTodoRequest {\n    readonly id: InboxTodoId;\n    readonly text?: string;\n    readonly status?: InboxTodoStatus;\n}',
+  },
+  {
     name: 'IndexInjection',
     declaration: 'export type IndexInjection = {\n    kind: \'global\';\n    name: string;\n    value: unknown;\n} | {\n    kind: \'script\';\n    placement: IndexInjectionPlacement;\n    text: string;\n} | {\n    kind: \'script-src\';\n    placement: IndexInjectionPlacement;\n    src: string;\n} | {\n    kind: \'script-preload\';\n    src: string;\n} | {\n    kind: \'style\';\n    text: string;\n} | {\n    kind: \'html\';\n    placement: IndexInjectionPlacement;\n    html: string;\n};',
   },
@@ -5005,6 +5199,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
   },
   {
+    name: 'SandboxWorkspaceRoots',
+    declaration: 'export type SandboxWorkspaceRoots = readonly [\n    primary: string,\n    ...additional: string[]\n];',
+  },
+  {
     name: 'SaveFileAttachment',
     declaration: 'export interface SaveFileAttachment {\n    data: Uint8Array;\n    name?: string;\n}',
   },
@@ -5125,6 +5323,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteRequest',
+    declaration: 'export interface SessionDeleteRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionDeleteValue',
+    declaration: 'export interface SessionDeleteValue {\n    readonly sessionIds: readonly SessionId[];\n}',
+  },
+  {
+    name: 'SessionDirectories',
+    declaration: 'export interface SessionDirectories {\n    readonly primaryDirectory: string;\n    readonly additionalDirectories: readonly string[];\n}',
+  },
+  {
+    name: 'SessionDirectoriesRequest',
+    declaration: 'export interface SessionDirectoriesRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'SessionEvent',
     declaration: 'export type SessionEvent<T extends SessionEventType = SessionEventType> = {\n    [K in SessionEventType]: {\n        type: K;\n        seq: SessionSeq;\n        time: number;\n        data: SessionEventMap[K];\n        ignorable?: true;\n    } & (K extends SurfaceEventType ? {\n        sourceEventSeqs?: SessionSeq[];\n        surfaceOp?: SurfaceOp;\n    } : object);\n}[T];',
   },
@@ -5134,7 +5348,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'session/directories\': {\n        additionalDirectories: string[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -5202,7 +5416,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionForkRequest',
-    declaration: 'export interface SessionForkRequest {\n    readonly sessionId: SessionId;\n    readonly atSeq?: number;\n}',
+    declaration: 'export interface SessionForkRequest {\n    readonly sessionId: SessionId;\n    readonly atSeq?: number;\n    readonly placement?: \'sibling\' | \'nested\';\n}',
   },
   {
     name: 'SessionForkSource',
@@ -5357,6 +5571,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
   },
   {
+    name: 'SessionQuestionSearchItem',
+    declaration: 'export interface SessionQuestionSearchItem {\n    readonly seq: number;\n    readonly time: number;\n    readonly snippet: string;\n}',
+  },
+  {
+    name: 'SessionQuestionSearchRequest',
+    declaration: 'export interface SessionQuestionSearchRequest {\n    readonly sessionId: SessionId;\n    readonly query: string;\n}',
+  },
+  {
+    name: 'SessionQuestionSearchValue',
+    declaration: 'export interface SessionQuestionSearchValue {\n    readonly items: readonly SessionQuestionSearchItem[];\n    readonly complete: boolean;\n}',
+  },
+  {
     name: 'SessionQueuedItem',
     declaration: 'export interface SessionQueuedItem {\n    readonly id: MessageId;\n    readonly placement: \'queued\' | \'steering\' | \'context\';\n    readonly rpcId?: SessionRequestId;\n    readonly message: {\n        readonly id: MessageId;\n        readonly content: readonly JsonValue[];\n    };\n}',
   },
@@ -5383,6 +5609,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionRenameValue',
     declaration: 'export interface SessionRenameValue {\n    readonly title: string;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'SessionReplaceDirectoriesRequest',
+    declaration: 'export interface SessionReplaceDirectoriesRequest extends SessionDirectoriesRequest {\n    readonly additionalDirectories: readonly string[];\n}',
   },
   {
     name: 'SessionRequestId',
@@ -6410,11 +6640,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly nestedUnder: Readonly<Record<string, SessionId>>;\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId, options?: {\n        nestUnder?: SessionId;\n    }): Promise<void>;\n    attachSessions(sessionIds: readonly SessionId[]): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    detachSessions(sessionIds: readonly SessionId[]): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',
     declaration: 'export interface WorkspaceArchiveSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'WorkspaceArchiveSessionsRequest',
+    declaration: 'export interface WorkspaceArchiveSessionsRequest {\n    readonly sessionIds: readonly SessionId[];\n}',
   },
   {
     name: 'WorkspaceArchiveValue',
@@ -6465,12 +6699,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n}',
   },
   {
+    name: 'WorkspaceSetSessionMembershipRequest',
+    declaration: 'export interface WorkspaceSetSessionMembershipRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly sessionIds: readonly SessionId[];\n    readonly member: boolean;\n}',
+  },
+  {
+    name: 'WorkspaceUnarchiveSessionRequest',
+    declaration: 'export interface WorkspaceUnarchiveSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'WorkspaceValue',
     declaration: 'export interface WorkspaceValue {\n    readonly workspace: WorkspaceView;\n}',
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly nestedUnder?: Readonly<Record<string, SessionId>>;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
 ]
 

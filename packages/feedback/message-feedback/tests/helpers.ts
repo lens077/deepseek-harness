@@ -108,6 +108,8 @@ interface StoredSession {
 
 /** Minimal controllable persistence provider for service-level tests. */
 class TestPersistence extends SessionPersistence {
+  delete(id: SessionId): Promise<boolean> { return Promise.resolve(this.durable.delete(id)) }
+
   readonly durable = new Map<SessionId, StoredSession>()
   readFailure: Error | undefined
   statCalls = 0

@@ -139,9 +139,11 @@ describe.skipIf(MODE === 'record')('web e2e: GitHub ready-for-review', () => {
         head: { ref: 'fix-session-replay', sha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
       },
     }
+    const settled = scaffold.whenTurnSettled()
     expect((await send(webhookOrigin, 'ready', payload)).status).toBe(202)
-    await vi.waitFor(() => { expect(scaffold.ctx.agents.list()).toHaveLength(before + 1) })
-    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
+    await settled
+    expect(scaffold.ctx.agents.list()).toHaveLength(before + 1)
+    expect(adapter.requests).toHaveLength(1)
 
     const agent = scaffold.ctx.agents.list().find(candidate => candidate.session.header.cwd === scaffold.workspaceCwd)
     expect(agent).toBeDefined()

@@ -55,6 +55,8 @@ export interface Config {
   surfaceContext: boolean
   /** Explicit `--trusted-host` authorities from this invocation. */
   trustedHosts: string[]
+  /** Whether Connection requires launch-token/cookie browser authentication (`--no-browser-auth` disables it). */
+  browserAuthentication: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -62,6 +64,7 @@ export const Config: z<Config> = z.object({
   printUrl: z.boolean().default(true),
   surfaceContext: z.boolean().default(true),
   trustedHosts: z.array(String).default([]),
+  browserAuthentication: z.boolean().default(true),
 })
 
 /** Bind-dependent Web values shared by the trust fence and URL display. */
@@ -70,6 +73,8 @@ export interface WebRuntimeValues {
   lanAddresses: string[]
   /** LAN literals followed by explicit invocation authorities. */
   trustedHosts: string[]
+  /** Whether Connection requires launch-token/cookie browser authentication. */
+  browserAuthentication: boolean
 }
 
 /** Environment variable naming the canonical local URL of this Web GUI. */
@@ -131,7 +136,7 @@ try {
  * @param extra - explicit `--trusted-host` values, in argument order.
  * @returns the LAN display addresses and invocation-derived fence authorities.
  */
-export function resolveLanTrust(bindHost: string, extra: readonly string[]): WebRuntimeValues {
+export function resolveLanTrust(bindHost: string, extra: readonly string[]): Pick<WebRuntimeValues, 'lanAddresses' | 'trustedHosts'> {
   const lanAddresses = bindHost === ALL_INTERFACES_HOST
     ? Object.values(networkInterfaces()).flat()
       .filter((iface): iface is NonNullable<typeof iface> => iface !== undefined && iface.family === 'IPv4' && !iface.internal)
@@ -232,7 +237,10 @@ export const internals: {
  * @param config - validated {@link Config}.
  */
 export function apply(ctx: Context, config: Config): void {
-  const runtime = resolveLanTrust(ctx.webServer.host, config.trustedHosts)
+  const runtime: WebRuntimeValues = {
+    ...resolveLanTrust(ctx.webServer.host, config.trustedHosts),
+    browserAuthentication: config.browserAuthentication,
+  }
   // The loopback URL belongs to this host. Under SSH, the operator reaches it
   // through a local forwarding address that this process cannot derive.
   const handoffBrowser = config.openBrowser && !launchedThroughSsh(ctx)

@@ -13,6 +13,15 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "对话布局":
+      - img
+      - text: 对话布局
+    - button "汇总面板":
+      - img
+      - text: 汇总面板
+    - button "项目待办":
+      - img
+      - text: 项目待办
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -40,7 +49,7 @@
           - textbox "显示名称 1":
             - /placeholder: 显示名称
             - text: DeepSeek-V4-Pro
-          - button "容量 1":
+          - button "高级 1":
             - img
           - button "删除模型 1":
             - img
@@ -50,7 +59,7 @@
           - textbox "显示名称 2":
             - /placeholder: 显示名称
             - text: DeepSeek-V4-Flash-Vision-Exp
-          - button "容量 2":
+          - button "高级 2":
             - img
           - button "删除模型 2":
             - img
@@ -60,7 +69,7 @@
           - textbox "显示名称 3":
             - /placeholder: 显示名称
             - text: Private Preview
-          - button "容量 3" [expanded]:
+          - button "高级 3" [expanded]:
             - img
           - button "删除模型 3":
             - img

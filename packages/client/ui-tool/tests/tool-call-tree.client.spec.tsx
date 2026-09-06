@@ -23,12 +23,12 @@ function props(
   block: ToolResultNode,
   selectedCallId?: string,
   home?: string,
-  owners?: ToolCallOwnerProps[],
+  owners?: { key: string; owner: ToolCallOwnerProps }[],
 ): ToolTreeProps {
   const snapshot = {} as SessionSnapshot
   const useSession = ((selector: (value: SessionSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
-  const renderSlot = ((_key: string, owner: ToolCallOwnerProps, options?: { fallback?: React.ReactNode }) => {
-    owners?.push(owner)
+  const renderSlot = ((key: string, owner: ToolCallOwnerProps, options?: { fallback?: React.ReactNode }) => {
+    owners?.push({ key, owner })
     return options?.fallback ?? null
   }) as unknown as ToolTreeProps['renderSlot']
   return {
@@ -67,7 +67,7 @@ describe('ToolCallTree', () => {
   })
 
   it('recursively renders a selected leaf without selecting its ancestors', () => {
-    const owners: ToolCallOwnerProps[] = []
+    const owners: { key: string; owner: ToolCallOwnerProps }[] = []
     const leaf = {
       ...root('parent:code:1:code:1', { name: 'read', argsRaw: '{"path":"a.ts"}' }),
       parentCallId: 'parent:code:1',
@@ -89,11 +89,17 @@ describe('ToolCallTree', () => {
     expect(view.container.querySelector('[data-chat-call-id="parent:code:1"]')?.hasAttribute('data-selected')).toBe(false)
     expect(view.container.querySelector('[data-chat-call-id="parent:code:1:code:1"]')?.getAttribute('data-selected')).toBe('true')
     expect(nests).toHaveLength(2)
-    expect(owners.map(owner => [owner.callId, owner.block.parentCallId ?? null])).toEqual([
-      ['parent', null],
-      ['parent:code:1', 'parent'],
-      ['parent:code:1:code:1', 'parent:code:1'],
+    expect(owners.map(({ key, owner }) => [key, owner.callId, owner.block.parentCallId ?? null])).toEqual([
+      ['tool.call.toolview', 'parent', null],
+      ['tool.call.tail', 'parent', null],
+      ['tool.call.toolview', 'parent:code:1', 'parent'],
+      ['tool.call.tail', 'parent:code:1', 'parent'],
+      ['tool.call.toolview', 'parent:code:1:code:1', 'parent:code:1'],
+      ['tool.call.tail', 'parent:code:1:code:1', 'parent:code:1'],
     ])
+    for (let index = 0; index < owners.length; index += 2) {
+      expect(owners[index]?.owner).toBe(owners[index + 1]?.owner)
+    }
   })
 
   it('abbreviates a POSIX home path in the generic tool summary', () => {

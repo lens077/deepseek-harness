@@ -43,6 +43,8 @@ Below 768px, the composer strip is hidden unless General settings enables **Show
 
 `Stop task` (visible while the session runs) cancels the running turn and keeps the queue. The style menu switches the strip variant; `Open in canvas` selects the `Flow` view, whose toolbar offers the same progress, stop, style, and `Back to chat` controls, plus zoom buttons and `Fit to view`. Both variant choices persist in the Host settings document and also appear in General settings. `Task-flow font size` controls text in the strip and canvas independently of body text size: 11px by default, adjustable from 10px to 16px in General settings or the strip header. The expanded strip's graph body scrolls internally above 160px; its header wraps on narrow layouts.
 
+Authentication failures (`AUTH`) omit the raw provider error message from task-flow snapshots and display a localized API-key-invalid message instead. Other error messages retain their existing presentation; Session logs and model-visible data are unchanged by this display policy.
+
 ### Configuration
 
 | Field | Default | Meaning |

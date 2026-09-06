@@ -82,15 +82,29 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
     renameSession: vi.fn(async () => {}),
+    sessionDirectories: vi.fn(async () => ({ primaryDirectory: '/', additionalDirectories: [] })),
+    replaceSessionDirectories: vi.fn(async (_id, directories) => ({
+      primaryDirectory: '/', additionalDirectories: [...directories],
+    })),
     forkSession: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
+    archiveSessions: vi.fn(async () => {}),
+    unarchiveSession: vi.fn(async () => {}),
+    deleteSession: vi.fn(async id => [id]),
+    addTodos: vi.fn(),
+    todosAvailable: () => false,
+    setSessionMembership: vi.fn(async (_workspaceId, sessionIds) => workspace('moved', [...sessionIds])),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
+    useSessionDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
+    useSessionSelection: selector => selector({ selected: [], anchor: undefined, lead: undefined }),
+    setSessionSelection: vi.fn(),
+    clearSessionSelection: vi.fn(),
     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
     ...overrides,
@@ -154,7 +168,7 @@ describe('mobile WorkspaceBrowser', () => {
     expect(screen.queryByText('alpha-s')).toBeNull()
   })
 
-  it('includes Ungrouped Sessions without exposing archived or inactive blank rows', () => {
+  it('includes Ungrouped and nested Sessions without exposing archived or inactive blank rows', () => {
     const open = vi.fn()
     mount({
       mobile: true,
@@ -165,6 +179,7 @@ describe('mobile WorkspaceBrowser', () => {
       ])),
       useWorkspaces: hook(workspaceState([{
         ...workspace('alpha', ['parent', 'child', 'archived', 'blank']),
+        nestedUnder: { child: sid('parent') },
       }], [sid('archived')])),
     })
     fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
@@ -259,10 +274,11 @@ describe('WorkspaceBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     expect(screen.getByText('分组方式')).toBeTruthy() // the menu heading label
-    expect(screen.getByRole('separator')).toBeTruthy()
-    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '按工作区', '单列表', '手动排序', '最近更新',
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    expect(screen.getAllByRole('menuitem').slice(0, 5).map(item => item.textContent)).toEqual([
+      '按工作区', '单列表', '已归档', '手动排序', '最近更新',
     ])
+    expect(screen.getByRole('menuitem', { name: '自适应' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '手动排序' }).querySelector('svg')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))

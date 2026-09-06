@@ -457,6 +457,9 @@ export function apply(ctx: Context, config: Config): void {
                 ? `started subagent ${value.subagentId}`
                 : outputValueText(value.output),
           }],
+          presentationMeta: (_args, value) => value.kind === 'background'
+            ? {}
+            : { childSessionId: value.kind === 'continuable' ? value.subagentId : value.runId },
         },
         // Children never mutate the parent session; the one parent-owned write
         // (tasks.start) is a synchronous commutative insertion.

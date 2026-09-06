@@ -2,10 +2,10 @@
 // over the Web bundles and the real host wire. The scaffold mounts the
 // shipped telemetry row in FEEDBACK_ONLY mode against this suite's own
 // loopback mock collector, so the default release path is real: /feedback
-// releases the session records through that event (exactly one OTLP request,
-// carrying the drive prompt and the feedback text), the acknowledgement pins
-// the feedback-gated disclosure sentence, and a second feedback releases only
-// the records since the first handoff — the earlier prompt does not repeat.
+// releases metadata for the session records through that event in one OTLP
+// request without prompt or feedback bodies. The acknowledgement pins the
+// feedback-gated disclosure sentence, and a second feedback releases only
+// the records since the first handoff.
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -32,6 +32,26 @@ const ACK_EXPANDED_EXPECTED = join(SNAPSHOT_DIR, 'ack-expanded.expected.md')
 const MODE = webSnapshotMode()
 
 const PROMPT = 'Reply with the single word LIGHTHOUSE and stop.'
+
+/** Read ledger identities while requiring metadata-only privacy on every exported record. */
+function releasedEvents(payload: string): { type: string; seq: number }[] {
+  const parsed = JSON.parse(payload) as {
+    resourceLogs: { scopeLogs: { logRecords: {
+      attributes: { key: string; value: { stringValue?: string; intValue?: number | string } }[]
+    }[] }[] }[]
+  }
+  const records = parsed.resourceLogs.flatMap(resource =>
+    resource.scopeLogs.flatMap(scope => scope.logRecords))
+  expect(records.length).toBeGreaterThan(0)
+  return records.map(record => {
+    const attribute = (key: string) => record.attributes.find(item => item.key === key)?.value
+    expect(attribute('dsh.telemetry.content_mode')?.stringValue).toBe('metadata-only')
+    const type = attribute('event.type')?.stringValue
+    const seq = Number(attribute('event.seq')?.intValue)
+    if (type === undefined || !Number.isInteger(seq)) throw new Error('released record lacks its ledger identity')
+    return { type, seq }
+  })
+}
 
 describe('web e2e: feedback-gated release under the shipped default mode', () => {
   let scaffold: WebScaffold
@@ -108,8 +128,12 @@ describe('web e2e: feedback-gated release under the shipped default mode', () =>
     // FEEDBACK_ONLY releases through the committed feedback event: exactly
     // one request reaches the collector, carrying the whole unshared range.
     await expect.poll(() => uploads.length, { timeout: 15_000 }).toBe(1)
-    expect(uploads[0]).toContain('the diff view is unreadable')
-    expect(uploads[0]).toContain(PROMPT)
+    expect(uploads[0]).not.toContain('the diff view is unreadable')
+    expect(uploads[0]).not.toContain(PROMPT)
+    const released = releasedEvents(uploads[0]!)
+    expect(released.map(event => event.seq)).toEqual(released.map((_event, index) => index))
+    expect(released.map(event => event.type)).toContain('user/message')
+    expect(released.at(-1)?.type).toBe('feedback/record')
 
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(ACK_EXPECTED, snapshot, MODE)
@@ -131,8 +155,13 @@ describe('web e2e: feedback-gated release under the shipped default mode', () =>
     await expect.poll(() => uploads.length, { timeout: 15_000 }).toBe(2)
     // Suffix semantics: the second release starts after the first feedback's
     // handoff, so the drive prompt already shared must not repeat.
-    expect(uploads[1]).toContain('the second remark')
+    expect(uploads[1]).not.toContain('the second remark')
     expect(uploads[1]).not.toContain(PROMPT)
+    const first = releasedEvents(uploads[0]!)
+    const second = releasedEvents(uploads[1]!)
+    const firstUnsharedSeq = first.at(-1)!.seq + 1
+    expect(second.map(event => event.seq)).toEqual(second.map((_event, index) => firstUnsharedSeq + index))
+    expect(second.at(-1)?.type).toBe('feedback/record')
   }, 60_000)
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {

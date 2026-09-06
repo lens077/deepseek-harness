@@ -203,7 +203,7 @@ Source: [`packages/api/gateway/src/index.ts:119`](../packages/api/gateway/src/in
 
 ## `@deepseek-ai/dsh-api-session-controller`
 
-Requires: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `llm` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
+Requires: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `llm` · `sessions` · `sessionProjections` · `sessionQuery` · `sandboxPolicy` · `typert` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -213,7 +213,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/api/session-controller/src/index.ts:69`](../packages/api/session-controller/src/index.ts)
+Source: [`packages/api/session-controller/src/index.ts:83`](../packages/api/session-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-settings-controller"></a>
 
@@ -1772,7 +1772,7 @@ export interface Config {
 
 Depends on: [`SandboxMode`](subsystems/sandbox.md)
 
-Source: [`packages/sandbox/sandbox-policy/src/index.ts:70`](../packages/sandbox/sandbox-policy/src/index.ts)
+Source: [`packages/sandbox/sandbox-policy/src/index.ts:75`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 <a id="deepseek-aidsh-sdk-app"></a>
 
@@ -1813,6 +1813,49 @@ export interface JsonRpcConfig {
 Depends on: `Readable` (`node:stream`) · `Writable` (`node:stream`)
 
 Source: [`packages/sdk/server/src/index.ts:25`](../packages/sdk/server/src/index.ts)
+
+<a id="deepseek-aidsh-session-digest"></a>
+
+## `@deepseek-ai/dsh-session-digest`
+
+Requires: `sessionProjections`
+
+```ts config-catalog
+/**
+ * Retained-text budgets. The value rides every `session.list` row, so these
+ * bound the listing payload rather than the durable log: a consumer reads the
+ * complete message through the Session history API when the user opens it.
+ * Invalid values fail plugin load.
+ */
+export interface Config {
+  /** Maximum retained question characters. Omit for 400. */
+  questionChars?: number
+  /** Maximum retained answer characters. Omit for 1200. */
+  replyChars?: number
+  /** Maximum retained changed-file paths of the current question. Omit for 8. */
+  changedFilePaths?: number
+  /** Maximum retained earlier questions. Omit for 30. */
+  historyQuestions?: number
+}
+```
+
+Source: [`packages/session/session-digest/src/index.ts:29`](../packages/session/session-digest/src/index.ts)
+
+<a id="deepseek-aidsh-session-inbox"></a>
+
+## `@deepseek-ai/dsh-session-inbox`
+
+Requires: `storageDomain`
+
+```ts config-catalog
+/** Required deployment policy for todo text. */
+export interface Config {
+  /** Maximum UTF-8 byte length accepted for one todo's text. */
+  readonly maxTextBytes: number
+}
+```
+
+Source: [`packages/session/session-inbox/src/index.ts:51`](../packages/session/session-inbox/src/index.ts)
 
 <a id="deepseek-aidsh-session-log-deepseek"></a>
 
@@ -3387,6 +3430,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-renderer` ([`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-schedule` ([`packages/client/ui-schedule/src/index.ts`](../packages/client/ui-schedule/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-session` ([`packages/client/ui-session/src/index.ts`](../packages/client/ui-session/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-session-files` ([`packages/client/ui-session-files/src/index.ts`](../packages/client/ui-session-files/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings` ([`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-general` ([`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-models` ([`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts))

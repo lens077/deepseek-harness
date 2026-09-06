@@ -14,6 +14,7 @@ Conversation 组装的浏览器 Chat target。本包注册 Chat event definition
 
 - [系统提示词行](#system-prompt-row)
 - [轮次 token 用量](#turn-token-usage)
+- [提问导航](#question-navigation)
 - [轮次过程折叠](#turn-process-folding)
 - [滚动归属](#scroll-ownership)
 - [模型体验](#model-experience)
@@ -33,6 +34,13 @@ Chat 会为每个非空的初始或恢复请求、显式消息序列起点或真
 ## 轮次 token 用量
 
 只有当已加载窗口包含 `turn/start`，且每次已启动的模型尝试都报告安全、精确的用量时，已完成 Turn 才显示可展开的用量行。该行会省略不可用的可选用量桶。记账不完整或相互矛盾时，整个详情都不显示，避免把部分总量冒充完整结果。
+
+-----
+
+<a id="question-navigation"></a>
+## 提问导航
+
+提问轨道可以搜索完整的 Host 索引、按需加载剩余 Session 历史，并在已加载提问之间移动。搜索结果位于当前窗口之外时，Chat 会先调用 `loadThrough(seq)`，再把目标放到转录阅读线。提问行滚出视口上方后，粘性栏会显示该提问，以及可用的 Turn 结果、耗时和改动文件统计。一个已完成 Turn 跨越至少四个 Chat 行时，会在 Turn tail 前复述其开场提问。可选的 `chatReveal` 服务接收跨 Session 表面提供的同一 Session id 与提问 seq；它会保留请求直到该 Session 的 Chat store 挂载，再使用同一加载与定位路径。快捷键和焦点策略由 `ui-conversation` 设置提供。
 
 -----
 

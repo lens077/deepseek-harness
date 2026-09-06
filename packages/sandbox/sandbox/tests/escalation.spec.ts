@@ -81,13 +81,23 @@ describe('approveEscalation', () => {
     expect(seen[0]?.reason).toBe('escalate sandbox to workspace-write: the user asked to write in the workspace')
   })
 
-  it('a non-widening request fails closed with its own text and never asks', async () => {
+  it('a request the effective mode already covers is granted as a no-op and never asks', async () => {
     const seen: unknown[] = []
     const spy = ingredients({ approver: approver('allowed-once', r => seen.push(r)) })
     await expect(approveEscalation(req({ requestedMode: 'read-only' }), spy))
-      .rejects.toThrow(/not strictly wider than this call's current "read-only" mode/)
+      .resolves.toBe('read-only')
     await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
-      .rejects.toThrow(/not strictly wider/)
+      .resolves.toBe('danger-full-access')
+    await expect(approveEscalation(req({ requestedMode: 'danger-full-access', effectiveMode: 'danger-full-access' as never }), spy))
+      .resolves.toBe('danger-full-access')
+    expect(seen).toEqual([])
+  })
+
+  it('an unrecognized mode pairing fails closed with the strictly-wider text and never asks', async () => {
+    const seen: unknown[] = []
+    const spy = ingredients({ approver: approver('allowed-once', r => seen.push(r)) })
+    await expect(approveEscalation(req({ requestedMode: 'danger-full-access', effectiveMode: 'unknown-mode' as never }), spy))
+      .rejects.toThrow(/not strictly wider than this call's current "unknown-mode" mode/)
     expect(seen).toEqual([])
   })
 

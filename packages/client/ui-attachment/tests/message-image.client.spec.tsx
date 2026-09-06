@@ -45,6 +45,7 @@ const useSessionPendingInteraction: MessageImagesProps['useSessionPendingInterac
 const useConversation: MessageImagesProps['useConversation'] = selector => selector(EMPTY_CONVERSATION_SNAPSHOT)
 const useChat: MessageImagesProps['useChat'] = selector => selector(EMPTY_CHAT_SNAPSHOT)
 const useTrajectory: MessageImagesProps['useTrajectory'] = selector => selector(emptyTrajectory)
+const useTaskFlow: MessageImagesProps['useTaskFlow'] = () => { throw new Error('unused') }
 
 describe('MessageImage', () => {
   it('renders a cached URL on the first frame while refreshing it', () => {
@@ -274,6 +275,7 @@ describe('ImageGallery', () => {
       useConversation,
       useChat,
       useTrajectory,
+      useTaskFlow,
       useInput,
       inputActions: {
         setDraft: vi.fn(),

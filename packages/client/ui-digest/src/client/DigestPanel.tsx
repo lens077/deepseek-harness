@@ -32,7 +32,7 @@ const CLOCK_MS = 60_000
 /** Longest question kept in an automatically worded todo. */
 const TODO_QUESTION_CHARS = 120
 
-const TABS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
+const TAB_KEYS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
 const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
 const SECTION_KEYS: readonly InboxSectionKey[] = ['unread', 'seen', 'running', 'pinned', 'needsYou', 'failed', 'handled']
 
@@ -287,7 +287,7 @@ export function DigestPanel(props: DigestPanelProps) {
       <header className={css.header}>
         <h2 className={css.title}>{t(mobilePending ? 'mobile.pending' : mobileView === 'overview' ? 'mobile.overview' : 'panel.title')}</h2>
         {!mobilePending && <span className={css.tabs} role="tablist">
-          {TABS.map(key => (
+          {TAB_KEYS.map(key => (
             <button
               key={key}
               type="button"
@@ -338,7 +338,7 @@ export function DigestPanel(props: DigestPanelProps) {
             value={tab}
             onChange={(event) => { setMobileTab(event.currentTarget.value as InboxTab) }}
           >
-            {TABS.map(key => <option key={key} value={key}>{t(`tab.${key}`)}</option>)}
+            {TAB_KEYS.map(key => <option key={key} value={key}>{t(`tab.${key}`)}</option>)}
           </select>
           <select
             className={css.compactSelect}

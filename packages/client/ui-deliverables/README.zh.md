@@ -25,11 +25,11 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-与 `ui-conversation` 一起挂载本插件；已完成轮次随即以产出文件行收尾，位于收尾消息正文与其动作页脚之间。每个标签项经 Host 打开器打开文件，相对路径按会话 cwd 解析；该行首次显示时会查询 `session.canOpenWorkspacePath()`，有文件被省略、页面为 loopback 且查询成功返回 `true` 时，**在文件夹中显示**动作才会打开会话工作区。
+与 `ui-conversation` 一起挂载本插件；已完成轮次随即以产出文件行收尾，位于收尾消息正文与其动作页脚之间。`ui-session-files` 提供已记录 hunk 时，标签项会展开修改前后的行内对照，展开面板另有 Host 打开动作；没有已记录 hunk 的标签项会直接打开文件。相对路径按 Session cwd 解析。该行首次显示时会查询 `session.canOpenWorkspacePath()`，有文件被省略、页面为 loopback 且查询成功返回 `true` 时，**在文件夹中显示**动作才会打开 Session Workspace。
 
 ### 该行
 
-该行通过 CSS 容器宽度档位响应式展示至多六个文件标签项。Flexbox 负责收缩文件名并用 ellipsis 省略，CSS 为未展示路径选择匹配的本地化 `+ N 个文件` 标签；完整路径仍保留在 `title` 中，该行不执行 JavaScript 布局观察，也不提供横向滚动。
+该行通过 CSS 容器宽度档位响应式展示至多六个文件标签项。Flexbox 负责收缩文件名并用 ellipsis 省略，CSS 为未展示路径选择匹配的本地化 `+ N 个文件` 标签；完整路径仍保留在 `title` 中，标签项一行不执行 JavaScript 布局观察，也不提供横向滚动。共享的 `all` / `single` / `none` 偏好分别默认展开所有可对照文件、仅含一个文件的 Turn，或全部不展开。create 没有修改前内容，因此保持折叠。
 
 ### 行内代码链接
 
@@ -43,7 +43,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-Node 半部注册静态 `ui:deliverable-file-references` 系统提示词段，要求模型点名成功创建或修改的主要文件，并把这些文件以及正文中提到的其他本轮变更文件写成 Markdown 行内代码。浏览器半部把 `ProducedFiles` 注册进 chat 视图的 `conversation.chat.turnTail` 洞。`deliverablesDefinition` 根据 `write`、`edit` 和有修改作用的 `str_replace_editor` 命令中经过校验的原始参数，把每个轮次成功的第一方修改调用折叠进 `DeliverablesTurnData`。读取、删除、不受支持的工具、格式错误的调用和失败结果不贡献任何条目。新的修改工具必须增加显式 Client contribution 才能加入列表。本包还提供 chat 视图按收尾消息查询的 `chatFileMentions` 服务；把插件组合出去会同时移除两个表面，视图的空链以零成本留下。
+Node 半部注册静态 `ui:deliverable-file-references` 系统提示词段，要求模型点名成功创建或修改的主要文件，并把这些文件以及正文中提到的其他本轮变更文件写成 Markdown 行内代码。浏览器半部把 `ProducedFiles` 注册进 Chat 视图的 `conversation.chat.turnTail` 洞。`deliverablesDefinition` 根据 `write`、`edit` 和有修改作用的 `str_replace_editor` 命令中经过校验的原始参数，把每个轮次成功的第一方修改调用折叠进 `DeliverablesTurnData`。读取、删除、不受支持的工具、格式错误的调用和失败结果不贡献任何条目。新的修改工具必须增加显式 Client contribution 才能加入列表。本包会按 Session 延迟解析可选的 `chatFileDiffs` 服务，同时提供 Chat 视图按收尾消息查询的 `chatFileMentions` 服务；把插件组合出去会同时移除两个产出物表面，视图的空链以零成本留下。
 
 </details>
 

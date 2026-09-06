@@ -49,6 +49,8 @@ kind: "package-bundle"
 
 开箱即用，基于本核心构建的每个 profile 都提供：DeepSeek 模型连接（provider 与模型可配置，你还可以在设置中启用额外 provider）、完整工具集——文件编辑、shell 命令、web 搜索、公开 HTTP(S) 抓取、subagent、任务与目标跟踪——可跨重启存活的持久会话，以及默认权限策略：把文件写入限制在工作区内，危险操作前征询许可。Web 抓取无需逐次审批，其提供方会拒绝非公开目的地址。遥测默认关闭，除非你主动开启。
 
+精确路由 `openai/gpt-6-astra` 使用 90% 的压缩阈值；其他路由继承后端默认的 80%。容量仍由提供方配置：[Astra 设置指南](../../../docs/user/guide/providers.zh.md#astra-long-context)说明了如何将 1M 窗口与 900K 压力触发阈值配合使用。Web 禁用这个宿主后端，改用预设所属的策略。
+
 ### 各平台的 shell 工具
 
 在 macOS 与 Linux 上你获得 bash shell 工具；在 Windows 上则获得对应的 PowerShell 孪生工具，因此每台机器恰好有一套 shell 栈。各平台的安全行为完全一致。偏好不受沙盒约束的 PowerShell 执行器的 Windows 主机可以在其 profile patch 中切换 shell 行——切换必须同时禁用两个 PowerShell 行并重新启用两个 bash 行，否则 profile 无法加载。

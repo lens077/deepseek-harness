@@ -14,7 +14,7 @@
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .title {
@@ -52,7 +52,7 @@
   display: flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
 }
 
@@ -123,8 +123,9 @@
 
 .sectionCount {
   padding: 0 6px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  corner-shape: round;
   font-size: 11px;
 }
 
@@ -146,7 +147,7 @@
   flex-direction: column;
   gap: 4px;
   padding: 12px 14px 14px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-top-width: 3px;
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-1);
@@ -199,6 +200,7 @@
   padding: 0 7px;
   border: 1px solid currentcolor;
   border-radius: 999px;
+  corner-shape: round;
   font-size: 11px;
   line-height: 16px;
 }
@@ -263,7 +265,7 @@
   align-self: flex-start;
   margin-top: 8px;
   padding: 4px 9px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 7px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
@@ -348,7 +350,7 @@
 
 .headerAction,
 .action {
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 7px;
   padding: 4px 9px;
   background: transparent;
@@ -382,7 +384,7 @@
   align-items: center;
   gap: 12px;
   padding: 8px 20px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .since {
@@ -407,15 +409,16 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 20px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .chip {
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  corner-shape: round;
   padding: 3px 10px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
@@ -514,6 +517,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-success-primary);
 }
 
@@ -593,7 +597,7 @@
   flex: 1;
   min-width: 0;
   padding: 6px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -618,7 +622,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -803,6 +807,7 @@
 .projectTag {
   padding: 0 6px;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-bg-module-platform);
   font-size: 11px;
   font-weight: 400;
@@ -826,7 +831,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -932,7 +937,7 @@
   padding: 0;
   gap: 0;
   border: 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 0;
   background: transparent;
   max-height: none;
@@ -1036,7 +1041,7 @@
     align-items: center;
     gap: var(--dsh-mobile-row-gap, 3px);
     padding: 2px var(--dsh-mobile-page-padding, 8px);
-    border-bottom: 1px solid var(--dsw-alias-border-l2);
+    border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   }
 
   :global([data-mobile-layout="small"]) .tabs,
@@ -1049,7 +1054,7 @@
     min-width: 0;
     min-height: var(--dsh-mobile-control-size, 44px);
     padding: 4px;
-    border: 1px solid var(--dsw-alias-border-l2);
+    border: 0.5px solid var(--dsw-alias-border-l2);
     border-radius: 7px;
     background: var(--dsw-alias-bg-base);
     color: var(--dsw-alias-label-primary);
@@ -1087,7 +1092,7 @@
     gap: var(--dsh-mobile-row-gap, 6px);
     width: min(260px, calc(100vw - 32px));
     padding: var(--dsh-mobile-page-padding, 12px);
-    border: 1px solid var(--dsw-alias-border-l2);
+    border: 0.5px solid var(--dsw-alias-border-l2);
     border-radius: 8px;
     background: var(--dsw-alias-bg-base);
     font-size: var(--dsh-mobile-meta-size, 13px);

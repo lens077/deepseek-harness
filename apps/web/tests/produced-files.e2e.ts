@@ -146,6 +146,7 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     await expect.poll(() => chips.count()).toBe(6)
     await expect.poll(() => row.getByText('+ 4 files', { exact: true }).isVisible()).toBe(true)
 
+    await page.getByRole('button', { name: 'Close the file panel', exact: true }).click()
     await page.setViewportSize({ width: 780, height: 900 })
     await expect.poll(() => chips.count()).toBe(5)
     expect(await chips.nth(0).innerText()).toBe('关于我.md')

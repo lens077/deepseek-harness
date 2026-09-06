@@ -239,6 +239,32 @@ export function readdirSync(
 }
 
 /**
+ * List a directory through Node's callback form; completion is always asynchronous.
+ * @param path - Directory path.
+ * @param optionsOrCallback - `withFileTypes` options, encoding, or completion callback.
+ * @param maybeCallback - Completion callback when options are present.
+ */
+export function readdir(
+  path: PathArg,
+  optionsOrCallback: Parameters<typeof readdirSync>[1] | ((error: NodeJS.ErrnoException | null, entries?: string[] | Dirent[]) => void),
+  maybeCallback?: (error: NodeJS.ErrnoException | null, entries?: string[] | Dirent[]) => void,
+): void {
+  const options = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback
+  const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
+  if (typeof callback !== 'function') throw new TypeError('The "callback" argument must be of type function')
+  queueMicrotask(() => {
+    let entries: string[] | Dirent[]
+    try {
+      entries = readdirSync(path, options)
+    } catch (error) {
+      callback(error as NodeJS.ErrnoException)
+      return
+    }
+    callback(null, entries)
+  })
+}
+
+/**
  * Create a directory.
  * @param path - directory path.
  * @param options - `recursive` creates parents.
@@ -823,7 +849,7 @@ export const __esModule = true
 type OwnSignature =
   | 'constants' | 'promises' | 'Dirent' | 'FSWatcher' | 'StatWatcher' | 'ReadStream' | 'WriteStream'
   | 'readFileSync' | 'writeFileSync' | 'appendFileSync' | 'statSync' | 'lstatSync' | 'realpathSync'
-  | 'readdirSync' | 'mkdirSync' | 'mkdtempSync' | 'rmSync' | 'opendirSync'
+  | 'readdirSync' | 'readdir' | 'mkdirSync' | 'mkdtempSync' | 'rmSync' | 'opendirSync'
   | 'openSync' | 'readSync' | 'writeSync' | 'stat' | 'lstat' | 'watch' | 'watchFile' | 'unwatchFile'
   | 'createReadStream' | 'createWriteStream'
 
@@ -839,7 +865,7 @@ type NodeFace = Partial<Omit<typeof import('node:fs'), OwnSignature>>
 export default {
   constants, promises, Dirent, FSWatcher, StatWatcher, ReadStream, WriteStream,
   readFileSync, writeFileSync, appendFileSync, existsSync, statSync, stat, lstatSync, lstat, realpathSync, chmodSync,
-  readdirSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, renameSync, accessSync, opendirSync,
+  readdirSync, readdir, mkdirSync, mkdtempSync, rmSync, unlinkSync, renameSync, accessSync, opendirSync,
   openHandleSync, linkSync,
   openSync, readSync, writeSync, closeSync, watch, watchFile, unwatchFile,
   createReadStream, createWriteStream,

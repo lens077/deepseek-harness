@@ -131,6 +131,11 @@
   config:
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
+      config:
+        modelPolicies:
+          - provider: openai
+            model: gpt-6-astra
+            thresholdRatio: 0.9
 
     - id: command-compact
       name: '@deepseek-ai/dsh-command-compact'

@@ -93,7 +93,9 @@ describe('workspace browser rows', () => {
     expect(screen.getByText('进行中')).toBeTruthy()
     expect(row.hasAttribute('draggable')).toBe(false)
     fireEvent.click(row)
-    expect(onOpen).toHaveBeenCalledWith(result.id)
+    expect(onOpen).toHaveBeenCalledWith(result.id, expect.objectContaining({
+      ctrlKey: false, metaKey: false, shiftKey: false,
+    }))
   })
 
   it('keeps the active-Schedule marker after a search title and inside the row action', () => {
@@ -113,7 +115,7 @@ describe('workspace browser rows', () => {
     expect(row.querySelectorAll('button')).toHaveLength(0)
 
     fireEvent.click(indicator)
-    expect(onOpen).toHaveBeenCalledWith(result.id)
+    expect(onOpen).toHaveBeenCalledWith(result.id, expect.anything())
   })
 
   it.each([
@@ -166,7 +168,7 @@ describe('workspace browser rows', () => {
     expect(row.hasAttribute('aria-expanded')).toBe(false)
     expect(screen.queryByRole('button', { name: /展开|收起/ })).toBeNull()
     fireEvent.click(row)
-    expect(onOpen).toHaveBeenCalledWith(node.id)
+    expect(onOpen).toHaveBeenCalledWith(node.id, expect.anything())
   })
 
   it('keeps the active-Schedule marker between the title and time in grouped and flat rows', () => {
@@ -192,7 +194,7 @@ describe('workspace browser rows', () => {
     }
 
     fireEvent.click(assertIndicator())
-    expect(onOpen).toHaveBeenCalledWith(node.id)
+    expect(onOpen).toHaveBeenCalledWith(node.id, expect.anything())
 
     view.rerender(
       <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
@@ -448,7 +450,7 @@ describe('workspace browser rows', () => {
     }
   })
 
-  it('session row menu opens without opening the session and dispatches rename, fork, and archive', () => {
+  it('session row menu opens without opening the session and dispatches rename, both fork placements, and archive', () => {
     const onOpen = vi.fn()
     const onRename = vi.fn()
     const onFork = vi.fn()
@@ -469,8 +471,11 @@ describe('workspace browser rows', () => {
     expect(onRename).toHaveBeenCalledWith(node.id, 'One')
     expect(onOpen).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '分叉会话' }))
-    expect(onFork).toHaveBeenCalledWith(node.id)
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制为平级会话' }))
+    expect(onFork).toHaveBeenCalledWith(node.id, 'sibling')
+    fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    expect(onFork).toHaveBeenCalledWith(node.id, 'nested')
     // Archive dispatches without opening the session.
     fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '归档会话' }))

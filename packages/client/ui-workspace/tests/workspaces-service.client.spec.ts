@@ -146,6 +146,34 @@ class FakeWorkspaces implements IWorkspaces {
     this.archiveCalls.push(sessionId)
     return this.onArchive(sessionId)
   }
+
+  archiveSessions(sessionIds: readonly SessionId[]): Promise<void> {
+    return Promise.all(sessionIds.map(id => this.archiveSession(id))).then(() => undefined)
+  }
+
+  unarchiveSession(sessionId: SessionId): Promise<void> {
+    this.list.update(state => ({
+      ...state,
+      archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+    }))
+    return Promise.resolve()
+  }
+
+  setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView> {
+    const current = this.list.getSnapshot().items.find(item => item.workspaceId === workspaceId)
+    if (current === undefined) return Promise.reject(new Error('unknown workspace'))
+    const requested = new Set(sessionIds)
+    return Promise.resolve({
+      ...current,
+      sessionIds: member
+        ? [...new Set([...current.sessionIds, ...sessionIds])]
+        : current.sessionIds.filter(id => !requested.has(id)),
+    })
+  }
 }
 
 const listing: DirectoryListing = {

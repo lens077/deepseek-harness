@@ -8,7 +8,7 @@ Status: implemented
 
 `SandboxMode` 所声明的语义涵盖文件系统效果，但最初只有 `ctx.shell` 强制执行该策略。fs 工具（`write`/`edit`）在进程内经由 `ctx.fs` 变更宿主文件系统，那里的 OS argv 包装在机制上毫无意义——[沙箱 Agent Note](2026-07-06-sandbox.zh.md) § 进程内工具记录了这一点，并把跨家族强制执行留作一个暂缓阶段，附带一个未决问题：进程内强制执行是各 seam 各自表达，还是变成一个统一的 harness 能力。本 Agent Note 就是那个阶段，并给出答案：一个共享的策略归属，在每个家族各自正确的层级上做 per-seam 强制执行。
 
-这个缺口并不只有 read-only 一种形态。一个受限编码 agent（智能体）的产品模式是 `workspace-write`：bash 已经可以在会话工作区根目录下写入，而其外的一切都被拒绝，所以只能全部拒绝的 fs 强制执行会严格劣于禁用 fs 工具——模型会尝试在工作区内 `write`，被拒，然后学会绕道 `bash` heredoc。因此跨家族强制执行必须涵盖完整的模式阶梯，包括 `workspace-write` 要求的路径包含判定（规范化目标；`..`/符号链接/绝对路径逃逸），以及与 bash 相同的升级手段。
+这个缺口并不只有 read-only 一种形态。一个受限编码 agent（智能体）的产品模式是 `workspace-write`：bash 已经可以在工作区根目录下写入，而其外的一切都被拒绝，所以只能全部拒绝的 fs 强制执行会严格劣于禁用 fs 工具——模型会尝试在工作区内 `write`，被拒，然后学会绕道 `bash` heredoc。因此跨家族强制执行必须涵盖完整的模式阶梯，包括 `workspace-write` 要求的路径包含判定（规范化目标；`..`/符号链接/绝对路径逃逸），以及与 bash 相同的升级手段。
 
 第二个强制执行家族还暴露了原布局中的一个归属问题。部署默认值（`mode` + `workspaceRoot`）配置在 `dsh-bash-sandbox` 上，而 per-session 覆盖事件是 `shell/sandbox-mode`，由 `dsh-shell` 的 session-mode 工具集折叠与写入。当 fs 强制执行同一套策略时，要么 fs 读取 bash 的配置与事件（一个能力家族依赖同级插件的配置），要么各家族各持一份副本——两份 `workspaceRoot` 会漂移进沙箱 RFC 警告过的割裂世界：bash 受限于一个根，而 fs 围住另一个根。
 
@@ -16,7 +16,7 @@ Status: implemented
 
 三个相互协调的部分全部在叶子 `cordis.yml` 中组合，均不触及 `agent-loop`。
 
-### `ctx.sandboxPolicy`——mode 与工作区根目录集合的统一归属
+### `ctx.sandboxPolicy`——mode 与工作区根的统一归属
 
 `packages/sandbox/sandbox-policy/`（`@deepseek-ai/dsh-sandbox-policy`）注册 `ctx.sandboxPolicy`，即部署沙箱策略的唯一所有者：
 
@@ -25,14 +25,14 @@ Status: implemented
 - `resolve({ session?, mode? })` 返回完整的单次调用 `SandboxExecutionPolicy`：显式批准的模式 > 会话的投影覆盖 > `defaultMode`，而会话中不可变的 cwd > 配置的 `workspaceRoot` 回退值。
 - 保留 `defaultMode` / `workspaceRoot` 访问器，作为部署回退值与能力宣告依据。
 
-`dsh-bash-sandbox` 自身不再携带任何沙箱配置——它注入 `sandboxPolicy`，仅在直接调用时使用其中的部署回退值。`dsh-tool-bash` 与 `dsh-tool-fs` 把当前会话传给 `ctx.sandboxPolicy.resolve()`，因此两者每次调用都会取得相同的生效模式与有序会话根目录；`dsh-permission-presets` 预设与 ACP（Agent Client Protocol）bridge 经由迁移后的 setter 写入。拥有 bash 与 fs 执行的 seam 仍不依赖会话——会话依赖归策略包与工具消费方所有。
+`dsh-bash-sandbox` 自身不再携带任何沙箱配置——它注入 `sandboxPolicy`，仅在直接调用时使用其中的部署回退值。`dsh-tool-bash` 与 `dsh-tool-fs` 把当前会话传给 `ctx.sandboxPolicy.resolve()`，因此两者每次调用都会取得相同的生效模式与 cwd 根目录；`dsh-permission-presets` 预设与 ACP（Agent Client Protocol）bridge 经由迁移后的 setter 写入。拥有 bash 与 fs 执行的 seam 仍不依赖会话——会话依赖归策略包与工具消费方所有。
 
 ### `dsh-fs-sandbox`——在提供方内部强制执行
 
 `packages/fs/fs-sandbox/`（`@deepseek-ai/dsh-fs-sandbox`）镜像 `bash-local`/`bash-sandbox` 的拆分：`SandboxedFileSystem extends LocalFileSystem`，注册为 `ctx.fs`，注入 `sandboxPolicy`。读取（`resolve`/`stat`/`readText`/`streamText`/`listDir`）原样透传——每种模式都允许读。两个变更操作在委托给继承来的原子写之前按模式强制执行：
 
 - `read-only` 直接拒绝 `writeText`/`editText`。
-- `workspace-write` 把规范化后的目标围栏于可写根集合——`dsh-sandbox` 中的 `writableRoots(policy)`：每个显式会话根目录加上平台临时目录（`/tmp`、`os.tmpdir()`），各自 realpath——与 Seatbelt profile 授予的是同一个集合，所以 fs 围栏是这一个模式含义在 bwrap/Landlock/Seatbelt profile 之外的第四种方言，因此不会出现「write 工具不能写 `/tmp` 而 bash 能」的不对称。规范化路径写法采用词法包含的快速路径；当 Windows 以大小写不同的路径、长文件名或 8.3 短文件名表示同一目录时，系统会逐级遍历祖先目录并比较文件系统身份，而不会把边界弱化为依据文本前缀猜测包含关系。目标在委托前被立即重新规范化（`resolve` 对最深的既有祖先做 realpath），因此自工具解析该目标以来被换出的祖先符号链接会被捕获。
+- `workspace-write` 把规范化后的目标围栏于可写根集合——`dsh-sandbox` 中的 `writableRoots(policy)`：工作区根加上平台临时目录（`/tmp`、`os.tmpdir()`），各自 realpath——与 Seatbelt profile 授予的是同一个集合，所以 fs 围栏是这一个模式含义在 bwrap/Landlock/Seatbelt profile 之外的第四种方言，因此不会出现「write 工具不能写 `/tmp` 而 bash 能」的不对称。规范化路径写法采用词法包含的快速路径；当 Windows 以大小写不同的路径、长文件名或 8.3 短文件名表示同一目录时，系统会逐级遍历祖先目录并比较文件系统身份，而不会把边界弱化为依据文本前缀猜测包含关系。目标在委托前被立即重新规范化（`resolve` 对最深的既有祖先做 realpath），因此自工具解析该目标以来被换出的祖先符号链接会被捕获。
 - `danger-full-access` 不加围栏地委托。
 
 拒绝是结构化的 `FS_SANDBOX_DENIED`，携带生效模式——区别于 `FS_PERMISSION_DENIED`（宿主 EACCES 是世界在拒绝；这里是策略在拒绝）。无文本推断：进程内围栏确切知道它拒绝了什么。per-call 载体是 `writeText`/`editText` 上一个末尾可选的 `SandboxExecutionPolicy`（文件系统侧对应 `ShellExecRequest.sandboxPolicy`）；该 seam 保持无会话依赖，而裸的本地后端会忽略它。`FileSystem.sandboxMode` 是能力事实（在基类与 `fs-local` 上为 `undefined`，在 `SandboxedFileSystem` 上为默认值），所以工具层按组合真相来宣告升级。
@@ -55,6 +55,7 @@ Status: implemented
 
 - **`ctx.web` 的网络策略**——`SandboxMode` 所声明的语义只涵盖文件系统效果；在 bash `curl` 畅通时给一个仅限 web 的网络旋钮会是一道假边界。待某个 bash 后端能强制执行网络策略（bwrap `--unshare-net`、Landlock ABI v4+）时再议。
 - **`subagent-acp` 消费方**——沙箱 RFC 中未变的延后阶段。
+- **单个会话中的额外可写根目录**——解析后的策略携带一个主要 `SessionHeader.cwd`；ACP `additionalDirectories` 仍是独立的 bridge 与策略设计问题。
 - **统一的 per-tool 沙箱运行时**——因沙箱 RFC 中的理由继续否决。
 
 ## 考虑过的替代方案
@@ -75,7 +76,7 @@ Status: implemented
 已交付的部分——§ 测试的各层各自钉住：
 
 - 在 `read-only` 下，`write`/`edit` 返回 `[sandbox: file access denied under read-only mode]` 标记，磁盘不受触动；`read`/`listDir` 与 `dsh-fs-local` 行为一致。
-- 在 `workspace-write` 下，变更落在每个显式会话根目录与临时目录下，其外被拒；包含矩阵——`..` 穿越、指向外部的绝对路径、一个既有的、指向外部的工作区内符号链接目录、在这样一个符号链接下新建的文件，以及根路径的等价别名形式——在真实磁盘上拒绝每一种逃逸，同时允许文件系统认定为同一目录的路径。
+- 在 `workspace-write` 下，变更落在工作区根与临时目录下，其外被拒；包含矩阵——`..` 穿越、指向外部的绝对路径、一个既有的、指向外部的工作区内符号链接目录、在这样一个符号链接下新建的文件，以及根路径的等价别名形式——在真实磁盘上拒绝每一种逃逸，同时允许文件系统认定为同一目录的路径。
 - 一个被拒的 fs 变更，携带 `sandbox_permissions` + `justification` 重试一次，会经组合的审批链提示；一次授权让恰好那一次调用在更宽的模式下运行且写入落盘；rejected/cancelled/unavailable 各自产生其逐字的 fail-closed 文案且不做任何变更。
 - 一次 `permission` 预设切换同时管辖两个家族：会话切换模式后，下一次 bash 调用与下一次 fs 变更都从同一个 `sandboxMode` 投影遵循新模式。
 - cwd 根目录不同的并发会话通过同一组服务实例携带不同策略；两个家族都不会缓存某个会话的根目录供下一次调用使用。

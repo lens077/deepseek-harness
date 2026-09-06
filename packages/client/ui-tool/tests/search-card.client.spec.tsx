@@ -20,7 +20,7 @@ import { createChatStore } from '@deepseek-ai/dsh-client-ui-chat/src/client/stor
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-chat/src/client/details/DetailsPanel.tsx'
 import { SearchRow, searchToolview } from '../src/client/tool/toolviews/search-row.tsx'
-import { renderToolDetails, toolChatSnapshot, useEmptyTrajectory } from './tool-details-render.client.tsx'
+import { renderToolDetails, toolChatSnapshot, useEmptyTaskFlow, useEmptyTrajectory } from './tool-details-render.client.tsx'
 
 type SearchRowProps = Parameters<typeof SearchRow>[0]
 
@@ -393,6 +393,7 @@ describe('DetailsPanel Output section (search)', () => {
         useConversation={bindSnapshotSelector(conversation)}
         useChat={bindSnapshotSelector({ getSnapshot: () => snapshot, subscribe: () => () => {} })}
         useTrajectory={useEmptyTrajectory}
+        useTaskFlow={useEmptyTaskFlow}
         useInput={(() => { throw new Error('unused') })}
         inputActions={{
           setDraft: () => {},

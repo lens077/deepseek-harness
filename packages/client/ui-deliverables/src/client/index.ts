@@ -10,7 +10,9 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { ChatFileDiffExpansion, ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -39,6 +41,10 @@ export const inject = ['slots', 'locale', 'uiConversation', 'remote', 'remote.se
  */
 export function apply(ctx: ClientContext): void {
   const workspacePathOpen = createSnapshotStore<boolean | undefined>(undefined)
+  const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
+    getSnapshot: () => ctx.get('chatFileDiffs')?.expansion.getSnapshot() ?? 'none',
+    subscribe: listener => ctx.get('chatFileDiffs')?.expansion.subscribe(listener) ?? (() => {}),
+  }
   let requestedWorkspacePathOpen = false
   let capabilityRevision = 0
   let pendingCapability: Promise<void> | undefined
@@ -72,10 +78,11 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.chat.turnTail',
       select: selectProducedFiles,
       locale: NS,
-      inject: () => ({
+      inject: (sessionId: SessionId) => ({
         isLoopback: ctx.remote.$host.isLoopback,
         ensureWorkspacePathOpen,
-        hooks: { workspacePathOpen },
+        fileDiffs: (path: string) => ctx.get('chatFileDiffs')?.forPath(sessionId, path) ?? [],
+        hooks: { workspacePathOpen, diffExpansion },
       }),
     }, ProducedFiles),
   )

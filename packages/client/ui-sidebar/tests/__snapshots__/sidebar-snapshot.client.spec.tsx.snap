@@ -61,6 +61,14 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
       />
     </button>
     <div
+      class="navArea"
+    >
+      <div
+        data-slot="sidebar.nav.entry"
+        style="display: contents;"
+      />
+    </div>
+    <div
       class="regionArea"
     >
       <div
@@ -143,7 +151,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 <span
                   class="localBuildTitle"
                 >
-                  DSH Local Build
+                  Sumery DSH Pro
                 </span>
                 <span
                   class="buildVersion"
@@ -152,6 +160,11 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 </span>
               </span>
             </div>
+          </span>
+          <span
+            class="brandTagline"
+          >
+            Forked from official DSH with more personalized features
           </span>
         </span>
       </button>
@@ -190,6 +203,14 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         New Session
       </span>
     </button>
+    <div
+      class="navArea"
+    >
+      <div
+        data-slot="sidebar.nav.entry"
+        style="display: contents;"
+      />
+    </div>
     <div
       class="regionArea"
     >
@@ -273,7 +294,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 <span
                   class="localBuildTitle"
                 >
-                  DSH 本地构建
+                  Sumery DSH Pro
                 </span>
                 <span
                   class="buildVersion"
@@ -282,6 +303,11 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 </span>
               </span>
             </div>
+          </span>
+          <span
+            class="brandTagline"
+          >
+            基于官方DSH分叉，改进更多个性化功能
           </span>
         </span>
       </button>
@@ -320,6 +346,14 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         新会话
       </span>
     </button>
+    <div
+      class="navArea"
+    >
+      <div
+        data-slot="sidebar.nav.entry"
+        style="display: contents;"
+      />
+    </div>
     <div
       class="regionArea"
     >

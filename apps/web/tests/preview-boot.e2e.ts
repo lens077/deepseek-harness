@@ -397,9 +397,9 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
     await showcase.click()
     await page.getByText(SHOWCASE_TAIL, { exact: true }).waitFor({ timeout: 30_000 })
 
-    expect(await page.getByText(SHOWCASE_OLDEST, { exact: true }).count()).toBe(0)
+    expect(await page.locator('[class*="userRow"]').getByText(SHOWCASE_OLDEST, { exact: true }).count()).toBe(0)
     await page.getByText('PREVIEW.md', { exact: true }).waitFor()
-    await page.getByText('src/preview.ts', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'src/preview.ts', exact: true }).waitFor()
     await page.getByText('Update to-do list', { exact: true }).waitFor()
     await page.getByText('Error: ENOENT: no such file, open missing.txt', { exact: true }).waitFor()
 
@@ -412,7 +412,7 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
     await catalog.press('Escape')
 
     await page.getByRole('button', { name: 'Load earlier', exact: true }).click()
-    await page.getByText(SHOWCASE_OLDEST, { exact: true }).waitFor({ timeout: 15_000 })
+    await page.locator('[class*="userRow"]').getByText(SHOWCASE_OLDEST, { exact: true }).waitFor({ timeout: 15_000 })
     expect(pageErrors.map(error => error.message)).toEqual([])
     expect(consoleErrors.filter(line =>
       /watchFile|failed to watch|node-addon-landlock-run\.probe|sandbox backend is usable|SANDBOX_UNAVAILABLE/i.test(line))).toEqual([])

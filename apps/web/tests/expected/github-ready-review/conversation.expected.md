@@ -12,14 +12,22 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Review deepseek-harness/deepseek-harness#314" [disabled]
-  - img
-  - text: Standard mode
   - button "Session log":
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -46,6 +54,8 @@
 - button "Add attachment":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
+- img
+- text: Standard mode
 - button "Select model, current github-webhook-review-test/reply":
   - text: github-webhook-review-test/reply
   - img

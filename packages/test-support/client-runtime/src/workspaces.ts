@@ -142,4 +142,55 @@ export class TestWorkspaces implements IWorkspaces {
       draft.archivedSessionIds = [...draft.archivedSessionIds, sessionId]
     })
   }
+
+  async archiveSessions(sessionIds: readonly SessionId[]): Promise<void> {
+    this.calls.push({ method: 'archiveSessions', args: [sessionIds] })
+    const stub = this.stubs.get('archiveSessions')
+    if (stub !== undefined) {
+      await (stub(sessionIds) as Promise<void>)
+      return
+    }
+    await this.update((draft) => {
+      draft.archivedSessionIds = [...new Set([...draft.archivedSessionIds, ...sessionIds])]
+    })
+  }
+
+  async unarchiveSession(sessionId: SessionId): Promise<void> {
+    this.calls.push({ method: 'unarchiveSession', args: [sessionId] })
+    const stub = this.stubs.get('unarchiveSession')
+    if (stub !== undefined) {
+      await (stub(sessionId) as Promise<void>)
+      return
+    }
+    await this.update((draft) => {
+      draft.archivedSessionIds = draft.archivedSessionIds.filter(id => id !== sessionId)
+    })
+  }
+
+  async setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView> {
+    this.calls.push({ method: 'setSessionMembership', args: [workspaceId, sessionIds, member] })
+    const stub = this.stubs.get('setSessionMembership')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, sessionIds, member) as Promise<WorkspaceView>)
+    }
+    const current = this.list.getSnapshot().items.find(item => item.workspaceId === workspaceId)
+    const existing = current?.sessionIds ?? []
+    const requested = new Set(sessionIds)
+    const nextIds = member
+      ? [...new Set([...existing, ...sessionIds])]
+      : existing.filter(id => !requested.has(id))
+    return {
+      workspaceId,
+      title: current?.title ?? '',
+      path: current?.path ?? '',
+      sessionIds: nextIds,
+      nestedUnder: current?.nestedUnder ?? {},
+      createdAt: current?.createdAt ?? '',
+      updatedAt: current?.updatedAt ?? '',
+    }
+  }
 }

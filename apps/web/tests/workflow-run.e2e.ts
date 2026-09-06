@@ -32,6 +32,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
   let prompt: string
+  let memberLabel: string
 
   const waitForParentSettlement = (): Promise<SessionId> => new Promise((resolve, reject) => {
     let dispose = (): void => {}
@@ -90,6 +91,8 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(await phaseDisclosure.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer')
     const member = page.getByRole('button', { name: /^Open Reply with exactly the word/ })
     await member.waitFor({ timeout: 15_000 })
+    memberLabel = await member.locator('[data-member-label]').innerText()
+    expect(memberLabel).toMatch(/^Reply with exactly the word WF_CHILD_OK and not/)
 
     await phaseDisclosure.click()
     expect(await phaseDisclosure.getAttribute('aria-expanded')).toBe('false')
@@ -104,17 +107,25 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await runDisclosure.press('Space')
     expect(await disclosures.count()).toBe(2)
     expect(await phaseDisclosure.getAttribute('aria-expanded')).toBe('true')
-    await member.focus()
-
     const lightColor = await member.locator('[data-member-label]').evaluate(element => getComputedStyle(element).color)
     await page.setViewportSize({ width: 560, height: 800 })
     await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
+    await page.getByRole('button', { name: 'Close digest', exact: true }).click()
+    // Keyboard focus is checked on the conversation, not the mobile overview.
+    await member.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect.poll(() => member.evaluate(element => element.matches(':focus-visible'))).toBe(true)
     const darkNarrow = await page.locator('[data-workflow-run]').evaluate((element) => {
       const panel = element as HTMLElement
       panel.style.width = '356px'
       const label = element.querySelector('[data-member-label]')
       const labelWrap = element.querySelector('[data-member-label-wrap]')
       const status = element.querySelector('[data-member-status-text]')
+      const fontProbe = document.createElement('span')
+      fontProbe.style.fontSize = 'var(--dsh-content-font-size-secondary)'
+      element.append(fontProbe)
+      const secondaryFontSize = getComputedStyle(fontProbe).fontSize
+      fontProbe.remove()
       const disclosures = element.querySelectorAll('[data-disclosure-row]')
       const runHeader = disclosures[0]
       const phaseHeader = disclosures[1]
@@ -133,6 +144,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
         focusWidth: labelWrap === null ? '' : getComputedStyle(labelWrap).outlineWidth,
         statusWidth: status?.getBoundingClientRect().width ?? 0,
         statusFontSize: status === null ? '' : getComputedStyle(status).fontSize,
+        secondaryFontSize,
         runHeight: runHeader?.getBoundingClientRect().height ?? 0,
         phaseHeight: phaseHeader?.getBoundingClientRect().height ?? 0,
         phaseTitleRight,
@@ -145,7 +157,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(darkNarrow.decoration).toContain('underline')
     expect(Number.parseFloat(darkNarrow.focusWidth)).toBeGreaterThanOrEqual(2)
     expect(darkNarrow.statusWidth).toBe(64)
-    expect(darkNarrow.statusFontSize).toBe('13px')
+    expect(darkNarrow.statusFontSize).toBe(darkNarrow.secondaryFontSize)
     expect(darkNarrow.runHeight).toBe(32)
     expect(darkNarrow.phaseHeight).toBe(32)
     expect(darkNarrow.phaseTitleRight).toBeLessThanOrEqual(darkNarrow.phaseStatusLeft)
@@ -156,7 +168,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await page.setViewportSize({ width: 1280, height: 800 })
 
     await member.click()
-    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
+    await page.locator('[data-chat-flow-kind="user"]').getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
 
     const sessions = page.getByRole('tree', { name: 'Sessions' })
     await sessions.getByRole('treeitem', { name: /Use the workflow tool exactly/ }).click()
@@ -166,17 +178,17 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
 
     expect(await page.locator('[data-chat-flow-kind="tool-call"]').count()).toBeGreaterThanOrEqual(1)
     expect(await page.locator('[data-chat-flow-kind="workflow-run"]').count()).toBe(1)
-    const terminalWorkflow = page.getByRole('button', { name: /^snapshot-flow/ })
+    const terminalWorkflow = page.locator('[data-workflow-run]').getByRole('button', { name: /^snapshot-flow/ })
     await terminalWorkflow.waitFor()
     expect(await terminalWorkflow.getAttribute('aria-expanded')).toBe('false')
     expect(await terminalWorkflow.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer')
     await terminalWorkflow.click()
-    const terminalPhase = page.getByRole('button', { name: /^Run/ })
+    const terminalPhase = page.locator('[data-workflow-run]').getByRole('button', { name: /^Run/ })
     await terminalPhase.waitFor()
     expect(await terminalPhase.getAttribute('aria-expanded')).toBe('false')
     expect(await terminalPhase.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer')
     await terminalPhase.click()
-    await page.getByText(CHILD_PROMPT, { exact: false }).waitFor()
+    await page.locator('[data-workflow-run]').getByText(memberLabel, { exact: true }).waitFor()
     await expect.poll(
       () => page.getByRole('button', { name: /^Open Reply with exactly the word/ }).count(),
       { timeout: 10_000 },
@@ -188,17 +200,17 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await expandTurnProcesses(page)
-    const workflow = page.getByRole('button', { name: /^snapshot-flow/ })
+    const workflow = page.locator('[data-workflow-run]').getByRole('button', { name: /^snapshot-flow/ })
     await workflow.waitFor({ timeout: 15_000 })
     expect(await workflow.getAttribute('aria-expanded')).toBe('false')
     const snapshot = await captureStableAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
     await workflow.click()
-    const phase = page.getByRole('button', { name: /^Run/ })
+    const phase = page.locator('[data-workflow-run]').getByRole('button', { name: /^Run/ })
     await phase.waitFor()
     expect(await phase.getAttribute('aria-expanded')).toBe('false')
     await phase.click()
-    await page.getByText(CHILD_PROMPT, { exact: false }).waitFor()
+    await page.locator('[data-workflow-run]').getByText(memberLabel, { exact: true }).waitFor()
     expect(await page.getByRole('button', { name: /^Open Reply with exactly the word/ }).count()).toBe(0)
 
   }, 60_000)

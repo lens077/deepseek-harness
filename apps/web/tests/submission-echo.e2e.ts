@@ -63,7 +63,8 @@ it('paints the submission echo on the send keystroke and swaps it for the durabl
       throw new Error('submission echo still present after the durable node arrived')
     }
   }, { timeout: 10_000 })
-  expect(screen.getAllByText('回显这条消息')).toHaveLength(1)
+  expect(screen.getAllByText('回显这条消息').filter(element =>
+    element.closest('[data-chat-flow-kind="user"]') !== null)).toHaveLength(1)
   await waitFor(() => {
     if (document.querySelector('[data-align="end"] img') === null) {
       throw new Error('durable user gallery missing')

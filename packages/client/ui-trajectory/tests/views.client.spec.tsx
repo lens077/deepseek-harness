@@ -223,6 +223,7 @@ function standaloneProps(
       createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),
     ),
     useWorkspaces: emptyWorkspaces(),
+    useTaskFlow: () => { throw new Error('unused') },
     useConversation: bindSnapshotSelector(createSnapshotStore(conversationSnapshot(trajectory))),
     useInput: bindSnapshotSelector(input),
     inputActions,
@@ -263,6 +264,7 @@ async function bench(snapshot = historySnapshot(NODES)) {
   const targetSources: ConversationTargetSources = {
     chat: createSnapshotStore<ChatSnapshot | undefined>(undefined),
     trajectory: trajectoryStore,
+    'task-flow': createSnapshotStore(undefined),
   }
   const binding: ConversationBinding = {
     snapshot: conversationStore,
@@ -341,6 +343,7 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
     sessionId: SID,
     useSession,
     useTrajectory,
+    useTaskFlow: () => { throw new Error('unused') },
     useChat,
     useConversation,
     useConversationViews,
@@ -390,6 +393,7 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
         SessionProvider={({ children }) => children}
         useStore={bindSnapshotSelector(conversation)}
         actions={conversation.actions}
+        useTabsLeading={selector => selector([])}
         renderSlot={() => null}
         open={vi.fn()}
         selectView={conversation.actions.setView}

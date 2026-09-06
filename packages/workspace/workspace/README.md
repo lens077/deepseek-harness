@@ -61,7 +61,7 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 ### Grouping sessions under a project
 
-A session joins the project of the directory it runs in: create a session in a project's directory and it appears under that project, newest first. A session can only belong to one project. A session whose directory cannot be validated — no recorded directory, or a moved or deleted folder — cannot join and stays ungrouped.
+A Session initially joins the project of the directory it runs in: create it in a project's directory and it appears under that project, newest first. A Session can belong to only one project, and an explicit membership operation can move selected Sessions between an existing Workspace and Ungrouped. `nestedUnder` can place an accounted child beneath another member without changing Session header lineage. A Session whose directory cannot be validated — no recorded directory, or a moved or deleted folder — cannot join automatically and stays ungrouped.
 
 ### Hiding sessions and removing projects
 
@@ -102,7 +102,7 @@ The API is one small family with two owners: `WorkspaceRegistry` creates, orders
 
 ### Durable shape
 
-The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, and the optional `pendingMutation` marker. Records written before `archivedSessionIds` existed parse with an empty set through the schema default.
+The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, and the optional `pendingMutation` marker. Each Workspace record owns ordered `sessionIds` and a defaulted `nestedUnder` child-to-parent map. Records written before the archive or nesting fields existed parse with empty values through schema defaults.
 
 ### Lifecycle
 
@@ -157,10 +157,10 @@ Independent of live requests: the package never touches a request prefix, so it 
 
 These limits define when the project list is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
-- **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and session deletion or folder removal are separate, absent capabilities ([decision](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)).
+- **Workspace removal never deletes data** — removing a project leaves its folder, files, and Session histories in place; those Sessions become Ungrouped. Permanent Session-lineage deletion is a separate registry operation coordinated with Session persistence ([decision](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)).
 - **A session joins only with a recorded directory** — a session belongs to a project only when its record carries a directory that resolves to the project's path; sessions without one stay ungrouped, and a session from another directory cannot be moved in.
 - **External changes are seen late** — if another process deletes or damages a directory, the project reflects it only at the next refresh or restart.
-- **Archiving is one-way** — a hidden session keeps its history and its place, but no unarchive action exists yet; the archive set is a durable display filter.
+- **Archiving changes visibility only** — an archived Session keeps its history, Workspace membership, position, and nested placement; unarchive removes it from the durable display filter.
 - **Re-adding a directory starts fresh** — after removal, adding the same directory again creates a new project with an empty session list; the old sessions do not come back automatically.
 
 <a id="dev-note"></a>

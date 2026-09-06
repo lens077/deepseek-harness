@@ -226,3 +226,28 @@
   color: var(--dsw-alias-label-secondary);
   text-decoration: underline;
 }
+
+.diff {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.diffHeader {
+  display: flex;
+  align-items: baseline;
+}
+
+.openFile {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.openFile:hover {
+  color: var(--dsw-alias-label-secondary);
+  text-decoration: underline;
+}

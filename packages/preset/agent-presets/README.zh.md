@@ -33,6 +33,8 @@ kind: "package-reference"
 
 可选的 preset 来自两处：本包 `presets/` 下随包交付的 preset，以及你自己放在 `<dshHome>/.agent-presets` 下的 preset。选择器会展示每个 preset 的显示名与描述；组装无法加载的 preset 会连同原因一起列出而不是被隐藏，因此你能看到该修什么或删什么。
 
+随包交付的 `standard`、`cordis`、`ptc` 组装仅为 `openai/gpt-6-astra` 设置 `thresholdRatio: 0.9`；其他路由保留后端默认的 80%。对应的 1M 容量与 900K 压力触发阈值见 [Astra 设置指南](../../../docs/user/guide/providers.zh.md#astra-long-context)。编辑这些文件只影响新组装，不影响已经加入旧代次的 agent。
+
 ### 最小配置
 
 插件需要一个 `default` preset id，并在 `roots` 中扫描 preset：

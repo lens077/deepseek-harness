@@ -40,6 +40,28 @@ function turnEndReasons(events: readonly SessionEvent[]): string[] {
   return events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])
 }
 
+/** Wait for the responsive sidebar and conversation width before measuring dock geometry. */
+async function setMeasuredViewport(page: Page, width: number, sidebarCollapsed: boolean): Promise<void> {
+  await page.setViewportSize({ width, height: 1000 })
+  await page.locator('[data-sidebar-collapsed="true"]').waitFor({
+    state: sidebarCollapsed ? 'attached' : 'detached',
+    timeout: 10_000,
+  })
+  await page.locator('[data-conversation-scroll]').evaluate(async (host) => {
+    const deadline = performance.now() + 5_000
+    let previous = host.getBoundingClientRect().width
+    let stableFrames = 0
+    while (performance.now() < deadline) {
+      await new Promise<void>((resolve) => { requestAnimationFrame(() => { resolve() }) })
+      const current = host.getBoundingClientRect().width
+      stableFrames = Math.abs(current - previous) < 0.01 ? stableFrames + 1 : 0
+      if (stableFrames >= 3) return
+      previous = current
+    }
+    throw new Error('conversation width did not settle after the viewport changed')
+  })
+}
+
 describe('web e2e: queue row actions', () => {
   let scaffold: WebScaffold | undefined
   let browser: Browser | undefined
@@ -114,9 +136,22 @@ describe('web e2e: queue row actions', () => {
       { timeout: 10_000 },
     ).toBe(2)
 
-    await page.setViewportSize({ width: 640, height: 1000 })
-    const queueBox = await page.locator('[data-queue-dock]').boundingBox()
-    const composerBox = await page.locator('[data-composer-card]').boundingBox()
+    await setMeasuredViewport(page, 640, true)
+    const { queueBox, composerBox, dockInset } = await page.evaluate(() => {
+      const queue = document.querySelector('[data-queue-dock]')
+      const composer = document.querySelector('[data-composer-card]')
+      const rect = (element: Element | null) => {
+        if (element === null) return null
+        const { x, width } = element.getBoundingClientRect()
+        return { x, width }
+      }
+      return {
+        queueBox: rect(queue),
+        composerBox: rect(composer),
+        dockInset: composer === null ? null
+          : Number.parseFloat(getComputedStyle(composer).getPropertyValue('--dsh-composer-dock-inset')),
+      }
+    })
     expect(queueBox).not.toBeNull()
     expect(composerBox).not.toBeNull()
     expect(queueBox!.x).toBeGreaterThanOrEqual(composerBox!.x)
@@ -124,15 +159,10 @@ describe('web e2e: queue row actions', () => {
       .toBeLessThanOrEqual(composerBox!.x + composerBox!.width)
     const queueLeftInset = queueBox!.x - composerBox!.x
     const queueRightInset = composerBox!.x + composerBox!.width - queueBox!.x - queueBox!.width
-    const composerMetrics = await page.locator('[data-composer-card]').evaluate((element) => {
-      const style = getComputedStyle(element)
-      return {
-        dockInset: Number.parseFloat(style.getPropertyValue('--dsh-composer-dock-inset')),
-      }
-    })
-    expect(queueLeftInset).toBeCloseTo(composerMetrics.dockInset, 1)
-    expect(queueRightInset).toBeCloseTo(composerMetrics.dockInset, 1)
-    await page.setViewportSize({ width: 1680, height: 1000 })
+    expect(dockInset).not.toBeNull()
+    expect(queueLeftInset).toBeCloseTo(dockInset!, 1)
+    expect(queueRightInset).toBeCloseTo(dockInset!, 1)
+    await setMeasuredViewport(page, 1680, false)
 
     const editRow = page.locator('[data-queue-dock] li', { hasText: EDIT })
     await editRow.getByRole('button', { name: 'Edit queued message' }).click()
@@ -241,9 +271,19 @@ describe('web e2e: queue row actions', () => {
     await compareOrRefreshGolden(LAYOUT_EXPECTED, layoutSnapshot, MODE)
 
     const expectAlignedContextPanels = async () => {
-      const queuePanelBox = await page.locator('[data-queue-dock] > div').boundingBox()
-      const todoBox = await page.locator('[data-testid="todo-panel"]').boundingBox()
-      const goalBox = await page.locator('[data-goal-bar] > div').boundingBox()
+      const { queuePanelBox, todoBox, goalBox } = await page.evaluate(() => {
+        const rect = (selector: string) => {
+          const element = document.querySelector(selector)
+          if (element === null) return null
+          const { x, y, width } = element.getBoundingClientRect()
+          return { x, y, width }
+        }
+        return {
+          queuePanelBox: rect('[data-queue-dock] > div'),
+          todoBox: rect('[data-testid="todo-panel"]'),
+          goalBox: rect('[data-goal-bar] > div'),
+        }
+      })
       expect(queuePanelBox).not.toBeNull()
       expect(todoBox).not.toBeNull()
       expect(goalBox).not.toBeNull()
@@ -255,9 +295,9 @@ describe('web e2e: queue row actions', () => {
       expect(todoBox!.width).toBeCloseTo(queuePanelBox!.width, 1)
     }
     await expectAlignedContextPanels()
-    await page.setViewportSize({ width: 640, height: 1000 })
+    await setMeasuredViewport(page, 640, true)
     await expectAlignedContextPanels()
-    await page.setViewportSize({ width: 1680, height: 1000 })
+    await setMeasuredViewport(page, 1680, false)
 
     await queueHeader.click()
     const removeButtons = page.getByRole('button', { name: 'Remove queued message' })

@@ -46,18 +46,12 @@ The generated [plugin configuration catalog](../../config-catalog.md) lists ever
 The Models page exposes only what a route needs to exist: the API key, display name, base URL, API protocol, and for each model its id, display name, context window, and max output tokens. Every other field — reasoning effort levels, image input, request-compatibility switches, headers, timeouts, retry policy — is set in `$DSH_HOME/settings.yaml`, the same document the page writes. Edit it directly, or, when the browser runs on the same machine as the server, open it with **Open configuration file** in the Settings header; the adapters re-read it on the next request, so nothing needs a restart. The subsections below cover the fields most gateways need.
 :::
 
+<a id="image-input"></a>
 ### Image input
 
 A model you enter by hand is treated as text-only until it says otherwise, because nothing can ask an endpoint which modalities it accepts. Attaching an image to such a model is refused before it is sent, naming the model.
 
-A vision model on a custom provider therefore needs one declaration, and so does a thinking model: without one the model picker offers it no reasoning levels. Both live behind the row's **Advanced** disclosure in the model list, beside the capacities:
-
-![A model row's advanced fold: context window, max output tokens, the Image input select set to Text and images, the Reasoning select set to Selectable levels, and the seven level checkboxes](providers-model-capabilities.png)
-
-- **Image input** — *Catalog default* keeps whatever the installed catalog records (text-only for a hand-entered model); *Text and images* writes `input: [text, image]`; *Text only* writes `input: [text]`, which is how a catalog model whose gateway does not serve images is narrowed. A list written by hand that the select cannot express is shown *as written in settings.yaml* and left alone until another choice replaces it.
-- **Reasoning** — *Catalog default* keeps the catalog's capability; *Non-reasoning model* writes `reasoningEfforts: false`, which strips reasoning from a catalog model the gateway cannot serve; *Selectable levels* writes a dict of the checked levels, each sent under its own name (`high: high`). Switching to it starts with `low`, `medium`, and `high` checked, and a dict must keep at least one level besides `off`. A renamed wire spelling (`max: ultra`) and the `compat` switches below stay in `settings.yaml`; the checkboxes preserve a spelling they find there.
-
-Both are also one line in `$DSH_HOME/settings.yaml`, which is what the form writes:
+A vision model on a custom provider therefore needs one line. The form has no field for it; add `input` to the model in `$DSH_HOME/settings.yaml`:
 
 ```yaml
 llm-pi-ai:
@@ -70,10 +64,6 @@ llm-pi-ai:
         - id: legacy-chat
         - id: vision-preview
           input: [text, image]
-          reasoningEfforts:
-            low: low
-            medium: medium
-            high: high
 ```
 
 `input` accepts `text` and `image`, and applies to that model alone, so one route can serve both kinds. Omitting it — or writing an empty list, which means the same thing — keeps whatever the installed catalog records for that model, and falls back to the route's `defaultInput` for a model the catalog does not describe.
@@ -149,6 +139,95 @@ A built-in provider's model whose gateway does not reason loses its levels with 
 llm-deepseek:
   reasoningEffort: max
 ```
+
+<a id="claude-model-onboarding"></a>
+### Claude: add an Anthropic model
+
+Native Claude routes use `anthropic-messages`, usually through the existing `anthropic` provider. For a gateway, first confirm that it accepts the exact model ID, then obtain the context window, output limit, input modalities, and reasoning levels from upstream documentation or verified configuration. A successful minimal call proves routing, not the accuracy of capacity metadata.
+
+#### 1. Preserve the provider and existing models
+
+Read `llm-pi-ai.providers.anthropic` in `$DSH_HOME/settings.yaml`. If it has an explicit `models` list, append the entry to that list and retain every older model you still need; the list replaces the installed catalog rather than extending it. When there is no explicit list and the catalog already contains the target, use the catalog directly; `modelOverrides` can adjust a known model, but cannot coexist with `models` or add a model unknown to the catalog.
+
+Keep the existing `baseURL` and `apiKeyEnv`. For a first setup, configure the credential through **Settings → Models → Add provider → anthropic**; choose `anthropic-messages` for a custom route. `apiKeyEnv: ANTHROPIC_API_KEY` is a credential reference, not the key value. Do not write keys or bearer tokens into documentation, the repository, or model entries.
+
+#### 2. Declare the Claude model's capabilities
+
+The example uses `claude-fable-5-1` and assumes the endpoint supports a 1M context, 128K output, image input, and the listed adaptive reasoning levels. These are example settings, not universal Claude specifications; adjust them to the endpoint before use. Merge only the needed fields and model entry into an existing configuration rather than replacing the whole settings file:
+
+```yaml
+llm-pi-ai:
+  providers:
+    anthropic:
+      api: anthropic-messages
+      apiKeyEnv: ANTHROPIC_API_KEY
+      models:
+        - id: claude-fable-5-1
+          name: Claude Fable 5.1
+          contextWindow: 1000000
+          maxTokens: 128000
+          input: [text, image]
+          reasoningEfforts:
+            low: low
+            medium: medium
+            high: high
+            xhigh: xhigh
+            max: max
+          compat:
+            forceAdaptiveThinking: true
+```
+
+Declare only capabilities the endpoint supports; omit `off` when disabling reasoning is unsupported. Use `forceAdaptiveThinking: true` only for models whose endpoint supports adaptive thinking and needs that protocol behavior explicitly enabled; a request with a selected reasoning level then uses `thinking.type: adaptive` and `output_config.effort`. Do not add it to every Claude model or copy this Anthropic-only switch into a GPT `openai-responses` or `openai-completions` route.
+
+#### 3. Verify before switching the default
+
+Check that the YAML parses, then verify a minimal upstream call, the model entry in DSH, image capability, and reasoning levels. Send a minimal prompt in a new session and confirm the target provider/model in `request/header` and the configured capacity in `request/context.contextWindow`; also verify image or tool requests if you use them. Keep an older model available until these checks succeed rather than switching the default before investigating failures.
+
+After verification, select Claude and the desired reasoning level in the model picker, or merge the following new-session defaults. `high` is this example's choice; before using `max`, confirm that both the endpoint and the model declaration support it:
+
+```yaml
+agent-default-model:
+  provider: anthropic
+  model: claude-fable-5-1
+  reasoningEffort: high
+```
+
+Model configuration is re-read on the next request; changing the global default does not replace an existing session's model selection. To use Claude in an existing session, explicitly switch through that session's model picker.
+
+#### 4. Check automatic compaction separately
+
+`maxTokens` caps output, not automatic compaction. Without an exact model-policy override, the backend's 80% default triggers at 800K measured pressure for a 1M window; Astra's 90% policy does not automatically apply to Claude. For a dedicated threshold, configure `thresholdRatio = target threshold / contextWindow` for the exact `anthropic/<model ID>` in a custom preset and keep `retainRatio < thresholdRatio`; alternatively, set `retainTokens` below the trigger threshold.
+
+Web's compaction engine belongs to the session preset. Copy an existing preset into the user preset directory `$DSH_HOME/.agent-presets/`, edit the copy, and create a session using it; do not edit an installed shipped preset directly because upgrades overwrite it. The [preset reference](../../../packages/preset/agent-presets/README.md) documents copying, default selection, and activation.
+
+<a id="astra-long-context"></a>
+### GPT-6 Astra: 1M context and 900K compaction
+
+DSH uses its own model settings, not Codex's `-c` flags or `config.toml`. When your endpoint supports a 1,000,000-token window and `max` effort, merge these fields into the existing `openai` model entry in `$DSH_HOME/settings.yaml`. Preserve its endpoint, credential reference, other models, and any additional reasoning levels:
+
+```yaml
+llm-pi-ai:
+  providers:
+    openai:
+      models:
+        - id: gpt-6-astra
+          contextWindow: 1000000
+          maxTokens: 128000
+          input: [text, image]
+          reasoningEfforts:
+            high: high
+            max: max
+agent-default-model:
+  provider: openai
+  model: gpt-6-astra
+  reasoningEffort: max
+```
+
+The context meter and model request preparation use `contextWindow` on the next request. The Responses API sends `reasoning.effort: max`; Chat Completions uses `reasoning_effort: max`. `maxTokens` is an output ceiling, not the context window; the adapter may reduce output to fit the remaining context. Declaring 1M does not grant endpoint access or prove its actual capacity.
+
+The [base bundle](../../../packages/bundle/base/README.md) and [standard, Cordis, and PTC presets](../../../packages/preset/agent-presets/README.md) configure `compaction-basic.modelPolicies` for the exact `openai/gpt-6-astra` route with `thresholdRatio: 0.9`. With a 1M window, `floor(1000000 * 0.9)` gives a 900,000-token measured-pressure trigger; other routes keep the 80% default. This is the DSH equivalent of the requested compaction limit for that window, not an independent absolute limit: changing the window also changes the threshold. Provider-confirmed overflow can trigger recovery earlier.
+
+Preset policy changes apply to newly composed agents. An already resident agent keeps its preset generation; refreshing the browser or sending another turn does not update its compaction policy. Restart DSH and reopen the saved session to recompose it, or start a new session. Model-capacity settings alone do not require a restart.
 
 ### Request compatibility
 

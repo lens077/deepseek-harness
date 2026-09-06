@@ -161,6 +161,15 @@ export abstract class SessionPersistence extends Service {
   abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle>
 
   /**
+   * Permanently delete one Session's stored data while holding write ownership.
+   * Active writers reject deletion. The operation is not cancellable after admission.
+   * @param id - Session whose data is removed.
+   * @returns whether stored data existed and was removed.
+   * @throws {SessionAlreadyOwnedError} while a write handle owns the Session.
+   */
+  abstract delete(id: SessionId): Promise<boolean>
+
+  /**
    * Flush every active write handle owned by this service instance in one
    * durability barrier: each handle's routed live events drain durably and
    * its session materializes, exactly as that handle's own

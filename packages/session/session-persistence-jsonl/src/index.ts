@@ -13,7 +13,7 @@ import {
   sessionFormatCatalog,
 } from '@deepseek-ai/dsh-session-format-catalog'
 import { readdirSync, type Dirent } from 'node:fs'
-import { open, mkdir, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readdir, realpath, link, lstat, rm, stat, truncate, unlink } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -30,7 +30,7 @@ import {
   type SessionPersistenceRevision as PersistenceRevision,
 } from '@deepseek-ai/dsh-session-persistence'
 import { JsonlBackendTracker, JsonlSessionHandle } from './storage.ts'
-import { SessionWriteLease } from './lease.ts'
+import { LEASE_FILENAME, SessionWriteLease } from './lease.ts'
 import { SESSION_FORMAT_VERSION, SessionId as makeSessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionId, SessionHeader, SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import {
@@ -305,6 +305,59 @@ class JsonlSessionPersistence extends SessionPersistence {
    */
   flush(): Promise<void> {
     return this.tracker.flushAll()
+  }
+
+  /**
+   * Delete stored Session data under its write lock, retaining the POSIX lock inode.
+   * @param id - Session whose generation files and owned artifacts are removed.
+   * @returns whether any stored artifact was removed.
+   */
+  async delete(id: SessionId): Promise<boolean> {
+    this.tracker.claimWrite(id)
+    let lease: SessionWriteLease | undefined
+    try {
+      await this.ensureRootEncoding()
+      const candidates: string[] = []
+      for (const project of await this.listProjectDirs()) {
+        await this.rejectLegacyFlatArtifact(project, id)
+        const directory = join(project, encodeSegment(id))
+        try {
+          await lstat(directory)
+          candidates.push(directory)
+        } catch (error: unknown) {
+          if (!isENOENT(error)) throw error
+        }
+      }
+      if (candidates.length > 1) {
+        throw new Error(`duplicate JSONL session id "${id}" appears in multiple project directories`)
+      }
+      const directory = candidates[0]
+      if (directory === undefined) return false
+      const metadata = await lstat(directory)
+      if (!metadata.isDirectory()) {
+        await unlink(directory)
+        this.coldLogMemo.delete(id)
+        if (process.platform !== 'win32') await this.syncDirPosix(dirname(directory))
+        return true
+      }
+      lease = await this.acquireLease(id, undefined, directory)
+      const entries = (await readdir(directory, { withFileTypes: true }))
+        .filter(entry => entry.name !== LEASE_FILENAME)
+      this.coldLogMemo.delete(id)
+      for (const entry of entries) {
+        const path = join(directory, entry.name)
+        if (entry.isDirectory()) await rm(path, { recursive: true })
+        else await unlink(path)
+      }
+      if (process.platform !== 'win32') await this.syncDirPosix(directory)
+      return entries.length > 0
+    } finally {
+      try {
+        await lease?.release()
+      } finally {
+        this.tracker.releaseClaim(id)
+      }
+    }
   }
 
   /**

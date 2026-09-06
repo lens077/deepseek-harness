@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import type { Browser, Page, Response } from 'playwright'
 import { chromium } from 'playwright'
 import { strFromU8, unzipSync } from 'fflate'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
 import { SESSION_FORMAT_VERSION, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection-cache'
@@ -89,7 +89,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
   let tripwire: ReturnType<typeof watchConsole> = { warnings: [], pageErrors: [] }
   let slotErrors: string[] = []
 
-  beforeAll(async () => {
+  // Opening a Session advances durable unread marks, so each case owns its inbox and settings document.
+  beforeEach(async () => {
     scaffold = await launchWebScaffold({})
     // The workspace-aware flow runs sessions in <workspaceCwd>/workspace;
     // the read targets must live in that session cwd (pre-creation is safe
@@ -165,7 +166,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     if (failures.length > 1) throw new AggregateError(failures, 'navigation case cleanup failed')
   })
 
-  afterAll(async () => {
+  afterEach(async () => {
     const failures: unknown[] = []
     await browser?.close().catch((error: unknown) => failures.push(error))
     await scaffold?.close().catch((error: unknown) => failures.push(error))
@@ -710,6 +711,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'digest.expected.md', 'session.v2.jsonl', 'search-results.expected.md',
       'trajectory.expected.md', 'terminal-card.expected.md',
+      'mobile-navigation.expected.md', 'mobile-pending-list.expected.md', 'mobile-small-layout.expected.md',
     ])
   })
 })

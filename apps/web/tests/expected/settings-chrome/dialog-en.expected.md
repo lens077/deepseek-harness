@@ -13,6 +13,15 @@
     - button "Agent presets":
       - img
       - text: Agent presets
+    - button "Conversation layout":
+      - img
+      - text: Conversation layout
+    - button "Digest panel":
+      - img
+      - text: Digest panel
+    - button "Project todos":
+      - img
+      - text: Project todos
   - button "Open configuration file"
   - button "Close":
     - img
@@ -52,3 +61,47 @@
   - 'button "Send behavior while busy: Queue"':
     - text: Queue
     - img
+  - text: Default sessions per workspace Set how many sessions each collapsed workspace shows by default.
+  - button "5":
+    - text: "5"
+    - img
+  - text: Session range and multi-selection Hold Shift to select a range of sessions and Ctrl (Command on macOS) to pick individual ones. Ctrl+A selects all, Esc clears.
+  - button "On":
+    - text: "On"
+    - img
+  - strong: Question navigation shortcuts
+  - paragraph: Jump between questions in the current conversation.
+  - button "Restore defaults"
+  - text: Previous question
+  - textbox "Previous question": Ctrl+ArrowUp
+  - text: Next question
+  - textbox "Next question": Ctrl+ArrowDown
+  - group "Shortcut focus behavior":
+    - text: Shortcut focus behavior
+    - radio "Disable in all form controls and editable areas" [checked]
+    - text: Disable in all form controls and editable areas
+    - radio "Disable only in text inputs"
+    - text: Disable only in text inputs
+    - radio "Always trigger shortcuts"
+    - text: Always trigger shortcuts
+  - group "Question bar expand button":
+    - text: Question bar expand button
+    - radio "Right (after the status)" [checked]
+    - text: Right (after the status)
+    - radio "Left (before the number)"
+    - text: Left (before the number)
+  - text: Task-flow strip style How the resident strip above the composer draws the flow.
+  - button "Step rail":
+    - text: Step rail
+    - img
+  - text: Task-flow canvas style How the enlarged Flow view draws the flow.
+  - button "Card graph":
+    - text: Card graph
+    - img
+  - text: Task-flow font size Text size for the strip and canvas, independent of body text size.
+  - group "Task-flow font size":
+    - button "Decrease task-flow font size":
+      - img
+    - text: 11px
+    - button "Increase task-flow font size":
+      - img

@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { ConversationSettingsSchema, type ConversationSettings } from '../src/submission-settings.ts'
 import {
-  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, DEFAULT_CONTENT_WIDTH_MODE,
-  DEFAULT_QUESTION_NAVIGATION_SETTINGS, apply,
+  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, DEFAULT_CONTENT_WIDTH_MODE, DEFAULT_QUESTION_NAVIGATION_SETTINGS, apply,
 } from '@deepseek-ai/dsh-client-ui-conversation'
 
 class MemorySettings extends SettingsProvider {

@@ -1,5 +1,5 @@
 ---
-description: "Web GUI 的 agent preset 表面：默认 preset 设置、新建会话 chip、会话标题标签与 preset 名单管理分区；供 agent 组装的用户与维护者阅读。"
+description: "Web GUI 的 agent preset 表面：默认 preset 设置、新建会话 chip、composer 标签与 preset 名单管理分区；供 agent 组装的用户与维护者阅读。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包提供 Web GUI 的 agent preset 表面：新建会话界面的一枚 chip，选择下一个会话的 preset；会话标题旁的一个只读标签；以及一个设置分区，用于管理名单——复制、删除、默认值，以及通往 preset 自身文件的入口。会话的 preset 在创建时即固定，因此选择作用于此后开启的会话，运行中的会话保持它们开始时的组装；默认 preset 在能看到名单的设置分区里编辑，通用设置不再为同一字段保留重复控件。当部署未组装任何 preset 时，三个表面都不渲染任何内容，每个会话共用宿主组装。
+本包提供 Web GUI 的 agent preset 表面：新建会话界面的一枚 chip，选择下一个会话的 preset；composer 工具行中的一个只读标签；以及一个设置分区，用于管理名单——复制、删除、默认值，以及通往 preset 自身文件的入口。会话的 preset 在创建时即固定，因此选择作用于此后开启的会话，运行中的会话保持它们开始时的组装；默认 preset 在能看到名单的设置分区里编辑，通用设置不再为同一字段保留重复控件。Session 为空时 composer 标签保持隐藏，因为新建会话 chip 已经显示并控制暂存选择。当部署未组装任何 preset 时，三个表面都不渲染任何内容，每个会话共用宿主组装。
 
 ## 目录
 
@@ -43,7 +43,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-展示选项来自同一次 `agentPresets/list` 调用——名单本身已报告未显式选择的会话会得到哪个 id，因此任何表面都无需对 settings schema 做内省——默认值的写入即设置分区的设为默认动作，目标是 `agent-presets` settings 命名空间的 `default` 字段，也正是 Host 在创建时解析的字段。设置分区首次加载时查询 `settings.canOpenAgentPresetDirectory()`，并把结果与名单合并；查询失败只会移除原生打开动作。新建会话 chip 与标题标签共用一个控制器，因为暂存选择属于流程而非任何单个会话；暂存值在会话到达时应用（既覆盖工作区连接新建的会话，也覆盖它复用的空白会话），被拒绝时丢弃。被拒绝会以一条瞬时横幅在 composer 列上方自报，因为 chip 的标签此时已经弹回，而被 Host 拒绝挂载的 preset 正是发现过程报告为健康的那一种——它的名单卡片上没有任何原因可供回头查看。只有人刚做出的选择会被自报；会话成为当前会话时触发的应用器不会。[`dsh-client-connection`](../connection/README.zh.md) 使用同一浏览器会话认证 `agentPresets/read`、`agentPresets/copy`、`settings/openAgentPresetDirectory`、`agentPresets/deletePreset`、`agentPresets/list` 及其他所有 Host API 方法。组装仍会指明一个会话所运行的插件，因此读取属于侦察，而 copy、delete 与 settings 所有的目录打开操作负责管理名单并驱动 Host 桌面。分区在自身操作、`settings/document-updated` 与 `connection/reset` 时重读，因为组装文件在浏览器之外编辑，线上没有任何机制宣布文件变动。
+展示选项来自同一次 `agentPresets/list` 调用——名单本身已报告未显式选择的会话会得到哪个 id，因此任何表面都无需对 settings schema 做内省——默认值的写入即设置分区的设为默认动作，目标是 `agent-presets` settings 命名空间的 `default` 字段，也正是 Host 在创建时解析的字段。设置分区首次加载时查询 `settings.canOpenAgentPresetDirectory()`，并把结果与名单合并；查询失败只会移除原生打开动作。新建会话 chip 与 composer 标签共用一个控制器，因为暂存选择属于流程而非任何单个会话；暂存值在会话到达时应用（既覆盖工作区连接新建的会话，也覆盖它复用的空白会话），被拒绝时丢弃。被拒绝会以一条瞬时横幅在 composer 列上方自报，因为 chip 的标签此时已经弹回，而被 Host 拒绝挂载的 preset 正是发现过程报告为健康的那一种——它的名单卡片上没有任何原因可供回头查看。只有人刚做出的选择会被自报；会话成为当前会话时触发的应用器不会。[`dsh-client-connection`](../connection/README.zh.md) 使用同一浏览器会话认证 `agentPresets/read`、`agentPresets/copy`、`settings/openAgentPresetDirectory`、`agentPresets/deletePreset`、`agentPresets/list` 及其他所有 Host API 方法。组装仍会指明一个会话所运行的插件，因此读取属于侦察，而 copy、delete 与 settings 所有的目录打开操作负责管理名单并驱动 Host 桌面。分区在自身操作、`settings/document-updated` 与 `connection/reset` 时重读，因为组装文件在浏览器之外编辑，线上没有任何机制宣布文件变动。
 
 </details>
 
@@ -55,7 +55,7 @@ kind: "package-reference"
 当 preset 面不够用时阅读以下页面。它们从浏览器表面进入 preset 领域与组装模型。
 
 - [dsh-agent-presets](../../preset/agent-presets/README.zh.md)——这些表面读取并管理的宿主名单与组装。
-- [ui-conversation](../ui-conversation/README.zh.md)——声明 chip 与标签填充的首屏与会话头部槽位。
+- [ui-conversation](../ui-conversation/README.zh.md)——声明 chip 与标签填充的首屏与 composer 槽位。
 - [ui-settings](../ui-settings/README.zh.md)——承载名单分区的设置外壳。
 - [客户端包映射](../README.zh.md)——相邻的浏览器 UI 包。
 

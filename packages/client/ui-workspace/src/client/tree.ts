@@ -38,7 +38,7 @@ export function owningGroupKey(
 export type SessionPendingInteractionStatus = 'approval' | 'plan-review' | 'question'
 type SessionPendingInteractions = ReadonlyMap<SessionId, SessionPendingInteractionBase>
 
-/** One top-level session row in a group or the flat list. */
+/** One session row in a group or the flat list. */
 export interface SessionNode {
   id: SessionId
   /** Stored display title; the renderer substitutes the localized New Session label for blank rows. */
@@ -55,7 +55,11 @@ export interface SessionNode {
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   updatedAt: number
-  /** Optional descendant rows supplied by grouped projections. */
+  /**
+   * Nested fork children (the workspace's `nestedUnder` placement), siblings
+   * in flat-account order. Always empty in the flat list and in search rows —
+   * those surfaces stay hierarchy-free.
+   */
   children?: readonly SessionNode[]
 }
 
@@ -77,7 +81,7 @@ export interface GroupNode {
   expanded: boolean
   /** The group contains the selected session (active folder tint; supplied here so the renderer never scans). */
   containsCurrent: boolean
-  /** Visible session rows (empty while the group is folded). */
+  /** Visible top-level session rows, each carrying its nested-child branch (empty while the group is folded). */
   sessions: readonly SessionNode[]
 }
 
@@ -104,6 +108,12 @@ export interface SearchResultSet {
   hasMore: boolean
 }
 
+/** One archived row plus the Workspace context retained outside Session state. */
+export interface ArchivedSessionNode {
+  session: SessionNode
+  workspace: string
+}
+
 /** Viewing state consumed by the derivation. */
 export interface TreeView {
   expandedGroups: readonly string[]
@@ -118,6 +128,8 @@ interface Group {
   createdAt: number | undefined
   label: string
   sessions: SessionSummary[]
+  /** Nested display placement from the backing workspace ({} for Ungrouped). */
+  nestedUnder: Readonly<Record<string, SessionId>>
 }
 
 /**
@@ -132,6 +144,17 @@ export function workspaceLabel(cwd: string | undefined): string {
   return base !== '' ? base : cwd
 }
 
+/** Resolve the first retained Workspace title for each accounted session. */
+function workspaceLabelsBySession(workspaces: readonly WorkspaceView[]): Map<SessionId, string> {
+  const labels = new Map<SessionId, string>()
+  for (const workspace of workspaces) {
+    for (const sessionId of workspace.sessionIds) {
+      if (!labels.has(sessionId)) labels.set(sessionId, workspace.title)
+    }
+  }
+  return labels
+}
+
 /** Recency comparator: newest first, id as the deterministic tiebreak (ids are unique per group). */
 function byRecency(a: SessionSummary, b: SessionSummary): number {
   if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt
@@ -140,9 +163,9 @@ function byRecency(a: SessionSummary, b: SessionSummary): number {
 
 /**
  * Ordinary sessions are visible; among blank sessions, only the current one
- * is visible. Subagent children use their parent header catalog; archived
- * sessions are visible nowhere, while their accounting slots remain so
- * unarchiving restores position.
+ * is visible. Subagent children use their parent header catalog; archive
+ * members stay out of every active-session derivation while their accounting
+ * slots remain so the dedicated archived view can restore them in place.
  */
 function sessionVisible(session: SessionSummary, current: SessionId | undefined, archived: ReadonlySet<SessionId>): boolean {
   return session.origin !== 'subagent'
@@ -164,7 +187,11 @@ function hasActiveSchedule(session: SessionSummary): boolean {
   return (session.projectionValues?.schedule?.length ?? 0) > 0
 }
 
-/** Build one group without projecting session lineage into presentation. */
+/**
+ * Build one group. Header lineage stays out of presentation; nesting is the
+ * workspace's explicit `nestedUnder` placement, projected in
+ * {@link deriveGroups}.
+ */
 function buildGroup(
   key: string,
   workspaceId: WorkspaceId | undefined,
@@ -173,12 +200,13 @@ function buildGroup(
   label: string,
   members: readonly SessionSummary[],
   order: 'account' | 'recency',
+  nestedUnder: Readonly<Record<string, SessionId>>,
 ): Group {
   const sessions = [...members]
   // Real Workspace order comes from sessionIds. Ungrouped falls back to
   // recency until the browser supplies its persisted local order.
   if (order === 'recency') sessions.sort(byRecency)
-  return { key, workspaceId, cwd, createdAt, label, sessions }
+  return { key, workspaceId, cwd, createdAt, label, sessions, nestedUnder }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -225,6 +253,9 @@ function groupByWorkspace(
     groups.push(buildGroup(
       workspace.workspaceId, workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members, 'account',
+      // Wire defense: a view produced before the field existed nests nothing.
+      // oxlint-disable-next-line typescript/no-unnecessary-condition -- the wire type requires the field; a pre-field host's view does not
+      workspace.nestedUnder ?? {},
     ))
   }
   const stray = list.ids
@@ -240,6 +271,7 @@ function groupByWorkspace(
       '',
       ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
       ungroupedOrder === undefined ? 'recency' : 'account',
+      {},
     ))
   }
   return groups
@@ -261,6 +293,7 @@ function sessionNode(
   s: SessionSummary,
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
   pendingInteractions: SessionPendingInteractions,
+  children: readonly SessionNode[] = [],
 ): SessionNode {
   const pendingInteraction = visiblePendingKind(pendingInteractions.get(s.id)?.kind)
   return {
@@ -272,12 +305,65 @@ function sessionNode(
     completed: s.completed === true,
     hasActiveSchedule: hasActiveSchedule(s),
     updatedAt: s.updatedAt,
+    children,
     ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
   }
 }
 
 /**
- * Derive the workspace browser groups with every session as a top-level row.
+ * Project one group's visible members into nested rows: a member whose
+ * placement parent is visible in the same group renders inside that parent's
+ * branch (siblings keep the flat order), every other member is a top-level
+ * row. Wire defense: a malformed placement cycle cannot recurse — each member
+ * materializes at most once, and members unreachable from any top-level row
+ * fall back to top level.
+ * @param members - visible group members in display order.
+ * @param nestedUnder - the workspace's child → parent placement map.
+ * @param descendants - running subagent-descendant index.
+ * @returns top-level session nodes carrying their child branches.
+ */
+function nestGroupNodes(
+  members: readonly SessionSummary[],
+  nestedUnder: Readonly<Record<string, SessionId>>,
+  descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
+  pendingInteractions: SessionPendingInteractions,
+): SessionNode[] {
+  const visible = new Set<string>(members.map(member => member.id))
+  const childrenOf = new Map<string, SessionSummary[]>()
+  const top: SessionSummary[] = []
+  for (const member of members) {
+    const parent = nestedUnder[member.id]
+    if (parent !== undefined && parent !== member.id && visible.has(parent)) {
+      const siblings = childrenOf.get(parent) ?? []
+      siblings.push(member)
+      childrenOf.set(parent, siblings)
+    } else {
+      top.push(member)
+    }
+  }
+  const materialized = new Set<string>()
+  const toNode = (member: SessionSummary): SessionNode | undefined => {
+    if (materialized.has(member.id)) return undefined
+    materialized.add(member.id)
+    const children = (childrenOf.get(member.id) ?? [])
+      .map(toNode)
+      .filter((node): node is SessionNode => node !== undefined)
+    return sessionNode(member, descendants, pendingInteractions, children)
+  }
+  const nodes = top.map(toNode).filter((node): node is SessionNode => node !== undefined)
+  for (const member of members) {
+    if (materialized.has(member.id)) continue
+    const node = toNode(member)
+    if (node !== undefined) nodes.push(node)
+  }
+  return nodes
+}
+
+/**
+ * Derive the workspace browser groups: sessions without a placement parent
+ * are top-level rows, nested-fork children render inside their parent's
+ * branch (workspace `nestedUnder` placement; an invisible parent promotes
+ * its children to top level).
  *
  * Every group shows; sessions populate under expanded groups in the selected
  * local order. Blank sessions are excluded except for the selected
@@ -317,7 +403,7 @@ export function deriveGroups(
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? g.sessions.map(session => sessionNode(session, descendants, pendingInteractions))
+        ? nestGroupNodes(g.sessions, g.nestedUnder ?? {}, descendants, pendingInteractions)
         : [],
     })
   }
@@ -352,6 +438,79 @@ export function deriveFlat(
 }
 
 /**
+ * Derive the archived-session view in durable archive-set order. Missing
+ * summaries wait for the Session baseline; subagent children stay on their
+ * parent-owned surfaces. Blank rows remain recoverable from the archive.
+ * @param list - sessions list snapshot.
+ * @param workspaces - retained Workspace accounting and display labels.
+ * @param archivedSessionIds - registry-global archive set in Host order.
+ * @param pendingInteractions - live interaction state keyed by Session.
+ * @returns archived rows with their retained Workspace context.
+ */
+export function deriveArchived(
+  list: SessionListState,
+  workspaces: readonly WorkspaceView[],
+  archivedSessionIds: readonly SessionId[],
+  pendingInteractions: SessionPendingInteractions = new Map(),
+): ArchivedSessionNode[] {
+  const descendants = indexSubagentDescendants(list.byId)
+  const labels = workspaceLabelsBySession(workspaces)
+  const included = new Set<SessionId>()
+  const rows: ArchivedSessionNode[] = []
+  for (const id of archivedSessionIds) {
+    const summary = list.byId[id]
+    if (summary === undefined || summary.origin === 'subagent' || included.has(id)) continue
+    included.add(id)
+    rows.push({
+      session: sessionNode(summary, descendants, pendingInteractions),
+      workspace: labels.get(id) ?? workspaceLabel(summary.cwd),
+    })
+  }
+  return rows
+}
+
+/** Where one session sits inside a group's rows: its top-level row and the branch rows above it. */
+export interface SessionPlace {
+  /** Index of the top-level row that holds the session (the session itself, or its outermost ancestor). */
+  index: number
+  /** Nested-fork ancestors from the top-level row down to the direct parent; empty for a top-level session. */
+  ancestors: readonly SessionId[]
+}
+
+/**
+ * Locate a session among a group's rows, descending nested-fork branches.
+ * Every hiding mechanism the tree has (the overflow cut, a folded branch) is
+ * addressed by one of the two fields, so a reveal needs nothing else.
+ * @param rows - the group's top-level rows in render order.
+ * @param id - the session to find.
+ * @returns its place, or `undefined` when no row in the group is the session.
+ */
+export function locateSession(rows: readonly SessionNode[], id: SessionId): SessionPlace | undefined {
+  const descend = (node: SessionNode, ancestors: readonly SessionId[]): readonly SessionId[] | undefined => {
+    if (node.id === id) return ancestors
+    for (const child of node.children ?? []) {
+      const found = descend(child, [...ancestors, node.id])
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  for (const [index, node] of rows.entries()) {
+    const ancestors = descend(node, [])
+    if (ancestors !== undefined) return { index, ancestors }
+  }
+  return undefined
+}
+
+/** Relative-time bucket of a session row's trailing label. */
+export type RelativeTimeUnit = 'now' | 'minutes' | 'hours' | 'days' | 'months' | 'years'
+
+/** Structured relative time: the bucket plus its magnitude (0 for 'now'). */
+export interface RelativeTime {
+  unit: RelativeTimeUnit
+  n: number
+}
+
+/**
  * Merge immediate title/Workspace substring matches with ranked Host content
  * matches. Local rows lead newest-first, content-only rows retain backend
  * order, and duplicate sessions receive the backend snippet in place.
@@ -378,12 +537,7 @@ export function deriveSearchResults(
   const archived = new Set(archivedSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
 
-  const workspaceBySession = new Map<SessionId, string>()
-  for (const workspace of workspaces) {
-    for (const sessionId of workspace.sessionIds) {
-      if (!workspaceBySession.has(sessionId)) workspaceBySession.set(sessionId, workspace.title)
-    }
-  }
+  const workspaceBySession = workspaceLabelsBySession(workspaces)
   const labelOf = (summary: SessionSummary): string =>
     workspaceBySession.get(summary.id) ?? workspaceLabel(summary.cwd)
   const contentBySession = new Map<SessionId, SessionSearchResultItem>()

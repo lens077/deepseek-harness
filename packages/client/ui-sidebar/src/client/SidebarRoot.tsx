@@ -169,6 +169,7 @@ function DesktopSidebarRoot({
                     ),
                 })}
               </span>
+              <span className={css.brandTagline}>{t('brand.tagline')}</span>
             </span>
           </button>
         )}

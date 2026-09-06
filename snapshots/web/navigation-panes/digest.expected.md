@@ -3,6 +3,7 @@
   - tablist:
     - tab "Inbox 1" [selected]
     - tab "Todos"
+    - tab "Project todos"
     - tab "Timeline"
   - button "Copy brief"
   - button "Mark reviewed"
@@ -16,7 +17,7 @@
   - text: since {{date}}, {{clock}} 1 to handle
   - checkbox "Show handled"
   - text: Show handled
-  - heading "Finished, unread 1" [level=3]
+  - heading "Finished 1" [level=3]
   - article:
     - text: "Finished NavScenario: first run bash to Ungrouped Question Reply in markdown with: a level-2 heading \"Navigation Summary\", a bulleted list of exactly two items, and a fenced code block containing echo WATERFALL. Then stop. Result ## Navigation Summary - alpha nav - beta nav ``` echo WATERFALL ```"
     - button "Open session"

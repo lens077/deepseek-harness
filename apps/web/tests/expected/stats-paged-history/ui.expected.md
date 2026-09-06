@@ -5,8 +5,16 @@
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
@@ -36,6 +44,14 @@
   - button "Jump to turn 26"
   - button "Jump to turn 27"
   - button "Jump to turn 28"
+- button "Search questions":
+  - img
+- button "Previous question":
+  - img
+- button "Next question":
+  - img
+- button "Back to bottom":
+  - img
 - text: m1 7/25 {{clock}}
 - button "Copy":
   - img
@@ -456,9 +472,22 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: 7/25 {{clock}}
-- button "Back to bottom":
+- text: "7/25 {{clock}} Task flow 28/28 · Elapsed {{duration}} · Latest branch: #28 New question m28 Resolved"
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
   - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 m1 Execution {{duration}} · 1 steps Forked from “m1” ↳ #2 m2 Execution {{duration}} · 1 steps Forked from “m1” ↳ #3 m3 Execution {{duration}} · 1 steps Forked from “m1” ↳ #4 m4 Execution {{duration}} · 1 steps Forked from “m1” ↳ #5 m5 Execution {{duration}} · 1 steps Forked from “m1” ↳ #6 m6 Execution {{duration}} · 1 steps Forked from “m1” ↳ #7 m7 Execution {{duration}} · 1 steps Forked from “m1” ↳ #8 m8 Execution {{duration}} · 1 steps Forked from “m1” ↳ #9 m9 Execution {{duration}} · 1 steps Forked from “m1” ↳ #10 m10 Execution {{duration}} · 1 steps Forked from “m1” ↳ #11 m11 Execution {{duration}} · 1 steps Forked from “m1” ↳ #12 m12 Execution {{duration}} · 1 steps Forked from “m1” ↳ #13 m13 Execution {{duration}} · 1 steps Forked from “m1” ↳ #14 m14 Execution {{duration}} · 1 steps Forked from “m1” ↳ #15 m15 Execution {{duration}} · 1 steps Forked from “m1” ↳ #16 m16 Execution {{duration}} · 1 steps Forked from “m1” ↳ #17 m17 Execution {{duration}} · 1 steps Forked from “m1” ↳ #18 m18 Execution {{duration}} · 1 steps Forked from “m1” ↳ #19 m19 Execution {{duration}} · 1 steps Forked from “m1” ↳ #20 m20 Execution {{duration}} · 1 steps Forked from “m1” ↳ #21 m21 Execution {{duration}} · 1 steps Forked from “m1” ↳ #22 m22 Execution {{duration}} · 1 steps Forked from “m1” ↳ #23 m23 Execution {{duration}} · 1 steps Forked from “m1” ↳ #24 m24 Execution {{duration}} · 1 steps Forked from “m1” ↳ #25 m25 Execution {{duration}} · 1 steps Forked from “m1” ↳ #26 m26 Execution {{duration}} · 1 steps Forked from “m1” ↳ #27 m27 Execution {{duration}} · 1 steps Forked from “m1” ↳ #28 m28 Execution {{duration}} · 1 steps"
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img

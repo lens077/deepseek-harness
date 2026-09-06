@@ -298,7 +298,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     expect(await page.getByText('a.txt', { exact: false }).count()).toBeGreaterThan(0)
     // The pinned hazard: compaction shadows the surface on the model side
     // only — the prompt and full tool output must stay on screen.
-    expect(await page.getByText(PROMPT, { exact: true }).count()).toBe(1)
+    expect(await page.locator('[class*="userRow"]').getByText(PROMPT, { exact: true }).count()).toBe(1)
 
     await expect.poll(
       () => scaffold.ctx.agents.get(SessionId(SEED_ID)) !== undefined,

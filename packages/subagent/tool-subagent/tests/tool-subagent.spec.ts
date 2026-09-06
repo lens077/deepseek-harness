@@ -86,6 +86,7 @@ describe('dsh-tool-subagent', () => {
       runId: 'scripted-subagent:mock:parent-1',
       output: [{ type: 'text', text: 'child says hi' }],
     })
+    expect(result.meta).toEqual({ childSessionId: 'scripted-subagent:mock:parent-1' })
     expect(text(result)).toBe('child says hi')
   })
 
@@ -1239,6 +1240,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
     const match = /^started subagent (\S+)$/.exec(text(started))
     expect(match).not.toBeNull()
     const [, childId] = match!
+    expect(started.meta).toEqual({ childSessionId: childId })
     // No Task was created for the continuable child.
     expect(ctx.jobs.list(parent)).toEqual([])
 

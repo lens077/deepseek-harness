@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-05-cross-engine-native-constructor-recognition.md
+2026-09-05-cross-engine-native-constructor-recognition.md: 3c5dd6dab7cb071131619b4b1a1c585d1a3dedfb
+2026-09-05-cross-engine-native-constructor-recognition.zh.md: b8abf6c19ffe358bc3ffed68928813fa6cce97b5

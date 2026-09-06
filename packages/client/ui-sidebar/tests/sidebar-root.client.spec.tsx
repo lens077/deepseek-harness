@@ -57,8 +57,14 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
           footerActionOwner = owner
           return <div data-testid="footer-action-seat" data-wide={owner.wide} />
         }
-        regionOwner = owner as SidebarSectionOwnerProps
-        return <div data-testid="region" data-wide={owner.wide} />
+        if (key === 'sidebar.nav.entry') {
+          return <div data-testid="navigation-seat" data-wide={owner.wide} />
+        }
+        if (key === 'sidebar.workspaces') {
+          regionOwner = owner as SidebarSectionOwnerProps
+          return <div data-testid="region" data-wide={owner.wide} />
+        }
+        throw new Error(`unexpected sidebar slot: ${key}`)
       }) as SidebarRootComponentProps['renderSlot']}
     />
   )
@@ -112,7 +118,7 @@ describe('SidebarRoot shell', () => {
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
 
-    expect(screen.getByText('DSH Local Build')).toBeTruthy()
+    expect(screen.getByText('Sumery DSH Pro')).toBeTruthy()
     expect(screen.getByText('1.2.3-rc.4-0123456-dirty')).toBeTruthy()
     expect(container.querySelector('svg')).not.toBeNull()
   })
@@ -131,7 +137,7 @@ describe('SidebarRoot shell', () => {
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
 
-    expect(screen.getByText('DSH Local Build')).toBeTruthy()
+    expect(screen.getByText('Sumery DSH Pro')).toBeTruthy()
     expect(screen.getByText(expected)).toBeTruthy()
   })
 
@@ -145,7 +151,7 @@ describe('SidebarRoot shell', () => {
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
 
-    expect(screen.getByText('DSH Local Build')).toBeTruthy()
+    expect(screen.getByText('Sumery DSH Pro')).toBeTruthy()
   })
 
   it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
@@ -162,6 +168,9 @@ describe('SidebarRoot shell', () => {
   it('keeps the region mounted through collapse and expands on its request', () => {
     vi.useFakeTimers()
     const b = mountShell()
+    const region = screen.getByTestId('region')
+    const navigation = screen.getByTestId('navigation-seat')
+    expect(navigation.getAttribute('data-wide')).toBe('true')
     b.rerender({ collapsed: true })
     // Wide content survives the crossfade window, then settles into the rail.
     expect(b.regionOwner().wide).toBe(true)
@@ -169,7 +178,9 @@ describe('SidebarRoot shell', () => {
     b.rerender({})
     expect(b.regionOwner().wide).toBe(false)
     expect(b.footerActionOwner().wide).toBe(false)
-    expect(screen.getByTestId('region')).toBeTruthy()
+    expect(screen.getByTestId('region')).toBe(region)
+    expect(screen.getByTestId('navigation-seat')).toBe(navigation)
+    expect(navigation.getAttribute('data-wide')).toBe('false')
     b.regionOwner().expandSidebar()
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
   })

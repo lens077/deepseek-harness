@@ -22,6 +22,12 @@ import css from './ChatView.module.css'
 const FOLLOW_THRESHOLD = 24
 const SCROLL_SAMPLE_INTERVAL_MS = 500
 
+// DEBUG-stream-follow: test-installed numeric trace sink; removed after diagnosis.
+function traceScroll(event: string, el: HTMLElement, state: Record<string, number | boolean>): void {
+  const sink = (globalThis as { __DSH_DEBUG_STREAM_FOLLOW?: (entry: unknown) => void }).__DSH_DEBUG_STREAM_FOLLOW
+  sink?.({ event, time: performance.now(), top: el.scrollTop, height: el.scrollHeight, viewport: el.clientHeight, ...state })
+}
+
 /** Active column host when present; otherwise the view-local scroller. */
 function scrollerOf(from: HTMLElement): HTMLElement {
   return (from.closest('[data-conversation-scroll]')) ?? from
@@ -435,6 +441,7 @@ export function ChatView({
   }, [scheduleActiveTurn])
 
   const toBottom = (el: HTMLElement): void => {
+    traceScroll('toBottom', el, { observed: observedTopRef.current, owned: atBottomRef.current, pending: scrollSamplePendingRef.current })
     anchorRef.current = null
     // Returning to the live tail supersedes a jump still landing.
     pendingJumpRef.current = null
@@ -593,6 +600,7 @@ export function ChatView({
     const isAtBottom = movedByReader
       ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
       : atBottomRef.current
+    traceScroll('sample', el, { observed: observedTopRef.current, floor, movedByReader, ownedBefore: atBottomRef.current, ownedAfter: isAtBottom })
     if (!movedByReader && isAtBottom) {
       toBottom(el)
       return
@@ -630,6 +638,7 @@ export function ChatView({
       setScrollSampleTick(tick => tick + 1)
     }
     const onScroll = (): void => {
+      traceScroll('raw', el, { observed: observedTopRef.current, owned: atBottomRef.current, pending: scrollSamplePendingRef.current })
       scrollSamplePendingRef.current = true
       sampleTimer ??= window.setTimeout(sample, SCROLL_SAMPLE_INTERVAL_MS)
     }
@@ -647,6 +656,8 @@ export function ChatView({
   // initializer a function initial value would need never exists.
   const followRef = useRef<(() => void) | null>(null)
   followRef.current = () => {
+    const tracedLocal = listRef.current
+    if (tracedLocal !== null) traceScroll('resize', scrollerOf(tracedLocal), { observed: observedTopRef.current, owned: atBottomRef.current, pending: scrollSamplePendingRef.current })
     if (scrollSamplePendingRef.current) return
     const local = listRef.current
     if (local !== null && atBottomRef.current) {

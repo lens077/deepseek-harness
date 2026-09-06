@@ -131,7 +131,7 @@ function WidthHandle(props: {
 export function ConversationRoot({
   sessionId, useSession, useSessions, useSessionPendingInteraction,
   useWorkspaces, useConversation, useInput, useComposerBlock,
-  renderSlot, renderSlotChain, selectWorkspace, useRailSeat,
+  renderSlot, renderSlotChain, selectWorkspace, startScratchSession, useRailSeat,
   useContentWidthMode, t,
 }: ConversationRootProps) {
   const railOccupied = useRailSeat(entries => entries.length > 0)
@@ -323,6 +323,7 @@ export function ConversationRoot({
             setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
           })
         },
+        onStartScratch: startScratchSession,
         onClose: () => { setPickerOpen(false) },
       })}
       {renderSlot('conversation.hero.agentPreset', {})}
@@ -393,10 +394,10 @@ export function ConversationRoot({
           aria-expanded={mobileRailOpen} onClick={() => { setMobileRailOpen(open => !open) }}>
           {t(mobileRailOpen ? 'mobile.railClose' : 'mobile.rail')}
         </button>}
-        {railOccupied && sessionId !== undefined
+        {railOccupied
           ? (
             <div className={css.bodyRow} data-rail="">
-              <div className={css.railPanel}>{renderSlot('conversation.session.rail', {})}</div>
+              {sessionId !== undefined && <div className={css.railPanel}>{renderSlot('conversation.session.rail', {})}</div>}
               {scrollBody}
             </div>
           )

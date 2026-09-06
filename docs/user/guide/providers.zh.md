@@ -47,19 +47,11 @@ Provider ID 是永久的，因为请求、已保存会话、模型默认值和�
 :::
 
 <a id="image-input"></a>
-
 ### 图片输入
 
 手动输入的模型在自己声明之前一律按纯文本对待，因为没有任何环节能去询问端点接受哪些模态。给这类模型附加图片，会在发送前就被拒绝，并点名该模型。
 
-因此自定义提供方下的视觉模型需要一处声明，推理模型也一样：不声明，模型选择器就不会为它提供任何推理档位。两者都在模型目录中该行的**高级**折叠里，与容量并列：
-
-![模型行的高级折叠：上下文窗口、最大输出 token、设为"文本 + 图片"的图片输入、设为"自定义可选档位"的推理，以及七个档位复选框](providers-model-capabilities.zh.png)
-
-- **图片输入**：*跟随目录默认*保留已安装目录记录的模态（手动录入的模型即纯文本）；*文本 + 图片*写入 `input: [text, image]`；*仅文本*写入 `input: [text]`，用于收窄网关并不提供图片能力的目录模型。手写的、下拉框无法表达的列表会显示为*按 settings.yaml 所写*，在被其他选项替换前保持原样。
-- **推理**：*跟随目录默认*保留目录的能力；*不推理*写入 `reasoningEfforts: false`，用于从网关无法服务的目录模型上剥离推理；*自定义可选档位*写入勾选档位组成的字典，每个档位按原名发送（`high: high`）。切换到它时默认勾选 `low`、`medium`、`high`，且字典必须保留至少一个 `off` 以外的档位。改写发送名称（`max: ultra`）与下文的 `compat` 开关仍在 `settings.yaml` 中；复选框会保留在那里找到的名称。
-
-两者在 `$DSH_HOME/settings.yaml` 中也各是一行，表单写入的正是它们：
+因此自定义提供方下的视觉模型需要加一行。表单没有对应字段；请在 `$DSH_HOME/settings.yaml` 中给该模型加上 `input`：
 
 ```yaml
 llm-pi-ai:
@@ -72,10 +64,6 @@ llm-pi-ai:
         - id: legacy-chat
         - id: vision-preview
           input: [text, image]
-          reasoningEfforts:
-            low: low
-            medium: medium
-            high: high
 ```
 
 `input` 接受 `text` 和 `image`，且只作用于该模型，因此一条路由可以同时服务两类模型。省略它——或写成空列表，两者同义——则保留已安装目录为该模型记录的模态；目录未描述的模型则回退到该路由的 `defaultInput`。
@@ -151,6 +139,95 @@ llm-pi-ai:
 llm-deepseek:
   reasoningEffort: max
 ```
+
+<a id="claude-model-onboarding"></a>
+### Claude：添加 Anthropic 模型
+
+Claude 原生路由使用 `anthropic-messages`，通常复用已有的 `anthropic` 提供方。通过代理接入时，先确认代理接受精确模型 ID，再从上游文档或已验证配置取得上下文窗口、输出上限、输入模态和推理档位。最小调用成功只能证明路由可用，不能证明容量元数据正确。
+
+#### 1. 保留现有提供方和模型
+
+读取 `$DSH_HOME/settings.yaml` 的 `llm-pi-ai.providers.anthropic`。如果已有显式 `models` 列表，就向原列表追加条目，保留仍需使用的旧模型；这个列表会替换内置目录，而不是追加到目录。没有显式列表且内置目录已包含目标模型时，直接使用目录；只调整已知模型时可用 `modelOverrides`，但它不能与 `models` 同时配置，也不能用于添加目录未知的模型。
+
+沿用已有的 `baseURL` 和 `apiKeyEnv`。首次接入时，通过**设置 → 模型 → 添加提供方 → anthropic**配置凭据；自定义路由则选择 `anthropic-messages`。`apiKeyEnv: ANTHROPIC_API_KEY` 是凭据引用，不是密钥值，不要把密钥或 Bearer Token 写进文档、仓库或模型条目。
+
+#### 2. 声明 Claude 模型能力
+
+下面以 `claude-fable-5-1` 为例，假定端点支持 1M 上下文、128K 输出、图片输入以及列出的自适应推理档位。这些是示例配置，不是所有 Claude 模型的统一规格；应用前按端点能力调整。已有配置时只合并所需字段和模型条目，不要整段覆盖设置文件：
+
+```yaml
+llm-pi-ai:
+  providers:
+    anthropic:
+      api: anthropic-messages
+      apiKeyEnv: ANTHROPIC_API_KEY
+      models:
+        - id: claude-fable-5-1
+          name: Claude Fable 5.1
+          contextWindow: 1000000
+          maxTokens: 128000
+          input: [text, image]
+          reasoningEfforts:
+            low: low
+            medium: medium
+            high: high
+            xhigh: xhigh
+            max: max
+          compat:
+            forceAdaptiveThinking: true
+```
+
+只声明端点实际支持的能力；不支持关闭推理时，不添加 `off`。`forceAdaptiveThinking: true` 仅用于端点支持自适应推理、需要显式启用该协议行为的模型；它让选定推理等级的请求使用 `thinking.type: adaptive` 和 `output_config.effort`。不要给所有 Claude 模型一律添加它，也不要将这个 Anthropic 专属开关复制到 GPT 的 `openai-responses` 或 `openai-completions` 路由。
+
+#### 3. 验证后再切换默认模型
+
+先检查 YAML 可解析，再验证上游最小调用、DSH 中的模型条目、图片能力与推理档位。用新会话发送最小提示，并确认会话日志的 `request/header` 是目标 provider/model，`request/context.contextWindow` 与配置一致；如果使用图片或工具，还要验证相应请求成功。完成前保留旧模型作为回退，不要先切换默认值再排查失败。
+
+验证通过后，可在模型选择器中选择 Claude 和所需推理等级，或合并以下新会话默认设置。`high` 只是此示例的选择；使用 `max` 前确认端点和模型声明都支持它：
+
+```yaml
+agent-default-model:
+  provider: anthropic
+  model: claude-fable-5-1
+  reasoningEffort: high
+```
+
+模型配置会在下一次请求时重新读取；修改全局默认值不会替换已有会话的模型选择。在已有会话中需要使用 Claude 时，显式通过该会话的模型选择器切换。
+
+#### 4. 单独核对自动压缩
+
+`maxTokens` 是输出上限，不是自动压缩阈值。没有精确模型策略覆盖时，1M 窗口按后端默认 80% 在 800K 测量压力触发压缩；Astra 的 90% 策略不会自动套用到 Claude。需要专属阈值时，在自定义预设中为精确的 `anthropic/<模型 ID>` 配置 `thresholdRatio = 目标阈值 / contextWindow`，并保持 `retainRatio < thresholdRatio`；也可改用小于触发阈值的 `retainTokens`。
+
+Web 的压缩引擎属于会话预设。自定义时先复制现有预设到用户预设目录 `$DSH_HOME/.agent-presets/`，再修改副本并创建使用该预设的新会话；不要直接修改安装目录中的随包预设，升级会覆盖它。预设的复制、默认选择和生效规则见[预设参考](../../../packages/preset/agent-presets/README.zh.md)。
+
+<a id="astra-long-context"></a>
+### GPT-6 Astra：1M 上下文与 900K 压缩阈值
+
+DSH 使用自己的模型设置，不读取 Codex 的 `-c` 参数或 `config.toml`。如果端点支持 1,000,000 token 窗口和 `max` 推理等级，请将以下字段合并到 `$DSH_HOME/settings.yaml` 中已有的 `openai` 模型条目，保留端点、凭据引用、其他模型及额外推理等级：
+
+```yaml
+llm-pi-ai:
+  providers:
+    openai:
+      models:
+        - id: gpt-6-astra
+          contextWindow: 1000000
+          maxTokens: 128000
+          input: [text, image]
+          reasoningEfforts:
+            high: high
+            max: max
+agent-default-model:
+  provider: openai
+  model: gpt-6-astra
+  reasoningEffort: max
+```
+
+上下文仪表和模型请求准备从下一次请求开始使用 `contextWindow`。Responses API 发送 `reasoning.effort: max`；Chat Completions 发送 `reasoning_effort: max`。`maxTokens` 是输出上限，不是上下文窗口；适配器可能根据剩余容量降低输出上限。声明 1M 不会授予端点权限，也不能证明端点的实际容量。
+
+[基础组合包](../../../packages/bundle/base/README.zh.md)和[标准、Cordis、PTC 预设](../../../packages/preset/agent-presets/README.zh.md)在 `compaction-basic.modelPolicies` 中为精确路由 `openai/gpt-6-astra` 设置 `thresholdRatio: 0.9`。窗口为 1M 时，`floor(1000000 * 0.9)` 得到 900,000 token 的测量压力触发阈值；其他路由保留默认 80%。这是该窗口下所需压缩限制的 DSH 对应配置，不是独立的绝对上限：修改窗口也会改变阈值。提供方确认上下文溢出时，恢复机制可以提前触发压缩。
+
+预设策略变更对新组装的 agent 生效。已驻留的 agent 保留其预设代次；刷新浏览器或发送下一轮消息不会更新其压缩策略。重启 DSH 后重新打开已保存的会话即可重新组装，也可以新建会话。仅修改模型容量设置不需要重启。
 
 ### 请求兼容性
 

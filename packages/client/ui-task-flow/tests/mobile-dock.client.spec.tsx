@@ -51,11 +51,7 @@ describe('phone task-flow visibility', () => {
     const policy = new FlowStylePolicy()
     const useMobileDock: ComponentProps<typeof MobileDockRow>['useMobileDock'] = selector =>
       selector(useSyncExternalStore(policy.mobileDock.subscribe, policy.mobileDock.getSnapshot))
-    const props = {
-      useMobileDock,
-      setMobileDock: (value: boolean) => { policy.setMobileDock(value) },
-      t: makeTranslate(en),
-    } as ComponentProps<typeof MobileDockRow>
+    const props = { useMobileDock, setMobileDock: (value: boolean) => { policy.setMobileDock(value) }, t: makeTranslate(en) } as ComponentProps<typeof MobileDockRow>
     const view = render(<MobileDockRow {...props} />)
     const checkbox = view.getByRole('checkbox', { name: 'Show task flow on mobile' }) as HTMLInputElement
     expect(checkbox.checked).toBe(false)

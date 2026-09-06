@@ -8,6 +8,7 @@ import css from './Modal.module.css'
 interface ModalBaseProps {
   open: boolean
   onClose: () => void
+  dismissable?: boolean
   title: string
   description?: string
   children?: ReactNode
@@ -27,6 +28,7 @@ type ModalProps = ModalBaseProps & (
  * @param props.onClose - Escape or mask click.
  * @param props.title - dialog heading (aria-label in every mode).
  * @param props.closeLabel - localized accessible close-button label.
+ * @param props.dismissable - whether Escape, mask, and close button may dismiss the dialog.
  * @param props.description - optional supporting sentence under the title.
  * @param props.children - body (inputs, etc.).
  * @param props.footer - action row (Cancel / Create).
@@ -36,22 +38,23 @@ type ModalProps = ModalBaseProps & (
  * @returns null when closed; otherwise the overlay tree.
  */
 export function Modal({
-  open, onClose, title, closeLabel, description, children, footer, className, contentClassName, headless = false,
+  open, onClose, title, closeLabel, dismissable = true,
+  description, children, footer, className, contentClassName, headless = false,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (dismissable && e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [open, onClose])
+  }, [dismissable, open, onClose])
 
   if (!open) return null
 
   return createPortal((
     <div className={css.root} role="presentation">
-      <div className={css.mask} aria-hidden="true" onClick={onClose} />
+      <div className={css.mask} aria-hidden="true" onClick={dismissable ? onClose : undefined} />
       <div
         className={clsx(css.dialog, className)}
         role="dialog"
@@ -65,7 +68,13 @@ export function Modal({
               <div className={clsx(css.content, contentClassName)}>
                 <div className={css.header}>
                   <h2 className={css.title}>{title}</h2>
-                  <button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}>
+                  <button
+                    type="button"
+                    className={css.close}
+                    aria-label={closeLabel}
+                    disabled={!dismissable}
+                    onClick={onClose}
+                  >
                     <IconCloseOutline16 size={14} />
                   </button>
                 </div>

@@ -34,7 +34,7 @@ Status: implemented
 
 ## 验证
 
-`packages/client/ui-conversation/tests/chat-view.client.spec.tsx` 整块删除其 `compact mode` 用例；它描述的只有被移除的行为，而按仓库的测试约定，过时的行为应与其测试一同删除，而非改写适配。该包其余 30 个测试文件、513 个用例全部通过，`tsc -b packages/client/ui-conversation/tsconfig.json` 干净。
+`packages/client/ui-chat/tests/chat-view.client.spec.tsx` 整块删除其 `compact mode` 用例；它描述的只有被移除的行为，而按仓库的测试约定，过时的行为应与其测试一同删除，而非改写适配。该包其余 30 个测试文件、513 个用例全部通过，`tsc -b packages/client/ui-chat/tsconfig.json` 干净。
 
 `tsc -b tsconfig.client.json` 在 `packages/client/ui-session-files/tests/tree-files.client.spec.ts` 报告一处失败（fixture 缺少新增的 `byTurn` 字段）。该问题属于本树中并行进行、尚未提交的工作，本次不予触碰。
 

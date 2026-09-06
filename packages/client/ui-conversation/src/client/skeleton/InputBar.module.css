@@ -241,10 +241,12 @@
    Read-only; the chip gap widened to 12 so the pill chips read as separate
    controls. */
 .tools {
+  flex-wrap: wrap;
   gap: 16px;
 }
 
 .modes {
+  flex-wrap: wrap;
   gap: 12px;
 }
 

@@ -19,7 +19,9 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
-import type { ChatFileMentions, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {
+  ChatFileDiffExpansion, ChatFileMentions, TurnTailOwnerProps,
+} from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate, RemoteError, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { ProducedFiles, type ProducedFilesInjected, type ProducedFilesProps } from '../src/client/ProducedFiles.tsx'
 import {
@@ -28,7 +30,7 @@ import {
 } from '../src/client/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 
 afterEach(() => {
   cleanup()
@@ -83,6 +85,8 @@ function tailOwner(
 ): TurnTailOwnerProps {
   return { seq, openFile, turn: turnLocation(turn, data) }
 }
+
+const SESSION_ID = 'deliverables-test' as SessionId
 
 interface TimelineSnapshot {
   readonly timeline: ConversationTimelineSnapshot
@@ -408,13 +412,24 @@ describe('ProducedFiles row', () => {
   const capability = (
     canOpenPath: boolean | undefined,
     isLoopback = true,
-  ): Pick<ProducedFilesProps, 'isLoopback' | 'ensureWorkspacePathOpen' | 'useWorkspacePathOpen'> => {
+    fileDiffs: ProducedFilesProps['fileDiffs'] = () => [],
+    expansion: ChatFileDiffExpansion = 'all',
+  ): Pick<
+    ProducedFilesProps,
+    'isLoopback' | 'ensureWorkspacePathOpen' | 'useWorkspacePathOpen' | 'fileDiffs' | 'useDiffExpansion'
+  > => {
     return {
       isLoopback,
       ensureWorkspacePathOpen: () => {},
+      fileDiffs,
       useWorkspacePathOpen: selector => selector(canOpenPath),
+      useDiffExpansion: selector => selector(expansion),
     }
   }
+
+  const everyPathChanged: ProducedFilesProps['fileDiffs'] = path => [
+    { label: 'Turn 1 · Edit', oldText: `old ${path}`, newText: `new ${path}` },
+  ]
 
   it('renders the bounded CSS candidates and opens a file or the workspace folder', () => {
     const paths = ['deep/a.html', 'b.css', 'c.ts', 'd.ts', 'e.ts', 'f.ts', 'g.ts', 'h.ts']
@@ -465,6 +480,86 @@ describe('ProducedFiles row', () => {
     const row = view.container.querySelector('[data-produced-files-row]')
     if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
     expect(within(row).getByText('+ 1 file')).toBeTruthy()
+  })
+
+  it('expands every changed file under the all preference and toggles them independently', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'all')}
+        t={t}
+      />,
+    )
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(2)
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(1)
+    expect(view.getByRole('button', { name: '打开 a.md' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('opens only a one-file Turn under the single preference', () => {
+    const one = render(
+      <ProducedFiles
+        matched={['out/report.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'single')}
+        t={t}
+      />,
+    )
+    expect(one.getByText('Turn 1 · Edit')).toBeTruthy()
+    cleanup()
+    const many = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'single')}
+        t={t}
+      />,
+    )
+    expect(many.queryByText('Turn 1 · Edit')).toBeNull()
+  })
+
+  it('keeps changed files closed under none until their chips are clicked', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...capability(false, true, everyPathChanged, 'none')}
+        t={t}
+      />,
+    )
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getByText('Turn 1 · Edit')).toBeTruthy()
+  })
+
+  it('retains the host opener for files without a recorded diff', () => {
+    const openFile = vi.fn()
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={openFile}
+        {...capability(false, true, path => path === 'a.md' ? everyPathChanged(path) : [], 'none')}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '打开 b.md' }))
+    expect(openFile).toHaveBeenCalledWith('b.md')
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+  })
+
+  it('offers the file opener inside an expanded diff', () => {
+    const openFile = vi.fn()
+    const view = render(
+      <ProducedFiles
+        matched={['deep/out/report.md']}
+        openFile={openFile}
+        {...capability(false, true, everyPathChanged)}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '在编辑器中打开 report.md' }))
+    expect(openFile).toHaveBeenCalledWith('deep/out/report.md')
   })
 })
 
@@ -523,12 +618,25 @@ describe('plugin registration', () => {
     await fiber.await()
     const [entry] = ctx.slots.entries('conversation.chat.turnTail')
     expect(entry).toBeDefined()
-    const injected = entry?.inject?.() as unknown as ProducedFilesInjected
+    const injected = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
     expect(injected.isLoopback).toBe(false)
     expect(typeof injected.ensureWorkspacePathOpen).toBe('function')
     expect(injected.hooks.workspacePathOpen.getSnapshot()).toBeUndefined()
+    expect(injected.hooks.diffExpansion.getSnapshot()).toBe('none')
+    expect(injected.fileDiffs('out/report.md')).toEqual([])
     ctx.emit('connection/reset')
     injected.ensureWorkspacePathOpen()
+
+    ctx.provide('chatFileDiffs', {
+      expansion: { getSnapshot: () => 'single' as const, subscribe: () => () => {} },
+      forPath: (sessionId: SessionId, path: string) => sessionId === SESSION_ID && path === 'out/report.md'
+        ? [{ label: 'Turn 2 · edit', oldText: 'a', newText: 'b' }]
+        : [],
+      forTurn: () => [],
+    } as never)
+    const withDiffs = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
+    expect(withDiffs.hooks.diffExpansion.getSnapshot()).toBe('single')
+    expect(withDiffs.fileDiffs('out/report.md')).toHaveLength(1)
     await vi.waitFor(() => {
       expect(injected.hooks.workspacePathOpen.getSnapshot()).toBe(true)
     })
@@ -583,7 +691,7 @@ describe('plugin registration', () => {
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const entry = ctx.slots.entries('conversation.chat.turnTail')[0]
-    const injected = entry?.inject?.() as unknown as ProducedFilesInjected
+    const injected = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
 
     injected.ensureWorkspacePathOpen()
     injected.ensureWorkspacePathOpen()

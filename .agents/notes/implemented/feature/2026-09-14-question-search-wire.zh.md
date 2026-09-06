@@ -40,7 +40,7 @@ Status: implemented
 
 `packages/host/apiproxy/tests/api-proxy-search.spec.ts` 覆盖处理器：它发送的过滤条件与上限、完整页面、不完整页面、因会话／内容视图／类型不符而被丢弃的命中、对不可读会话在抵达索引前的拒绝、索引未挂载，以及中止映射。其中两条已验证能够拒绝无效实现——返回常量 `complete: true` 会让不完整页面的测试失败，删除 `historySourceFor` 调用会让授权测试失败。
 
-`packages/client/ui-conversation/tests/chat-apply.client.spec.tsx` 覆盖绑定：注入的 `searchQuestions` 带着会话 id 与查询抵达会话服务并保留 `complete: false`，而被拒绝的搜索会抛出而非解析为空。删除 `apply.ts` 中的错误分支会让第二条失败。
+`packages/client/ui-chat/tests/chat-apply.client.spec.tsx` 覆盖绑定：注入的 `searchQuestions` 带着会话 id 与查询抵达会话服务并保留 `complete: false`，而被拒绝的搜索会抛出而非解析为空。删除 `apply.ts` 中的错误分支会让第二条失败。
 
 `packages/client/connection` 的 fixture 在其自有语料上实现了该操作，因此无密钥的 GUI 场景走的是真实路径。
 

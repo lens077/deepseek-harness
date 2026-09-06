@@ -6,7 +6,10 @@
  * and win32 hosts briefly open and auto-abort a real dialog.
  */
 
+import { execFile } from 'node:child_process'
 import { EventEmitter } from 'node:events'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import { pickWin32Directory, type Win32DialogInternals, type Win32DialogWorkerLike } from '../src/win32-dialog.ts'
 import type { Win32DialogWorkerMessage } from '../src/win32-dialog-worker.ts'
@@ -40,6 +43,18 @@ function harness(overrides: Partial<Win32DialogInternals> = {}): Harness {
 }
 
 const live = (): AbortSignal => new AbortController().signal
+
+async function sourceWorkerSmoke(operation: string): Promise<void> {
+  const driver = new URL('../src/win32-dialog.ts', import.meta.url).href
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    '--import', 'tsx/esm', '--input-type=module', '--eval',
+    `import assert from 'node:assert/strict';
+     import { pickWin32Directory } from ${JSON.stringify(driver)};
+     ${operation}
+     console.log('worker rejection verified');`,
+  ], { cwd: fileURLToPath(new URL('..', import.meta.url)), timeout: 25_000 })
+  expect(stdout.trim()).toBe('worker rejection verified')
+}
 
 describe('pickWin32Directory', () => {
   it('resolves the selected path and the cancellation null', async () => {
@@ -145,19 +160,24 @@ describe('pickWin32Directory', () => {
     expect(close.mock.calls.length).toBeGreaterThan(10)
   })
 
-  // POSIX hosts exercise the REAL default plumbing end to end: the tsx-bootstrapped
-  // worker spawns, loads koffi, fails to load ole32.dll, and reports the error.
+  // Source-launch smoke: native ESM resolution must run outside Vite's module runner.
   it.skipIf(process.platform === 'win32')('rejects through the real worker where the Win32 surface is unavailable', async () => {
-    await expect(pickWin32Directory(live())).rejects.toThrow('win32 folder dialog failed')
+    await sourceWorkerSmoke(`
+      await assert.rejects(pickWin32Directory(new AbortController().signal), /win32 folder dialog failed/);
+    `)
   }, 30_000)
 
   // win32 hosts run the true COM smoke instead: a real dialog opens briefly
   // and the abort service closes it (the same lever a disconnecting client pulls).
   it.skipIf(process.platform !== 'win32')('opens and abort-closes a real dialog', async () => {
-    const controller = new AbortController()
-    setTimeout(() => {
-      controller.abort()
-    }, 400)
-    await expect(pickWin32Directory(controller.signal)).rejects.toThrow('native directory picker aborted')
+    await sourceWorkerSmoke(`
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 400);
+      try {
+        await assert.rejects(pickWin32Directory(controller.signal), /native directory picker aborted/);
+      } finally {
+        clearTimeout(timer);
+      }
+    `)
   }, 30_000)
 })

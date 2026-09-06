@@ -45,11 +45,9 @@ Uploading modes require an exporter URL and accept the SDK option blocks verbati
 - id: sessionTelemetry-otel
   name: '@deepseek-ai/dsh-session-telemetry-otel'
   config:
-    mode: FULL
-    captureContent: false
-    includeAnonymousUserId: false
-    shutdownTimeoutMillis: 3000
-    exporter:
+    mode: FULL                # explicit opt-in; default: DISABLED
+    shutdownTimeoutMillis: 3000 # optional; defaults to 3000
+    exporter:                # passed verbatim to the SDK's OTLP/HTTP log exporter
       url: https://collector.example.com/v1/logs
       headers:
         authorization: !!js `Bearer ${process.env.OTLP_TOKEN}`

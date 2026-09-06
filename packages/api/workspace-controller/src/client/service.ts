@@ -63,6 +63,28 @@ export interface IWorkspaces {
    */
   archiveSession(sessionId: SessionId): Promise<void>
   /**
+   * Archive several Sessions in one Host mutation.
+   * @param sessionIds - distinct Sessions to archive.
+   */
+  archiveSessions(sessionIds: readonly SessionId[]): Promise<void>
+  /**
+   * Remove one Session from the archive set.
+   * @param sessionId - Session to make visible again.
+   */
+  unarchiveSession(sessionId: SessionId): Promise<void>
+  /**
+   * Add or remove several Sessions from one Workspace account.
+   * @param workspaceId - Workspace whose membership changes.
+   * @param sessionIds - distinct Sessions to add or remove.
+   * @param member - true to add; false to remove into Ungrouped.
+   * @returns the changed Workspace.
+   */
+  setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView>
+  /**
    * Move a Session within one Workspace account.
    * @param workspaceId - owning Workspace.
    * @param sessionId - Session to move.
@@ -114,6 +136,26 @@ export class WorkspaceController extends Service implements IWorkspaces {
   async archiveSession(sessionId: SessionId): Promise<void> {
     const result = await this.model.archiveSession(sessionId)
     if (!result.ok) throw commandError('session archive', result.error)
+  }
+
+  async archiveSessions(sessionIds: readonly SessionId[]): Promise<void> {
+    const result = await this.model.archiveSessions(sessionIds)
+    if (!result.ok) throw commandError('session archive', result.error)
+  }
+
+  async unarchiveSession(sessionId: SessionId): Promise<void> {
+    const result = await this.model.unarchiveSession(sessionId)
+    if (!result.ok) throw commandError('session unarchive', result.error)
+  }
+
+  async setSessionMembership(
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ): Promise<WorkspaceView> {
+    const result = await this.model.setSessionMembership(workspaceId, sessionIds, member)
+    if (!result.ok) throw commandError('session membership', result.error)
+    return result.value.workspace
   }
 
   async insertSessionBefore(

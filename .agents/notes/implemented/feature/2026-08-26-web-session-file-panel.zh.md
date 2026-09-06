@@ -61,7 +61,7 @@ diff 本身横跨转录区全宽，分两栏，左为修改前、右为修改后
 
 侧栏选中时的行为是第一刀唯一未达设计之处：它滚动到最后一个以 `data-file` 携带该路径的工具行，而不是那个展开的 chip。从回合外部驱动 turn-tail 的展开需要一条两个包都没有的通道，而工具行本来就渲染着该文件的这次改动。
 
-第二刀把面板扩展到**会话族改动**——本会话与其全部后代子代理会话改动的并集。子代理的工作对本地推导按设计不可见：子会话在自己的会话里工作，父会话日志只记录委派工具的调用与结果（[tool-subagent](../../../../packages/subagent/tool-subagent/README.zh.md)）。该扩展读取 [`subagent.list`](../../../../packages/host/apiproxy/src/api/subagents.ts) 与 `subagent.history`（两者对活跃与冷子会话同样可用，且携带 render intents），沿 `hasChildren` 递归至整棵树，且同一文件仍只占一行，每段按来源标注（`reviewer · 第 3 轮 · edit`）。
+第二刀把面板扩展到**会话族改动**——本会话与其全部后代子代理会话改动的并集。子代理的工作对本地推导按设计不可见：子会话在自己的会话里工作，父会话日志只记录委派工具的调用与结果（[tool-subagent](../../../../packages/subagent/tool-subagent/README.zh.md)）。该扩展读取 [`subagents.list`](../../../../packages/subagent/subagent/src/index.ts)，通过 [`session.follow`](../../../../packages/api/session-controller/src/index.ts) 打开每个子会话，再通过 `session.page` 读取更早的记录。这些操作对活跃与冷子会话同样可用；遍历沿 `hasChildren` 递归至整棵树，同一文件仍只占一行，每段按来源标注（`reviewer · 第 3 轮 · edit`）。
 
 历史深度只有一个开关。打开面板时加载当前会话最近一页，以及第一层各个已完成子会话的最近一页。`加载全部` 控件加载当前会话的完整历史并递归整棵子代理树。
 

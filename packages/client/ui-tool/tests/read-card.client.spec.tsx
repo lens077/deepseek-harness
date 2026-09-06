@@ -20,7 +20,7 @@ import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.t
 import { zh as chatZh } from '@deepseek-ai/dsh-client-ui-chat/src/client/locale.ts'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-chat/src/client/details/DetailsPanel.tsx'
 import { ReadRow, readToolview } from '../src/client/tool/toolviews/read-row.tsx'
-import { renderToolDetails, toolChatSnapshot, useEmptyTrajectory } from './tool-details-render.client.tsx'
+import { renderToolDetails, toolChatSnapshot, useEmptyTaskFlow, useEmptyTrajectory } from './tool-details-render.client.tsx'
 
 afterEach(cleanup)
 
@@ -309,6 +309,7 @@ describe('DetailsPanel Output section (read)', () => {
         useConversation={bindSnapshotSelector(conversation)}
         useChat={bindSnapshotSelector({ getSnapshot: () => snapshot, subscribe: () => () => {} })}
         useTrajectory={useEmptyTrajectory}
+        useTaskFlow={useEmptyTaskFlow}
         useInput={(() => { throw new Error('unused') })}
         inputActions={{
           setDraft: () => {},

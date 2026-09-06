@@ -144,6 +144,7 @@ describe('render branch tails', () => {
         useChat={bindSnapshotSelector(createSnapshotStore(chatSnapshot))}
         useConversation={bindSnapshotSelector(createSnapshotStore(EMPTY_CONVERSATION_SNAPSHOT))}
         useTrajectory={(() => { throw new Error('unused') })}
+        useTaskFlow={(() => { throw new Error('unused') })}
         useSessions={bindSnapshotSelector(emptyList)}
         useSessionPendingInteraction={bindSnapshotSelector(
           createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),
@@ -206,6 +207,7 @@ describe('render branch tails', () => {
         useChat={bindSnapshotSelector(createSnapshotStore(chatSnapshot))}
         useConversation={bindSnapshotSelector(createSnapshotStore(EMPTY_CONVERSATION_SNAPSHOT))}
         useTrajectory={(() => { throw new Error('unused') })}
+        useTaskFlow={(() => { throw new Error('unused') })}
         useSessions={bindSnapshotSelector(emptyList)}
         useSessionPendingInteraction={bindSnapshotSelector(
           createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),

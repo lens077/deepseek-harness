@@ -269,10 +269,8 @@ describe('SettingsPanel navigation', () => {
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The five ids the shell names get their own glyph; every other section —
-    // including one this package never heard of — shares the gear.
-    expect(new Set(glyphs.slice(0, 6)).size).toBe(6)
-    expect(glyphs[6]).toBe(glyphs[0])
+    expect(new Set(glyphs.slice(0, 4)).size).toBe(4)
+    expect(glyphs.slice(4)).toEqual([glyphs[0], glyphs[0], glyphs[0]])
   })
 
   it('switches the rendered section on nav click', () => {

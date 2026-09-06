@@ -13,7 +13,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type { ChatFileDiffs, ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { ChatFileDiffs } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Declaration-merge only: it is what puts `tool.call.tail` in the slot map so
 // the registration below typechecks against the seat ui-tool declares.
@@ -118,7 +118,7 @@ export function apply(ctx: ClientContext): void {
   const snapshotFor = (sessionId: SessionId): SessionFilesSnapshot | undefined => {
     const binding = ctx.sessions.binding(sessionId)
     if (binding === undefined) return undefined
-    const chat = ctx.uiConversation.binding(binding).target('chat').getSnapshot() as ChatSnapshot | undefined
+    const chat = ctx.uiConversation.binding(binding).target('chat').getSnapshot()
     if (chat === undefined) return undefined
     const session = binding.session.getSnapshot()
     return { chat, running: session.running, hasMore: session.hasMore }
@@ -216,7 +216,7 @@ export function apply(ctx: ClientContext): void {
   }
   ctx.provide('chatFileDiffs', diffs)
 
-  ctx.slots.inject('conversation.session.tabs.leading', () => seatWhileVisible(() => ctx.slots.register({
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.inject('conversation.session.tabs.leading', () => seatWhileVisible(() => ctx.slots.register({
     name: 'conversation.session.tabs.leading',
     id: 'session-files',
     locale: NS,
@@ -224,7 +224,7 @@ export function apply(ctx: ClientContext): void {
       hooks: { rail: controller.store },
       toggle: () => { controller.toggle() },
     }),
-  }, SessionFilesButton)))
+  }, SessionFilesButton))))
 
   ctx.slots.inject('tool.call.tail', () => ctx.slots.register({
     name: 'tool.call.tail',
@@ -236,7 +236,7 @@ export function apply(ctx: ClientContext): void {
     }),
   }, DelegationFiles))
 
-  ctx.slots.inject('conversation.session.rail', () => seatWhileVisible(() => ctx.slots.register({
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.inject('conversation.session.rail', () => seatWhileVisible(() => ctx.slots.register({
     name: 'conversation.session.rail',
     locale: NS,
     inject: (sessionId: SessionId): SessionFilesRailInjected => ({
@@ -249,7 +249,7 @@ export function apply(ctx: ClientContext): void {
       },
       reveal: revealFile,
     }),
-  }, SessionFilesRail)))
+  }, SessionFilesRail))))
 }
 
 /**

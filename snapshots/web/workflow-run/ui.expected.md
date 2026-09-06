@@ -28,6 +28,9 @@
   - img
   - text: Think The workflow returned successfully with the reply "WF_CHILD_OK". Now I need to reply with exactly "WORKFLOW_DONE" and stop.
 - paragraph: WORKFLOW_DONE
+- 'button "Answering: Use the workflow tool exactly once, with args omitted, meta set to { \"name\": \"snapshot-flow\", \"description\": \"one child for the snapshot\" }, and this EXACT script body (copy it verbatim): phase(''Run'') const reply = await agent(''Reply with exactly the word WF_CHILD_OK and nothing else.'') return { reply } After the workflow returns, reply with the single word WORKFLOW_DONE and stop. Do not use any other tool. — Jump to this question"':
+  - img
+  - text: "Answering #1 Use the workflow tool exactly once, with args omitted, meta set to { \"name\": \"snapshot-flow\", \"description\": \"one child for the snapshot\" }, and this EXACT script body (copy it verbatim): phase('Run') const reply = await agent('Reply with exactly the word WF_CHILD_OK and nothing else.') return { reply } After the workflow returns, reply with the single word WORKFLOW_DONE and stop. Do not use any other tool."
 - button "Copy":
   - img
 - button "Good response":

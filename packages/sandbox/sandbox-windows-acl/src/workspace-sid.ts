@@ -1,54 +1,49 @@
 /**
- * The per-workspace write identity: a deterministic `S-1-4-x-y` SID derived
- * from the canonical workspace path, whose ACEs form that workspace's write
- * allowlist. Every confined execution of the same workspace — across
- * sessions, server restarts, and calls — carries the SAME write SID, so the
- * workspace-root ACE materializes once per workspace per machine (the
- * grant's exact-ACE skip then makes every later provision O(1)) instead of
- * once per session. The SID's power is defined solely by the ACEs that name
- * it (which exist only on the workspace tree and the session's private temp
- * directory), and only tokens minted for that workspace carry it — the SID
- * string itself is not a secret. Temporary directories use a separate,
- * per-directory identity from {@link tempWriteSid}; sharing the workspace
- * identity with temp would let sibling sessions write one another's temp
- * trees.
- *
- * The input MUST be the canonical workspace path (`realpathSync.native` on
- * Windows — the sandbox-policy `resolveWorkspaceRoot` already applies it):
- * canonicalization converges case/alias spellings, so two spellings of one
- * workspace derive one SID; an as-spelled fallback path would mint a second
- * identity for the same directory (self-healing, at the cost of one extra
- * tree propagation). Renaming the workspace directory derives a new SID —
- * the old standing ACEs are inert residue, and the next session re-propagates
- * once.
+ * Deterministic write identities for canonical workspace-root sets and private
+ * temporary directories.
  * @module @deepseek-ai/dsh-sandbox-windows-acl/workspace-sid
  */
 
 import { createHash } from 'node:crypto'
 
-/**
- * Derive the workspace's write SID (`S-1-4-x-y`; subauthorities 30-bit,
- * matching the workspace-capability shape the token and ACE layers carry).
- * @param workspaceRoot - the canonical workspace path.
- * @returns the SDDL string form.
- */
-export function workspaceWriteSid(workspaceRoot: string): string {
-  const digest = createHash('sha256').update(workspaceRoot, 'utf8').digest()
-  const first = (digest.readUInt32LE(0) % (2 ** 30 - 1)) + 1
-  const second = (digest.readUInt32LE(4) % (2 ** 30 - 1)) + 1
-  return `S-1-4-${first}-${second}`
+/** Convert four digest words into non-zero 30-bit SID subauthorities. */
+function digestSubauthorities(digest: Buffer): readonly [number, number, number, number] {
+  const value = (offset: number): number => (digest.readUInt32LE(offset) % (2 ** 30 - 1)) + 1
+  return [value(0), value(4), value(8), value(12)]
 }
 
 /**
- * Derive one private temp directory's write SID. The random directory path
- * is the capability identity; a fixed third subauthority domain-separates
- * the result from every two-subauthority workspace SID.
+ * Derive one write SID for an exact canonical workspace-root set. Sorting makes
+ * caller order irrelevant, while length framing prevents path-boundary
+ * ambiguity. Every root carrying this SID is authorized only by tokens minted
+ * for the same complete set; standing ACEs from a wider or narrower set stay
+ * inert. Four 30-bit subauthorities retain 120 digest bits.
+ * @param workspaceRoots - non-empty canonical, deduplicated workspace roots.
+ * @returns the SDDL string form.
+ */
+export function workspaceRootsWriteSid(workspaceRoots: readonly string[]): string {
+  const roots = [...new Set(workspaceRoots)].sort()
+  if (roots.length === 0) throw new Error('workspace root-set SID requires at least one root')
+  const hash = createHash('sha256').update('dsh-workspace-write-roots\0', 'utf8')
+  for (const root of roots) {
+    const bytes = Buffer.from(root, 'utf8')
+    const length = Buffer.allocUnsafe(4)
+    length.writeUInt32LE(bytes.byteLength)
+    hash.update(length).update(bytes)
+  }
+  const [first, second, third, fourth] = digestSubauthorities(hash.digest())
+  return `S-1-4-${first}-${second}-${third}-${fourth}`
+}
+
+/**
+ * Derive one private temp directory's write SID. The random directory path is
+ * the capability identity; a distinct hash domain prevents equality with a
+ * workspace-root-set SID.
  * @param tempDir - the private temp directory's absolute path.
  * @returns the SDDL string form.
  */
 export function tempWriteSid(tempDir: string): string {
-  const digest = createHash('sha256').update('temp\0', 'utf8').update(tempDir, 'utf8').digest()
-  const first = (digest.readUInt32LE(0) % (2 ** 30 - 1)) + 1
-  const second = (digest.readUInt32LE(4) % (2 ** 30 - 1)) + 1
-  return `S-1-4-${first}-${second}-1`
+  const digest = createHash('sha256').update('dsh-private-temp\0', 'utf8').update(tempDir, 'utf8').digest()
+  const [first, second, third, fourth] = digestSubauthorities(digest)
+  return `S-1-4-${first}-${second}-${third}-${fourth}`
 }

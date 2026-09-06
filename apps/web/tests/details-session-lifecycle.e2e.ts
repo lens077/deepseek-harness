@@ -44,7 +44,7 @@ function appFrame(page: Page) {
 
 /** Render the two column-resize handles without platform-dependent coordinates. */
 async function handleSnapshot(page: Page): Promise<string> {
-  const handles = await page.locator('[class*="handle"]').evaluateAll(elements =>
+  const handles = await page.locator('[data-side="sidebar"], [data-side="details"]').evaluateAll(elements =>
     elements.map(element => ({
       side: element.getAttribute('data-side'),
       cursor: getComputedStyle(element).cursor,

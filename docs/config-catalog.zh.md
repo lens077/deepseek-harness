@@ -205,7 +205,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-api-session-controller`
 
-需要：`agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `llm` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
+需要：`agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `llm` · `sessions` · `sessionProjections` · `sessionQuery` · `sandboxPolicy` · `typert` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -215,7 +215,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/api/session-controller/src/index.ts:69`](../packages/api/session-controller/src/index.ts)
+来源：[`packages/api/session-controller/src/index.ts:83`](../packages/api/session-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-settings-controller"></a>
 
@@ -1626,6 +1626,7 @@ export interface ProjectTodosSettings {
 
 来源：[`packages/todo/project-todos/src/index.ts:45`](../packages/todo/project-todos/src/index.ts)
 
+
 <a id="deepseek-aidsh-pwsh-local"></a>
 
 ## `@deepseek-ai/dsh-pwsh-local`
@@ -1774,7 +1775,7 @@ export interface Config {
 
 依赖：[`SandboxMode`](subsystems/sandbox.zh.md)
 
-来源：[`packages/sandbox/sandbox-policy/src/index.ts:70`](../packages/sandbox/sandbox-policy/src/index.ts)
+来源：[`packages/sandbox/sandbox-policy/src/index.ts:75`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 <a id="deepseek-aidsh-sdk-app"></a>
 
@@ -1816,6 +1817,51 @@ export interface JsonRpcConfig {
 
 来源：[`packages/sdk/server/src/index.ts:25`](../packages/sdk/server/src/index.ts)
 
+<a id="deepseek-aidsh-session-digest"></a>
+
+## `@deepseek-ai/dsh-session-digest`
+
+需要：`sessionProjections`
+
+```ts config-catalog
+/**
+ * Retained-text budgets. The value rides every `session.list` row, so these
+ * bound the listing payload rather than the durable log: a consumer reads the
+ * complete message through the Session history API when the user opens it.
+ * Invalid values fail plugin load.
+ */
+export interface Config {
+  /** Maximum retained question characters. Omit for 400. */
+  questionChars?: number
+  /** Maximum retained answer characters. Omit for 1200. */
+  replyChars?: number
+  /** Maximum retained changed-file paths of the current question. Omit for 8. */
+  changedFilePaths?: number
+  /** Maximum retained earlier questions. Omit for 30. */
+  historyQuestions?: number
+}
+```
+
+来源：[`packages/session/session-digest/src/index.ts:29`](../packages/session/session-digest/src/index.ts)
+
+
+<a id="deepseek-aidsh-session-inbox"></a>
+
+## `@deepseek-ai/dsh-session-inbox`
+
+需要：`storageDomain`
+
+```ts config-catalog
+/** Required deployment policy for todo text. */
+export interface Config {
+  /** Maximum UTF-8 byte length accepted for one todo's text. */
+  readonly maxTextBytes: number
+}
+```
+
+来源：[`packages/session/session-inbox/src/index.ts:51`](../packages/session/session-inbox/src/index.ts)
+
+
 <a id="deepseek-aidsh-session-log-deepseek"></a>
 
 ## `@deepseek-ai/dsh-session-log-deepseek`
@@ -1850,49 +1896,6 @@ export type SessionLogCompressionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 ```
 
 来源：[`packages/session-query/session-log-export/src/index.ts:45`](../packages/session-query/session-log-export/src/index.ts)
-
-<a id="deepseek-aidsh-session-digest"></a>
-
-## `@deepseek-ai/dsh-session-digest`
-
-需要：`sessionProjections`
-
-```ts config-catalog
-/**
- * Retained-text budgets. The value rides every `session.list` row, so these
- * bound the listing payload rather than the durable log: a consumer reads the
- * complete message through `session.history` when the user expands an entry.
- * Invalid values fail plugin load.
- */
-export interface Config {
-  /** Maximum retained question characters. Omit for 400. */
-  questionChars?: number
-  /** Maximum retained answer characters. Omit for 1200. */
-  replyChars?: number
-  /** Maximum retained changed-file paths of the current question. Omit for 8. */
-  changedFilePaths?: number
-  /** Maximum retained earlier questions. Omit for 30. */
-  historyQuestions?: number
-}
-```
-
-来源：[`packages/session/session-digest/src/index.ts:29`](../packages/session/session-digest/src/index.ts)
-
-<a id="deepseek-aidsh-session-inbox"></a>
-
-## `@deepseek-ai/dsh-session-inbox`
-
-需要：`storageDomain`
-
-```ts config-catalog
-/** Required deployment policy for todo text. */
-export interface Config {
-  /** Maximum UTF-8 byte length accepted for one todo's text. */
-  readonly maxTextBytes: number
-}
-```
-
-来源：[`packages/session/session-inbox/src/index.ts:51`](../packages/session/session-inbox/src/index.ts)
 
 <a id="deepseek-aidsh-session-persistence-jsonl"></a>
 
@@ -2716,7 +2719,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/shell/tool-bash-persistent/src/index.ts:432`](../packages/shell/tool-bash-persistent/src/index.ts)
+来源：[`packages/shell/tool-bash-persistent/src/index.ts:439`](../packages/shell/tool-bash-persistent/src/index.ts)
 
 <a id="deepseek-aidsh-tool-fs"></a>
 
@@ -3432,6 +3435,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-renderer`（[`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-schedule`（[`packages/client/ui-schedule/src/index.ts`](../packages/client/ui-schedule/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-session`（[`packages/client/ui-session/src/index.ts`](../packages/client/ui-session/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-session-files`（[`packages/client/ui-session-files/src/index.ts`](../packages/client/ui-session-files/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings`（[`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）

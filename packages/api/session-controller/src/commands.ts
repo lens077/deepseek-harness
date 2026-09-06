@@ -273,7 +273,11 @@ export class SessionCommandController {
     }
     if (workspace !== undefined) {
       try {
-        await workspace.attachSession(childId)
+        if (request.placement === 'nested') {
+          await workspace.attachSession(childId, { nestUnder: source.header.id })
+        } else {
+          await workspace.attachSession(childId)
+        }
       } catch (error) {
         throw new RemoteError(
           'session/workspace-attach-failed',

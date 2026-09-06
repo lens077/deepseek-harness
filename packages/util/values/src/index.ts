@@ -20,9 +20,13 @@ function hasIntrinsicConstructor(prototype: object, name: 'Array' | 'Object'): b
   const constructor: unknown = descriptor?.value
   if (typeof constructor !== 'function') return false
   try {
+    const source = Function.prototype.toString.call(constructor)
+    const prefix = `function ${name}() {`
     return constructor.name === name
       && constructor.prototype === prototype
-      && Function.prototype.toString.call(constructor) === `function ${name}() { [native code] }`
+      && source.startsWith(prefix)
+      && source.endsWith('}')
+      && /^\s*\[native code\]\s*$/u.test(source.slice(prefix.length, -1))
   } catch {
     return false
   }

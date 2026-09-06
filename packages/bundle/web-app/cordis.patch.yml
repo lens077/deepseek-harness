@@ -167,6 +167,7 @@
         printUrl: true
         surfaceContext: true
         trustedHosts: !!js ctx.webStartup.trustedHosts
+        browserAuthentication: !!js ctx.webStartup.browserAuthentication
 
     # The client-plugin reload chain, always mounted: it is idle until a
     # rebuild watcher (pnpm run dev:web) actually rewrites client bundles. It
@@ -194,6 +195,9 @@
         # A deployment adding authorities keeps this expression and concatenates
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
         trustedHosts: !!js ctx.webRuntime.trustedHosts
+        # --no-browser-auth turns the launch-token/cookie requirement off for
+        # deployments fronted by their own authenticating layer.
+        browserAuthentication: !!js ctx.webRuntime.browserAuthentication
 
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.

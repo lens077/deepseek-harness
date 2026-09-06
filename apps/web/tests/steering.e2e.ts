@@ -166,7 +166,7 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
 
     // Visible: the plain steering bubble plus the reply that obeys it
     // (steer text + final reply each contain the marker word).
-    await expect.poll(() => page.getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await pendingSteering.count()).toBe(0)
     await expect.poll(() => page.getByText('BANANA', { exact: false }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
     expect(await page.locator('[data-question-key]').count()).toBe(0)
@@ -241,7 +241,7 @@ describe('web e2e: composer shortcut steers directly', () => {
 
     const steerEvents = claimedMessages(sessionEvents, STEER)
     expect(steerEvents).toHaveLength(1)
-    await expect.poll(() => page.getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await pendingSteering.count()).toBe(0)
     await expect.poll(() => page.getByText('BANANA', { exact: false }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(2)
@@ -398,8 +398,8 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     expect(second).toHaveLength(1)
     expect(assistantText(sessionEvents)).toContain('BANANA')
     expect(assistantText(sessionEvents)).toContain('ORANGE')
-    await expect.poll(() => page.getByText(STEER_ONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    await expect.poll(() => page.getByText(STEER_TWO, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER_ONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER_TWO, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await page.locator('[data-pending-steering]').count()).toBe(0)
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(STEER_ALL_SETTLED, snapshot, MODE)

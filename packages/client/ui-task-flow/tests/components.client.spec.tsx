@@ -171,6 +171,9 @@ describe('format helpers', () => {
     expect(nodeDetail(t, node({ id: 's', kind: 'steps', laneId: 'l' }))).toBe('0 步')
     expect(nodeDetail(t, node({ id: 'e', kind: 'terminal', laneId: 'l' }))).toBeUndefined()
     expect(terminalLabel(t, node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'error', detail: 'boom' }))).toBe('出错 · boom')
+    expect(terminalLabel(t, node({
+      id: 'auth', kind: 'terminal', laneId: 'l', status: 'error', failureCode: 'AUTH',
+    }))).toBe('出错 · API 密钥无效')
     expect(terminalLabel(t, node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'interrupted' }))).toBe('异常中断')
     const lane: FlowLane = { id: 'x', kind: 'fork', turn: 2, ordinal: 2, label: '', status: 'done', anchorNodeId: 'gone', nodeIds: [], startTime: 1 }
     expect(laneAnchorLabel(t, lane, new Map())).toBeUndefined()

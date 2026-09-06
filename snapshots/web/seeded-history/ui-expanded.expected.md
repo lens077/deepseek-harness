@@ -5,11 +5,21 @@
     - text: Session log
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -39,6 +49,9 @@
   - img
   - text: Think Both files have been read. a.txt contains "alpha" and b.txt contains "beta". I'll now reply with DONE as instructed.
 - paragraph: DONE
+- 'button "Answering: Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop."
 - button "Copy":
   - img
 - button "Good response":
@@ -56,6 +69,22 @@
   - img
   - img
   - text: Context injection AGENTS.md
+- text: Task flow 1/1 · Elapsed {{duration}}
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Use the read tool twice in one assistant message: read a.txt and b.txt. Then re… Execution {{duration}} · 2 steps"
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img

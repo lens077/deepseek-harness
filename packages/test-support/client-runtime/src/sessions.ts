@@ -198,7 +198,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'refresh' | 'search' | 'fork'
+      | 'clear' | 'refresh' | 'search' | 'fork' | 'directories' | 'replaceDirectories' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -509,13 +509,39 @@ export class TestSessions implements ISessions {
     return Promise.resolve({ ok: true, value: this.searchStub?.(query, signal) ?? { items: [], hasMore: false } })
   }
 
+  async directories(sessionId: SessionId): ReturnType<ISessions['directories']> {
+    this.calls.push({ method: 'directories', args: [sessionId] })
+    const summary = this.require(sessionId).summary
+    return { primaryDirectory: summary.cwd ?? '/', additionalDirectories: [] }
+  }
+
+  async replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): ReturnType<ISessions['replaceDirectories']> {
+    this.calls.push({ method: 'replaceDirectories', args: [sessionId, additionalDirectories] })
+    const summary = this.require(sessionId).summary
+    return { primaryDirectory: summary.cwd ?? '/', additionalDirectories: [...additionalDirectories] }
+  }
+
+  async delete(sessionId: SessionId): ReturnType<ISessions['delete']> {
+    this.calls.push({ method: 'delete', args: [sessionId] })
+    await this.remove(sessionId)
+    return [sessionId]
+  }
+
   /**
    * Recorded fork stub: no child materializes (benches asserting the full
    * fork flow drive the production service; this face only proves the call).
    * @param opts - source session id, optional cut anchor, and client title policy.
    * @returns the source id (no child record is created).
    */
-  fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
+  fork(opts: {
+    sessionId: SessionId
+    atSeq?: number
+    increaseTitle?: boolean
+    placement?: 'sibling' | 'nested'
+  }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
   }

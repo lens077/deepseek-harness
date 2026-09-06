@@ -170,6 +170,16 @@ async function launchScrollWorld(options: ScrollWorldOptions): Promise<ScrollWor
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { events.push(event) })
     scaffold.ctx.on('agent/assistant-stream', ({ frame }) => { assistantFrames.push(frame) })
     page = await newEnglishPage(browser, 900)
+    // DEBUG-stream-follow: diagnostic capture, removed after the ownership race is identified.
+    await page.addInitScript(() => {
+      const probe = globalThis as { __DSH_DEBUG_STREAM_FOLLOW?: (entry: unknown) => void; __DSH_STREAM_TRACE?: unknown[] }
+      const entries: unknown[] = []
+      probe.__DSH_STREAM_TRACE = entries
+      probe.__DSH_DEBUG_STREAM_FOLLOW = (entry) => { entries.push(entry); if (entries.length > 400) entries.shift() }
+      for (const kind of ['wheel', 'pointerdown', 'keydown']) {
+        window.addEventListener(kind, () => { probe.__DSH_DEBUG_STREAM_FOLLOW?.({ event: 'input', kind, time: performance.now() }) }, { capture: true })
+      }
+    })
     const tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
@@ -222,6 +232,7 @@ async function withScrollWorld(
     await run(world)
   } catch (error) {
     runFailure = error
+    console.log('[DEBUG-stream-follow]', JSON.stringify(await world.page.evaluate(() => (globalThis as { __DSH_STREAM_TRACE?: unknown[] }).__DSH_STREAM_TRACE)))
     try {
       await saveFailureShot(world.page, options.failureShot)
     } catch {
@@ -270,6 +281,12 @@ async function loadedFlowRows(page: Page): Promise<number> {
 }
 
 async function openSeed(page: Page, fixture: ChatScrollFixture, tailMarker?: string): Promise<void> {
+  const mobileNav = page.getByRole('navigation', { name: 'Mobile navigation' })
+  if (await mobileNav.isVisible()) {
+    await mobileNav.getByRole('button', { name: 'Workspaces', exact: true }).click()
+    const manage = page.getByRole('button', { name: 'Search & manage', exact: true })
+    if (await manage.isVisible()) await manage.click()
+  }
   // Search collapsed into a header action; expand it before filling.
   const searchButton = page.getByRole('button', { name: 'Search sessions' })
   if (await searchButton.getAttribute('aria-expanded') !== 'true') await searchButton.click()
@@ -557,7 +574,7 @@ describe('web e2e: long Chat scroll contract', () => {
       // transcript (scoped: the sidebar search row also carries it) and no
       // page remains.
       expect(await world.page.locator('[data-conversation-scroll]')
-        .getByText(HISTORY_FIXTURE.markers.user(1), { exact: false }).count()).toBe(1)
+        .locator('[data-chat-flow-kind="user"]').getByText(HISTORY_FIXTURE.markers.user(1), { exact: false }).count()).toBe(1)
       expect(await world.page.getByRole('button', { name: 'Load earlier', exact: true }).count()).toBe(0)
       assertClean(world)
     })
@@ -623,7 +640,7 @@ describe('web e2e: long Chat scroll contract', () => {
       await expect.poll(() => world.page.getByRole('tooltip').count(), { timeout: 15_000 }).toBe(0)
       await nextPaint(world.page)
       const marker = world.page.locator('[data-conversation-scroll]')
-        .getByText(HISTORY_FIXTURE.markers.user(1), { exact: false })
+        .locator('[data-chat-flow-kind="user"]').getByText(HISTORY_FIXTURE.markers.user(1), { exact: false })
       expect(await marker.count()).toBe(1)
       const scrollport = await world.page.locator('[data-conversation-scroll]').boundingBox()
       const row = await marker.boundingBox()
@@ -749,9 +766,9 @@ describe('web e2e: long Chat scroll contract', () => {
       await world.page.getByRole('tab', { name: 'Trajectory', exact: true }).click()
       await world.page.getByLabel('Trajectory timeline').waitFor({ timeout: 30_000 })
       await world.page.setViewportSize({ width: 700, height: 900 })
-      // The narrow breakpoint auto-collapses the sidebar. Re-open it because
-      // this scenario switches sessions while pinning the narrow Chat scroll owner.
-      await world.page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
+      await world.page.locator('[data-mobile="true"]').waitFor({ state: 'visible' })
+      const overview = world.page.getByRole('region', { name: 'Overview', exact: true })
+      if (await overview.isVisible()) await overview.getByRole('button', { name: 'Close digest', exact: true }).click()
       await world.page.getByRole('tab', { name: 'Chat', exact: true }).click()
       await nextPaint(world.page)
       await expectSameFlowTop(world.page, sessionAnchor, RESPONSIVE_REFLOW_TOLERANCE)

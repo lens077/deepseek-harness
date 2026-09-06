@@ -3576,6 +3576,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       const callSignal = signal ?? new AbortController().signal
       const request = args.request
       switch (endpoint) {
+        // Standalone fixtures have no dynamic Host plugins or inspect queries.
+        case 'dynamicCordisRunner/inventory': return Promise.resolve({ ok: true, value: [] })
+        case 'dynamicCordisRunner/syncInspectManifest': return Promise.resolve({ ok: true, value: null })
         case 'commands/list': return Promise.resolve(commandRemotes.list(sessionId))
         case 'commands/execute': return Promise.resolve(commandRemotes.execute(sessionId, args.line as string, args.images ?? []))
         case 'fileReferences/list': return Promise.resolve(referenceRemotes.files(sessionId, args.query ?? ''))

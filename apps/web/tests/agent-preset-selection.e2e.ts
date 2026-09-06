@@ -4,7 +4,7 @@
 // Two surfaces, one host rule: a session's composition is fixed when the
 // session starts. Before that, the new-session chip stages the choice beside
 // the workspace picker — the only screen where it still works. After it, the
-// session header names what the session runs and offers no control at all,
+// composer tool row names what the session runs and offers no control at all,
 // because the host answers `agent-preset-locked` to anything else.
 //
 // Zero model calls: no replay fixture mounts, so a stray stream fails loud.
@@ -31,6 +31,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/agent-preset-selection', 
 const HERO_EXPECTED = join(SNAPSHOT_DIR, 'hero.expected.md')
 const MENU_EXPECTED = join(SNAPSHOT_DIR, 'menu.expected.md')
 const HEADER_EXPECTED = join(SNAPSHOT_DIR, 'header.expected.md')
+const COMPOSER_EXPECTED = join(SNAPSHOT_DIR, 'composer.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'agent-preset-selection-web-e2e'
 /** A project skill only a preset that mounts `skill-filesystem` can discover. */
@@ -217,7 +218,7 @@ describe('web e2e: agent-preset selection', () => {
       agentPresets: { roots: [{ path: presetRoot, trust: 'user' }], default: 'standard' },
     })
     // A resumed session runs what it was created with; seeding one that
-    // records `minimal` is what makes the header label a claim about the
+    // records `minimal` is what makes the composer label a claim about the
     // session rather than an echo of the current default.
     const seededId = await seedSession(scaffold, seedLog(), SEED_ID, 'minimal')
     await seedSubagent(scaffold, seededId)
@@ -328,23 +329,26 @@ describe('web e2e: agent-preset selection', () => {
   }, 90_000)
 
   it('labels a resumed session with the preset it was created under', async () => {
-    onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-header'))
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-label'))
     // The seeded session's cwd is the scaffold root rather than the connected
     // workspace, so it lists under Ungrouped; the group collapses by default.
     await page.getByRole('treeitem', { name: /^Ungrouped/ }).click()
     await page.locator('[role="treeitem"]').last().click()
-    await page.getByText('Seeded turn.').waitFor({ timeout: 15_000 })
+    await page.locator('[data-chat-flow]').getByText('Seeded turn.', { exact: true }).waitFor({ timeout: 15_000 })
 
-    const snapshot = await captureStableAria(page, '[class*="titleRow"]', scaffold.workspaceCwd)
+    const header = await captureStableAria(page, '[class*="titleRow"]', scaffold.workspaceCwd)
 
-    await compareOrRefreshGolden(HEADER_EXPECTED, snapshot, MODE)
-    expect(snapshot).toContain('Minimal mode')
-    expect(snapshot).toContain('button "1 subagent"')
-    expect(snapshot.indexOf('button "1 subagent"')).toBeLessThan(snapshot.indexOf('Minimal mode'))
-    expect(snapshot.indexOf('Minimal mode')).toBeLessThan(snapshot.indexOf('button "Session log"'))
-    // Static chrome, not a control: the header can only report a composition
+    await compareOrRefreshGolden(HEADER_EXPECTED, header, MODE)
+    expect(header).toContain('button "1 subagent"')
+    expect(header).not.toContain('Minimal mode')
+
+    const composer = await captureStableAria(page, '[class*="trailing"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(COMPOSER_EXPECTED, composer, MODE)
+    expect(composer).toContain('Minimal mode')
+    expect(composer.indexOf('Minimal mode')).toBeLessThan(composer.indexOf('button "Send'))
+    // Static chrome, not a control: the composer can only report a composition
     // the host would refuse to change.
-    expect(snapshot).not.toContain('button "Minimal mode"')
+    expect(composer).not.toContain('button "Minimal mode"')
   })
 
   it('drove every surface without a page error or a stream warning', () => {

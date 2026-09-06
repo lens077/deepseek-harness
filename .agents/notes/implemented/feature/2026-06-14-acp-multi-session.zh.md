@@ -28,7 +28,7 @@ ACP 桥接层将活跃会话存储在 `Map<SessionId, AcpSession>` 中。agent �
 
 一个会话内部的多根项目是另一项可选能力：ACP 把[有效根目录定义为主 `cwd` 加 `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367)。自动化桥接层不公布任何多根能力，并拒绝非空的 `additionalDirectories`；如[包约定](../../../../packages/acp/acp/README.zh.md#standard-acp-v1-surface)所记录，每个会话恰好有一个工作区。
 
-[标准传输是每个 stdio 连接一个 agent 子进程](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/transports.mdx#L17-L42)；多个连接因此需要多个子进程或自定义传输，而本决策保证的是一个连接内部存在多个会话。在该连接内，`ctx.sandboxPolicy` 把每个会话的主要 cwd 加持久附加目录快照解析为各自的有序 `workspace-write` 根目录集合。共享的 bash 和文件系统服务因此保持会话隔离；只有客户端有意把同一个规范目录授予多个会话时，根目录才会重叠。
+[标准传输是每个 stdio 连接一个 agent 子进程](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/transports.mdx#L17-L42)；多个连接因此需要多个子进程或自定义传输，而本决策保证的是一个连接内部存在多个会话。在该连接内，`ctx.sandboxPolicy` 把每个会话的 `cwd` 解析为其自己的 `workspace-write` 根目录，因此共享的 bash 和文件系统服务可以服务并发项目而不授予跨项目写入。这不会添加 ACP `additionalDirectories`；它只是从已经支持的「每会话一个主根目录」路径中移除了进程级根目录限制。
 
 ## 曾考虑的替代方案
 

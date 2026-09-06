@@ -1,5 +1,5 @@
 ---
-description: "Shared Workspace browser and picker plugin for the dsh web client: grouped or flat session rows, add/rename/reorder, search, fork, archive, and the directory-flow picking hole."
+description: "Shared Workspace browser and picker plugin for the dsh web client: grouped, flat, and archived Session views; selection, placement, directory, deletion, and Workspace flows."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-workspace` is the shared Workspace browser and picker of the dsh web client: users browse grouped or flat Session rows in the sidebar, pick a Workspace for a new session from the Session Intent hero, and manage Workspaces and Sessions with add, rename, reorder, search, fork, and archive actions; the same Workspace menu and add flow serve both surfaces. Pending user interactions surface as amber warning dots, active Schedule projections surface as non-interactive alarm markers in ordinary and search rows, and the shared sidebar projection hides subagent-origin sessions. Distinct canonical paths remain separate id-keyed Workspaces, and adding a folder goes through a directory-flow child hole that a composed picker package's client half fills.
+`dsh-client-ui-workspace` is the shared Workspace browser and picker of the dsh Web client. Users browse grouped, flat, or archived Session rows; start a Workspace-backed or ungrouped scratch Session; and manage Session placement, selection, directories, archive state, and permanent deletion. Pending user interactions surface as amber warning dots, active Schedule projections surface as non-interactive alarm markers, nested forks render under their selected parent, and the shared sidebar projection hides subagent-origin Sessions. Distinct canonical paths remain separate id-keyed Workspaces, and folder choices go through child slots filled by a composed picker package.
 
 ## Table of Contents
 
@@ -25,11 +25,13 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Use the sidebar to browse Workspaces and their Sessions, reorder them, and start new ones; use the picker in the Session Intent hero to choose a Workspace for a new session. An open Workspace shows five non-blank Sessions by default and keeps the selected blank **New Session** as one provisional extra row until its first prompt. **Show more** reveals the hidden remainder; closing and reopening the Workspace restores this folded projection.
+Use the sidebar to browse Workspaces and their Sessions, reorder them, and start new ones; use the picker in the Session Intent hero to choose a Workspace or start without a folder. A collapsed Workspace shows five non-blank Sessions by default and keeps the selected blank **New Session** as one provisional extra row until its first prompt. The view menu and General Settings can set that count from 5 through 20 or to automatic sizing. **Show more** reveals the hidden remainder; closing and reopening the Workspace restores the folded projection.
+
+On phones, **Workspaces** opens a full-width Workspace list with an Ungrouped group when present. Selecting a Workspace shows its Session list; **Back** returns to the Workspace list, and selecting a Session opens the conversation. The drill-down uses the shared Session projection and ordering rather than a second Workspace account. Its header's icon-only **Search and manage** control opens the shared management browser; its accessible name identifies the action without a separate text row.
 
 ### Reordering and view options
 
-View options combine grouping with one browser-persisted Session order per account: **Manual** and **Last updated** apply in either presentation. Entering Last updated performs a complete recency sort and later user prompts or steers promote their Session once; entering Manual preserves every current position and disables later promotion. Dragging edits the current order in either mode; Manual-mode drags for real Workspaces also update the Host Session account, while Ungrouped and flat-list orders remain browser-local. In a collapsed group, drag boundaries follow rendered rows and place the source before intervening hidden rows, so a drag cannot hide its source. Workspace drag order is Host-durable in either Session order mode.
+View options combine grouped, flat, and archived views with one browser-persisted Session order per account. **Manual** and **Last updated** apply to grouped and flat views. Entering Last updated performs a complete recency sort and later user prompts or steers promote their Session once; entering Manual preserves every current position and disables later promotion. Dragging edits the current order in either mode; Manual-mode drags for real Workspaces also update the Host Session account, while Ungrouped and flat-list orders remain browser-local. In a collapsed group, drag boundaries follow rendered rows and place the source before intervening hidden rows, so a drag cannot hide its source. Workspace drag order is Host-durable in either Session order mode.
 
 ### Search
 
@@ -37,7 +39,7 @@ Collapsed search is one header action beside the view and add actions: activatin
 
 ### Managing sessions
 
-The Session row's Rename action opens a dialog prefilled with the row's display title; confirming an unchanged title is deliberately allowed — it pins the current automatic title against regeneration. Archive commits without a confirmation dialog and the row disappears from every grouping surface when the archive-set echo lands. Fork forks at the source's last completed turn, increments the inherited persisted title on the client, and then opens the child. Workspace Delete opens a confirmation that states the retention boundary; success removes the group while its Sessions remain under Ungrouped.
+The Session row's Rename action opens a dialog prefilled with the display title. Fork can create a sibling or place the child under the source Session; both fork at the last completed Turn, increment the inherited title, and open the child. **Manage Session directories** keeps the primary cwd fixed and replaces the canonical list of additional writable roots for later commands. Archive hides a Session after the Workspace echo; the archived view can restore it or permanently delete its lineage after confirmation. Multi-selection supports toggle and visible-range gestures, keyboard movement, select all, batch archive, batch delete, Workspace membership changes, and optional todo creation. Workspace Delete removes the registration while its Sessions remain under Ungrouped.
 
 ### Pending interactions
 
@@ -57,7 +59,7 @@ The value is intentionally best effort for cold Sessions. An identity-matching u
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package is one composition: both target slots are declared by other plugins, so `apply` uses `slots.inject()` to register for each declaration lifetime and re-register after a declaring slot is restored.
+The package fills the sidebar browser and Session Intent picker slots and contributes the Session-count and multi-selection rows to General Settings. `apply` uses `slots.inject()` for each declaration lifetime and re-registers after a declaring slot is restored. A persisted viewing store owns grouping, ordering, expansion, and row-count preferences; a separate non-persisted store owns the current multi-selection.
 
 ### The directory-flow hole
 
@@ -87,8 +89,6 @@ These pages cover the sidebar host, the hero surface, and the picking backends.
 
 -----
 
-On phones, **Workspaces** opens a full-width Workspace list with an Ungrouped group when present. Selecting a Workspace shows its Session list; **Back** returns to the Workspace list, and selecting a Session opens the conversation. The drill-down uses the shared Session projection and ordering rather than a second Workspace account. Its header's icon-only **Search and manage** control opens the shared management browser; its accessible name identifies the action without a separate text row.
-
 <a id="model-experience"></a>
 ## Model Experience
 
@@ -103,10 +103,10 @@ None; this package neither assembles nor sends a provider request.
 <a id="known-limitations-and-deferred-work"></a>
 
 
-These limits define the search depth, the archive surface, and the picking carrier; they are current package constraints.
+These limits define search depth, archive behavior, and the picking carrier; they are current package constraints.
 
 - **No fuzzy content search or event deep links** — the content backend uses literal token/phrase matching, and selecting a result opens the Session rather than the matching event.
-- **No Session deletion or unarchive control** — sessions can be archived, but archived sessions have no viewing or unarchive surface, and Workspace registration deletion does not delete Sessions.
+- **Permanent deletion is lineage-wide and irreversible** — the confirmation lists every Session that the Host will remove, and a running Agent can refuse deletion until it becomes disposable.
 - **Pending user interaction is not aggregated into collapsed groups** — a waiting row inside a collapsed group lights no group-header indicator and becomes visible only after that group is expanded.
 - **Native folder selection depends on the local Host carrier** — under the `-native` composition, in-process or remote browser deployments cannot open a local operating-system dialog; remote-capable picking is the `-browse` composition's in-app flow.
 
@@ -120,4 +120,4 @@ None.
 
 </details>
 
-**Runtime invariant:** No companion is published. A pure-consumer plugin registering presentational components into two host-declared slots plus its locale dictionaries — its inject face is stateless RPC wrappers plus a create-and-open call; it emits no cordis events and owns no cross-plugin mutable state.
+**Runtime invariant:** No companion is published. Controller contracts own Host mutation failures; the browser's viewing and selection stores remain Client-local and every slot registration is effect-owned.

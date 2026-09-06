@@ -83,6 +83,8 @@ export interface FlowNode {
   /** Verbatim user or model text; empty for `steps` and `terminal` nodes, whose copy is locale-owned. */
   readonly title: string
   readonly detail?: string
+  /** Terminal failure category; authentication errors never retain provider message text. */
+  readonly failureCode?: string
   /** Agent steps covered by a `steps` node. */
   readonly stepCount?: number
   readonly status: FlowStatus

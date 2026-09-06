@@ -60,13 +60,14 @@ function fakeSession(pages: number, nodes: readonly unknown[] = []) {
   }
 }
 
-function declare(slots: SlotRegistry): () => void {
+function declare(slots: SlotRegistry, chat = true): () => void {
   return slots.register({
     name: 'root',
     children: {
       'conversation.session.tabs.leading': { kind: 'list', scope: 'session' },
       'conversation.session.rail': { kind: 'single', scope: 'session' },
       'tool.call.tail': { kind: 'list', scope: 'session' },
+      ...(chat ? { 'conversation.chat.node': { kind: 'keyed', scope: 'session' } } : {}),
       'settings.section': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
@@ -74,11 +75,11 @@ function declare(slots: SlotRegistry): () => void {
 
 // `null`, not `undefined`: an omitted argument takes the default, so a spec
 // asking for "no session" with `undefined` would silently get one.
-async function bench(session: ReturnType<typeof fakeSession> | null = fakeSession(0)) {
+async function bench(session: ReturnType<typeof fakeSession> | null = fakeSession(0), chat = true) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const slots = ctx.get('slots') as SlotRegistry
-  const declaration = declare(slots)
+  const declaration = declare(slots, chat)
   ctx.provide('locale', new LocaleRuntime(ctx))
   ctx.provide('sessions', { binding: () => (session === null ? undefined : { session }) } as never)
   ctx.provide('uiConversation', {
@@ -116,6 +117,27 @@ function railFaceTree(b: { slots: SlotRegistry }): unknown {
 }
 
 describe('session-files browser plugin', () => {
+  it('leaves Chat-dependent seats empty without Chat while keeping its settings available', async () => {
+    const b = await bench(fakeSession(0), false)
+    let declaration = b.declaration
+    try {
+      expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(0)
+      expect(b.slots.entries('conversation.session.rail')).toHaveLength(0)
+      expect(b.slots.entries('settings.section')).toHaveLength(1)
+      declaration()
+      declaration = declare(b.slots)
+      expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(1)
+      expect(b.slots.entries('conversation.session.rail')).toHaveLength(1)
+      declaration()
+      declaration = declare(b.slots, false)
+      expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(0)
+      expect(b.slots.entries('conversation.session.rail')).toHaveLength(0)
+    } finally {
+      await b.fiber.dispose()
+      declaration()
+    }
+  })
+
   it('takes both seats and releases them with the fiber', async () => {
     const b = await bench()
     expect(inject).toEqual([

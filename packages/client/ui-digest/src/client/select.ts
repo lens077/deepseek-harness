@@ -405,10 +405,7 @@ export function selectInbox(
   const ungrouped = counts.get(null)
   if (ungrouped !== undefined) orderedCounts.push(ungrouped)
 
-  return {
-    sections, workspaces: orderedCounts, attentionCount, waitingCount, failedCount,
-    unreadCount, seenCount, runningCount, snoozedCount, since,
-  }
+  return { sections, workspaces: orderedCounts, attentionCount, waitingCount, failedCount, unreadCount, seenCount, runningCount, snoozedCount, since }
 }
 
 /**

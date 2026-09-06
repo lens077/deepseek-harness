@@ -1,5 +1,5 @@
 import { runInNewContext } from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { isJsonValue, snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
 
 function objectWithForgedIntrinsicPrototype(revoked = false): Record<string, unknown> {
@@ -62,6 +62,18 @@ describe('snapshotJsonValue', () => {
     expect(arraySnapshot).toEqual([2, { ok: true }])
     expect(Object.getPrototypeOf(objectSnapshot)).toBe(Object.prototype)
     expect(Object.getPrototypeOf(arraySnapshot)).toBe(Array.prototype)
+  })
+
+  it('accepts Firefox whitespace in native container constructors', () => {
+    const nativeToString = Function.prototype.toString
+    const toString = vi.spyOn(Function.prototype, 'toString').mockImplementation(function (this: Function) {
+      return nativeToString.call(this).replace(' { [native code] }', ' {\n    [native code]\n}')
+    })
+    try {
+      expect(snapshotJsonValue({ nested: [1] })).toEqual({ nested: [1] })
+    } finally {
+      toString.mockRestore()
+    }
   })
 
   it('reads each object value and array slot once while materializing', () => {

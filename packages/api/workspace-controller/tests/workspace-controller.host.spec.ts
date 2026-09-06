@@ -147,8 +147,9 @@ describe('WorkspaceController commands', () => {
       sessionId: SessionId('session'),
     })).rejects.toBe(moveFailure)
 
+    ctx.sessions.create(SessionId('session'))
     const archiveFailure = new Error('archive storage failed')
-    vi.spyOn(ctx.workspaceRegistry, 'archiveSession').mockRejectedValueOnce(archiveFailure)
+    vi.spyOn(ctx.workspaceRegistry, 'archiveSessions').mockRejectedValueOnce(archiveFailure)
     await expect(controller.archiveSession({ sessionId: SessionId('session') }))
       .rejects.toBe(archiveFailure)
   })
