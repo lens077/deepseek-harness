@@ -10,6 +10,8 @@ import { QuestionShortcutRow, type QuestionShortcutRowProps } from '../src/clien
 import { QuestionNavigationPolicy } from '../src/client/input/question-navigation-policy.ts'
 import type { QuestionNavigationSettings } from '../src/submission-settings.ts'
 import { en } from '../src/client/locales.ts'
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(() => {
   cleanup()
@@ -34,6 +36,7 @@ function mount() {
   const props: QuestionShortcutRowProps = {
     useSessions: emptySessions(),
     useSessionPendingInteraction: selector => selector(new Map()),
+    useResource,
     useWorkspaces: emptyWorkspaces(),
     useQuestionNavigation: bindSnapshotSelector(policy.settings),
     setQuestionNavigation,

@@ -14,6 +14,8 @@ import { ContentWidthPolicy } from '../src/client/settings/content-width-policy.
 import { DEFAULT_CONTENT_WIDTH_MODE } from '../src/submission-settings.ts'
 import type { ContentWidthMode, ConversationSettings } from '../src/submission-settings.ts'
 import { en } from '../src/client/locales.ts'
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(() => {
   cleanup()
@@ -89,6 +91,7 @@ function mount() {
   const props: ContentWidthRowProps = {
     useSessions: emptySessions(),
     useSessionPendingInteraction: noPendingInteraction(),
+    useResource,
     useWorkspaces: emptyWorkspaces(),
     useContentWidthMode: bindSnapshotSelector(policy.mode),
     setContentWidthMode,

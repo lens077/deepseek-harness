@@ -32,4 +32,4 @@ fork 命令通过新增的 `ApiSessionAgentController.createSeeded` 发布子会
 
 ## 相关
 
-- [SessionStore fork API](../feature/2026-06-30-session-store-fork-api.zh.md)——该 endpoint 应用的 fork 边界与谱系规则。
+- [SessionStore fork API](../../archived/feature/2026-06-30-session-store-fork-api.md)——该 endpoint 应用的 fork 边界与谱系规则。

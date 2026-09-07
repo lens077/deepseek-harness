@@ -4,6 +4,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - button "Close the file panel" [pressed]:
       - img
@@ -62,11 +64,7 @@
   - img
   - text: Read
   - button "b.txt"
-- button "Think This path was interrupted.":
-  - img
-  - img
-  - text: Think This path was interrupted.
-- text: Stopped Now give the final answer. 7/25 {{clock}}
+- text: Now give the final answer. 7/25 {{clock}}
 - button "Copy":
   - img
 - paragraph: DONE

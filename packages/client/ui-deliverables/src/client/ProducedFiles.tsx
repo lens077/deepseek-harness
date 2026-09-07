@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { hasPriorContent, LinkIcon, SideBySideDiff, classifyLinkPath } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   ChatFileDiffExpansion, ChatFileDiffSegment, TurnTailOwnerProps,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -12,17 +12,11 @@ import css from './ProducedFiles.module.css'
 /** Maximum number of file chips rendered before the remainder counter. */
 const SHOWN_LIMIT = 6
 
-/** Registration-side Host capability facts. */
+/** Registration-side facts about this Session's recorded file changes. */
 export interface ProducedFilesInjected {
-  /** Whether the browser itself is connected over loopback. */
-  isLoopback: boolean
-  /** Load the opener capability when this row first reaches the page. */
-  ensureWorkspacePathOpen(): void
   /** Return this Session's recorded diff segments for one exact path. */
   fileDiffs(path: string): readonly ChatFileDiffSegment[]
   hooks: {
-    /** Current generation's Session workspace opener capability. */
-    workspacePathOpen: HostObservable<boolean | undefined>
     /** Reader preference controlling which inline file diffs open initially. */
     diffExpansion: ObservableSnapshot<ChatFileDiffExpansion>
   }
@@ -39,7 +33,7 @@ export function expandsByDefault(expansion: ChatFileDiffExpansion, changedCount:
   return expansion === 'single' && changedCount === 1
 }
 
-/** Matched paths plus the opener, locale, and injected Host capability. */
+/** Matched paths plus the opener, locale, and injected diff facts. */
 export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
   matched: readonly string[]
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
@@ -49,17 +43,14 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
 }
 
 /**
- * Render one turn's produced files as openable chips.
- * @param props - selector-matched paths, the chat view's file opener, and the locale seat.
+ * Render one turn's produced files as chips. A chip with recorded hunks
+ * toggles an inline before/after comparison whose header opens the file
+ * through the owner's `openFile`; a chip without hunks opens the file directly.
+ * @param props - selector-matched paths, the chat view's file opener, the
+ *   injected diff facts, and the locale seat.
  * @returns The produced-files row.
  */
-export function ProducedFiles({
-  matched: paths, openFile, isLoopback, ensureWorkspacePathOpen, fileDiffs,
-  useWorkspacePathOpen, useDiffExpansion, t,
-}: ProducedFilesProps) {
-  useEffect(() => { ensureWorkspacePathOpen() }, [ensureWorkspacePathOpen])
-  const hostCanOpenPath = useWorkspacePathOpen(available => available === true)
-  const canOpenPath = isLoopback && hostCanOpenPath
+export function ProducedFiles({ matched: paths, openFile, fileDiffs, useDiffExpansion, t }: ProducedFilesProps) {
   const shown = paths.slice(0, SHOWN_LIMIT)
   const expansion = useDiffExpansion(value => value)
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map())
@@ -111,16 +102,6 @@ export function ProducedFiles({
             )
           })}
         </div>
-        {paths.length > 1 && canOpenPath && (
-          <button
-            type="button"
-            className={css.showFolder}
-            onClick={() => { openFile('.') }}
-          >
-            <LinkIcon kind="folder" className={css.fileIcon} />
-            {t('produced.showInFolder')}
-          </button>
-        )}
       </div>
       {opened.length > 0 && (
         <div className={css.diff}>
@@ -132,7 +113,7 @@ export function ProducedFiles({
                   className={css.openFile}
                   onClick={() => { openFile(entry.path) }}
                 >
-                  {t('produced.openInEditor', { name: basename(entry.path) })}
+                  {t('produced.openInSidebar', { name: basename(entry.path) })}
                 </button>
               </div>
               <SideBySideDiff path={entry.path} segments={entry.segments} />

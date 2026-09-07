@@ -44,6 +44,6 @@ The host suite pins direct-user filtering, multi-step last-answer selection, res
 
 ## Related
 
-- [Session projection state and client views](../architecture/2026-08-19-session-projection-state-and-client-views.md) owns the fold-state/client-value split used by `sessionDigest`.
+- [Session projection state and client views](../../archived/architecture/2026-08-19-session-projection-state-and-client-views.md) owns the fold-state/client-value split used by `sessionDigest`.
 - [Web background-job display](2026-08-08-web-background-job-display.md) owns process-scoped `ctx.jobs` visibility; its records are not durable Session outcomes.
 - [Task Surface](../../proposed/feature/2026-08-04-task-surface.md) remains the proposal for a declarative interaction inside one Session, not a cross-Session digest.

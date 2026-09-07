@@ -53,4 +53,4 @@ The Host suite pins monotonic `markSeen`, handled/snooze/pin idempotence, `snooz
 ## Related
 
 - [Cross-workspace finished-session digest](2026-09-01-cross-workspace-finished-session-digest.md) owns the digest projection's delivery path and the panel's two seats; this note replaces its "reuse the transient completed bit" reasoning with the durable seen mark.
-- [Session projection state and client views](../architecture/2026-08-19-session-projection-state-and-client-views.md) owns the fold-state/client-value split `sessionDigest` extends.
+- [Session projection state and client views](../../archived/architecture/2026-08-19-session-projection-state-and-client-views.md) owns the fold-state/client-value split `sessionDigest` extends.

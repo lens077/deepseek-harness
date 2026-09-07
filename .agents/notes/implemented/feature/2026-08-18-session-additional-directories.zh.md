@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-每个 Session 有一个不可变主要目录和零个或多个附加目录。`SessionHeader.cwd` 仍是主要目录、Workspace 成员关系键、持久化分组键、相对路径基准和默认进程 cwd。附加目录只属于会话策略状态：它们绝不进入 header、创建 Workspace 记录、把 Session 附加到另一个分组，也不会移动 transcript。此规则保留[主要 cwd 文件系统决策](../architecture/2026-07-02-fs-per-session-cwd.zh.md)、[Workspace 产品流程](2026-07-25-workspace-ui-product-flow.zh.md)和[项目会话目录布局](../architecture/2026-07-24-project-session-directories.zh.md)。
+每个 Session 有一个不可变主要目录和零个或多个附加目录。`SessionHeader.cwd` 仍是主要目录、Workspace 成员关系键、持久化分组键、相对路径基准和默认进程 cwd。附加目录只属于会话策略状态：它们绝不进入 header、创建 Workspace 记录、把 Session 附加到另一个分组，也不会移动 transcript。此规则保留[主要 cwd 文件系统决策](../../archived/architecture/2026-07-02-fs-per-session-cwd.md)、[Workspace 产品流程](../../archived/feature/2026-07-25-workspace-ui-product-flow.md)和[项目会话目录布局](../architecture/2026-07-24-project-session-directories.zh.md)。
 
 必需且不可忽略的 `session/directories` 事件携带完整的规范 `additionalDirectories` 列表。最新快照胜出，没有快照即表示空列表；规范化结果相同的替换不会追加事件。回放会验证绝对且规范的路径拼写、重复标识和主要目录别名，但不要求记录的路径仍然存在。格式仍沿用当前 `SESSION_FORMAT_VERSION`，因为这是新的必需事件类型，而非事件信封变更。
 
@@ -24,13 +24,13 @@ Status: implemented
 
 Windows 使用带域分离和长度成帧的哈希，从经过排序、去重和规范化的精确根目录集合中派生一个不受顺序影响的 SID。同一个 SID 会授予每个显式根目录，随机私有临时目录 SID 则仍限定到一个活跃的 Session／根目录集合对。集合成员变化会产生另一个 SID，因此相互重叠的较宽和较窄集合所留下的常驻 ACE 不会合并成非预期权限。临时根目录重叠检查会覆盖每个成员。[Windows ACL 决策](2026-08-08-windows-acl-restricted-token-sandbox.zh.md)继续负责后端的部分强制执行和常驻授权限制。
 
-模型可见的 `sandbox:policy` 上下文列出有序显式根目录，标明首项为主要目录，并概述平台临时区域。附加目录列表来自持久事件，完整运行时上下文快照也会写入日志，因此策略文本仍可从 Session 日志重建。替换会改变下一份缓存安全尾部快照，但不会重写稳定系统提示词。此机制扩展[当前沙箱策略上下文决策](2026-07-30-current-sandbox-policy-context.zh.md)，而不增加能力清单。
+模型可见的 `sandbox:policy` 上下文列出有序显式根目录，标明首项为主要目录，并概述平台临时区域。附加目录列表来自持久事件，完整运行时上下文快照也会写入日志，因此策略文本仍可从 Session 日志重建。替换会改变下一份缓存安全尾部快照，但不会重写稳定系统提示词。此机制扩展[当前沙箱策略上下文决策](../../archived/feature/2026-07-30-current-sandbox-policy-context.md)，而不增加能力清单。
 
-ACP 公布 `sessionCapabilities.additionalDirectories`。`session/new` 会校验并规范化所提供的列表，再于 Agent 发布前，在尚未发布的 Agent setup 事务中提交非空初始快照；没有该事件则表示空列表。主要 ACP `cwd` 仍是相对路径基准，非空 MCP 服务器列表仍不受支持。该能力只改变一个 Session 内的根目录，不会改变[单连接多会话归属模型](2026-06-14-acp-multi-session.zh.md)或 ACP 仅面向自动化的角色。
+ACP 公布 `sessionCapabilities.additionalDirectories`。`session/new` 会校验并规范化所提供的列表，再于 Agent 发布前，在尚未发布的 Agent setup 事务中提交非空初始快照；没有该事件则表示空列表。主要 ACP `cwd` 仍是相对路径基准，非空 MCP 服务器列表仍不受支持。该能力只改变一个 Session 内的根目录，不会改变[单连接多会话归属模型](../../archived/feature/2026-06-14-acp-multi-session.md)或 ACP 仅面向自动化的角色。
 
 Host 公开读取和完整列表替换 RPC。Web Session 行会打开中文目录管理对话框，显示不可变主要目录、移除附加条目，并通过第三个目录选择器子 slot 添加目录。UI 始终采用 Host 返回的规范结果，并提示进程生命周期中的非追溯生效边界。相同的原生与浏览式选择器实现会同时占用 Workspace 创建和 Session 目录 slot；后者不会调用 `workspace.create`。
 
-Fork 只在目录快照位于已复制事件前缀内时继承它，遵循 [SessionStore fork 决策](2026-06-30-session-store-fork-api.zh.md)；父会话之后的替换不会跟随子会话。新委派或跨进程 subagent 不会自动继承附加目录，现有沙箱模式继承规则保持不变。附加根目录不会触发指令文件发现，不会成为 LSP 工作区，也不会改变 LSP 在主要 cwd 下的包含边界。
+Fork 只在目录快照位于已复制事件前缀内时继承它，遵循 [SessionStore fork 决策](../../archived/feature/2026-06-30-session-store-fork-api.md)；父会话之后的替换不会跟随子会话。新委派或跨进程 subagent 不会自动继承附加目录，现有沙箱模式继承规则保持不变。附加根目录不会触发指令文件发现，不会成为 LSP 工作区，也不会改变 LSP 在主要 cwd 下的包含边界。
 
 ## 曾考虑的替代方案
 

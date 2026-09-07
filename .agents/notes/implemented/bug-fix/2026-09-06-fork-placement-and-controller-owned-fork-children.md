@@ -32,4 +32,4 @@ Not changed here: a fork of a subagent still lands in the nearest Workspace-owni
 
 ## Related
 
-- [SessionStore fork API](../feature/2026-06-30-session-store-fork-api.md) — the fork boundary and lineage rules this endpoint applies.
+- [SessionStore fork API](../../archived/feature/2026-06-30-session-store-fork-api.md) — the fork boundary and lineage rules this endpoint applies.

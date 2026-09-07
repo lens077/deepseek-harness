@@ -9,7 +9,6 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ChatFileDiffExpansion, ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -40,36 +39,12 @@ export const inject = ['slots', 'locale', 'uiConversation', 'remote', 'remote.se
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const workspacePathOpen = createSnapshotStore<boolean | undefined>(undefined)
+  // The inline diff preference and recorded hunks come from ui-session-files
+  // when it is composed in; without it every chip simply opens the file.
   const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
     getSnapshot: () => ctx.get('chatFileDiffs')?.expansion.getSnapshot() ?? 'none',
     subscribe: listener => ctx.get('chatFileDiffs')?.expansion.subscribe(listener) ?? (() => {}),
   }
-  let requestedWorkspacePathOpen = false
-  let capabilityRevision = 0
-  let pendingCapability: Promise<void> | undefined
-  const loadWorkspacePathOpen = (): void => {
-    if (pendingCapability !== undefined) return
-    const revision = capabilityRevision
-    const pending = ctx.remote.session.canOpenWorkspacePath()
-      .then((result) => {
-        if (revision === capabilityRevision) workspacePathOpen.set(result.ok && result.value)
-      })
-      .finally(() => {
-        if (pendingCapability === pending) pendingCapability = undefined
-      })
-    pendingCapability = pending
-  }
-  const ensureWorkspacePathOpen = (): void => {
-    requestedWorkspacePathOpen = true
-    if (workspacePathOpen.getSnapshot() === undefined) loadWorkspacePathOpen()
-  }
-  ctx.on('connection/reset', () => {
-    capabilityRevision++
-    pendingCapability = undefined
-    workspacePathOpen.set(undefined)
-    if (requestedWorkspacePathOpen) loadWorkspacePathOpen()
-  })
   ctx.uiConversation.events.register(deliverablesDefinition)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-deliverables: dictionaries')
   ctx.slots.inject(
@@ -79,10 +54,8 @@ export function apply(ctx: ClientContext): void {
       select: selectProducedFiles,
       locale: NS,
       inject: (sessionId: SessionId) => ({
-        isLoopback: ctx.remote.$host.isLoopback,
-        ensureWorkspacePathOpen,
         fileDiffs: (path: string) => ctx.get('chatFileDiffs')?.forPath(sessionId, path) ?? [],
-        hooks: { workspacePathOpen, diffExpansion },
+        hooks: { diffExpansion },
       }),
     }, ProducedFiles),
   )

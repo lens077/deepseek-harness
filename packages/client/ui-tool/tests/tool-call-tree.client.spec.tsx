@@ -23,12 +23,12 @@ function props(
   block: ToolResultNode,
   selectedCallId?: string,
   home?: string,
-  owners?: { key: string; owner: ToolCallOwnerProps }[],
+  owners?: ToolCallOwnerProps[],
 ): ToolTreeProps {
   const snapshot = {} as SessionSnapshot
   const useSession = ((selector: (value: SessionSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
-  const renderSlot = ((key: string, owner: ToolCallOwnerProps, options?: { fallback?: React.ReactNode }) => {
-    owners?.push({ key, owner })
+  const renderSlot = ((_key: string, owner: ToolCallOwnerProps, options?: { fallback?: React.ReactNode }) => {
+    owners?.push(owner)
     return options?.fallback ?? null
   }) as unknown as ToolTreeProps['renderSlot']
   return {
@@ -56,50 +56,13 @@ function props(
 }
 
 describe('ToolCallTree', () => {
-  it('owns the root marker, generic fallback, and selected state for a window-truncated call', () => {
+  it('owns the root marker and the generic fallback for a window-truncated call', () => {
     const block = root('w1', null)
     const view = render(<ToolCallTree {...props(block, 'w1')} />)
     const row = view.container.querySelector('[data-chat-call-id="w1"]')
     expect(row?.getAttribute('data-chat-anchor-key')).toBe('call:w1')
-    expect(row?.getAttribute('data-selected')).toBe('true')
     expect(view.container.querySelector('[data-variant="others"]')).not.toBeNull()
     expect(view.getByText('w1')).toBeTruthy()
-  })
-
-  it('recursively renders a selected leaf without selecting its ancestors', () => {
-    const owners: { key: string; owner: ToolCallOwnerProps }[] = []
-    const leaf = {
-      ...root('parent:code:1:code:1', { name: 'read', argsRaw: '{"path":"a.ts"}' }),
-      parentCallId: 'parent:code:1',
-    }
-    const child = {
-      ...root('parent:code:1', { name: 'run_code', argsRaw: '{"code":"return 1"}' }),
-      parentCallId: 'parent',
-      subCalls: [leaf],
-    }
-    const block = {
-      ...root('parent', { name: 'run_code', argsRaw: '{"code":"return 1"}' }),
-      subCalls: [child],
-    }
-    const view = render(<ToolCallTree {...props(block, leaf.callId, undefined, owners)} />)
-    const nests = view.container.querySelectorAll('[data-subcalls]')
-    expect(nests[0]?.parentElement).toBe(view.container.querySelector('[data-chat-call-id="parent"]'))
-    expect(nests[1]?.parentElement).toBe(view.container.querySelector('[data-chat-call-id="parent:code:1"]'))
-    expect(view.container.querySelector('[data-chat-call-id="parent"]')?.hasAttribute('data-selected')).toBe(false)
-    expect(view.container.querySelector('[data-chat-call-id="parent:code:1"]')?.hasAttribute('data-selected')).toBe(false)
-    expect(view.container.querySelector('[data-chat-call-id="parent:code:1:code:1"]')?.getAttribute('data-selected')).toBe('true')
-    expect(nests).toHaveLength(2)
-    expect(owners.map(({ key, owner }) => [key, owner.callId, owner.block.parentCallId ?? null])).toEqual([
-      ['tool.call.toolview', 'parent', null],
-      ['tool.call.tail', 'parent', null],
-      ['tool.call.toolview', 'parent:code:1', 'parent'],
-      ['tool.call.tail', 'parent:code:1', 'parent'],
-      ['tool.call.toolview', 'parent:code:1:code:1', 'parent:code:1'],
-      ['tool.call.tail', 'parent:code:1:code:1', 'parent:code:1'],
-    ])
-    for (let index = 0; index < owners.length; index += 2) {
-      expect(owners[index]?.owner).toBe(owners[index + 1]?.owner)
-    }
   })
 
   it('abbreviates a POSIX home path in the generic tool summary', () => {

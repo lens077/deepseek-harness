@@ -44,7 +44,7 @@ function workspaceRegistry(ctx: Context, workspaces: readonly Workspace[]): {
 async function composed(workspaces: readonly Workspace[] = []): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
-  await ctx.plugin(SystemPrompt, { persona: '' })
+  await ctx.plugin(SystemPrompt, { personaPrefix: '' })
   await ctx.plugin(AgentRegistry)
   installSessionReadTestServices(ctx)
   ctx.provide('workspaceRegistry', workspaceRegistry(ctx, workspaces) as never)

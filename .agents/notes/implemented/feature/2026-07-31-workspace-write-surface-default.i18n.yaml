@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-31-workspace-write-surface-default.md
-2026-07-31-workspace-write-surface-default.md: 8292db68ef5f6422ffbbb7ab629f0db9cdb9fcce
-2026-07-31-workspace-write-surface-default.zh.md: ec9201dede78223ededc3997d097dd18ced4262e

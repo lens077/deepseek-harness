@@ -4,6 +4,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - button "Close the file panel" [pressed]:
       - img
@@ -71,10 +73,10 @@
   - text: Context injection AGENTS.md
 - img
 - text: permission preset read-only
-- 'button "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Session sharing is not configured." [expanded]':
+- 'button "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}." [expanded]':
   - img
-  - text: "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Session sharing is not configured."
-- text: "Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Session sharing is not configured. Task flow 1/1 · Elapsed {{duration}}"
+  - text: "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}."
+- text: "Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Task flow 1/1 · Elapsed {{duration}}"
 - group "Task-flow font size":
   - button "Decrease task-flow font size":
     - img

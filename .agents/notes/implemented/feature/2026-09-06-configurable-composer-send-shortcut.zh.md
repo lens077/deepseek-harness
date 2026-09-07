@@ -16,7 +16,7 @@ Host 支持的 `ui-conversation.sendShortcut` 设置接受 `enter`、`mod-enter`
 
 [共享快捷键校验](../../../../packages/client/ui-conversation/src/send-shortcut.ts)供 Host schema、录制器和匹配器使用。显式组合键必须包含 Ctrl、Meta 或 Alt，以及一个受支持的按键；修饰键顺序固定。校验器拒绝保留的编辑与浏览器快捷键，而不是允许录制与这些操作冲突的组合键。录制结果在保存前只是候选值；取消不会改变持久化偏好。
 
-[Queue/Steer 决策](2026-07-30-web-queue-steer-action.zh.md) 继续定义排队行的严格 steering（中途引导）和 composer 的尽力而为投递；本偏好只选择请求该投递的键盘手势。
+[Queue/Steer 决策](../../archived/feature/2026-07-30-web-queue-steer-action.md) 继续定义排队行的严格 steering（中途引导）和 composer 的尽力而为投递；本偏好只选择请求该投递的键盘手势。
 
 ## 考虑过的替代方案
 

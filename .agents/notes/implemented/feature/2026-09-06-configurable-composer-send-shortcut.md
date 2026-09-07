@@ -16,7 +16,7 @@ The preference selects the send gesture, not the delivery mode. In `enter` mode,
 
 [Shared shortcut validation](../../../../packages/client/ui-conversation/src/send-shortcut.ts) supplies the Host schema, recorder, and matcher. Explicit combinations require Ctrl, Meta, or Alt and a supported key; modifier order is canonical. The validator rejects reserved editing/browser shortcuts rather than allowing a recorded combination that competes with those actions. Recording is provisional until Save; cancellation leaves the persisted preference unchanged.
 
-The [Queue/Steer decision](2026-07-30-web-queue-steer-action.md) continues to own strict queued-row steering and best-effort composer delivery; this preference only selects which keyboard gesture requests that delivery.
+The [Queue/Steer decision](../../archived/feature/2026-07-30-web-queue-steer-action.md) continues to own strict queued-row steering and best-effort composer delivery; this preference only selects which keyboard gesture requests that delivery.
 
 ## Alternatives considered
 

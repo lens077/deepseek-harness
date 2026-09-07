@@ -10,6 +10,8 @@ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 import { MultiSelectSettingsRow, type MultiSelectSettingsRowProps } from '../src/client/MultiSelectSettingsRow.tsx'
 import { zh } from '../src/client/locales.ts'
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
@@ -24,6 +26,7 @@ function mount() {
       actions={store.actions}
       useSessions={vi.fn() as never}
       useSessionPendingInteraction={vi.fn() as never}
+      useResource={useResource}
       useWorkspaces={vi.fn() as never}
       t={t}
     />,

@@ -4,6 +4,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { SidebarRootComponentProps, SidebarSectionOwnerProps } from '../src/client/contract/slots.ts'
 import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
 import { en } from '../src/client/locales.ts'
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(cleanup)
 
@@ -15,7 +17,7 @@ function mount(startUngrouped = vi.fn(async () => {})) {
   const props: SidebarRootComponentProps = {
     collapsed: true, width: 390, mobileView: 'workspaces', navigateMobile,
     startUngrouped, startSession, toggleSidebar: vi.fn(),
-    useSessions: neverHook, useWorkspaces: neverHook, useSessionPendingInteraction: neverHook,
+    useSessions: neverHook, useWorkspaces: neverHook, useSessionPendingInteraction: neverHook, useResource,
     t: key => (en as Record<string, string>)[key] ?? key,
     renderSlot: ((key: string, params: SidebarSectionOwnerProps) => {
       if (key === 'sidebar.settings') return <button>Settings</button>

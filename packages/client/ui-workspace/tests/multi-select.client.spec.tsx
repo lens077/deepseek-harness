@@ -19,6 +19,8 @@ import { createWorkspaceViewStore } from '../src/client/stores.ts'
 import { createSessionSelectionStore } from '../src/client/selectionStore.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { zh } from '../src/client/locales.ts'
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(cleanup)
 beforeEach(() => { localStorage.clear() })
@@ -59,6 +61,7 @@ function mountRows(names: readonly string[], overrides: Partial<WorkspaceBrowser
     expandSidebar: vi.fn(),
     useSessions: hook(sessionState(items)),
     useSessionPendingInteraction: hook(new Map()),
+    useResource,
     useWorkspaces: hook(workspaceState([workspace('alpha', [...names])])),
     useStore: bindSnapshotSelector(store),
     actions: store.actions,

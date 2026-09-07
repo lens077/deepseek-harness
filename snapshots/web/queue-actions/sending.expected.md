@@ -1,0 +1,76 @@
+- banner:
+  - navigation "Session hierarchy":
+    - button "Reply with a one-sentence description" [disabled]
+  - button "Session log":
+    - text: Session log
+    - img
+  - button "Open the sidebar":
+    - img
+  - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
+      - img
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
+- button "Back to bottom" [disabled]:
+  - img
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
+- button "Copy":
+  - img
+- button "Context injection @deepseek-ai/dsh-system-prompt":
+  - img
+  - img
+  - text: Context injection @deepseek-ai/dsh-system-prompt
+- paragraph: partial
+- status: Deep diving...
+- text: "Task flow 0/1 · Elapsed {{duration}} · Current: Execution"
+- group "Task-flow font size":
+  - button "Decrease task-flow font size":
+    - img
+  - text: 11px
+  - button "Increase task-flow font size":
+    - img
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Stop task":
+  - img
+  - text: Stop task
+- button "Collapse flow graph" [expanded]:
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Execution {{duration}} · 1 steps"
+- list:
+  - listitem:
+    - text: Queue item to remove
+    - status: Sending…
+    - button "Edit queued message" [disabled]:
+      - img
+    - button "Remove queued message" [disabled]:
+      - img
+    - button "Steer queued message" [disabled]:
+      - img
+- textbox "Message or run a task... / commands, @ files or sessions"
+- button "Commands":
+  - img
+- button "Add attachment":
+  - img
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- img
+- text: Standard mode
+- button "Select model, current DeepSeek-V4-Flash":
+  - text: DeepSeek-V4-Flash
+  - img
+- button "Stop generating"

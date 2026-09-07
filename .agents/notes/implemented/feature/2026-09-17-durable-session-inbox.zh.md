@@ -53,4 +53,4 @@ Host 测试固定了单调的 `markSeen`、已处理/延后/置顶的幂等性�
 ## 相关
 
 - [跨工作区已完成会话汇总](2026-09-01-cross-workspace-finished-session-digest.zh.md) 拥有汇总投影的投递路径与面板的两个座位；本 note 以持久的已读标记取代了它"复用瞬时 completed 位"的推理。
-- [会话投影状态与客户端视图](../architecture/2026-08-19-session-projection-state-and-client-views.zh.md) 拥有 `sessionDigest` 所扩展的折叠状态/客户端值划分。
+- [会话投影状态与客户端视图](../../archived/architecture/2026-08-19-session-projection-state-and-client-views.md) 拥有 `sessionDigest` 所扩展的折叠状态/客户端值划分。

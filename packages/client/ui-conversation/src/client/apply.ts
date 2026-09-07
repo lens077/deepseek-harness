@@ -173,7 +173,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     locale: NS,
     inject: (): QuestionShortcutRowInjected => ({
       hooks: { questionNavigation: questionNavigation.settings },
-      setQuestionNavigation: settings => { questionNavigation.set(settings) },
+      setQuestionNavigation: (settings) => { questionNavigation.set(settings) },
       resetQuestionNavigation: () => { questionNavigation.reset() },
     }),
   }, QuestionShortcutRow))
@@ -338,6 +338,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
+      'conversation.session.header.corner': { kind: 'single', scope: 'session' },
       'conversation.session.tabs.leading': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,

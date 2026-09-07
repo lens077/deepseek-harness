@@ -145,6 +145,18 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Additive controls before the registered View tabs. */
     'conversation.session.tabs.leading': { kind: 'list'; scope: 'session' }
+    /**
+     * The header's far-right corner, past the utilities' edge and into the
+     * header's own padding, for one control that must keep its place whether or
+     * not it currently shows anything. The corner reserves its width while an
+     * occupant is registered, so the utilities beside it never move; an
+     * occupant with nothing to show renders a same-size placeholder.
+     */
+    'conversation.session.header.corner': {
+      kind: 'single'
+      scope: 'session'
+      owner: ConversationHeaderCornerOwnerProps
+    }
     /** Registered Conversation target Views, rendered one at a time. */
     'conversation.view': { kind: 'list'; scope: 'session'; owner: ConvViewOwnerProps }
     /** Selector-routed replacements for the current Session's resident composer. */
@@ -232,6 +244,12 @@ export interface HeroAgentPresetOwnerProps {
 /** Header actions derive their state from standard Session props. */
 export interface ConversationHeaderActionOwnerProps {
   /** Marker field: entries receive no owner-specific values. */
+  children?: never
+}
+
+/** The header corner's occupant derives its state from standard Session props. */
+export interface ConversationHeaderCornerOwnerProps {
+  /** Marker field: the occupant receives no owner-specific values. */
   children?: never
 }
 
@@ -417,6 +435,7 @@ export type ConversationSessionHeaderSlotProps =
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.tabs.leading'
+    | 'conversation.session.header.corner'
   >
   & PropsStore<ConversationStore>
   & InjectFace<ConversationSessionHeaderInjected>

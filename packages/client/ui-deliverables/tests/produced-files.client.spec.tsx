@@ -22,7 +22,7 @@ import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-c
 import type {
   ChatFileDiffExpansion, ChatFileMentions, TurnTailOwnerProps,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
-import { makeTranslate, RemoteError, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { ProducedFiles, type ProducedFilesInjected, type ProducedFilesProps } from '../src/client/ProducedFiles.tsx'
 import {
   basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
@@ -409,34 +409,24 @@ describe('produced-file Turn data', () => {
 
 describe('ProducedFiles row', () => {
   const t = makeTranslate(zh)
-  const capability = (
-    canOpenPath: boolean | undefined,
-    isLoopback = true,
+  const diffs = (
     fileDiffs: ProducedFilesProps['fileDiffs'] = () => [],
     expansion: ChatFileDiffExpansion = 'all',
-  ): Pick<
-    ProducedFilesProps,
-    'isLoopback' | 'ensureWorkspacePathOpen' | 'useWorkspacePathOpen' | 'fileDiffs' | 'useDiffExpansion'
-  > => {
-    return {
-      isLoopback,
-      ensureWorkspacePathOpen: () => {},
-      fileDiffs,
-      useWorkspacePathOpen: selector => selector(canOpenPath),
-      useDiffExpansion: selector => selector(expansion),
-    }
-  }
+  ): Pick<ProducedFilesProps, 'fileDiffs' | 'useDiffExpansion'> => ({
+    fileDiffs,
+    useDiffExpansion: selector => selector(expansion),
+  })
 
   const everyPathChanged: ProducedFilesProps['fileDiffs'] = path => [
     { label: 'Turn 1 · Edit', oldText: `old ${path}`, newText: `new ${path}` },
   ]
 
-  it('renders the bounded CSS candidates and opens a file or the workspace folder', () => {
+  it('renders the bounded CSS candidates and opens a file through the owner', () => {
     const paths = ['deep/a.html', 'b.css', 'c.ts', 'd.ts', 'e.ts', 'f.ts', 'g.ts', 'h.ts']
     const openFile = vi.fn<(path: string) => void>()
 
     const view = render(
-      <ProducedFiles matched={paths} openFile={openFile} {...capability(true)} t={t} />,
+      <ProducedFiles matched={paths} openFile={openFile} {...diffs()} t={t} />,
     )
     expect(view.getByText('产物')).toBeTruthy()
     const row = view.container.querySelector('[data-produced-files-row]')
@@ -449,23 +439,8 @@ describe('ProducedFiles row', () => {
     expect(view.queryByRole('button', { name: '打开 g.ts' })).toBeNull()
     fireEvent.click(chip)
     expect(openFile).toHaveBeenCalledWith('deep/a.html')
-
-    const showFolder = view.getByRole('button', { name: '在文件夹中显示' })
-    fireEvent.click(showFolder)
-    expect(openFile).toHaveBeenLastCalledWith('.')
-  })
-
-  it('keeps the folder action absent without overflow or a local native opener', () => {
-    const openFile = vi.fn<(path: string) => void>()
-    const view = render(
-      <ProducedFiles matched={['a.md']} openFile={openFile} {...capability(true)} t={t} />,
-    )
-    const overflowing = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
-    expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
-    for (const unavailable of [capability(false), capability(true, false), capability(undefined)]) {
-      view.rerender(<ProducedFiles matched={overflowing} openFile={openFile} {...unavailable} t={t} />)
-      expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
-    }
+    // The Sidebar has no directory form, so the row offers no folder action.
+    expect(view.queryByRole('button', { name: /文件夹/ })).toBeNull()
   })
 
   it('uses singular English copy when exactly one file is hidden', () => {
@@ -473,7 +448,7 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']}
         openFile={() => {}}
-        {...capability(false)}
+        {...diffs()}
         t={makeTranslate(en)}
       />,
     )
@@ -487,7 +462,7 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={['a.md', 'b.md']}
         openFile={() => {}}
-        {...capability(false, true, everyPathChanged, 'all')}
+        {...diffs(everyPathChanged, 'all')}
         t={t}
       />,
     )
@@ -502,7 +477,7 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={['out/report.md']}
         openFile={() => {}}
-        {...capability(false, true, everyPathChanged, 'single')}
+        {...diffs(everyPathChanged, 'single')}
         t={t}
       />,
     )
@@ -512,7 +487,7 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={['a.md', 'b.md']}
         openFile={() => {}}
-        {...capability(false, true, everyPathChanged, 'single')}
+        {...diffs(everyPathChanged, 'single')}
         t={t}
       />,
     )
@@ -524,7 +499,7 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={['a.md', 'b.md']}
         openFile={() => {}}
-        {...capability(false, true, everyPathChanged, 'none')}
+        {...diffs(everyPathChanged, 'none')}
         t={t}
       />,
     )
@@ -533,13 +508,13 @@ describe('ProducedFiles row', () => {
     expect(view.getByText('Turn 1 · Edit')).toBeTruthy()
   })
 
-  it('retains the host opener for files without a recorded diff', () => {
+  it('opens files without a recorded diff through the owner instead of toggling', () => {
     const openFile = vi.fn()
     const view = render(
       <ProducedFiles
         matched={['a.md', 'b.md']}
         openFile={openFile}
-        {...capability(false, true, path => path === 'a.md' ? everyPathChanged(path) : [], 'none')}
+        {...diffs(path => path === 'a.md' ? everyPathChanged(path) : [], 'none')}
         t={t}
       />,
     )
@@ -548,17 +523,17 @@ describe('ProducedFiles row', () => {
     expect(view.queryByText('Turn 1 · Edit')).toBeNull()
   })
 
-  it('offers the file opener inside an expanded diff', () => {
+  it('offers the owner opener inside an expanded diff', () => {
     const openFile = vi.fn()
     const view = render(
       <ProducedFiles
         matched={['deep/out/report.md']}
         openFile={openFile}
-        {...capability(false, true, everyPathChanged)}
+        {...diffs(everyPathChanged)}
         t={t}
       />,
     )
-    fireEvent.click(view.getByRole('button', { name: '在编辑器中打开 report.md' }))
+    fireEvent.click(view.getByRole('button', { name: '在侧栏中打开 report.md' }))
     expect(openFile).toHaveBeenCalledWith('deep/out/report.md')
   })
 })
@@ -602,9 +577,7 @@ describe('plugin registration', () => {
       children: { 'conversation.chat.turnTail': { kind: 'chain', scope: 'session' } },
     } as never, () => null)
     // ui-theme's Appearance row binds a durable scope through these two.
-    const session = {
-      canOpenWorkspacePath: () => Promise.resolve({ ok: true as const, value: true }),
-    }
+    const session = {}
     ctx.provide('remote', {
       $on: () => () => {},
       $host: { home: undefined, isLoopback: false },
@@ -619,13 +592,9 @@ describe('plugin registration', () => {
     const [entry] = ctx.slots.entries('conversation.chat.turnTail')
     expect(entry).toBeDefined()
     const injected = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
-    expect(injected.isLoopback).toBe(false)
-    expect(typeof injected.ensureWorkspacePathOpen).toBe('function')
-    expect(injected.hooks.workspacePathOpen.getSnapshot()).toBeUndefined()
     expect(injected.hooks.diffExpansion.getSnapshot()).toBe('none')
     expect(injected.fileDiffs('out/report.md')).toEqual([])
-    ctx.emit('connection/reset')
-    injected.ensureWorkspacePathOpen()
+    expect(injected.hooks.diffExpansion.subscribe(() => {})).toBeTypeOf('function')
 
     ctx.provide('chatFileDiffs', {
       expansion: { getSnapshot: () => 'single' as const, subscribe: () => () => {} },
@@ -637,10 +606,6 @@ describe('plugin registration', () => {
     const withDiffs = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
     expect(withDiffs.hooks.diffExpansion.getSnapshot()).toBe('single')
     expect(withDiffs.fileDiffs('out/report.md')).toHaveLength(1)
-    await vi.waitFor(() => {
-      expect(injected.hooks.workspacePathOpen.getSnapshot()).toBe(true)
-    })
-    injected.ensureWorkspacePathOpen()
 
     // The prose face is live while the plugin is: a produced turn yields a
     // resolver whose matches open through the owner-supplied opener.
@@ -661,53 +626,5 @@ describe('plugin registration', () => {
     expect(ctx.slots.entries('conversation.chat.turnTail')).toHaveLength(0)
     // Fiber teardown retracts the service: the consumer's ctx.get sees the off state.
     expect((ctx as unknown as { get(name: string): unknown }).get('chatFileMentions')).toBeUndefined()
-  })
-
-  it('queries the workspace opener lazily and replaces stale results after reconnect', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SlotRegistry).await()
-    new UiConversation(ctx, { binding: () => undefined } as never)
-    ctx.slots.register({
-      name: 'root',
-      children: { 'conversation.chat.turnTail': { kind: 'chain', scope: 'session' } },
-    } as never, () => null)
-    const first = Promise.withResolvers<{ ok: true; value: boolean }>()
-    const second = Promise.withResolvers<{ ok: true; value: boolean }>()
-    const staleFailure = Promise.withResolvers<{ ok: false; error: RemoteError }>()
-    const capability = vi.fn()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise)
-      .mockReturnValueOnce(staleFailure.promise)
-      .mockResolvedValueOnce({ ok: false, error: new RemoteError('gateway/internal', 'offline', {}) })
-    const session = { canOpenWorkspacePath: capability }
-    ctx.provide('remote', {
-      $on: () => () => {},
-      $host: { home: undefined, isLoopback: true },
-      session,
-    } as never)
-    ctx.provide('remote.session', session as never)
-    ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
-    await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
-    const fiber = ctx.plugin({ inject: [...inject], apply })
-    await fiber.await()
-    const entry = ctx.slots.entries('conversation.chat.turnTail')[0]
-    const injected = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
-
-    injected.ensureWorkspacePathOpen()
-    injected.ensureWorkspacePathOpen()
-    expect(capability).toHaveBeenCalledOnce()
-    ctx.emit('connection/reset')
-    expect(capability).toHaveBeenCalledTimes(2)
-    first.resolve({ ok: true, value: false })
-    await Promise.resolve()
-    expect(injected.hooks.workspacePathOpen.getSnapshot()).toBeUndefined()
-    second.resolve({ ok: true, value: true })
-    await vi.waitFor(() => { expect(injected.hooks.workspacePathOpen.getSnapshot()).toBe(true) })
-
-    ctx.emit('connection/reset')
-    ctx.emit('connection/reset')
-    staleFailure.resolve({ ok: false, error: new RemoteError('gateway/internal', 'stale offline', {}) })
-    await vi.waitFor(() => { expect(injected.hooks.workspacePathOpen.getSnapshot()).toBe(false) })
-    await fiber.dispose()
   })
 })

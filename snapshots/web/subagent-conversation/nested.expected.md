@@ -8,6 +8,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - button "Close the file panel" [pressed]:
       - img

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-06-configurable-composer-send-shortcut.md
-2026-09-06-configurable-composer-send-shortcut.md: 33c00898df8712f2e1a07009f5f57789bae08218
-2026-09-06-configurable-composer-send-shortcut.zh.md: 92275391e2f1fc5cd59586d837e81a3d55cc15c6
+2026-09-06-configurable-composer-send-shortcut.md: 58977a2f09e2e7d29c27006f572260f7a6107f6f
+2026-09-06-configurable-composer-send-shortcut.zh.md: 3d119b824e8546d5512557c2da9e3a2370b8daa6

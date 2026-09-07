@@ -44,6 +44,6 @@ Web 应用提供一个覆盖整个中间栏的跨工作区汇总界面。位于�
 
 ## 相关记录
 
-- [会话投影状态与客户端视图](../architecture/2026-08-19-session-projection-state-and-client-views.zh.md)负责 `sessionDigest` 所使用的折叠状态与客户端值拆分。
+- [会话投影状态与客户端视图](../../archived/architecture/2026-08-19-session-projection-state-and-client-views.md)负责 `sessionDigest` 所使用的折叠状态与客户端值拆分。
 - [Web 后台任务展示](2026-08-08-web-background-job-display.zh.md)负责进程级 `ctx.jobs` 可见性；这些记录不是持久会话结局。
 - [Task Surface](../../proposed/feature/2026-08-04-task-surface.zh.md)仍是单个会话内声明式交互的提案，不是跨会话汇总。

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-06-fork-placement-and-controller-owned-fork-children.md
-2026-09-06-fork-placement-and-controller-owned-fork-children.md: 0e496dc285580488cd864beac8628ea5f98b3a41
-2026-09-06-fork-placement-and-controller-owned-fork-children.zh.md: efedcc96d06bd383e4813db1832ff0d168e0ef00
+2026-09-06-fork-placement-and-controller-owned-fork-children.md: 159c7259b425646c2409aa075b3942f93375d7ec
+2026-09-06-fork-placement-and-controller-owned-fork-children.zh.md: 5159b4b78d66dbba84119fb8fb9adfa73961b6cc

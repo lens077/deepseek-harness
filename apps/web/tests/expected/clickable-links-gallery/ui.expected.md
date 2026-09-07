@@ -4,6 +4,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - button "Close the file panel" [pressed]:
       - img
@@ -211,8 +213,7 @@
 - button "Open site/app.js": app.js
 - button "Open src/tokens.css" [expanded]: tokens.css
 - text: + 1 file
-- button "Show in folder"
-- button "Open tokens.css in the editor"
+- button "Open tokens.css in the Sidebar"
 - text: "src/tokens.css Turn 1 · edit --inline-code: #EBEEF2; --inline-code: #F5F5F5;"
 - button "Copy":
   - img
@@ -251,4 +252,4 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
+- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}}

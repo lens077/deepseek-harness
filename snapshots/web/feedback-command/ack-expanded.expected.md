@@ -4,6 +4,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - button "Close the file panel" [pressed]:
       - img
@@ -51,10 +53,10 @@
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- 'button "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}. Session sharing is enabled."':
+- 'button "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}."':
   - img
   - img
-  - text: "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}. Session sharing is enabled."
+  - text: "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}."
 - text: Task flow 1/1 · Elapsed {{duration}}
 - group "Task-flow font size":
   - button "Decrease task-flow font size":

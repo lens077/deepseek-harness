@@ -9,6 +9,8 @@
   - button "Session log":
     - text: Session log
     - img
+  - button "Open the sidebar":
+    - img
   - tablist:
     - button "Close the file panel" [pressed]:
       - img
@@ -56,12 +58,7 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}}
-- button "System prompt":
-  - img
-  - img
-  - text: System prompt
-- text: Now give the same explanation to a human reader. {{clock}}
+- text: {{clock}} Now give the same explanation to a human reader. {{clock}}
 - button "Copy":
   - img
 - button "Thought for a while":

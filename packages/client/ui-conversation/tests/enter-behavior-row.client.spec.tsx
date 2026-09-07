@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -11,6 +12,9 @@ import type { EnterBehaviorRowProps } from '../src/client/settings/EnterBehavior
 import { ComposerSubmissionPolicy } from '../src/client/input/submission-policy.ts'
 import { en } from '../src/client/locales.ts'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
+
+// Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(() => {
   cleanup()
@@ -40,6 +44,7 @@ function mount() {
   const props: EnterBehaviorRowProps = {
     useSessions: emptySessions(),
     useSessionPendingInteraction: noPendingInteraction(),
+    useResource,
     useWorkspaces: emptyWorkspaces(),
     useBusyEnter: bindSnapshotSelector(policy.busyEnter),
     setBusyEnter,

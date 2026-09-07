@@ -7,7 +7,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatViewSlotProps } from '../contract/slots.ts'
+import type { ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
@@ -25,6 +25,11 @@ const SCROLL_SAMPLE_INTERVAL_MS = 500
 /** Active column host when present; otherwise the view-local scroller. */
 function scrollerOf(from: HTMLElement): HTMLElement {
   return (from.closest('[data-conversation-scroll]')) ?? from
+}
+
+/** Browser shrink clamps and recorded writes do not transfer scroll ownership. */
+function readerMovedScroll(top: number, floor: number, observedTop: number): boolean {
+  return Math.abs(top - Math.min(observedTop, floor)) > 0.5
 }
 
 interface PagingAnchor {
@@ -125,11 +130,6 @@ function scrollPosition(list: HTMLElement, scrollport: HTMLElement): ChatScrollP
 function openFailureMessage(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error)
   return message === '' ? fallback : message
-}
-
-/** ProducedFiles opens the session workspace as `.`. */
-function isFolderOpenPath(path: string): boolean {
-  return path === '.'
 }
 
 /**
@@ -271,7 +271,6 @@ export function ChatView({
   const openError = useSession(s => s.openError)
   const hasMore = useSession(s => s.hasMore)
   const loadingOlder = useSession(s => s.loadingOlder)
-  const selectedCallId = useStore(s => s.selection?.callId)
   const reveal = useStore(s => s.reveal)
   const compactTranscript = useTranscriptView(mode => mode === 'compact')
   const inspectCall = useCallback((callId: string) => {
@@ -283,10 +282,10 @@ export function ChatView({
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
 
-  const requestOpenFile = useCallback((path: string) => {
+  const requestOpenFile = useCallback((path: string, options?: OpenFileOptions) => {
     const id = ++fileOpenRequest.current
     setFileOpenBusy(true)
-    void openFile(path).then(
+    void (options === undefined ? openFile(path) : openFile(path, options)).then(
       () => {
         if (id !== fileOpenRequest.current) return
         setFileOpenError(null)
@@ -298,7 +297,7 @@ export function ChatView({
           path,
           message: openFailureMessage(
             error,
-            t(isFolderOpenPath(path) ? 'fileOpen.folderUnknown' : 'fileOpen.unknown'),
+            t('fileOpen.unknown'),
           ),
         })
         setFileOpenBusy(false)
@@ -345,6 +344,7 @@ export function ChatView({
     () => turnNavigationItems.at(-1)?.turn ?? null,
   )
   const [questionAbove, setQuestionAbove] = useState(false)
+  const questionAboveRef = useRef<(() => void) | null>(null)
   const [loadingAll, setLoadingAll] = useState(false)
   const [pendingQuestionSeq, setPendingQuestionSeq] = useState<number | null>(null)
   /** Last position delivered or written on the main thread. */
@@ -589,7 +589,7 @@ export function ChatView({
     // programmatic deliveries land on the ledger itself, so both preserve
     // the current ownership state.
     const floor = Math.max(0, el.scrollHeight - el.clientHeight)
-    const movedByReader = Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+    const movedByReader = readerMovedScroll(el.scrollTop, floor, observedTopRef.current)
     const isAtBottom = movedByReader
       ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
       : atBottomRef.current
@@ -613,31 +613,43 @@ export function ChatView({
     scheduleActiveTurn()
   }
 
-  // Raw scroll events only schedule work. Geometry is sampled at most once
-  // per interval, with scrollend providing the final sample for a short burst.
+  // Non-reader pinned deliveries must settle before layout growth invalidates
+  // their floor. Reader movement stays pending even inside the follow threshold,
+  // so growth cannot erase small gestures before they accumulate off the floor.
   useEffect(() => {
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: effect runs after the list node commits. */
     if (local === null) return
     const el = scrollerOf(local)
     let sampleTimer: number | undefined
-    const sample = (): void => {
+    // `settled` marks the throttled reader samples (interval or scrollend);
+    // the synchronous pinned sample stays free of row geometry reads.
+    const sample = (settled: boolean): void => {
       if (!scrollSamplePendingRef.current) return
       scrollSamplePendingRef.current = false
       if (sampleTimer !== undefined) window.clearTimeout(sampleTimer)
       sampleTimer = undefined
       onScrollRef.current()
+      if (settled) questionAboveRef.current?.()
       setScrollSampleTick(tick => tick + 1)
     }
     const onScroll = (): void => {
       scrollSamplePendingRef.current = true
-      sampleTimer ??= window.setTimeout(sample, SCROLL_SAMPLE_INTERVAL_MS)
+      if (atBottomRef.current) {
+        const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+        if (!readerMovedScroll(el.scrollTop, floor, observedTopRef.current)) {
+          sample(false)
+          return
+        }
+      }
+      sampleTimer ??= window.setTimeout(() => { sample(true) }, SCROLL_SAMPLE_INTERVAL_MS)
     }
+    const onScrollEnd = (): void => { sample(true) }
     el.addEventListener('scroll', onScroll, { passive: true })
-    el.addEventListener('scrollend', sample, { passive: true })
+    el.addEventListener('scrollend', onScrollEnd, { passive: true })
     return () => {
       el.removeEventListener('scroll', onScroll)
-      el.removeEventListener('scrollend', sample)
+      el.removeEventListener('scrollend', onScrollEnd)
       if (sampleTimer !== undefined) window.clearTimeout(sampleTimer)
       scrollSamplePendingRef.current = false
     }
@@ -825,9 +837,13 @@ export function ChatView({
     ? Math.max(0, questions.length - 1)
     : questionTurns.byTurn.get(activeTurn)?.questionIndex ?? Math.max(0, questions.length - 1)
 
+  // The sticky question bar reads row geometry only on the settled reader
+  // samples (interval or scrollend) and when the active question changes, so
+  // the pinned follow path never forces layout for it.
   useEffect(() => {
     const local = listRef.current
     if (local === null || questions.length === 0) {
+      questionAboveRef.current = null
       setQuestionAbove(false)
       return
     }
@@ -846,8 +862,8 @@ export function ChatView({
       setQuestionAbove(row.getBoundingClientRect().bottom < scrollport.getBoundingClientRect().top)
     }
     update()
-    scrollport.addEventListener('scroll', update, { passive: true })
-    return () => { scrollport.removeEventListener('scroll', update) }
+    questionAboveRef.current = update
+    return () => { questionAboveRef.current = null }
   }, [activeQuestionIndex, questions])
 
   useEffect(() => {
@@ -974,7 +990,6 @@ export function ChatView({
             compactTranscript={compactTranscript}
             useStore={useStore}
             actions={actions}
-            selectedCallId={selectedCallId}
             cwd={cwd}
             openFile={requestOpenFile}
             inspectCall={inspectCall}
@@ -1011,7 +1026,6 @@ export function ChatView({
       </div>
       {fileOpenError !== null && (
         <FileOpenErrorDialog
-          path={fileOpenError.path}
           message={fileOpenError.message}
           busy={fileOpenBusy}
           onClose={closeFileOpenError}
@@ -1025,9 +1039,8 @@ export function ChatView({
 
 /** In-page Host open-path refusal: the wire reason plus a retry of the same path. */
 function FileOpenErrorDialog({
-  path, message, busy, onClose, onRetry, t,
+  message, busy, onClose, onRetry, t,
 }: {
-  path: string
   message: string
   busy: boolean
   onClose: () => void
@@ -1039,7 +1052,7 @@ function FileOpenErrorDialog({
       open
       onClose={onClose}
       closeLabel={t('close')}
-      title={t(isFolderOpenPath(path) ? 'fileOpen.folderTitle' : 'fileOpen.title')}
+      title={t('fileOpen.title')}
       description={message}
       footer={(
         <>

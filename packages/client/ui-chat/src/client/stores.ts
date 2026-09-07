@@ -1,9 +1,8 @@
-/** Per-Session Chat selection store shared by the transcript and details panel. */
+/** Per-Session Chat view store. */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
-import type { ChatStoreState, SelectionTarget, TurnProcessViewEntry } from './contract/store.ts'
+import type { ChatStoreState, TurnProcessViewEntry } from './contract/store.ts'
 
 type ChatActions = {
-  select: (draft: ChatStoreState, target: SelectionTarget | null) => void
   requestReveal: (draft: ChatStoreState, seq: number) => void
   clearReveal: (draft: ChatStoreState) => void
   setTurnProcessOpen: (
@@ -28,14 +27,13 @@ export function storedTurnProcessEntry(
 }
 
 /**
- * Create the Chat selection store handle.
+ * Create the Chat view store handle.
  * @returns a handle instantiated once per rendered Session scope.
  */
 export function createChatStore(): EngineStoreHandle<ChatStoreState, ChatActions> {
   return defineStore({
-    init: (): ChatStoreState => ({ selection: null, turnProcesses: [], reveal: null }),
+    init: (): ChatStoreState => ({ turnProcesses: [], reveal: null }),
     actions: {
-      select: (draft, target: SelectionTarget | null) => { draft.selection = target },
       requestReveal: (draft, seq: number) => {
         draft.reveal = { seq, nonce: (draft.reveal?.nonce ?? 0) + 1 }
       },
