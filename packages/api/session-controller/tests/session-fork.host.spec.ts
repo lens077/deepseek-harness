@@ -1,5 +1,8 @@
 /** Session Controller fork boundaries, lineage, and inherited model routing. */
 
+import { mkdtempSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { agentEvents } from '@deepseek-ai/dsh-agent'
@@ -84,8 +87,9 @@ function liveAgent(
   turns: number,
   tail: Tail = 'none',
   lineage: { parentSession?: SessionId; origin?: 'subagent' } = {},
+  cwd: string | null = '/proj',
 ): Session {
-  const session = ctx.sessions.create(sid(id), { meta: { cwd: '/proj', ...lineage } })
+  const session = ctx.sessions.create(sid(id), { meta: { ...cwd === null ? {} : { cwd }, ...lineage } })
   for (let turn = 1; turn <= turns; turn++) {
     session.append('turn/start', { turn })
     session.append('user/message', createUserMessage({
@@ -216,6 +220,47 @@ describe('sessions.fork', () => {
     if (!response.ok) return
     expect(attachSession).toHaveBeenCalledTimes(1)
     expect(attachSession).toHaveBeenCalledWith(response.value.sessionId)
+    await ctx.fiber.dispose()
+  })
+
+  it('adopts an Ungrouped source into the Workspace owning its directory for placement=nested', async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-fork-adopt-')))
+    const attachSession = vi.fn<(sessionId: SessionId, options?: { nestUnder?: SessionId }) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const workspace = { path: dir, sessionIds: [], attachSession } as unknown as Workspace
+    const ctx = await composed([workspace])
+    const source = liveAgent(ctx, 'session-adopt-source', 1, 'none', {}, dir)
+
+    const response = await remote(ctx).fork(request({ sessionId: source.id, placement: 'nested' }))
+
+    expect(response.ok ? null : response.error).toBeNull()
+    if (!response.ok) return
+    expect(attachSession.mock.calls).toEqual([
+      [source.id],
+      [response.value.sessionId, { nestUnder: source.id }],
+    ])
+    await ctx.fiber.dispose()
+  })
+
+  it('leaves a placement=nested fork of an Ungrouped source unattached without an owning Workspace', async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-fork-orphan-')))
+    const attachSession = vi.fn<(sessionId: SessionId, options?: { nestUnder?: SessionId }) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const workspace = { path: join(dir, 'elsewhere'), sessionIds: [], attachSession } as unknown as Workspace
+    const ctx = await composed([workspace])
+    const proxy = remote(ctx)
+    // Existing directory without a registration, a directory that does not
+    // resolve, and a source without any cwd all keep the Ungrouped sibling slot.
+    const unowned = liveAgent(ctx, 'session-orphan-unowned', 1, 'none', {}, dir)
+    const missing = liveAgent(ctx, 'session-orphan-missing', 1)
+    const bare = liveAgent(ctx, 'session-orphan-bare', 1, 'none', {}, null)
+
+    for (const source of [unowned, missing, bare]) {
+      const response = await proxy.fork(request({ sessionId: source.id, placement: 'nested' }))
+      expect(response.ok ? null : response.error).toBeNull()
+    }
+
+    expect(attachSession).not.toHaveBeenCalled()
     await ctx.fiber.dispose()
   })
 

@@ -21,6 +21,7 @@ import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { realpathNormalize } from '@deepseek-ai/dsh-workspace'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   ApiSessionAgentController,
@@ -237,8 +238,17 @@ export class SessionCommandController {
       cut = SessionLogOffset(cut + 1)
     }
     let workspace: Workspace | undefined
+    // An Ungrouped top-level source cannot carry a nested child (placement
+    // lives on the Workspace record). When a registered Workspace owns its
+    // directory, the fork adopts the source there so the requested nesting
+    // holds; without one the child takes the Ungrouped sibling slot.
+    let adoptSource = false
     try {
       workspace = await this.forkWorkspace(source.header)
+      if (workspace === undefined && request.placement === 'nested' && source.header.origin !== 'subagent') {
+        workspace = await this.workspaceOwningCwd(source.header.cwd)
+        adoptSource = workspace !== undefined
+      }
     } catch (error) {
       throw new RemoteError(
         'gateway/internal',
@@ -278,10 +288,14 @@ export class SessionCommandController {
       // Nested placement needs the source accounted in the attached
       // Workspace; a subagent source reached through an ancestor takes the
       // sibling slot (documented on SessionForkRequest.placement).
-      const nestUnder = request.placement === 'nested' && workspace.sessionIds.includes(source.header.id)
+      const nestUnder = request.placement === 'nested'
+        && (adoptSource || workspace.sessionIds.includes(source.header.id))
         ? source.header.id
         : undefined
       try {
+        // The source joins first so the child's nested placement names an
+        // accounted parent on the Workspace write chain.
+        if (adoptSource) await workspace.attachSession(source.header.id)
         await (nestUnder === undefined
           ? workspace.attachSession(childId)
           : workspace.attachSession(childId, { nestUnder }))
@@ -544,6 +558,22 @@ export class SessionCommandController {
       if (workspace !== undefined) return workspace
     }
     return undefined
+  }
+
+  /**
+   * The registered Workspace whose canonical path is the given session
+   * directory, or `undefined` when the directory is absent, does not resolve,
+   * or has no registration.
+   */
+  private async workspaceOwningCwd(cwd: string | undefined): Promise<Workspace | undefined> {
+    if (cwd === undefined) return undefined
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(cwd)
+    } catch {
+      return undefined
+    }
+    return this.ctx.workspaceRegistry.list().find(workspace => workspace.path === canonical)
   }
 }
 

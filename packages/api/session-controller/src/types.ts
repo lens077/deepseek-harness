@@ -354,6 +354,9 @@ export interface SessionForkRequest {
    * source in Workspace presentation. `nested` requires the source itself to
    * be accounted in the attached Workspace; a subagent source attached
    * through an ancestor takes the sibling slot instead of failing the fork.
+   * An Ungrouped top-level source is adopted into the registered Workspace
+   * that owns its directory (when one exists) so the child can nest beneath
+   * it; without such a Workspace the child stays an Ungrouped sibling.
    */
   readonly placement?: 'sibling' | 'nested'
 }
