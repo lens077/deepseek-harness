@@ -62,6 +62,8 @@ describe('SessionTitleService configuration and refresh boundaries', () => {
       .toThrow(/fallbackMaxWords must be a positive integer/)
     expect(() => new SessionTitleService(new Context(), { ...CONFIG, fallbackMaxBytes: 81 }))
       .toThrow(/fallbackMaxBytes must not exceed maxTitleBytes/)
+    expect(() => new SessionTitleService(new Context(), { ...CONFIG, automaticOverridesUserRename: 'yes' as never }))
+      .toThrow(/automaticOverridesUserRename must be a boolean/)
   })
 
   it('returns no title for empty input with or without a provider, and rejects detached or pre-aborted refreshes', async () => {

@@ -106,6 +106,41 @@ describe('SessionTitleService.rename', () => {
     expect(ctx.sessionTitle.get(session)?.source.kind).toBe('provider')
   })
 
+  it('automaticOverridesUserRename lets the next eligible prompt supersede a user title', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SessionTitleService, { ...CONFIG, automaticOverridesUserRename: true })
+    const generate = vi.fn(async (request: SessionTitleProviderRequest) => ({
+      title: 'Provider title',
+      messageSeqs: request.messages.map(message => message.seq),
+    }))
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('override-provider'),
+      automatic: 'all-prompts',
+      generate,
+    })
+    const session = ctx.sessions.create(SessionId('rename-override'))
+    session.append('turn/start', { turn: 1 })
+    appendHumanPrompt(session, 'First prompt')
+    await settle()
+    ctx.sessionTitle.rename(session, 'Renamed by hand')
+    expect(ctx.sessionTitle.get(session)?.source.kind).toBe('user')
+
+    appendHumanPrompt(session, 'Second prompt after the rename')
+    await settle()
+    session.append('request/header', {
+      header: { config: { provider: 'main-route', model: 'chat-model' } },
+      reason: 'change',
+    })
+    await settle()
+    expect(generate).toHaveBeenCalledOnce()
+    expect(ctx.sessionTitle.get(session)).toMatchObject({
+      title: 'Provider title',
+      source: { kind: 'provider' },
+    })
+  })
+
   it('fallback-only refresh also unpins: the user title yields to a re-derived fallback', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)

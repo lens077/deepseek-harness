@@ -75,4 +75,41 @@ describe('all-messages LLM title provider', () => {
       messageSeqs: [inherited.seq, latest.seq],
     })
   })
+
+  it('latestMessages frames and attributes only the newest prompts', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
+    await ctx.plugin(SessionTitleService, TITLE_CONFIG)
+    const adapter = new RecordingAdapter()
+    ctx.llm.registerAdapter(['current-route'], adapter)
+    await ctx.plugin(providerPlugin, { ...LLM_CONFIG, latestMessages: 1 })
+    const session = ctx.sessions.create(SessionId('latest-window'))
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'older prompt' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    await settle()
+    session.append('request/header', {
+      header: { config: { provider: 'current-route', model: 'current-model' } }, reason: 'change',
+    })
+    await settle()
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    session.append('turn/start', { turn: 2 })
+    const latest = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'newest prompt' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    await settle()
+    session.append('request/header', {
+      header: { config: { provider: 'current-route', model: 'current-model' } }, reason: 'change',
+    })
+    await settle()
+
+    const content = adapter.requests.at(-1)?.messages[0]?.content[0]
+    expect(content?.type === 'text' && content.text).toContain('newest prompt')
+    expect(content?.type === 'text' && content.text).not.toContain('older prompt')
+    expect(ctx.sessionTitle.get(session)).toMatchObject({ messageSeqs: [latest.seq] })
+  })
 })

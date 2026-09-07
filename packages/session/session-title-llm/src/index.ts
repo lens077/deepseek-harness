@@ -12,6 +12,7 @@ import { deadline, MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { SessionSeq } from '@deepseek-ai/dsh-session'
 import {
+  foldSessionTitle,
   normalizeSessionTitle,
   SessionTitleProviderId,
 } from '@deepseek-ai/dsh-session-title'
@@ -65,6 +66,27 @@ export interface SessionTitleLlmConfig {
   readonly provider?: string
   /** Optional explicit model id; must be paired with `provider`. */
   readonly model?: string
+  /**
+   * Optional deployment instructions appended verbatim to the system prompt,
+   * such as a required title format or a fixed category vocabulary.
+   */
+  readonly instructions?: string
+  /**
+   * Optional Unicode regular-expression source the normalized title must
+   * match in full; a non-matching model output fails the generation, so the
+   * service retains the previous title.
+   */
+  readonly titlePattern?: string
+  /**
+   * Optional cap on how many of the newest provider-selected messages are
+   * framed and attributed; absent means every selected message.
+   */
+  readonly latestMessages?: number
+  /**
+   * Whether the framed input also carries the session's latest accepted
+   * title, so a revision can keep or refine it instead of starting over.
+   */
+  readonly includeCurrentTitle?: boolean
 }
 
 /** Validated immutable model-provider policy. */
@@ -79,6 +101,10 @@ export const SessionTitleLlmConfigFields = {
   timeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).required(),
   provider: z.string(),
   model: z.string(),
+  instructions: z.string(),
+  titlePattern: z.string(),
+  latestMessages: z.number().step(1).min(1),
+  includeCurrentTitle: z.boolean(),
 }
 
 /** Shared Loader schema with no library defaults. */
@@ -93,6 +119,10 @@ const CONFIG_KEYS: ReadonlySet<string> = new Set([
   'timeoutMs',
   'provider',
   'model',
+  'instructions',
+  'titlePattern',
+  'latestMessages',
+  'includeCurrentTitle',
 ])
 
 /** Validate one positive integer limit. */
@@ -136,7 +166,34 @@ export function resolveSessionTitleLlmConfig(
       || typeof value.model !== 'string' || value.model.length === 0)) {
     throw new Error('session-title-llm: provider and model overrides must be non-empty strings')
   }
+  if (value.instructions !== undefined
+    && (typeof value.instructions !== 'string' || value.instructions.trim().length === 0)) {
+    throw new Error('session-title-llm: instructions must be a non-empty string')
+  }
+  if (value.titlePattern !== undefined) {
+    if (typeof value.titlePattern !== 'string' || value.titlePattern.length === 0) {
+      throw new Error('session-title-llm: titlePattern must be a non-empty string')
+    }
+    try {
+      new RegExp(value.titlePattern, 'u')
+    } catch (error: unknown) {
+      throw new Error(`session-title-llm: titlePattern is not a valid regular expression: ${String(error)}`)
+    }
+  }
+  if (value.latestMessages !== undefined) assertPositiveInteger('latestMessages', value.latestMessages)
+  if (value.includeCurrentTitle !== undefined && typeof value.includeCurrentTitle !== 'boolean') {
+    throw new Error('session-title-llm: includeCurrentTitle must be a boolean')
+  }
   return deepFreeze({ ...value })
+}
+
+/** Keep only the newest `latestMessages` selected messages when the cap is set. */
+function windowMessages(
+  config: ResolvedSessionTitleLlmConfig,
+  messages: readonly SessionTitleUserMessage[],
+): readonly SessionTitleUserMessage[] {
+  if (config.latestMessages === undefined || messages.length <= config.latestMessages) return messages
+  return messages.slice(messages.length - config.latestMessages)
 }
 
 /** Select the provider-owned message subset from one fixed service revision. */
@@ -165,7 +222,8 @@ export function registerSessionTitleLlmProvider(
     id: titleProvider,
     automatic,
     async generate(request) {
-      return generateSessionTitleWithLlm(ctx, resolved, request, selectMessages(request.messages), titleProvider)
+      const selected = windowMessages(resolved, selectMessages(request.messages))
+      return generateSessionTitleWithLlm(ctx, resolved, request, selected, titleProvider)
     },
   })
 }
@@ -186,17 +244,32 @@ function resolveRoute(
 
 /** Stable language-aware system instruction shared by both provider plugins. */
 function systemPrompt(config: ResolvedSessionTitleLlmConfig): string {
-  return [
+  const lines = [
     'Create a concise title for an AI coding-assistant session from the supplied human messages.',
     'Return only the title on one line, **in plain text of natural language**, with no quotes, prefix, explanation, Markdown, XML, or terminal control codes. No code is allowed.',
     'Use the language of the messages.',
     `Aim for about ${config.targetWords} words in non-CJK languages or ${config.targetCjkCharacters} CJK characters.`,
-  ].join('\n')
+  ]
+  if (config.instructions !== undefined) lines.push(config.instructions)
+  return lines.join('\n')
 }
 
-/** Frame exact messages as JSON so user text cannot break structural delimiters. */
-function frameMessages(messages: readonly SessionTitleUserMessage[]): string {
-  return `Generate the session title from this JSON array of human messages:\n${JSON.stringify(messages)}`
+/** Frame exact messages (and the optional current title) as JSON so user text cannot break structural delimiters. */
+function frameMessages(messages: readonly SessionTitleUserMessage[], currentTitle: string | undefined): string {
+  if (currentTitle === undefined) {
+    return `Generate the session title from this JSON array of human messages:\n${JSON.stringify(messages)}`
+  }
+  return 'Generate the session title from this JSON object holding the current title and the human messages:\n'
+    + JSON.stringify({ currentTitle, messages })
+}
+
+/** Reject a normalized title that does not match the configured full-title pattern. */
+function assertTitlePattern(config: ResolvedSessionTitleLlmConfig, title: string): void {
+  if (config.titlePattern === undefined) return
+  const pattern = new RegExp(`^(?:${config.titlePattern})$`, 'u')
+  if (!pattern.test(title)) {
+    throw new Error(`session-title-llm: title ${JSON.stringify(title)} does not match titlePattern ${JSON.stringify(config.titlePattern)}`)
+  }
 }
 
 /** Translate terminal finish reasons into an auxiliary-call failure. */
@@ -239,7 +312,10 @@ export async function generateSessionTitleWithLlm(
   if (selectedMessages.length === 0) {
     throw new Error('session-title-llm: at least one source message is required')
   }
-  const framedInput = frameMessages(selectedMessages)
+  const currentTitle = config.includeCurrentTitle === true
+    ? foldSessionTitle(request.session.snapshotEvents())?.title
+    : undefined
+  const framedInput = frameMessages(selectedMessages, currentTitle)
   const inputBytes = Buffer.byteLength(framedInput, 'utf8')
   if (inputBytes > config.maxInputBytes) {
     throw new Error(`session-title-llm: input is ${inputBytes} bytes, exceeding maxInputBytes ${config.maxInputBytes}`)
@@ -288,6 +364,7 @@ export async function generateSessionTitleWithLlm(
     .join(' ')
   const title = normalizeSessionTitle(text, Number.MAX_SAFE_INTEGER)
   if (title.length === 0) throw new Error('session-title-llm: title model produced no text')
+  assertTitlePattern(config, title)
   return {
     title,
     messageSeqs: selectedMessages.map(message => message.seq),

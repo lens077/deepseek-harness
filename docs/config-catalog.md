@@ -2083,6 +2083,13 @@ export interface Config {
   readonly fallbackMaxBytes: number
   /** Maximum UTF-8 bytes in any accepted title. */
   readonly maxTitleBytes: number
+  /**
+   * Whether later human messages still schedule automatic provider generation
+   * after an explicit user rename. `false` (the default) keeps a user rename
+   * pinned until an explicit `refresh()`; `true` lets the registered
+   * provider's cadence supersede the user title on the next eligible message.
+   */
+  readonly automaticOverridesUserRename?: boolean
 }
 ```
 

@@ -231,6 +231,71 @@ describe('generateSessionTitleWithLlm', () => {
     expect(() => resolveSessionTitleLlmConfig(CONFIG)).not.toThrow()
   })
 
+  it('validates the optional instructions, titlePattern, latestMessages, and includeCurrentTitle fields', () => {
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, instructions: '   ' }))
+      .toThrow(/instructions must be a non-empty string/)
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, instructions: 1 } as never))
+      .toThrow(/instructions must be a non-empty string/)
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, titlePattern: '' }))
+      .toThrow(/titlePattern must be a non-empty string/)
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, titlePattern: 1 } as never))
+      .toThrow(/titlePattern must be a non-empty string/)
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, titlePattern: '(' }))
+      .toThrow(/titlePattern is not a valid regular expression/)
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, latestMessages: 0 }))
+      .toThrow(/latestMessages must be a positive integer/)
+    expect(() => resolveSessionTitleLlmConfig({ ...CONFIG, includeCurrentTitle: 'yes' } as never))
+      .toThrow(/includeCurrentTitle must be a boolean/)
+    expect(() => resolveSessionTitleLlmConfig({
+      ...CONFIG,
+      instructions: 'Prefix the title with a category.',
+      titlePattern: '.+｜.+',
+      latestMessages: 1,
+      includeCurrentTitle: true,
+    })).not.toThrow()
+  })
+
+  it('appends instructions, frames the current title on request, and enforces titlePattern on the output', async () => {
+    const typed: StreamChunk[] = [
+      { type: 'text-delta', index: 0, text: '文档｜标题规则' },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ]
+    const { ctx, adapter } = await withScript(typed)
+    const config = resolveSessionTitleLlmConfig({
+      ...CONFIG,
+      instructions: 'Format the title as 类型｜主题.',
+      titlePattern: '(?:功能|文档)｜.+',
+      includeCurrentTitle: true,
+    })
+
+    // Without an accepted title the framed input stays the plain message array.
+    const untitled = request(ctx)
+    await generateSessionTitleWithLlm(ctx, config, untitled, untitled.messages, TITLE_PROVIDER)
+    const untitledPrompt = adapter.requests[0]?.messages[0]?.content[0]
+    expect(adapter.requests[0]?.system).toContain('Format the title as 类型｜主题.')
+    expect(untitledPrompt?.type === 'text' && untitledPrompt.text).toContain('JSON array of human messages')
+    expect(untitledPrompt?.type === 'text' && untitledPrompt.text).not.toContain('currentTitle')
+
+    // With an accepted title the framed input carries it next to the messages.
+    const titled = request(ctx)
+    titled.session.append('session/title', {
+      title: '功能｜当前标题',
+      messageSeqs: [],
+      source: { kind: 'user' },
+    })
+    const result = await generateSessionTitleWithLlm(ctx, config, titled, titled.messages, TITLE_PROVIDER)
+    expect(result.title).toBe('文档｜标题规则')
+    const titledPrompt = adapter.requests[1]?.messages[0]?.content[0]
+    expect(titledPrompt?.type === 'text' && titledPrompt.text).toContain('"currentTitle":"功能｜当前标题"')
+    expect(titledPrompt?.type === 'text' && titledPrompt.text).toContain('第二个问题')
+
+    // A model output outside the pattern fails the revision instead of being accepted.
+    const strict = resolveSessionTitleLlmConfig({ ...config, titlePattern: '功能｜.+' })
+    const rejected = request(ctx)
+    await expect(generateSessionTitleWithLlm(ctx, strict, rejected, rejected.messages, TITLE_PROVIDER))
+      .rejects.toThrow(/does not match titlePattern/)
+  })
+
   it('rejects an absent route, empty selection, and pre-aborted caller before model dispatch', async () => {
     const { ctx, adapter } = await withScript(SCRIPT)
     const config = resolveSessionTitleLlmConfig(CONFIG)
