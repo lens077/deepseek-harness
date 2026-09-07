@@ -119,6 +119,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Browser-local nested placement (child → parent) for the Ungrouped bucket. */
+  ungroupedNestedUnder?: Readonly<Record<string, string>>
 }
 
 interface Group {
@@ -128,7 +130,7 @@ interface Group {
   createdAt: number | undefined
   label: string
   sessions: SessionSummary[]
-  /** Nested display placement from the backing workspace ({} for Ungrouped). */
+  /** Nested display placement: the backing workspace's map, or the browser-local Ungrouped map. */
   nestedUnder: Readonly<Record<string, SessionId>>
 }
 
@@ -231,13 +233,16 @@ function orderedUngrouped(members: readonly SessionSummary[], stored: readonly s
  * Group Sessions by Host Workspace: one group per entity in stable Host
  * order, with members resolved from sessionIds in their stored order. Sessions
  * outside every Workspace trail in the browser-local Ungrouped order, which
- * falls back to recency before that order is initialized.
+ * falls back to recency before that order is initialized, and nest by the
+ * browser-local Ungrouped placement map (entries naming a parent outside the
+ * bucket stay top level through the shared nesting rule).
  */
 function groupByWorkspace(
   list: SessionListState,
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
   ungroupedOrder: readonly string[] | undefined,
+  ungroupedNestedUnder: Readonly<Record<string, string>> | undefined,
 ): Group[] {
   const groups: Group[] = []
   const accounted = new Set<SessionId>()
@@ -271,7 +276,7 @@ function groupByWorkspace(
       '',
       ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
       ungroupedOrder === undefined ? 'recency' : 'account',
-      {},
+      (ungroupedNestedUnder ?? {}) as Readonly<Record<string, SessionId>>,
     ))
   }
   return groups
@@ -362,8 +367,9 @@ function nestGroupNodes(
 /**
  * Derive the workspace browser groups: sessions without a placement parent
  * are top-level rows, nested-fork children render inside their parent's
- * branch (workspace `nestedUnder` placement; an invisible parent promotes
- * its children to top level).
+ * branch (workspace `nestedUnder` placement, or the browser-local Ungrouped
+ * placement for the Ungrouped bucket; an invisible parent promotes its
+ * children to top level).
  *
  * Every group shows; sessions populate under expanded groups in the selected
  * local order. Blank sessions are excluded except for the selected
@@ -374,7 +380,7 @@ function nestGroupNodes(
  * @param workspaces - real workspaces in stable Host order.
  * @param archivedSessionIds - registry-global archive set.
  * @param pendingInteractions - pending UI interactions by Session.
- * @param view - local expansion arrays.
+ * @param view - local expansion arrays plus the Ungrouped order and placement.
  * @returns group sections in render order.
  */
 export function deriveGroups(
@@ -391,7 +397,7 @@ export function deriveGroups(
     ? undefined
     : owningGroupKey(workspaces, list.current)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder, view.ungroupedNestedUnder)) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,

@@ -250,6 +250,35 @@ describe('deriveGroups', () => {
       .sessions.map(node => node.id)).toEqual([sid('tie-a'), sid('tie-b')])
   })
 
+  it('nests Ungrouped sessions by the browser-local placement map only', () => {
+    const parent = summary('un-parent', 1)
+    const nested = { ...summary('un-nested', 10), parentId: parent.id }
+    const sibling = { ...summary('un-sibling', 20), parentId: parent.id }
+    const owned = summary('owned', 30)
+    const strayChildOfOwned = summary('stray-child', 40)
+    const groups = deriveGroups(
+      list(parent, nested, sibling, owned, strayChildOfOwned),
+      [workspace('project', ['owned'])],
+      noArchive,
+      noAttention,
+      {
+        expandedGroups: ['project', UNGROUPED_KEY],
+        ungroupedNestedUnder: {
+          [nested.id]: parent.id,
+          // A parent accounted by a Workspace is outside the bucket: top level.
+          [strayChildOfOwned.id]: owned.id,
+        },
+      },
+    )
+
+    const ungrouped = groups.find(group => group.key === UNGROUPED_KEY)!
+    expect(ungrouped.sessions.map(node => node.id)).toEqual([strayChildOfOwned.id, sibling.id, parent.id])
+    expect(ungrouped.sessions.at(-1)!.children?.map(node => node.id)).toEqual([nested.id])
+    // Fork lineage alone still never nests.
+    expect(ungrouped.sessions.find(node => node.id === sibling.id)!.children ?? []).toEqual([])
+    expect(groups.find(group => group.key === 'project')!.sessions.map(node => node.id)).toEqual([owned.id])
+  })
+
   it('tolerates Workspace membership arriving before its Session summary', () => {
     const partial: SessionListState = {
       ...list(),
@@ -499,12 +528,15 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setGroupExpanded('alpha', true)
     store.actions.syncSessionOrderAccount('alpha', ['two', 'one'], { one: 1, two: 2 })
     store.actions.setSessionOrder('alpha', ['one', 'two'])
+    expect(store.getSnapshot().ungroupedNestedUnder).toEqual({})
+    store.actions.setUngroupedNesting('child', 'parent')
     expect(store.getSnapshot().groupBy).toBe('flat')
     expect(store.getSnapshot()).toMatchObject({
       orderBy: 'updated',
       groupExpansion: { alpha: true },
       sessionOrderByAccount: { alpha: ['one', 'two'] },
       sessionUpdatedAtByAccount: { alpha: { one: 1, two: 2 } },
+      ungroupedNestedUnder: { child: 'parent' },
     })
   })
 

@@ -128,16 +128,19 @@ export function apply(ctx: Context): void {
     sessionDirectories: sessionId => ctx.sessions.directories(sessionId),
     replaceSessionDirectories: (sessionId, additionalDirectories) =>
       ctx.sessions.replaceDirectories(sessionId, additionalDirectories),
-    forkSession: (sessionId, placement) => {
-      ctx.sessions.fork({
-        sessionId,
-        increaseTitle: true,
-        ...(placement === undefined ? {} : { placement }),
-      })
-        .then((childId) => { ctx.sessions.open(childId) })
-        .catch(() => {
-          // Fork or child-rename failure keeps the current selection.
+    forkSession: async (sessionId, placement) => {
+      try {
+        const childId = await ctx.sessions.fork({
+          sessionId,
+          increaseTitle: true,
+          ...(placement === undefined ? {} : { placement }),
         })
+        ctx.sessions.open(childId)
+        return childId
+      } catch {
+        // Fork or child-rename failure keeps the current selection.
+        return undefined
+      }
     },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },

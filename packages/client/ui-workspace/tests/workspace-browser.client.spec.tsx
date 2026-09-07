@@ -580,6 +580,57 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
+  it('records a nested fork of an Ungrouped source locally and nests the child once it lands', async () => {
+    const forkSession = vi.fn(async () => sid('loose-child'))
+    const loose = summary('loose', 3)
+    const owned = summary('owned', 2)
+    const b = mount({
+      useSessions: hook(sessionState([loose, owned])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['owned'])])),
+      forkSession,
+    })
+    fireEvent.click(screen.getByText('未分组'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“loose”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    expect(forkSession).toHaveBeenCalledWith(sid('loose'), 'nested')
+    await vi.waitFor(() => {
+      expect(b.store.getSnapshot().ungroupedNestedUnder).toEqual({ 'loose-child': 'loose' })
+    })
+
+    // The child summary lands: the source becomes a branch holding the child
+    // (a sibling fork would render beside it without any branch affordance).
+    const child = { ...summary('loose-child', 1), parentId: loose.id }
+    rerender(b, { useSessions: hook(sessionState([loose, owned, child])) })
+    expect(screen.getByRole('button', { name: '1 个子会话' })).toBeTruthy()
+    expect(screen.getByText('loose-child')).toBeTruthy()
+  })
+
+  it('does not record local nesting for sibling forks, failed forks, or Workspace-accounted sources', async () => {
+    const forkSession = vi.fn<WorkspaceBrowserProps['forkSession']>()
+      .mockResolvedValueOnce(sid('sibling-child'))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(sid('owned-child'))
+    const b = mount({
+      useSessions: hook(sessionState([summary('loose', 3), summary('owned', 2)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['owned'])])),
+      forkSession,
+    })
+    fireEvent.click(screen.getByText('未分组'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“loose”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制为平级会话' }))
+    fireEvent.click(screen.getByRole('button', { name: '会话“loose”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“owned”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    await vi.waitFor(() => { expect(forkSession).toHaveBeenCalledTimes(3) })
+    await Promise.resolve()
+    expect(forkSession.mock.calls).toEqual([
+      [sid('loose'), 'sibling'], [sid('loose'), 'nested'], [sid('owned'), 'nested'],
+    ])
+    expect(b.store.getSnapshot().ungroupedNestedUnder).toEqual({})
+  })
+
   it('renders a fork child as a top-level row without a session twist', () => {
     const parent = summary('parent-s', 2)
     const child = { ...summary('child-s', 1), parentId: parent.id }

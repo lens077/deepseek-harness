@@ -10,7 +10,7 @@
  * (same package — direct composition, no slot between them).
  */
 import {
-  useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
   type KeyboardEvent as ReactKeyboardEvent, type ReactNode,
 } from 'react'
 import clsx from 'clsx'
@@ -442,6 +442,8 @@ type SessionTreeProps = Pick<
   syncSessionOrderAccount: (accountKey: string, order: string[], updatedAt: Record<string, number>) => void
   /** Apply a drag to one shared order. */
   setSessionOrder: (accountKey: string, order: string[]) => void
+  /** Browser-local nested placement for the Ungrouped bucket. */
+  ungroupedNestedUnder: Readonly<Record<string, string>>
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
@@ -484,7 +486,8 @@ function SessionTree({
   onSessionContextMenu, onSessionDelete, onSessionDirectories, renderSelectionActions,
   insertWorkspaceBefore, insertSessionBefore, orderBy, collapsedSessionCount,
   groupExpansion, setGroupExpanded, multiSelect, selection, setSelection, clearSelection,
-  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
+  ungroupedNestedUnder, home, t,
   revealSessionId, onSessionRevealed,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
@@ -573,8 +576,9 @@ function SessionTree({
       ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
         ? {}
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
+      ungroupedNestedUnder,
     }),
-    [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, sessionOrderByAccount],
+    [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, sessionOrderByAccount, ungroupedNestedUnder],
   )
   const collapsedLimit = collapsedSessionCount === 'auto'
     ? automaticSessionLimit(treeHeight, groups.length)
@@ -1333,6 +1337,20 @@ function DesktopWorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+  const ungroupedNestedUnder = useStore(s => s.ungroupedNestedUnder)
+  // The Host records nested placement only on Workspace records, so a nested
+  // fork of an Ungrouped source is remembered in this browser's view store.
+  // The source's grouping is read before the fork: the Host may adopt it into
+  // a Workspace meanwhile, in which case that record governs and the local
+  // entry stays inert.
+  const forkSessionRow = useCallback<WorkspaceBrowserProps['forkSession']>(async (sessionId, placement) => {
+    const ungrouped = !workspaces.some(workspace => workspace.sessionIds.includes(sessionId))
+    const childId = await forkSession(sessionId, placement)
+    if (childId !== undefined && placement === 'nested' && ungrouped) {
+      actions.setUngroupedNesting(childId as string, sessionId as string)
+    }
+    return childId
+  }, [actions, forkSession, workspaces])
   const currentBlankSessionId = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === true ? current : undefined
@@ -2053,7 +2071,7 @@ function DesktopWorkspaceBrowser({
               ? (
                 <FlatList
                   useSessions={useSessions} useSessionPendingInteraction={useSessionPendingInteraction}
-                  open={open} forkSession={forkSession}
+                  open={open} forkSession={forkSessionRow}
                   onSessionRename={onSessionRename} onSessionDirectories={onSessionDirectories}
                   onSessionArchive={onSessionArchive}
                   onSessionContextMenu={onSessionContextMenu}
@@ -2083,7 +2101,7 @@ function DesktopWorkspaceBrowser({
                   onSessionContextMenu={onSessionContextMenu}
                   onSessionDelete={(sessionId) => { requestSessionDelete([sessionId]) }}
                   renderSelectionActions={renderSelectionActions}
-                  forkSession={forkSession}
+                  forkSession={forkSessionRow}
                   workspaces={workspaces}
                   workspaceReady={workspacePhase === 'ready' && workspaceStreamState !== 'loading'}
                   groupExpansion={groupExpansion}
@@ -2092,6 +2110,7 @@ function DesktopWorkspaceBrowser({
                   sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
                   syncSessionOrderAccount={actions.syncSessionOrderAccount}
                   setSessionOrder={actions.setSessionOrder}
+                  ungroupedNestedUnder={ungroupedNestedUnder}
                   archivedSessionIds={archivedSessionIds}
                   startSession={startSession}
                   open={open}

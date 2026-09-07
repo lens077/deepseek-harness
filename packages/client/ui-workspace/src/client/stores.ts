@@ -29,6 +29,13 @@ type WorkspaceViewState = {
   /** Last observed update timestamps per order account for one-time promotion events. */
   sessionUpdatedAtByAccount: Record<string, Record<string, number>>
   /**
+   * Browser-local nested placement for the Ungrouped bucket (child Session id
+   * → parent Session id). A real Workspace records nesting on its Host
+   * record; Sessions outside every Workspace have no such record, so a
+   * nested fork of an Ungrouped source is remembered here instead.
+   */
+  ungroupedNestedUnder: Record<string, string>
+  /**
    * Whether Shift/Ctrl range and toggle selection is active on session rows.
    * Disabled restores plain single-click-opens behavior and ignores the
    * modifier keys entirely.
@@ -54,6 +61,7 @@ type WorkspaceViewActions = {
     updatedAt: Record<string, number>,
   ) => void
   setSessionOrder: (draft: WorkspaceViewState, accountKey: string, order: string[]) => void
+  setUngroupedNesting: (draft: WorkspaceViewState, childId: string, parentId: string) => void
 }
 
 /**
@@ -69,9 +77,10 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
+      ungroupedNestedUnder: {},
       multiSelect: true,
     }),
-    persist: 'dsh.workspace.view.v7',
+    persist: 'dsh.workspace.view.v8',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
@@ -96,6 +105,9 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
+      },
+      setUngroupedNesting: (d, childId: string, parentId: string) => {
+        d.ungroupedNestedUnder[childId] = parentId
       },
     },
   })

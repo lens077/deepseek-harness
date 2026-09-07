@@ -23,6 +23,7 @@ export function MobileWorkspaceBrowser({
   const workspaces = useWorkspaces(state => state)
   const pending = useSessionPendingInteraction(state => state)
   const orders = useStore(state => state.sessionOrderByAccount)
+  const ungroupedNestedUnder = useStore(state => state.ungroupedNestedUnder)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
@@ -45,8 +46,9 @@ export function MobileWorkspaceBrowser({
     {
       expandedGroups: selectedKey === null ? [] : [selectedKey],
       ...(orders[UNGROUPED_KEY] === undefined ? {} : { ungroupedOrder: orders[UNGROUPED_KEY] }),
+      ungroupedNestedUnder,
     },
-  ), [list, workspaces, pending, orders, selectedKey])
+  ), [list, workspaces, pending, orders, ungroupedNestedUnder, selectedKey])
   const selected = groups.find(group => group.key === selectedKey)
   const activeKey = selected?.key ?? null
   const label = selected === undefined || selected.workspaceId === undefined

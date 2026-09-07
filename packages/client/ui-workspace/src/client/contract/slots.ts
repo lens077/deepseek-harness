@@ -140,8 +140,10 @@ export type WorkspaceBrowserInjected = {
    * Fork a Session at its last completed turn and open the child. `sibling`
    * duplicates into a top-level row of the same Workspace; `nested` accounts
    * the child under the source, which becomes an expandable parent row.
+   * Resolves the child id, or `undefined` when the fork failed (the current
+   * selection is kept); the browser records Ungrouped nesting locally.
    */
-  forkSession: (sessionId: SessionId, placement?: 'sibling' | 'nested') => void
+  forkSession: (sessionId: SessionId, placement?: 'sibling' | 'nested') => Promise<SessionId | undefined>
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
