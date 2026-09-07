@@ -44,7 +44,9 @@ function appFrame(page: Page) {
 
 /** Render the two column-resize handles without platform-dependent coordinates. */
 async function handleSnapshot(page: Page): Promise<string> {
-  const handles = await page.locator('[data-side="sidebar"], [data-side="details"]').evaluateAll(elements =>
+  // The frame's own column handles carry data-side; the file panel's resize
+  // separator also has a handle class and is not part of this contract.
+  const handles = await page.locator('[data-side="sidebar"], [data-side="rightbar"]').evaluateAll(elements =>
     elements.map(element => ({
       side: element.getAttribute('data-side'),
       cursor: getComputedStyle(element).cursor,
@@ -323,7 +325,9 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
       await expect.poll(() => columns(page)).toEqual([420, viewport.width - 420 - normalWidth, normalWidth])
       await page.setViewportSize({ width: 767, height: viewport.height })
       await expect.poll(() => panel.boundingBox()).toEqual({ x: 0, y: 0, width: 767, height: viewport.height })
-      await expect.poll(() => columns(page)).toEqual([56, 711, 0])
+      // Below 768px the frame presents one phone column; the right Sidebar
+      // derives fullscreen from the same breakpoint and covers the viewport.
+      await expect.poll(() => columns(page)).toEqual([767])
       expect(await sidebarSnapshot(page)).toMatchObject({ mode: 'fullscreen', resizeHandleWidth: 0, coversViewport: true })
       await checkpoint('A automatic fullscreen at 767px')
       await column.locator('[data-sidebar-right-mode="push"]').click()

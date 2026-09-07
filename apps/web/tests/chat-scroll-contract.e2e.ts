@@ -666,7 +666,8 @@ describe('web e2e: long Chat scroll contract', () => {
         await liveRow.waitFor({ timeout: 15_000 })
         expect(await liveRow.getAttribute('data-state')).toBe('running')
         await expectBottom(world.page)
-        expect(await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).count()).toBe(0)
+        // The rail keeps the button mounted; following renders it disabled.
+        expect(await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).isEnabled()).toBe(false)
 
         await wheelTranscript(world.page, -1_200)
         await expect.poll(() => world.page.getByRole('button', { name: 'Back to bottom', exact: true }).isEnabled(), { timeout: 10_000 }).toBe(true)
