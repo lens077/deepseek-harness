@@ -170,16 +170,6 @@ async function launchScrollWorld(options: ScrollWorldOptions): Promise<ScrollWor
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { events.push(event) })
     scaffold.ctx.on('agent/assistant-stream', ({ frame }) => { assistantFrames.push(frame) })
     page = await newEnglishPage(browser, 900)
-    // DEBUG-stream-follow: diagnostic capture, removed after the ownership race is identified.
-    await page.addInitScript(() => {
-      const probe = globalThis as { __DSH_DEBUG_STREAM_FOLLOW?: (entry: unknown) => void; __DSH_STREAM_TRACE?: unknown[] }
-      const entries: unknown[] = []
-      probe.__DSH_STREAM_TRACE = entries
-      probe.__DSH_DEBUG_STREAM_FOLLOW = (entry) => { entries.push(entry); if (entries.length > 400) entries.shift() }
-      for (const kind of ['wheel', 'pointerdown', 'keydown']) {
-        window.addEventListener(kind, () => { probe.__DSH_DEBUG_STREAM_FOLLOW?.({ event: 'input', kind, time: performance.now() }) }, { capture: true })
-      }
-    })
     const tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
@@ -232,7 +222,6 @@ async function withScrollWorld(
     await run(world)
   } catch (error) {
     runFailure = error
-    console.log('[DEBUG-stream-follow]', JSON.stringify(await world.page.evaluate(() => (globalThis as { __DSH_STREAM_TRACE?: unknown[] }).__DSH_STREAM_TRACE)))
     try {
       await saveFailureShot(world.page, options.failureShot)
     } catch {

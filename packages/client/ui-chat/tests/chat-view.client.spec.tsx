@@ -2460,6 +2460,47 @@ describe('ChatView', () => {
     expect(scroller.scrollTop).toBe(900)
   })
 
+  it.each([
+    { movement: 'only the browser clamps', readerTop: null, expectedTop: 530, following: true },
+    { movement: 'the reader also moves', readerTop: 450, expectedTop: 450, following: false },
+  ])('retains shrink-clamp ownership before a delayed sample when $movement', ({ readerTop, expectedTop, following }) => {
+    let notify: (() => void) | undefined
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    act(() => { h.setSession({ running: true }) })
+    expect(scroller.scrollTop).toBe(700)
+    fireEvent.scroll(scroller)
+
+    // The browser's intermediate floor can disappear before the throttled
+    // sample runs: a finalizing row shrinks, then the composer or tail grows.
+    metrics.setLayout(800, scroller.scrollTop)
+    fireEvent.scroll(scroller)
+    act(() => { notify?.() })
+    if (readerTop !== null) {
+      scroller.scrollTop = readerTop
+      fireEvent.scroll(scroller)
+    }
+    metrics.setHeight(830)
+    act(() => { notify?.() })
+    fireEvent(scroller, new Event('scrollend'))
+
+    expect(scroller.scrollTop).toBe(expectedTop)
+    expect(backToBottom(view).disabled).toBe(following)
+    if (following) expect(h.chatScroll.read()).toBeNull()
+    else expect(h.chatScroll.read()?.scrollTop).toBe(expectedTop)
+  })
+
   it('uses the last delivered top when compositor scrolling precedes scroll delivery', () => {
     const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
     const view = render(<h.ChatView {...h.props} />)
