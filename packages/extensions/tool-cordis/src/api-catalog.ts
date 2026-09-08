@@ -516,6 +516,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['the signal reason when aborted, or a storage error when verification fails.'],
       },
       {
+        signature: 'async imageAvailable(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<boolean>',
+        description: 'Report whether the stored object behind one durable image reference still exists. A session log outlives its attachment objects when the harness home is deleted, so request assembly asks this before it reads image bytes and degrades an absent object to model-visible text instead of failing the request. Backends without a cheaper existence probe keep this default, which reads and verifies the object.',
+        parameters: [{ name: 'ref', description: 'durable reference from the session log.' }, { name: 'signal', description: 'optional cancellation for the backend probe.' }],
+        returns: 'false only when the object is absent; verification and storage failures are thrown.',
+      },
+      {
         signature: 'imageHostPath(ref: ImageAttachmentRef): string | undefined',
         description: 'Locate the provider-owned normalized object in the harness host filesystem.',
         parameters: [{ name: 'ref', description: 'durable normalized attachment reference.' }],

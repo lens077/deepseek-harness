@@ -166,6 +166,27 @@ export abstract class AttachmentStore extends Service {
   abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>
 
   /**
+   * Report whether the stored object behind one durable image reference still
+   * exists. A session log outlives its attachment objects when the harness
+   * home is deleted, so request assembly asks this before it reads image
+   * bytes and degrades an absent object to model-visible text instead of
+   * failing the request. Backends without a cheaper existence probe keep this
+   * default, which reads and verifies the object.
+   * @param ref - durable reference from the session log.
+   * @param signal - optional cancellation for the backend probe.
+   * @returns false only when the object is absent; verification and storage failures are thrown.
+   */
+  async imageAvailable(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<boolean> {
+    try {
+      await this.readImage(ref, signal)
+      return true
+    } catch (error) {
+      if (matchesAttachmentError(error) && error.code === 'ATTACHMENT_NOT_FOUND') return false
+      throw error
+    }
+  }
+
+  /**
    * Locate the provider-owned normalized object in the harness host filesystem.
    * @param ref - durable normalized attachment reference.
    * @returns an absolute host path, or undefined when this backend is not host-file-backed.

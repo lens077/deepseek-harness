@@ -2,7 +2,7 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import { constants, createReadStream } from 'node:fs'
-import { chmod, link, mkdir, open, readFile, unlink } from 'node:fs/promises'
+import { access, chmod, link, mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { dirname, join, parse, resolve } from 'node:path'
 import {
   AttachmentError,
@@ -418,6 +418,30 @@ export async function saveImageFile(
   policy: NormalizationPolicy,
 ): Promise<ImageAttachmentRef> {
   return commitPreparedImageFile(root, await prepareImageFile(input, limits, policy))
+}
+
+/**
+ * Probe whether one content-addressed image object exists without reading it.
+ * @param root - absolute `DSH_HOME/attachments/v1` root.
+ * @param ref - reference recorded in the session log.
+ * @param signal - optional cancellation checked before the probe.
+ * @returns false when the object entry is absent, true when it exists.
+ * @throws the signal reason when aborted, or an AttachmentError when the entry cannot be inspected.
+ */
+export async function imageFileExists(
+  root: string,
+  ref: ImageAttachmentRef,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  signal?.throwIfAborted()
+  const path = normalizedImagePath(root, ref)
+  try {
+    await access(path, constants.F_OK)
+    return true
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false
+    throw new AttachmentError('Unable to read image attachment.', 'ATTACHMENT_READ_FAILED', { cause: error })
+  }
 }
 
 /**

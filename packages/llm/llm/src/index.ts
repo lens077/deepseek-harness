@@ -33,9 +33,10 @@ import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
 import { normalizeApiKey } from './api-key.ts'
 import {
-  contentHasFile, contentHasImage, fileHandleText, projectFilesToText, projectImagesForTextModel,
+  collectImageRefs, contentHasFile, contentHasImage, fileHandleText, projectFilesToText, projectImagesForTextModel,
+  projectMissingImagesToText,
 } from './content.ts'
-import type { FileAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 
 export * from './attribution.ts'
 export * from './brand.ts'
@@ -991,6 +992,27 @@ export class LlmRuntime extends TypertRemoteService {
   }
 
   /**
+   * Probe the mounted attachment provider for every distinct image in one
+   * request. A durable log outlives its objects when the harness home is
+   * deleted, so absent objects are collected here and projected to text
+   * instead of failing the request inside the adapter.
+   */
+  private async missingImageIds(
+    messages: readonly Message[],
+    signal: AbortSignal | undefined,
+  ): Promise<ReadonlySet<ImageAttachmentRef['attachmentId']>> {
+    const attachments = this.ctx.get('attachments')
+    const missing = new Set<ImageAttachmentRef['attachmentId']>()
+    if (attachments === undefined) return missing
+    const refs = collectImageRefs(messages)
+    const available = await Promise.all(refs.map(ref => attachments.imageAvailable(ref, signal)))
+    for (const [index, ref] of refs.entries()) {
+      if (available[index] === false) missing.add(ref.attachmentId)
+    }
+    return missing
+  }
+
+  /**
    * Final adapter boundary. Adapter selection, dispatch, iterator construction,
    * and iteration failures become one terminal failure chunk. Middleware and
    * downstream consumer failures remain thrown plugin or consumer errors.
@@ -1036,6 +1058,12 @@ export class LlmRuntime extends TypertRemoteService {
         && !modelInfo.inputModalities.includes('image')
         && projectedMessages.some(message => contentHasImage(message.content))) {
         projectedMessages = projectImagesForTextModel(projectedMessages)
+      }
+      if (projectedMessages.some(message => contentHasImage(message.content))) {
+        projectedMessages = projectMissingImagesToText(
+          projectedMessages,
+          await this.missingImageIds(projectedMessages, options.signal),
+        )
       }
       const projectedOptions = projectedMessages === resolvedOptions.messages
         ? resolvedOptions

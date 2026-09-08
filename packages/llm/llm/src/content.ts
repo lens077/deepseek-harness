@@ -268,17 +268,26 @@ function replaceOldestImages(
   return next ?? blocks as ContentBlock[]
 }
 
-/** Replace every image occurrence, including nested tool results, for a text-only model. */
-function replaceImagesForTextModel(blocks: readonly ContentBlock[]): ContentBlock[] {
+/**
+ * Replace selected image occurrences, including nested tool results, with
+ * text. `placeholder` returns undefined to keep an occurrence.
+ */
+function replaceImages(
+  blocks: readonly ContentBlock[],
+  placeholder: (ref: ImageAttachmentRef) => string | undefined,
+): ContentBlock[] {
   let next: ContentBlock[] | undefined
   for (const [index, block] of blocks.entries()) {
     if (block.type === 'image') {
-      next ??= blocks.slice(0, index)
-      next.push({ type: 'text', text: textOnlyImageText(block.attachment) })
-      continue
+      const text = placeholder(block.attachment)
+      if (text !== undefined) {
+        next ??= blocks.slice(0, index)
+        next.push({ type: 'text', text })
+        continue
+      }
     }
     if (block.type === 'tool-result') {
-      const content = replaceImagesForTextModel(block.content)
+      const content = replaceImages(block.content, placeholder)
       if (content !== block.content) {
         next ??= blocks.slice(0, index)
         next.push({ ...block, content })
@@ -290,6 +299,17 @@ function replaceImagesForTextModel(blocks: readonly ContentBlock[]): ContentBloc
   return next ?? blocks as ContentBlock[]
 }
 
+function projectImages(
+  messages: readonly Message[],
+  placeholder: (ref: ImageAttachmentRef) => string | undefined,
+): readonly Message[] {
+  const projected = messages.map((message) => {
+    const content = replaceImages(message.content, placeholder)
+    return content === message.content ? message : { ...message, content }
+  })
+  return projected.every((message, index) => message === messages[index]) ? messages : projected
+}
+
 /**
  * Project durable image history into deterministic text for an exact text-only model.
  * @param messages - complete request history.
@@ -297,10 +317,52 @@ function replaceImagesForTextModel(blocks: readonly ContentBlock[]): ContentBloc
  */
 export function projectImagesForTextModel(messages: readonly Message[]): readonly Message[] {
   if (!messages.some(message => contentHasImage(message.content))) return messages
-  return messages.map((message) => {
-    const content = replaceImagesForTextModel(message.content)
-    return content === message.content ? message : { ...message, content }
-  })
+  return projectImages(messages, ref => textOnlyImageText(ref))
+}
+
+/**
+ * Stable text shown to a model for one durable image reference whose stored
+ * object no longer exists, for example after the harness home was deleted.
+ * @param ref - durable normalized attachment whose object is absent.
+ * @returns deterministic text-only placeholder naming the attachment and the recovery action.
+ */
+export function missingImageText(ref: ImageAttachmentRef): string {
+  return `[image unavailable: its stored copy is missing from this harness installation; ${imageIdentity(ref)}. Ask the user to attach it again if its content is needed.]`
+}
+
+/**
+ * Project image occurrences whose stored objects are absent into deterministic
+ * text so a session log that outlived its attachment storage still produces
+ * a valid request. Present images are left untouched.
+ * @param messages - complete request history.
+ * @param missing - attachment ids whose stored objects were probed absent.
+ * @returns the original list when nothing is missing, otherwise shallow message copies with placeholders.
+ */
+export function projectMissingImagesToText(
+  messages: readonly Message[],
+  missing: ReadonlySet<ImageAttachmentRef['attachmentId']>,
+): readonly Message[] {
+  if (missing.size === 0) return messages
+  return projectImages(messages, ref => (missing.has(ref.attachmentId) ? missingImageText(ref) : undefined))
+}
+
+/**
+ * Collect every distinct durable image reference in request order, walking
+ * nested tool-result content.
+ * @param messages - complete request history.
+ * @returns first occurrence of each attachment id.
+ */
+export function collectImageRefs(messages: readonly Message[]): ImageAttachmentRef[] {
+  const refs = new Map<ImageAttachmentRef['attachmentId'], ImageAttachmentRef>()
+  const walk = (blocks: readonly ContentBlock[]): void => {
+    for (const block of blocks) {
+      if (block.type === 'image') {
+        if (!refs.has(block.attachment.attachmentId)) refs.set(block.attachment.attachmentId, block.attachment)
+      } else if (block.type === 'tool-result') walk(block.content)
+    }
+  }
+  for (const message of messages) walk(message.content)
+  return [...refs.values()]
 }
 
 /**

@@ -13,6 +13,7 @@ import LlmRuntime, {
   ReasoningEffortId,
   resolveRetryPolicy,
   StreamChunk,
+  ToolCallId,
   createMessage,
   createUserMessage,
 } from '@deepseek-ai/dsh-llm'
@@ -269,6 +270,81 @@ describe('LlmRuntime', () => {
       if (fixture.fs !== undefined) {
         expect(projected.text, fixture.name).toContain('include this saved path in the delegation prompt')
       }
+    }
+  })
+
+  it('projects images whose stored objects are absent into text and keeps present ones', async () => {
+    const present = {
+      attachmentId: AttachmentId(`sha256:${'aa'.repeat(32)}`),
+      mediaType: 'image/png' as const,
+      bytes: 3,
+      width: 1,
+      height: 1,
+      name: 'kept.png',
+    }
+    const missing = { ...present, attachmentId: AttachmentId(`sha256:${'bb'.repeat(32)}`), name: 'lost.png' }
+    const probed: string[] = []
+    const ctx = new Context()
+    ctx.provide('attachments', {
+      imageAvailable: (ref: typeof present) => {
+        probed.push(ref.name)
+        return Promise.resolve(ref.attachmentId !== missing.attachmentId)
+      },
+    } as never)
+    await ctx.plugin(LlmRuntime)
+    const adapter = new RecordingAdapter(SCRIPT)
+    ctx.llm.registerAdapter(['test-provider'], adapter)
+    const messages = [
+      createUserMessage({
+        content: [{ type: 'image', attachment: present }, { type: 'image', attachment: missing }],
+        source: { kind: 'user' },
+      }),
+      createUserMessage({
+        content: [{
+          type: 'tool-result',
+          toolCallId: ToolCallId('call-1'),
+          content: [{ type: 'text', text: 'tool' }, { type: 'image', attachment: missing }],
+        }],
+        source: { kind: 'user' },
+      }),
+    ]
+
+    await collect(ctx.llm.stream({ provider: 'test-provider', model: 'test-model', messages }))
+
+    // Distinct references are probed once each, in request order.
+    expect(probed).toEqual(['kept.png', 'lost.png'])
+    const first = adapter.lastOptions?.messages[0]?.content
+    expect(first?.[0]).toEqual({ type: 'image', attachment: present })
+    expect(first?.[1]).toEqual({
+      type: 'text',
+      text: '[image unavailable: its stored copy is missing from this harness installation; "lost.png" (sha256:'
+        + `${'bb'.repeat(32)}). Ask the user to attach it again if its content is needed.]`,
+    })
+    const nested = adapter.lastOptions?.messages[1]?.content[0]
+    expect(nested).toMatchObject({ type: 'tool-result', content: [{ type: 'text', text: 'tool' }, { type: 'text' }] })
+    // Durable session messages remain untouched.
+    expect(messages[0]?.content[1]).toEqual({ type: 'image', attachment: missing })
+  })
+
+  it('dispatches image history unchanged when every object is present or no attachment service is mounted', async () => {
+    const attachment = {
+      attachmentId: AttachmentId(`sha256:${'aa'.repeat(32)}`),
+      mediaType: 'image/png' as const,
+      bytes: 3,
+      width: 1,
+      height: 1,
+    }
+    for (const attachments of [undefined, { imageAvailable: () => Promise.resolve(true) }]) {
+      const ctx = new Context()
+      if (attachments !== undefined) ctx.provide('attachments', attachments as never)
+      await ctx.plugin(LlmRuntime)
+      const adapter = new RecordingAdapter(SCRIPT)
+      ctx.llm.registerAdapter(['test-provider'], adapter)
+      const message = createUserMessage({ content: [{ type: 'image', attachment }], source: { kind: 'user' } })
+
+      await collect(ctx.llm.stream({ provider: 'test-provider', model: 'test-model', messages: [message] }))
+
+      expect(adapter.lastOptions?.messages[0]).toBe(message)
     }
   })
 

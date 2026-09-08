@@ -150,6 +150,28 @@ describe('AttachmentStore.saveImages', () => {
   })
 })
 
+describe('AttachmentStore.imageAvailable', () => {
+  class ProbeStore extends UnsupportedProjectionStore {
+    failure: Error | undefined
+
+    override readImage(): Promise<StoredImageAttachment> {
+      return this.failure === undefined
+        ? Promise.resolve({ ref: {} as ImageAttachmentRef, data: Uint8Array.of(1) })
+        : Promise.reject(this.failure)
+    }
+  }
+
+  it('reads the object by default and reports only an absent object as unavailable', async () => {
+    const store = new ProbeStore(new Context())
+    const ref = await new RecordingStore(new Context()).saveImage(image(1))
+    await expect(store.imageAvailable(ref)).resolves.toBe(true)
+    store.failure = new AttachmentError('gone', 'ATTACHMENT_NOT_FOUND')
+    await expect(store.imageAvailable(ref)).resolves.toBe(false)
+    store.failure = new AttachmentError('broken', 'ATTACHMENT_CORRUPT')
+    await expect(store.imageAvailable(ref)).rejects.toBe(store.failure)
+  })
+})
+
 describe('AttachmentStore.readImageRequest', () => {
   it('reports unsupported request projection while preserving cancellation', async () => {
     const store = new UnsupportedProjectionStore(new Context())

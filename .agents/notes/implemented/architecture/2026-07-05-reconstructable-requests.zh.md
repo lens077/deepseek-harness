@@ -52,6 +52,6 @@ Status: implemented
 - 在提供方处仍需全价计算的内容是固有的且已记录的：压缩（其 `compaction/*` 事件和替换条目）、真正的提示词、工具或配置变更（reason 为 `change` 的 `request/header`），或带漂移的进程边界（不同的 `resume` 快照）。提供方自身的 reasoning-content 排除由服务端管理。
 - `agent/pre-step` 是当前请求的消息通道；直接修改 inbox 则是最终进入后续请求的通道。
 - 工具结果裁剪无需新机制：一个已记录的单条目 surface replace（`start === end`），携带同一 `callId` 下裁剪后的 `tool/result`——属压缩家族，回放正确，缓存失效由相同的压力逻辑批量处理。
-- 无法读取的被引用附件对象仍会让模型请求失败；[附件自动隔离](../../proposed/bug-fix/2026-08-20-attachment-read-quarantine.zh.md)记录了不削弱字节精确重建的拟议恢复方案。
+- 被引用的图片对象缺失时，会在分发前变为确定性占位符文本（[缺失图片对象降级为文本](../bug-fix/2026-09-18-missing-image-objects-degrade-to-text.zh.md)）；该替换只取决于日志与当前对象是否存在，而与适配器无关。损坏或无法读取的对象仍会让模型请求失败；[附件自动隔离](../../proposed/bug-fix/2026-08-20-attachment-read-quarantine.zh.md)记录了不削弱字节精确重建的拟议持久恢复方案。
 - 会话日志会为每个循环实例、真实变更和后续模型消息序列增加一个 `request/header` 快照。重复完整系统提示词与工具目录比 delta 编解码器更大，但相对分片密集型日志仍然很小，并保留一种自包含的回放表示。当前 v1 保留这一种表示；冻结的 v0-to-v1 迁移边会在构造当前 Session 前显式拒绝旧版 delta 事件。
 - 快照 fixture 包含每个重复的 series header。无密钥 refresh 负责这些确定性日志变化；快照 harness 只为 initial 与真实 change 修订固定提示词和工具 sidecar，并让 `series` 快照复用当前修订。写入文件系统的 fixture 继续以规范化的撰写形式存储，工具参数使用 cwd 相对路径，因为回放只对 cwd 无关的参数路径做往返。

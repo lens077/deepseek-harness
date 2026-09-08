@@ -3,9 +3,12 @@ import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import {
   ToolCallId,
+  collectImageRefs,
   contentHasFile,
   createUserMessage,
   fileHandleText,
+  missingImageText,
+  projectMissingImagesToText,
   projectFilesToText,
   offloadedImageText,
   offloadedImagePrefixCount,
@@ -361,6 +364,54 @@ describe('projectImagesForTextModel', () => {
         ],
       },
     ])
+  })
+})
+
+describe('projectMissingImagesToText', () => {
+  const lost = {
+    ...image(3).attachment,
+    attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+    name: 'lost.png',
+  }
+  const lostBlock: Extract<ContentBlock, { type: 'image' }> = { type: 'image', attachment: lost }
+
+  it('returns history unchanged when nothing is missing', () => {
+    const messages = [createUserMessage({ content: [image(3)], source })]
+    expect(projectMissingImagesToText(messages, new Set())).toBe(messages)
+    expect(projectMissingImagesToText(messages, new Set([lost.attachmentId]))).toBe(messages)
+  })
+
+  it('replaces only the missing references, including nested tool results', () => {
+    const nested = {
+      type: 'tool-result' as const,
+      toolCallId: ToolCallId('nested-image'),
+      content: [image(3), lostBlock],
+    }
+    const plain = createUserMessage({ content: [{ type: 'text', text: 'plain' }], source })
+    const visual = createUserMessage({ content: [image(3), lostBlock, nested], source })
+
+    const projected = projectMissingImagesToText([plain, visual], new Set([lost.attachmentId]))
+    expect(projected[0]).toBe(plain)
+    expect(projected[1]?.content).toEqual([
+      image(3),
+      { type: 'text', text: missingImageText(lost) },
+      { ...nested, content: [image(3), { type: 'text', text: missingImageText(lost) }] },
+    ])
+    expect(missingImageText(lost)).toBe(
+      '[image unavailable: its stored copy is missing from this harness installation; '
+      + `"lost.png" (sha256:${'b'.repeat(64)}). Ask the user to attach it again if its content is needed.]`,
+    )
+    expect(missingImageText(image(3).attachment)).toContain(`; sha256:${'a'.repeat(64)}.`)
+  })
+
+  it('collects each distinct reference once in request order', () => {
+    const nested = { type: 'tool-result' as const, toolCallId: ToolCallId('n'), content: [lostBlock, image(3)] }
+    const messages = [
+      createUserMessage({ content: [{ type: 'text', text: 'lead' }, image(3), nested], source }),
+      createUserMessage({ content: [lostBlock], source }),
+    ]
+    expect(collectImageRefs(messages)).toEqual([image(3).attachment, lost])
+    expect(collectImageRefs([createUserMessage({ content: [], source })])).toEqual([])
   })
 })
 
