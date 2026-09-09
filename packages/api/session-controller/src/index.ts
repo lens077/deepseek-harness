@@ -352,13 +352,13 @@ export class SessionController extends TypertRemoteService {
         && hit.surface === 'current'
         && hit.type === 'user/message'
           ? [{
-              seq: hit.seq,
-              time: hit.time,
-              snippet: truncateUnicodeCodePoints(
-                hit.snippet,
-                SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
-              ),
-            }]
+            seq: hit.seq,
+            time: hit.time,
+            snippet: truncateUnicodeCodePoints(
+              hit.snippet,
+              SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
+            ),
+          }]
           : []
       ))
       return { items, complete: page.nextCursor === undefined }
