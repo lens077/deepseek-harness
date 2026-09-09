@@ -56,12 +56,6 @@ function mount() {
   return { policy, setBusyEnter, setSendShortcut }
 }
 
-function startRecording() {
-  fireEvent.click(screen.getByRole('button', { name: /^Send message shortcut:/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: /^Custom/ }))
-  return screen.getByRole('textbox', { name: 'Record send shortcut' })
-}
-
 describe('EnterBehaviorRow', () => {
   it('explains the busy-only scope over Enter and Send and shows Queue by default', () => {
     mount()
@@ -85,7 +79,7 @@ describe('EnterBehaviorRow', () => {
 
     act(() => { b.policy.setSendShortcut('enter') })
     expect(screen.getByRole('button', { name: 'Send message shortcut: Enter' })).toBeDefined()
-    expect(screen.getByText('Busy only; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
+    expect(screen.getByText('What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'Send message shortcut: Enter' }))
     fireEvent.pointerDown(document.body)
     expect(screen.queryByRole('menuitem', { name: 'Ctrl / Cmd + Enter' })).toBeNull()

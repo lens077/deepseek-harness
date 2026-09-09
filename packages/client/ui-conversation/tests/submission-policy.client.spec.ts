@@ -2,9 +2,24 @@
 import { describe, expect, it, vi } from 'vitest'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import {
-  ComposerSubmissionPolicy, DEFAULT_BUSY_ENTER_BEHAVIOR, resolveSubmitMode,
+  ComposerSubmissionPolicy, DEFAULT_BUSY_ENTER_BEHAVIOR, resolveGesture, resolveSubmitMode,
 } from '../src/client/input/submission-policy.ts'
 import type { ConversationSettings } from '../src/submission-settings.ts'
+
+function currentGesture(policy: ComposerSubmissionPolicy, event: Parameters<typeof resolveGesture>[1]) {
+  return resolveGesture(policy.sendShortcut.getSnapshot(), event)
+}
+
+function currentMode(
+  policy: ComposerSubmissionPolicy,
+  running: boolean,
+  gesture: Parameters<typeof resolveSubmitMode>[2],
+  steeringAvailable: boolean,
+) {
+  return resolveSubmitMode(
+    policy.busyEnter.getSnapshot(), running, gesture, steeringAvailable, policy.sendShortcut.getSnapshot(),
+  )
+}
 
 describe('resolveSubmitMode', () => {
   it('queues outside steer-capable busy state and applies the preference to the enter gesture', () => {
@@ -38,20 +53,20 @@ describe('ComposerSubmissionPolicy', () => {
   it('requires the configured send gesture and keeps accelerated sending available', () => {
     const policy = new ComposerSubmissionPolicy()
     expect(policy.sendShortcut.getSnapshot()).toBe('enter')
-    expect(policy.resolveGesture({ key: 'Enter' })).toBe('enter')
-    expect(policy.resolveGesture({ key: 'Enter', ctrlKey: true })).toBe('accelerated')
-    expect(policy.resolveGesture({ key: 'Enter', metaKey: true })).toBe('accelerated')
+    expect(currentGesture(policy, { key: 'Enter' })).toBe('enter')
+    expect(currentGesture(policy, { key: 'Enter', ctrlKey: true })).toBe('accelerated')
+    expect(currentGesture(policy, { key: 'Enter', metaKey: true })).toBe('accelerated')
     const changed = vi.fn()
     policy.sendShortcut.subscribe(changed)
     policy.setSendShortcut('mod-enter')
-    expect(policy.resolveGesture({ key: 'Enter' })).toBeNull()
-    expect(policy.resolveGesture({ key: 'Enter', ctrlKey: true })).toBe('accelerated')
-    expect(policy.resolveGesture({ key: 'Enter', metaKey: true })).toBe('accelerated')
+    expect(currentGesture(policy, { key: 'Enter' })).toBeNull()
+    expect(currentGesture(policy, { key: 'Enter', ctrlKey: true })).toBe('accelerated')
+    expect(currentGesture(policy, { key: 'Enter', metaKey: true })).toBe('accelerated')
     expect(changed).toHaveBeenCalledOnce()
     policy.setSendShortcut('mod-enter')
     expect(changed).toHaveBeenCalledOnce()
     policy.setSendShortcut('enter')
-    expect(policy.resolveGesture({ key: 'Enter' })).toBe('enter')
+    expect(currentGesture(policy, { key: 'Enter' })).toBe('enter')
     expect(changed).toHaveBeenCalledTimes(2)
   })
 
@@ -59,37 +74,37 @@ describe('ComposerSubmissionPolicy', () => {
     const policy = new ComposerSubmissionPolicy()
     policy.setBusyEnter(behavior)
     policy.setSendShortcut('mod-enter')
-    expect(policy.resolve(true, 'accelerated', true)).toBe(behavior)
-    expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
-    expect(policy.resolve(true, 'accelerated', false)).toBe('queue')
+    expect(currentMode(policy, true, 'accelerated', true)).toBe(behavior)
+    expect(currentMode(policy, false, 'accelerated', true)).toBe('queue')
+    expect(currentMode(policy, true, 'accelerated', false)).toBe('queue')
     policy.setSendShortcut('enter')
-    expect(policy.resolve(true, 'accelerated', true)).toBe(behavior === 'queue' ? 'steer' : 'queue')
+    expect(currentMode(policy, true, 'accelerated', true)).toBe(behavior === 'queue' ? 'steer' : 'queue')
   })
 
   it('switches live between exact custom chords and presets', () => {
     const policy = new ComposerSubmissionPolicy()
     policy.setSendShortcut('Ctrl+Shift+Enter')
-    expect(policy.resolveGesture({ key: 'Enter' })).toBeNull()
-    expect(policy.resolveGesture({ key: 'Enter', ctrlKey: true })).toBeNull()
-    expect(policy.resolveGesture({ key: 'Enter', ctrlKey: true, shiftKey: true })).toBe('custom')
-    expect(policy.resolveGesture({ key: 'Enter', metaKey: true, shiftKey: true })).toBeNull()
+    expect(currentGesture(policy, { key: 'Enter' })).toBeNull()
+    expect(currentGesture(policy, { key: 'Enter', ctrlKey: true })).toBeNull()
+    expect(currentGesture(policy, { key: 'Enter', ctrlKey: true, shiftKey: true })).toBe('custom')
+    expect(currentGesture(policy, { key: 'Enter', metaKey: true, shiftKey: true })).toBeNull()
     policy.setSendShortcut('Meta+Enter')
-    expect(policy.resolveGesture({ key: 'Enter', metaKey: true })).toBe('custom')
-    expect(policy.resolveGesture({ key: 'Enter', ctrlKey: true })).toBeNull()
+    expect(currentGesture(policy, { key: 'Enter', metaKey: true })).toBe('custom')
+    expect(currentGesture(policy, { key: 'Enter', ctrlKey: true })).toBeNull()
     policy.setSendShortcut('Ctrl+Alt+S')
-    expect(policy.resolveGesture({ key: 'ß', code: 'KeyS', ctrlKey: true, altKey: true })).toBe('custom')
-    expect(policy.resolveGesture({ key: 's', ctrlKey: true, altKey: true, repeat: true })).toBeNull()
+    expect(currentGesture(policy, { key: 'ß', code: 'KeyS', ctrlKey: true, altKey: true })).toBe('custom')
+    expect(currentGesture(policy, { key: 's', ctrlKey: true, altKey: true, repeat: true })).toBeNull()
     policy.setSendShortcut('enter')
-    expect(policy.resolveGesture({ key: 'Enter' })).toBe('enter')
+    expect(currentGesture(policy, { key: 'Enter' })).toBe('enter')
   })
 
   it.each(['queue', 'steer'] as const)('uses preferred %s for custom gestures, with idle and subagent fallback', (behavior) => {
     const policy = new ComposerSubmissionPolicy()
     policy.setSendShortcut('Ctrl+Alt+S')
     policy.setBusyEnter(behavior)
-    expect(policy.resolve(true, 'custom', true)).toBe(behavior)
-    expect(policy.resolve(false, 'custom', true)).toBe('queue')
-    expect(policy.resolve(true, 'custom', false)).toBe('queue')
+    expect(currentMode(policy, true, 'custom', true)).toBe(behavior)
+    expect(currentMode(policy, false, 'custom', true)).toBe('queue')
+    expect(currentMode(policy, true, 'custom', false)).toBe('queue')
   })
 
   it('writes an explicit change through the scope after publishing it locally', () => {

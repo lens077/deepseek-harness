@@ -20,6 +20,7 @@ import type {
 } from './input.ts'
 import type { createConversationStore } from '../stores.ts'
 import type { BusyEnterBehavior } from './composer-submission.ts'
+import type { ContentWidthMode, QuestionNavigationSettings, SendShortcut } from '../../submission-settings.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
 
@@ -354,6 +355,8 @@ export interface ComposerBarInjected {
      * and the primary Send button use while the addressed agent is busy.
      */
     busyEnter: ObservableSnapshot<BusyEnterBehavior>
+    /** Live keyboard shortcut used to recognize a send gesture. */
+    sendShortcut: ObservableSnapshot<SendShortcut>
     /** Live per-draft upload states for file-kind drafts. */
     fileUploads: ObservableSnapshot<DraftFileUploads>
     notices: ObservableSnapshot<InputNotice | null>

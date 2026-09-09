@@ -80,6 +80,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     })),
     toggleCommandMenu: vi.fn(),
     useBusyEnter: bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue')),
+    useSendShortcut: bindSnapshotSelector(createSnapshotStore<'enter'>('enter')),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(createSnapshotStore<string | null>(null)),

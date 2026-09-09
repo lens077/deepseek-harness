@@ -17,6 +17,18 @@ import { matchesSendShortcut, type ShortcutKeyEvent } from '../../send-shortcut.
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 
 /**
+ * Classify one keydown against the selected send shortcut.
+ * @param shortcut - the configured send shortcut.
+ * @param event - keyboard facts after editor composition guarding.
+ * @returns the matched delivery gesture, or null for ordinary editor behavior.
+ */
+export function resolveGesture(shortcut: SendShortcut, event: ShortcutKeyEvent): ComposerSubmitGesture | null {
+  if (!matchesSendShortcut(shortcut, event)) return null
+  if (shortcut !== 'enter' && shortcut !== 'mod-enter') return 'custom'
+  return event.ctrlKey === true || event.metaKey === true ? 'accelerated' : 'enter'
+}
+
+/**
  * Resolve one submission gesture against the busy-Enter preference. Plain
  * Enter and the primary Send button share the `enter` gesture, so the button
  * delivers exactly what Enter would. Direct `steer` is intentionally
@@ -26,6 +38,7 @@ export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
  * @param running - whether the addressed agent currently reports busy.
  * @param gesture - plain Enter (or the Send button) or the Cmd/Ctrl-accelerated chord.
  * @param steeringAvailable - whether this session transport supports steering.
+ * @param shortcut - the configured send shortcut; only `enter` gives the accelerated chord alternate delivery.
  * @returns Queue outside steer-capable busy state; otherwise the preferred mode or its opposite.
  */
 export function resolveSubmitMode(
@@ -33,9 +46,10 @@ export function resolveSubmitMode(
   running: boolean,
   gesture: ComposerSubmitGesture,
   steeringAvailable: boolean,
+  shortcut: SendShortcut = 'enter',
 ): InputSubmitMode {
   if (!running || !steeringAvailable) return 'queue'
-  if (gesture === 'enter') return preferred
+  if (gesture !== 'accelerated' || shortcut !== 'enter') return preferred
   return preferred === 'queue' ? 'steer' : 'queue'
 }
 

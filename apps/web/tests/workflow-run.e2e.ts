@@ -32,6 +32,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
   let prompt: string
+  let memberLabel: string
   const releaseChild = Promise.withResolvers<undefined>()
 
   const waitForParentSettlement = (): Promise<SessionId> => new Promise((resolve, reject) => {

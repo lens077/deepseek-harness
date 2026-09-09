@@ -32,7 +32,7 @@ import type { ComposerBarProps } from '../contract/slots.ts'
 import { ComposerContentEditable } from '../input/editor/ComposerContentEditable.tsx'
 import { DecoratorPortals } from '../input/editor/DecoratorPortals.tsx'
 import { registerComposerKeymap } from '../input/editor/keymap.ts'
-import { resolveSubmitMode } from '../input/submission-policy.ts'
+import { resolveGesture, resolveSubmitMode } from '../input/submission-policy.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
@@ -44,7 +44,7 @@ export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
   retryFileUpload,
   toggleCommandMenu, stop, command, t,
-  renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher,
+  renderSlot, useBusyEnter, useSendShortcut, useFileUploads, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
   placeholder, accessory,
@@ -52,6 +52,7 @@ export const InputBar = memo(function InputBar({
   const input = useInput(s => s)
   const notice = useNotices(s => s)
   const busyEnter = useBusyEnter(s => s)
+  const sendShortcut = useSendShortcut(s => s)
   void useLexicon // hook seat stays bound by the inject compartment; text-ref decoration rides the shell's editor transforms
   const commandMenuOpen = useMenuLauncher(source => source === 'command')
   const promptError = useSession(s => s.promptError) ?? null
@@ -265,11 +266,11 @@ export const InputBar = memo(function InputBar({
   // The keymap handlers read live bar state through this ref so the editor
   // registration survives re-renders without re-arming per keystroke.
   const gate = useRef({
-    locked, machineBusy, canSteerQueue, running, steeringAvailable, busyEnter,
+    locked, machineBusy, canSteerQueue, running, steeringAvailable, busyEnter, sendShortcut,
     intakeFiles, uploadsPending, showToast, t,
   })
   gate.current = {
-    locked, machineBusy, canSteerQueue, running, steeringAvailable, busyEnter,
+    locked, machineBusy, canSteerQueue, running, steeringAvailable, busyEnter, sendShortcut,
     intakeFiles, uploadsPending, showToast, t,
   }
 
@@ -282,7 +283,7 @@ export const InputBar = memo(function InputBar({
         return keyboard.space()
       },
       dismissPopup: () => { keyboard.dismissPopup() },
-      resolveGesture: event => gate.current.resolveGesture(event),
+      resolveGesture: event => resolveGesture(gate.current.sendShortcut, event),
       canSubmit: () => !gate.current.locked && !gate.current.machineBusy,
       submit: (gesture) => {
         const g = gate.current
@@ -302,6 +303,7 @@ export const InputBar = memo(function InputBar({
           g.running,
           gesture,
           g.steeringAvailable,
+          g.sendShortcut,
         ))
       },
       intakeFiles: (files) => { gate.current.intakeFiles(files) },
@@ -348,7 +350,7 @@ export const InputBar = memo(function InputBar({
   // Disabled native buttons may omit mouseleave; their tooltip must close from state.
   const primaryDisabled = primaryStops ? stop === undefined : empty || disabled || machineBusy || uploadsPending
   const interruptible = running && continuable
-  const primarySubmitMode = resolveSubmitMode(busyEnter, running, 'enter', steeringAvailable)
+  const primarySubmitMode = resolveSubmitMode(busyEnter, running, 'enter', steeringAvailable, sendShortcut)
   const plainMessageDraft = !empty && input?.phase === 'plain' && !draft.trimStart().startsWith('/')
   const primaryLabel = primaryStops
     ? t('input.stop')
@@ -362,7 +364,9 @@ export const InputBar = memo(function InputBar({
     }
     if (keyboard === undefined) return // absent machine: the button is disabled
     /* v8 ignore next -- defensive: the primary button is disabled for empty, disabled, and pending-upload states. */
-    if (!empty && !disabled && !machineBusy && !uploadsPending) keyboard.submit(primarySubmitMode)
+    if (!empty && !disabled && !machineBusy && !uploadsPending) {
+      keyboard.submit(primarySubmitMode)
+    }
   }
 
   // The Access seat: the projection-fed permission chip (renders nothing

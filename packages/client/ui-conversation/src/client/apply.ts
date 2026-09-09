@@ -377,6 +377,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           command: undefined,
           hooks: {
             busyEnter: submissionPolicy.busyEnter,
+            sendShortcut: submissionPolicy.sendShortcut,
             fileUploads: ABSENT_FILE_UPLOADS,
             notices: ABSENT_NOTICES,
             lexicon: ABSENT_LEXICON,
@@ -435,6 +436,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         },
         hooks: {
           busyEnter: submissionPolicy.busyEnter,
+          sendShortcut: submissionPolicy.sendShortcut,
           fileUploads: conversation.fileUploads,
           notices: shell.notices,
           lexicon: shell.lexicon,

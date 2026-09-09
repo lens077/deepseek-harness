@@ -154,7 +154,8 @@ function bench(over?: BenchOptions) {
   const stop = vi.fn()
   const removeAttachment = vi.fn((id: DraftAttachmentId) => { shell.removeAttachment(id) })
   const menuLauncher = createSnapshotStore<string | null>(over?.commandMenuOpen === true ? 'command' : null)
-  const busyEnter = createSnapshotStore<'queue' | 'steer'>(over?.busyEnter ?? 'queue')
+  const policy = new ComposerSubmissionPolicy()
+  const busyEnter = policy.busyEnter
   const slotCalls: { key: string; owner: unknown }[] = []
   const renderSlot = ((key: string, owner: object) => {
     slotCalls.push({ key, owner })
@@ -166,7 +167,6 @@ function bench(over?: BenchOptions) {
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
     return null
   }) as never
-  const policy = new ComposerSubmissionPolicy()
   policy.setBusyEnter(over?.busyEnter ?? 'queue')
   policy.setSendShortcut(over?.sendShortcut ?? 'enter')
   const props: InputBarProps = {
@@ -202,6 +202,7 @@ function bench(over?: BenchOptions) {
     }),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useBusyEnter: bindSnapshotSelector(busyEnter),
+    useSendShortcut: bindSnapshotSelector(policy.sendShortcut),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(menuLauncher),
@@ -245,7 +246,7 @@ function bench(over?: BenchOptions) {
   const interruptButton = view.container.querySelector<HTMLButtonElement>('button[aria-label="停止生成"]')
   return {
     view, textarea, button, interruptButton, props, sink, shell, wiring: shell, session, stop, removeAttachment, slotCalls,
-    menuLauncher, busyEnter,
+    menuLauncher, busyEnter, policy,
     steerQueue: over?.steerQueue,
     get placeholder() { return placeholderOf(view.container) },
     get inputDisabled() { return textarea.getAttribute('aria-disabled') === 'true' },
@@ -756,12 +757,12 @@ describe('configurable send shortcut', () => {
 
   it('adopts changes without remounting the composer and keeps Shift+Enter for newlines', async () => {
     const { textarea, shell, sink, policy } = bench({ draft: 'hello' })
-    policy.setSendShortcut('mod-enter')
+    act(() => { policy.setSendShortcut('mod-enter') })
     act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true, ctrlKey: true })
     await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
     expect(sink).not.toHaveBeenCalled()
-    policy.setSendShortcut('enter')
+    act(() => { policy.setSendShortcut('enter') })
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(sink).toHaveBeenCalledOnce()
   })
