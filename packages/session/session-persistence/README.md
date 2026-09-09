@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-session-persistence` stores a Session event log durably and addresses each stored Session through one per-Session handle. The backend-neutral service (`ctx.sessionPersistence`) exposes `create`/`open`/`delete`/`stat`/`list`; `create` and `open` return a `SessionHandle` that carries every log read and write plus single-writer ownership. The persisted unit is the existing `SessionEvent` log — there is no parallel stored message type — and non-replayable metadata (format version, working directory, lineage, seed boundary) travels separately as `SessionHeader`. Backends own their storage, while the seam owns append-only contiguous logs, explicit durability barriers, permanent deletion admission, torn-tail exclusion, fail-closed validation, and in-process writer exclusion. Mount the shipped [JSONL backend](../session-persistence-jsonl/README.md) and agent-loop persists and resumes Sessions without the loop or model knowing which backend is underneath.
+This package lets applications persist and resume session event logs through a backend-independent API. Readers can create, open, inspect, list, append to, read, flush, and close stored sessions while preserving contiguous append-only history. A completed flush is the durability barrier; readers never receive torn tails or invalid records, and only one writer per session is allowed within a backend instance. Use the shipped [JSONL backend](../session-persistence-jsonl/README.md) for one compressed log per session, or implement another backend with the same observable guarantees.
 
 ## Table of Contents
 

@@ -236,13 +236,7 @@
 - button "Switch style":
   - text: Step rail
   - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Assemble the link gallery: write the report and styles, inspect the sources, an… Execution {{duration}} · 2 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -252,4 +246,6 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}}
+- button "1 turns 2 steps":
+  - img
+  - text: 1 turns 2 steps

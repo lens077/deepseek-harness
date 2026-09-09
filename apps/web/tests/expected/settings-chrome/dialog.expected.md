@@ -53,12 +53,8 @@
   - button "Compact":
     - text: Compact
     - img
-  - text: 发送消息快捷键 Enter 发送，Shift + Enter 换行。
-  - 'button "发送消息快捷键: Enter"':
-    - text: Enter
-    - img
-  - text: 繁忙时发送方式 仅在智能体运行时生效；Cmd/Ctrl+Enter 使用另一行为
-  - 'button "繁忙时发送方式: 排队发送"':
+  - text: 繁忙时的发送行为 智能体运行时 Enter 键和发送按钮的行为；Cmd/Ctrl+Enter 使用另一行为
+  - button "排队发送":
     - text: 排队发送
     - img
   - text: 工作区默认显示会话数 设置每个折叠工作区默认显示的会话数量。

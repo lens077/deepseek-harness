@@ -61,17 +61,11 @@ async function composed(workspaces: readonly Workspace[] = []): Promise<Context>
           : { inheritedEventCount: options.inheritedEventCount },
       })
       const agent = {} as Agent
-      const agentCtx = ownerCtx.extend({ agent })
+      const agentCtx = ownerCtx
       Object.assign(agent, { id: session.id, session, status: 'idle', ctx: agentCtx })
-      await options.setup?.(agentCtx)
-      const unregister = ctx.agents.register(agent)
-      return {
-        agent,
-        dispose: () => {
-          unregister()
-          return Promise.resolve()
-        },
-      }
+      await options.setup?.(agentCtx, agent)
+      ctx.agents.register(agent)
+      return { agent, dispose: () => Promise.resolve() }
     },
     resume: () => Promise.reject(new Error('fork test sources are live')),
   })

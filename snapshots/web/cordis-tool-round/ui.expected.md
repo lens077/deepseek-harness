@@ -135,23 +135,8 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: "{{clock}} Task flow 2/2 · Elapsed {{duration}} · Latest branch: #3 New question Use only Cordis tools. Call cordis_stop with pluginId \"snap-1\". After it succee… Resolved"
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Use only Cordis tools. First call cordis_inspect_self with no arguments. Then c… Execution {{duration}} · 4 steps Forked from “Use only Cordis tools. First call cordis_inspect_self with no arguments. Then c…” ↳ #3 Use only Cordis tools. Call cordis_stop with pluginId \"snap-1\". After it succee… Execution {{duration}} · 2 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -164,4 +149,9 @@
   - img
 - button "0% of context used"
 - button "Send message" [disabled]
-- text: 3 turns · 7 steps LLM {{duration}} · Tool call {{duration}} Cache hit 77% Input 66.5K tok · Output 321 tok
+- button "3 turns 7 steps":
+  - img
+  - text: 3 turns 7 steps
+- button "66.8K tok · Cache hit 77%":
+  - img
+  - text: 66.8K tokCache hit 77%

@@ -270,9 +270,8 @@ function mount(
           retryFileUpload={undefined}
           removeAttachment={() => {}}
           resolveDraftAttachments={() => []}
-          resolveGesture={event => event.key === 'Enter' && !event.shiftKey ? 'enter' : null}
-          resolveSubmitMode={() => 'queue'}
           toggleCommandMenu={vi.fn()}
+          useBusyEnter={bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue'))}
           useNotices={bindSnapshotSelector(wiring.notices)}
           useLexicon={bindSnapshotSelector(wiring.lexicon)}
           useMenuLauncher={bindSnapshotSelector(createSnapshotStore<string | null>(null))}

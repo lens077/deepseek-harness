@@ -26,6 +26,13 @@
 - paragraph:
   - img "Remote test image"
 - paragraph: Local test image
+- paragraph:
+  - img "Workspace test image"
+- paragraph: Oversized image
+- paragraph:
+  - img "Outside workspace image"
+- paragraph: Missing image
+- paragraph: {{cwd}}/corrupt.png
 - paragraph: REMOTE_IMAGE_DONE
 - button "Copy":
   - img
@@ -38,23 +45,8 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}} Task flow 1/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Show the Markdown image policy. Execution {{duration}} · 1 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -64,4 +56,6 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}}
+- button "1 turns 1 steps":
+  - img
+  - text: 1 turns 1 steps

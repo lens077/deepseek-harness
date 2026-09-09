@@ -1,4 +1,8 @@
-/** Composer keyboard preferences and queue/steer delivery policy. */
+/**
+ * Composer submission policy. It owns the live busy-Enter preference and
+ * resolves submission gestures into queue/steer delivery modes; Host and
+ * Agent keep the actual delivery-window authority.
+ */
 import {
   createSnapshotStore, type SnapshotStore,
 } from '@deepseek-ai/dsh-client-store'
@@ -13,11 +17,35 @@ import { matchesSendShortcut, type ShortcutKeyEvent } from '../../send-shortcut.
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 
 /**
- * Keyboard policy shared by the composer and General Settings.
- * AgentLoop turns a closed-window steer submission into the next waking Queue item.
+ * Resolve one submission gesture against the busy-Enter preference. Plain
+ * Enter and the primary Send button share the `enter` gesture, so the button
+ * delivers exactly what Enter would. Direct `steer` is intentionally
+ * best-effort: AgentLoop turns a closed-window submission into the next waking
+ * Queue item.
+ * @param preferred - the live busy-Enter preference.
+ * @param running - whether the addressed agent currently reports busy.
+ * @param gesture - plain Enter (or the Send button) or the Cmd/Ctrl-accelerated chord.
+ * @param steeringAvailable - whether this session transport supports steering.
+ * @returns Queue outside steer-capable busy state; otherwise the preferred mode or its opposite.
+ */
+export function resolveSubmitMode(
+  preferred: BusyEnterBehavior,
+  running: boolean,
+  gesture: ComposerSubmitGesture,
+  steeringAvailable: boolean,
+): InputSubmitMode {
+  if (!running || !steeringAvailable) return 'queue'
+  if (gesture === 'enter') return preferred
+  return preferred === 'queue' ? 'steer' : 'queue'
+}
+
+/**
+ * Busy-Enter preference shared by the composer bar inject face and its
+ * Settings row: one live store the bar's submission gestures and Send label
+ * read, backed by the Host user-settings document when one is composed.
  */
 export class ComposerSubmissionPolicy {
-  /** Reactive busy-state delivery preference. */
+  /** Reactive preference source for the composer bar and the Settings row. */
   readonly busyEnter: SnapshotStore<BusyEnterBehavior> = createSnapshotStore(DEFAULT_BUSY_ENTER_BEHAVIOR)
   /** Reactive send shortcut preference. */
   readonly sendShortcut: SnapshotStore<SendShortcut> = createSnapshotStore('enter')
@@ -36,34 +64,8 @@ export class ComposerSubmissionPolicy {
   }
 
   /**
-   * Classify a keydown against the current shortcut without changing state.
-   * @param event - keyboard facts after editor composition guarding.
-   * @returns the matched delivery gesture, or null for ordinary editor behavior.
-   */
-  resolveGesture(event: ShortcutKeyEvent): ComposerSubmitGesture | null {
-    const shortcut = this.sendShortcut.getSnapshot()
-    if (!matchesSendShortcut(shortcut, event)) return null
-    if (shortcut !== 'enter' && shortcut !== 'mod-enter') return 'custom'
-    return event.ctrlKey === true || event.metaKey === true ? 'accelerated' : 'enter'
-  }
-
-  /**
-   * Resolve delivery for a send gesture without changing state.
-   * @param running - whether the addressed agent currently reports busy.
-   * @param gesture - preset Enter gesture or an explicitly matched custom chord.
-   * @param steeringAvailable - whether this session transport supports steering.
-   * @returns Queue when idle or steering is unavailable; otherwise the preferred mode,
-   * except that Ctrl/Cmd+Enter selects its opposite in Enter-to-send mode.
-   */
-  resolve(running: boolean, gesture: ComposerSubmitGesture, steeringAvailable: boolean): InputSubmitMode {
-    if (!running || !steeringAvailable) return 'queue'
-    const preferred = this.busyEnter.getSnapshot()
-    if (gesture !== 'accelerated' || this.sendShortcut.getSnapshot() !== 'enter') return preferred
-    return preferred === 'queue' ? 'steer' : 'queue'
-  }
-
-  /**
-   * Publish and persist the busy-state delivery preference.
+   * Change the busy-state submission behavior; the live value publishes
+   * before the durable write starts.
    * @param behavior - Queue or Steer.
    */
   setBusyEnter(behavior: BusyEnterBehavior): void {

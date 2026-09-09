@@ -19,9 +19,7 @@ import type {
   ComposerKeyboard, DraftAttachmentId, EditSelection, InputActions, InputNotice, InputState,
 } from './input.ts'
 import type { createConversationStore } from '../stores.ts'
-import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
-import type { ContentWidthMode, QuestionNavigationSettings } from '../../submission-settings.ts'
-import type { ShortcutKeyEvent } from '../../send-shortcut.ts'
+import type { BusyEnterBehavior } from './composer-submission.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
 
@@ -347,17 +345,15 @@ export interface ComposerBarInjected {
   resolveDraftAttachments: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
   /** Restart one failed file upload; absent without a session. */
   retryFileUpload: ((id: DraftAttachmentId) => void) | undefined
-  /** Resolve a keydown into a send gesture, or null for ordinary editor behavior. */
-  resolveGesture: (event: ShortcutKeyEvent) => ComposerSubmitGesture | null
-  resolveSubmitMode: (
-    running: boolean,
-    gesture: ComposerSubmitGesture,
-    steeringAvailable: boolean,
-  ) => InputSubmitMode
   toggleCommandMenu: ((selection: EditSelection) => void) | undefined
   stop: (() => void) | undefined
   command: ((line: string) => Promise<boolean>) | undefined
   hooks: {
+    /**
+     * Live busy-state submission preference: the delivery mode plain Enter
+     * and the primary Send button use while the addressed agent is busy.
+     */
+    busyEnter: ObservableSnapshot<BusyEnterBehavior>
     /** Live per-draft upload states for file-kind drafts. */
     fileUploads: ObservableSnapshot<DraftFileUploads>
     notices: ObservableSnapshot<InputNotice | null>

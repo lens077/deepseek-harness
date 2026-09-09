@@ -46,23 +46,8 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}} Task flow 0/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Begin your reply with the plain sentence \"Reading the workspace now.\" as text, … Execution {{duration}} · 2 steps Stopped（stopped manually）"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -75,4 +60,9 @@
   - img
 - button "6% of context used"
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 0% Input 7.8K tok · Output 109 tok
+- button "1 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 2 steps{{throughput}} tok/s
+- button "7.9K tok · Cache hit 0%":
+  - img
+  - text: 7.9K tokCache hit 0%

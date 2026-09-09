@@ -484,13 +484,7 @@
 - button "Switch style":
   - text: Step rail
   - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 m1 Execution {{duration}} · 1 steps Forked from “m1” ↳ #2 m2 Execution {{duration}} · 1 steps Forked from “m1” ↳ #3 m3 Execution {{duration}} · 1 steps Forked from “m1” ↳ #4 m4 Execution {{duration}} · 1 steps Forked from “m1” ↳ #5 m5 Execution {{duration}} · 1 steps Forked from “m1” ↳ #6 m6 Execution {{duration}} · 1 steps Forked from “m1” ↳ #7 m7 Execution {{duration}} · 1 steps Forked from “m1” ↳ #8 m8 Execution {{duration}} · 1 steps Forked from “m1” ↳ #9 m9 Execution {{duration}} · 1 steps Forked from “m1” ↳ #10 m10 Execution {{duration}} · 1 steps Forked from “m1” ↳ #11 m11 Execution {{duration}} · 1 steps Forked from “m1” ↳ #12 m12 Execution {{duration}} · 1 steps Forked from “m1” ↳ #13 m13 Execution {{duration}} · 1 steps Forked from “m1” ↳ #14 m14 Execution {{duration}} · 1 steps Forked from “m1” ↳ #15 m15 Execution {{duration}} · 1 steps Forked from “m1” ↳ #16 m16 Execution {{duration}} · 1 steps Forked from “m1” ↳ #17 m17 Execution {{duration}} · 1 steps Forked from “m1” ↳ #18 m18 Execution {{duration}} · 1 steps Forked from “m1” ↳ #19 m19 Execution {{duration}} · 1 steps Forked from “m1” ↳ #20 m20 Execution {{duration}} · 1 steps Forked from “m1” ↳ #21 m21 Execution {{duration}} · 1 steps Forked from “m1” ↳ #22 m22 Execution {{duration}} · 1 steps Forked from “m1” ↳ #23 m23 Execution {{duration}} · 1 steps Forked from “m1” ↳ #24 m24 Execution {{duration}} · 1 steps Forked from “m1” ↳ #25 m25 Execution {{duration}} · 1 steps Forked from “m1” ↳ #26 m26 Execution {{duration}} · 1 steps Forked from “m1” ↳ #27 m27 Execution {{duration}} · 1 steps Forked from “m1” ↳ #28 m28 Execution {{duration}} · 1 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -500,4 +494,6 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 28 turns · 28 steps LLM {{duration}}
+- button "28 turns 28 steps":
+  - img
+  - text: 28 turns 28 steps

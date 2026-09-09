@@ -50,23 +50,8 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}} Task flow 1/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Show the local preview URL. Execution {{duration}} · 1 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -76,4 +61,6 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}}
+- button "1 turns 1 steps":
+  - img
+  - text: 1 turns 1 steps

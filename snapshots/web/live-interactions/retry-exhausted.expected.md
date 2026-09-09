@@ -35,26 +35,7 @@
 - status:
   - text: This turn failedupstream 503
   - code: SERVER
-- 'button "Answering: Reply with a one-sentence description of event sourcing, then stop. — Jump to this question"':
-  - img
-  - text: "Answering #1 Reply with a one-sentence description of event sourcing, then stop."
-- text: Task flow 0/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Execution {{duration}} · 1 steps Failed · upstream 503"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -66,4 +47,5 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps
+- img
+- text: 1 turns 1 steps

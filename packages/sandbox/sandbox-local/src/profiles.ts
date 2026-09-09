@@ -4,8 +4,8 @@
  * @module @deepseek-ai/dsh-sandbox-local/profiles
  */
 
-import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-landlock-run'
-import { canonicalPath, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/landlock-run'
+import { writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 
 /**

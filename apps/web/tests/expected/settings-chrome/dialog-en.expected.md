@@ -53,12 +53,8 @@
   - button "Compact":
     - text: Compact
     - img
-  - text: Send message shortcut Enter sends; Shift + Enter inserts a newline.
-  - 'button "Send message shortcut: Enter"':
-    - text: Enter
-    - img
-  - text: Send behavior while busy Busy only; Cmd/Ctrl+Enter uses the other behavior
-  - 'button "Send behavior while busy: Queue"':
+  - text: Send behavior while busy What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior
+  - button "Queue":
     - text: Queue
     - img
   - text: Default sessions per workspace Set how many sessions each collapsed workspace shows by default.

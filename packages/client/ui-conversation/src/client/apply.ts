@@ -372,13 +372,11 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           removeAttachment: undefined,
           resolveDraftAttachments: undefined,
           retryFileUpload: undefined,
-          resolveGesture: event => submissionPolicy.resolveGesture(event),
-          resolveSubmitMode: (running, gesture, steeringAvailable) =>
-            submissionPolicy.resolve(running, gesture, steeringAvailable),
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
           hooks: {
+            busyEnter: submissionPolicy.busyEnter,
             fileUploads: ABSENT_FILE_UPLOADS,
             notices: ABSENT_NOTICES,
             lexicon: ABSENT_LEXICON,
@@ -411,9 +409,6 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         retryFileUpload: (id) => {
           if (sessions.binding(sessionId) !== undefined) conversation.retryFileUpload(sessionId, id)
         },
-        resolveGesture: event => submissionPolicy.resolveGesture(event),
-        resolveSubmitMode: (running, gesture, steeringAvailable) =>
-          submissionPolicy.resolve(running, gesture, steeringAvailable),
         toggleCommandMenu: inputTriggers === undefined
           ? undefined
           : (selection) => {
@@ -439,6 +434,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           return result.ok && result.value.matched
         },
         hooks: {
+          busyEnter: submissionPolicy.busyEnter,
           fileUploads: conversation.fileUploads,
           notices: shell.notices,
           lexicon: shell.lexicon,

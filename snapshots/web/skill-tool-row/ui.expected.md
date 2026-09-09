@@ -65,23 +65,8 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{date}} {{clock}} Task flow 1/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Load the editing-cordis-compositions skill with the skill tool, then reply DONE. Execution {{duration}} · 2 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: {{date}} {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -91,4 +76,9 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 0% Input 280 tok · Output 30 tok
+- button "1 turns 2 steps":
+  - img
+  - text: 1 turns 2 steps
+- button "310 tok · Cache hit 0%":
+  - img
+  - text: 310 tokCache hit 0%

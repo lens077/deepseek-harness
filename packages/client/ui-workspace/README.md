@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-workspace` is the shared Workspace browser and picker of the dsh Web client. Users browse grouped, flat, or archived Session rows; start a Workspace-backed or ungrouped scratch Session; and manage Session placement, selection, directories, archive state, and permanent deletion. Pending user interactions surface as amber warning dots; active, completed, and failed Sessions can add subdued status perimeters; active Schedule projections surface as non-interactive alarm markers; nested forks render under their selected parent; and the shared sidebar projection hides subagent-origin Sessions. Distinct canonical paths remain separate id-keyed Workspaces, and folder choices go through child slots filled by a composed picker package.
+This package lets users browse grouped or flat Session lists, choose a Workspace for a new Session, and manage Workspaces and Sessions through add, rename, reorder, search, fork, archive, and Workspace deletion. Pending interactions appear as warning dots, active scheduled tasks as alarm markers, and subagent-origin Sessions remain hidden. Canonically distinct folder paths remain separate Workspaces. Adding a Workspace requires a composed directory picker; without one, the add action is unavailable.
 
 ## Table of Contents
 

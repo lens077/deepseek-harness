@@ -26,7 +26,7 @@
   - img
   - img
   - text: System prompt
-- text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. 7/25 {{clock}}"
+- text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
 - button "Copy":
   - img
 - button "2 tool calls" [expanded]:
@@ -65,30 +65,15 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: 7/25 {{clock}}
+- text: {{clock}}
 - button "compact Compacted 5 history items (~{{tokens}} tokens)"
 - button "Context injection AGENTS.md":
   - img
   - img
   - text: Context injection AGENTS.md
 - img
-- text: permission preset read-only Task flow 1/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Use the read tool twice in one assistant message: read a.txt and b.txt. Then re… Execution {{duration}} · 2 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: permission preset read-only
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment":
@@ -98,4 +83,9 @@
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 98% Input 15.8K tok · Output 135 tok
+- button "1 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 1 turns 2 steps{{throughput}} tok/s
+- button "16K tok · Cache hit 98%":
+  - img
+  - text: 16K tokCache hit 98%

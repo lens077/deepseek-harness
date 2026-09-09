@@ -66,7 +66,12 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}} Now give the same explanation to a human reader. {{clock}}
+- text: {{clock}}
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: Now give the same explanation to a human reader. {{clock}}
 - button "Copy":
   - img
 - button "Thought for a while" [expanded]:
@@ -88,23 +93,8 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: "{{clock}} Task flow 2/2 · Elapsed {{duration}} · Latest branch: #2 New question Now give the same explanation to a human reader. Resolved"
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
-- button "Switch style":
-  - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
-  - img
-- button "Open in canvas":
-  - img
-  - text: Open in canvas
-- region "Task flow graph": "#1 Explain event sourcing in one sentence for a reader who knows databases but has… Execution {{duration}} · 1 steps Forked from “Explain event sourcing in one sentence for a reader who knows databases but has…” ↳ #2 Now give the same explanation to a human reader. Execution {{duration}} · 1 steps"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
 - button "Add attachment" [disabled]:
@@ -114,4 +104,9 @@
 - text: Standard mode
 - button "6% of context used"
 - button "Send message" [disabled]
-- text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok
+- button "2 turns 2 steps · {{throughput}} tok/s":
+  - img
+  - text: 2 turns 2 steps{{throughput}} tok/s
+- button "15.7K tok · Cache hit 99%":
+  - img
+  - text: 15.7K tokCache hit 99%
