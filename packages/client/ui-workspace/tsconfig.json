@@ -42,6 +42,12 @@
       "path": "../../schedule/schedule"
     },
     {
+      "path": "../../session/session-digest"
+    },
+    {
+      "path": "../ui-settings"
+    },
+    {
       "path": "../ui-sidebar"
     },
     {

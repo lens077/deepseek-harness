@@ -144,12 +144,13 @@ export function MobileWorkspaceBrowser({
                 }}
               >
                 <span className={css.name}>{session.blank ? t('session.new') : session.title}</span>
-                {(session.pendingInteraction !== undefined || session.running || session.completed) && (
+                {(session.pendingInteraction !== undefined || session.running || session.failed || session.completed) && (
                   <span className={css.count}>{t(
                     session.pendingInteraction === 'approval' ? 'status.waitingApproval'
                       : session.pendingInteraction === 'plan-review' ? 'status.planReview'
                         : session.pendingInteraction === 'question' ? 'status.waitingAnswer'
-                          : session.running ? 'status.running' : 'status.completed',
+                          : session.running ? 'status.running'
+                            : session.failed ? 'status.failed' : 'status.completed',
                   )}</span>
                 )}
               </button>

@@ -6,6 +6,10 @@ English | [中文](README.zh.md)
 
 This is a personal fork of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). Upstream is the source of truth for the project; this repository is not affiliated with DeepSeek AI and carries no support commitment.
 
+### Continue sessions with missing images
+
+If session logs survive an OS reinstall or deletion of attachment directories under `.dsh`, conversations can continue even when uploaded images are missing. Missing images become text placeholders that identify the attachment and ask for re-upload if its contents are needed, rather than stopping the model request with `Attachment object is missing.` Existing images and saved conversation history remain unchanged. This does not restore deleted image bytes; corrupt objects and other read failures still report errors. See the [LLM documentation](packages/llm/llm/README.md) for details.
+
 ### Message sending shortcuts
 
 Open **Settings → General → Send message shortcut** to choose Enter, Ctrl/Cmd+Enter, or another preset. To use a custom combination, select **Custom…**, press the keys (for example, Ctrl+Alt+S), and click **Save shortcut**. Escape or Cancel discards the recording; **Restore default** returns to Enter-to-send.
@@ -126,16 +130,6 @@ DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL B
 Review the [safety notice](SAFETY.md) before running the project.
 
 ## Run
-
-### Run from `npm`
-
-Install `Node.js`, then run:
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
 
 ### Run from source
 

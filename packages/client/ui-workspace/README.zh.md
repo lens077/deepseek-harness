@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-workspace` 是 dsh Web 客户端的共享 Workspace 浏览器与选择器。用户可以浏览分组、平铺或已归档的 Session 行；启动由 Workspace 支持的 Session 或未分组 scratch Session；并管理 Session 放置、选择、目录、归档状态与永久删除。待处理的用户交互以琥珀色警告点呈现，活动 Schedule projection 以不可交互的闹钟呈现，嵌套 fork 显示在所选父 Session 下，共享侧边栏投影还会隐藏 subagent 来源的 Session。不同的规范化路径仍作为由 id 区分的独立 Workspace；目录选择经组合的选择器 package 填充的子 slot 完成。
+`dsh-client-ui-workspace` 是 dsh Web 客户端的共享 Workspace 浏览器与选择器。用户可以浏览分组、平铺或已归档的 Session 行；启动由 Workspace 支持的 Session 或未分组 scratch Session；并管理 Session 放置、选择、目录、归档状态与永久删除。待处理的用户交互以琥珀色警告点呈现；运行中、已完成和运行出错的 Session 可以显示弱化的状态边框；活动 Schedule projection 以不可交互的闹钟呈现；嵌套 fork 显示在所选父 Session 下；共享侧边栏投影还会隐藏 subagent 来源的 Session。不同的规范化路径仍作为由 id 区分的独立 Workspace；目录选择经组合的选择器 package 填充的子 slot 完成。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-用侧边栏浏览 Workspace 及其 Session、重排它们并新建会话；在 Session Intent 主视觉区选择 Workspace，或不选文件夹直接开始。折叠的 Workspace 默认显示五条非空白 Session，并在首条提示词落地前把当前选中的空白**新会话**作为一条临时额外行。视图菜单与通用设置可以把数量设为 5 到 20，或使用自适应尺寸。**展开其余**会显示隐藏条目；关闭再打开 Workspace 会恢复折叠投影。
+用侧边栏浏览 Workspace 及其 Session、重排它们并新建会话；Workspace 标题行上的 ＋ 在该 Workspace 内新建 Session，“未分组”标题行上的 ＋ 复用或创建一条不属于任何 Workspace 的空白 Session。在 Session Intent 主视觉区选择 Workspace，或不选文件夹直接开始。折叠的 Workspace 默认显示五条非空白 Session，并在首条提示词落地前把当前选中的空白**新会话**作为一条临时额外行。视图菜单与通用设置可以把数量设为 5 到 20，或使用自适应尺寸。**展开其余**会显示隐藏条目；关闭再打开 Workspace 会恢复折叠投影。
 
 手机端**工作区**打开全宽 Workspace 列表，并在存在未分组会话时显示未分组条目。选择 Workspace 后显示其 Session 列表；**返回**回到 Workspace 列表，选择 Session 则打开对话。逐层浏览使用共享的 Session 投影与排序，而不是另一份 Workspace 记账。顶部的纯图标**搜索与管理**控件打开共享管理浏览器；无障碍名称说明操作，不占用单独的文字行。
 
@@ -45,6 +45,12 @@ Session 行内的 Rename 操作打开一个以显示标题预填的对话框。F
 
 Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**等待审批**，计划审阅显示**计划待审**，普通问题显示**等待回答**。每个待处理交互都使用一枚琥珀色警告点，优先级高于运行指示器。
 
+### Session 状态呈现
+
+拥有运行中 Turn 的 Session 会显示低透明度边框，其中一段长高光每八秒环绕一次。已完成提醒和持久化的 `sessionDigest.outcome === 'error'` 分别使用静态成功或错误边框；`aborted`、`blocked`、`max-tokens` 和 `interrupted` 不会被标记为错误。待处理交互会抑制边框；只有后代在运行时，空闲的属主 Session 仍只显示原有状态点和标签，不会显示运行边框。
+
+通用设置提供**打开（默认）**、**关闭动画**和**完全关闭**三档。关闭动画后，按状态着色的静态边框仍然显示；完全关闭只移除边框，状态点和读屏标签仍然保留。浏览器的 `prefers-reduced-motion: reduce` 媒体查询也会停止旋转并保留静态边框。
+
 ### 活动 Schedule 标识
 
 分组与平铺 Session 行以及搜索结果会在 `SessionSummary.projectionValues.schedule` 为非空数组时显示一枚轮廓闹钟。标识位于标题之后；普通行的更新时间仍位于标识之后，搜索结果则没有更新时间。它不是按钮，没有独立 pointer 行为或 Tab stop，点击所在区域仍会打开整行。本地化 tooltip 与同义读屏标签均为**有活动定时任务**。
@@ -59,7 +65,7 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 <details>
 <summary>实现细节——点击展开</summary>
 
-本包填充侧边栏浏览器与 Session Intent 选择器 slot，并向通用设置贡献 Session 数量与多选两行。`apply` 对每个声明生命周期使用 `slots.inject()`，在目标 slot 恢复后重新注册。持久化 viewing store 拥有分组、顺序、展开状态与行数偏好；独立的非持久化 store 拥有当前多选。
+本包填充侧边栏浏览器与 Session Intent 选择器 slot，并向通用设置贡献 Session 数量、多选与状态呈现三行。`apply` 对每个声明生命周期使用 `slots.inject()`，在目标 slot 恢复后重新注册。持久化 viewing store 拥有分组、顺序、展开状态、行数与状态边框偏好；独立的非持久化 store 拥有当前多选。
 
 ### 目录流子 slot
 
@@ -67,7 +73,7 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 ### 视图状态
 
-Workspace 列表基线就绪后，浏览器持久化的展开状态与 Session 顺序记录只保留当前 Workspace id、Ungrouped 与单列表记账。真实 Workspace 从 `WorkspaceView.sessionIds` 初始化，Ungrouped 与跨 Workspace 单列表从最近更新时间顺序初始化。共享侧边栏投影会隐藏持久化 Session 摘要中带有 `origin: 'subagent'` 的行；每个可见普通行都会在经不间断的 subagent 谱系可达的任一后代运行时继承蓝色活动指示器。同一份纯派生还会为分组、平铺与搜索节点读取列表 projection value 中的 Schedule key；本包只使用纯类型依赖 `@deepseek-ai/dsh-schedule/client`，不会导入 Schedule runtime 或 `ui-schedule`。
+Workspace 列表基线就绪后，浏览器持久化的展开状态与 Session 顺序记录只保留当前 Workspace id、Ungrouped 与单列表记账。真实 Workspace 从 `WorkspaceView.sessionIds` 初始化，Ungrouped 与跨 Workspace 单列表从最近更新时间顺序初始化。共享侧边栏投影会隐藏持久化 Session 摘要中带有 `origin: 'subagent'` 的行；经不间断的 subagent 谱系可达的任一后代运行时，每个可见普通行都会保留蓝色活动状态点；只有后代在运行时不会显示属主的运行边框。同一份纯派生还会为分组、平铺、归档与搜索节点读取列表 projection value 中的 Schedule 和 `sessionDigest`；本包只使用纯类型依赖 `@deepseek-ai/dsh-schedule/client` 与 `@deepseek-ai/dsh-session-digest/types`，不会导入任一功能的运行时。
 
 ### 悬浮卡片
 

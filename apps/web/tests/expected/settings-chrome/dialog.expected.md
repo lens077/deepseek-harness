@@ -65,9 +65,17 @@
   - button "5":
     - text: "5"
     - img
+  - text: 对话内容宽度 占满整个内容区，或启用可拖拽的自适应宽度
+  - button "占满内容区":
+    - text: 占满内容区
+    - img
   - text: 会话连选与多选 按住 Shift 连选一段会话，按住 Ctrl（macOS 为 Command）逐个多选；Ctrl+A 全选，Esc 取消选择。
   - button "启用":
     - text: 启用
+    - img
+  - text: 对话状态动画 关闭动画时仍显示静态状态边框；完全关闭时仅保留状态点和辅助说明。
+  - button "打开（默认）":
+    - text: 打开（默认）
     - img
   - strong: 提问导航快捷键
   - paragraph: 在当前会话的历史提问之间快速跳转。

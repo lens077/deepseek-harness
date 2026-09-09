@@ -6,6 +6,10 @@
 
 这是 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的个人 fork。上游是该项目的真相源；本仓库与 DeepSeek AI 无关联，也不承诺任何支持。
 
+### 图片附件丢失后继续会话
+
+重装系统或删除 `.dsh` 下的附件目录后，只要会话日志仍在，即使上传的图片丢失，对话也可以继续。缺失图片会被替换为文本占位符，标明附件，并在需要图片内容时提示重新上传，而不是以 `Attachment object is missing.` 中止模型请求。仍然存在的图片和已保存的会话历史保持不变。此功能不能恢复已删除的图片数据；对象损坏和其他读取失败仍会报错。详见 [LLM 文档](packages/llm/llm/README.zh.md)。
+
 ### 发送消息快捷键
 
 打开 **设置 → 通用设置 → 发送消息快捷键**，可选择 Enter、Ctrl/Cmd+Enter 或其他预设。需要自定义时，选择 **自定义…**，按下组合键（例如 Ctrl+Alt+S），再点击 **保存快捷键**。按 Esc 或点击取消可放弃录制；**恢复默认**可切回 Enter 发送。
@@ -128,16 +132,6 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 <a id="run"></a>
 
 ## 运行
-
-### 通过 `npm` 运行
-
-安装 `Node.js`，然后运行：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
 
 <a id="run-from-source"></a>
 

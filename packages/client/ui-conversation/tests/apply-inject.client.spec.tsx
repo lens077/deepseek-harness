@@ -49,7 +49,8 @@ async function bench() {
   }
   runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const connectWorkspace = vi.fn(async () => ROOT)
-  runtime.ctx.provide('uiWorkspace', { connectWorkspace } as never)
+  const startScratchSession = vi.fn(async () => ROOT)
+  runtime.ctx.provide('uiWorkspace', { connectWorkspace, startScratchSession } as never)
   const sessionFake = sessionFakeFor()
   await runtime.sessions.add({
     id: ROOT,
@@ -101,7 +102,7 @@ async function bench() {
     conversationApi(id).injected.hooks.conversationViews
   return {
     runtime, feature, slots: runtime.slots, entryOf, conversationApi, headerApi, residentApi, composerApi,
-    inputApi, viewSource, sessionFake, connectWorkspace, rootUpload, uploads,
+    inputApi, viewSource, sessionFake, connectWorkspace, startScratchSession, rootUpload, uploads,
   }
 }
 
@@ -357,6 +358,12 @@ describe('Conversation inject API', () => {
     await expect(b.residentApi(ROOT).selectWorkspace('workspace-4' as WorkspaceId))
       .rejects.toThrow('offline')
     expect(b.runtime.sessions.calls.filter(call => call.method === 'open')).toHaveLength(opens)
+
+    // The scratch action delegates to the Workspace navigation service, which owns reuse-or-create and opening.
+    await b.residentApi(undefined).startScratchSession()
+    expect(b.startScratchSession).toHaveBeenCalledOnce()
+    b.startScratchSession.mockRejectedValueOnce(new Error('refused'))
+    await expect(b.residentApi(ROOT).startScratchSession()).rejects.toThrow('refused')
     await b.runtime.dispose()
   })
 

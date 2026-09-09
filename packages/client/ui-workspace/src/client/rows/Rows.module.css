@@ -32,6 +32,8 @@
 }
 
 .searchResultRow {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -145,6 +147,8 @@
 
 /* Session cell (figma): pad 8, a 16px status slot, then a 4px title gap. */
 .sessionRow {
+  position: relative;
+  isolation: isolate;
   height: 32px;
   gap: 0;
   /* Mount fade: session rows appear by unfolding a group (or the tree
@@ -162,6 +166,66 @@
 
 @keyframes row-in {
   from { opacity: 0; }
+}
+
+/* A dedicated overlay leaves the row pseudo-elements to drag insertion
+   markers. The quiet track carries terminal state; only an owning Session
+   in progress receives the long rotating highlight. */
+.sessionStatusPerimeter {
+  position: absolute;
+  z-index: 0;
+  inset: 1px;
+  box-sizing: border-box;
+  border: 1px solid var(--session-status-color);
+  border-radius: inherit;
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.sessionStatusPerimeterRunning {
+  --session-status-color: var(--dsw-alias-state-business-primary);
+}
+
+.sessionStatusPerimeterCompleted {
+  --session-status-color: var(--dsw-alias-state-success-primary);
+}
+
+.sessionStatusPerimeterError {
+  --session-status-color: var(--dsw-alias-state-error-primary);
+}
+
+/* The overlay itself is the static ring mask and clip; only the centered
+   gradient square inside it rotates, so the highlight travels along the row
+   edge and never paints outside the row. */
+.sessionStatusPerimeterAnimated {
+  overflow: hidden;
+  mask: linear-gradient(currentColor 0 0) content-box, linear-gradient(currentColor 0 0);
+  mask-composite: exclude;
+}
+
+.sessionStatusPerimeterAnimated::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 56%,
+    color-mix(in srgb, var(--session-status-color) 34%, transparent) 70%,
+    color-mix(in srgb, var(--session-status-color) 58%, transparent) 92%,
+    var(--session-status-color) 96% 98%,
+    transparent 100%
+  );
+  opacity: 0.9;
+  animation: session-status-orbit 8s linear infinite;
+  will-change: rotate;
+}
+
+@keyframes session-status-orbit {
+  to { rotate: 1turn; }
 }
 
 .slot {
@@ -467,8 +531,14 @@
 @media (prefers-reduced-motion: reduce) {
   .sessionRow,
   .arrow,
-  .branchGlyph {
+  .branchGlyph,
+  .sessionStatusPerimeterAnimated::before {
     animation: none;
     transition: none;
+  }
+
+  /* Reduced motion keeps the static track; only the moving highlight goes. */
+  .sessionStatusPerimeterAnimated::before {
+    opacity: 0;
   }
 }

@@ -65,9 +65,17 @@
   - button "5":
     - text: "5"
     - img
+  - text: Conversation content width Fill the whole content area, or enable the draggable adaptive width
+  - button "Fill the content area":
+    - text: Fill the content area
+    - img
   - text: Session range and multi-selection Hold Shift to select a range of sessions and Ctrl (Command on macOS) to pick individual ones. Ctrl+A selects all, Esc clears.
   - button "On":
     - text: "On"
+    - img
+  - text: Session status animation Turning motion off keeps the static status border. Turning it off completely keeps only status dots and accessible labels.
+  - button "Animation on (default)":
+    - text: Animation on (default)
     - img
   - strong: Question navigation shortcuts
   - paragraph: Jump between questions in the current conversation.

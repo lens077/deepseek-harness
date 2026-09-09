@@ -16,6 +16,7 @@ import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { SessionStatusIndicatorMode } from '../stores.ts'
 import type { ArchivedSessionNode, GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
 
@@ -120,7 +121,7 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * `containsCurrent` arrives on the node (derivation fact, no renderer scan).
  * @param props.group - derived group node.
  * @param props.onToggle - expand/collapse the group.
- * @param props.onCreate - start a frontend Session inside this Workspace.
+ * @param props.onCreate - start a frontend Session inside this Workspace or the ungrouped bucket.
  * @param props.drag - optional workspace-row drag wiring.
  * @param props.home - host account home for POSIX hover-path abbreviation.
  * @param props.t - the browser root's locale seat.
@@ -246,7 +247,7 @@ interface SessionStatus {
  * outranks completion reminders.
  */
 function sessionStatuses(
-  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed'>,
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'runningSubagentCount' | 'completed' | 'failed'>,
   t: RowTranslate,
 ): readonly [SessionStatus, ...SessionStatus[]] {
   const subagents: SessionStatus | undefined = node.runningSubagentCount === 0
@@ -281,8 +282,57 @@ function sessionStatuses(
     return subagents === undefined ? [primary] : [primary, subagents]
   }
   if (subagents !== undefined) return [subagents]
+  if (node.failed) return [{ state: 'error', label: t('status.failed') }]
   if (node.completed) return [{ state: 'done', label: t('status.completed') }]
   return [{ state: 'done', label: t('status.idle') }]
+}
+
+/** Perimeter states: an own run, an unviewed completion, or the newest failed Turn. */
+type SessionStatusPerimeterState = 'running' | 'completed' | 'error'
+
+/**
+ * Which perimeter a row draws. A pending interaction keeps the amber dot as
+ * the only signal; an own run outranks both terminal states; error outranks
+ * completion. Descendant-only activity draws nothing (the owner is idle).
+ */
+function sessionStatusPerimeterState(
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'completed' | 'failed'>,
+): SessionStatusPerimeterState | undefined {
+  if (node.pendingInteraction !== undefined) return undefined
+  if (node.running) return 'running'
+  if (node.failed) return 'error'
+  if (node.completed) return 'completed'
+  return undefined
+}
+
+/**
+ * Decorative status perimeter: a quiet token-colored track, plus one slow
+ * rotating highlight while the row's own Session is running under the
+ * `animated` preference. Terminal states are always static. Status dots and
+ * labels carry the accessible meaning, so the overlay is hidden from AT.
+ */
+function SessionStatusPerimeter({ node, mode }: {
+  node: Pick<SessionNode, 'pendingInteraction' | 'running' | 'completed' | 'failed'>
+  mode: SessionStatusIndicatorMode
+}) {
+  if (mode === 'hidden') return null
+  const state = sessionStatusPerimeterState(node)
+  if (state === undefined) return null
+  const animated = mode === 'animated' && state === 'running'
+  return (
+    <span
+      aria-hidden="true"
+      className={clsx(
+        css.sessionStatusPerimeter,
+        state === 'running' && css.sessionStatusPerimeterRunning,
+        state === 'completed' && css.sessionStatusPerimeterCompleted,
+        state === 'error' && css.sessionStatusPerimeterError,
+        animated && css.sessionStatusPerimeterAnimated,
+      )}
+      data-session-status-perimeter={state}
+      data-motion={animated ? 'animated' : 'static'}
+    />
+  )
 }
 
 /** Primary status dot plus every status's screen-reader label, shared by the search and session rows. */
@@ -343,7 +393,9 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
  * @param props.t - Workspace-browser translation seat.
  * @returns the result button.
  */
-export function SearchResultItem({ result, currentId, onOpen, onContextMenu, multiSelected = false, multiLead = false, t }: {
+export function SearchResultItem({
+  result, currentId, onOpen, onContextMenu, multiSelected = false, multiLead = false, statusIndicatorMode = 'animated', t,
+}: {
   result: SearchResultNode
   currentId: string | undefined
   onOpen: (id: SearchResultNode['id'], event: RowActivationEvent) => void
@@ -352,6 +404,8 @@ export function SearchResultItem({ result, currentId, onOpen, onContextMenu, mul
   multiSelected?: boolean | undefined
   /** The row is the selection lead that arrow keys move and Shift extends to. */
   multiLead?: boolean | undefined
+  /** Status perimeter preference; dots and labels render in every mode. */
+  statusIndicatorMode?: SessionStatusIndicatorMode
   t: RowTranslate
 }) {
   const selected = result.id === currentId
@@ -372,6 +426,7 @@ export function SearchResultItem({ result, currentId, onOpen, onContextMenu, mul
         onContextMenu?.(result.id, e)
       }}
     >
+      <SessionStatusPerimeter node={result} mode={statusIndicatorMode} />
       <span className={css.searchResultHeading}>
         <span className={css.slot}>
           {(primaryStatus.state !== 'done' || result.completed) && (
@@ -402,12 +457,14 @@ export function SearchResultItem({ result, currentId, onOpen, onContextMenu, mul
  * @param props.t - the browser root's locale seat.
  * @returns the archived session row.
  */
-export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, t }: {
+export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, statusIndicatorMode = 'animated', t }: {
   node: ArchivedSessionNode
   now: number
   busy: boolean
   onUnarchive: (id: SessionNode['id']) => void
   onDelete: (id: SessionNode['id']) => void
+  /** Status perimeter preference; dots and labels render in every mode. */
+  statusIndicatorMode?: SessionStatusIndicatorMode
   t: RowTranslate
 }) {
   const title = displayTitle(node.session, t)
@@ -421,6 +478,7 @@ export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, t 
       role="treeitem"
       aria-busy={busy || undefined}
     >
+      <SessionStatusPerimeter node={node.session} mode={statusIndicatorMode} />
       <span className={css.searchResultHeading}>
         <span className={css.slot}>
           {showStatus && <SessionStatusDots statuses={statuses} />}
@@ -495,12 +553,13 @@ export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, t 
  * @param props.branch - nested-children affordance (chevron + count) for rows with a child branch.
  * @param props.multiSelected - the row is in the multi-selection set.
  * @param props.multiLead - the row is the selection lead (arrow-key cursor).
+ * @param props.statusIndicatorMode - status perimeter preference (default animated).
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
 export function SessionNodeItem({
   node, currentId, now, onOpen, onContextMenu, onRename, onFork, onDirectories, onArchive, onDelete,
-  onReveal, drag, flat = false, branch, multiSelected = false, multiLead = false, t,
+  onReveal, drag, flat = false, branch, multiSelected = false, multiLead = false, statusIndicatorMode = 'animated', t,
 }: {
   node: SessionNode
   currentId: string | undefined
@@ -534,6 +593,8 @@ export function SessionNodeItem({
   multiSelected?: boolean | undefined
   /** The row is the selection lead that arrow keys move and Shift extends to. */
   multiLead?: boolean | undefined
+  /** Status perimeter preference; dots and labels render in every mode. */
+  statusIndicatorMode?: SessionStatusIndicatorMode
   t: RowTranslate
 }) {
   const row = node
@@ -621,6 +682,7 @@ export function SessionNodeItem({
           drag.drop(rowHalf(e))
         }}
     >
+      <SessionStatusPerimeter node={node} mode={statusIndicatorMode} />
       {/* A row with nested children carries its own expand affordance; the
           chevron replaces nothing — it leads the status slot. */}
       {branch !== undefined && (
@@ -714,6 +776,7 @@ export interface SessionRowContext {
   onSessionRevealed: (id: SessionId) => void
   isSelected: (id: SessionNode['id']) => boolean
   isLead: (id: SessionNode['id']) => boolean
+  statusIndicatorMode: SessionStatusIndicatorMode
   t: RowTranslate
 }
 
@@ -759,6 +822,7 @@ export function SessionBranch({ node, row, drag, collapsedBranches, onToggleBran
         branch={hasChildren ? { expanded, toggle: () => { onToggleBranch(node.id) } } : undefined}
         multiSelected={row.isSelected(node.id)}
         multiLead={row.isLead(node.id)}
+        statusIndicatorMode={row.statusIndicatorMode}
         t={row.t}
       />
       {hasChildren && expanded && (

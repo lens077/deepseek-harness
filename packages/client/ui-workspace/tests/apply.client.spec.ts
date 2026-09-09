@@ -75,11 +75,13 @@ async function bench() {
   }
 }
 
-type HoleName = 'sidebar.workspaces' | 'conversation.hero.workspace' | 'conversation.empty.workspace'
+type HoleName = 'sidebar.workspaces' | 'conversation.hero.workspace' | 'conversation.empty.workspace' | 'settings.general.item'
 
 /** Declare any subset of the holes with a single root registration ('root' is a single slot). */
 function declare(slots: SlotRegistry, ...names: HoleName[]): () => void {
-  const children = Object.fromEntries(names.map(name => [name, { kind: 'single', scope: 'root' }]))
+  const children = Object.fromEntries(names.map(name => [
+    name, { kind: name === 'settings.general.item' ? 'list' : 'single', scope: 'root' },
+  ]))
   return slots.register({ name: 'root', children } as never, () => null)
 }
 
@@ -124,6 +126,13 @@ describe('ui-workspace apply', () => {
     expect(startSession).toHaveBeenCalledWith('ws')
     browser.startSession()
     expect(startSession).toHaveBeenLastCalledWith(undefined)
+    // The Ungrouped ＋ shares the sidebar's fire-and-forget failure reporting.
+    const startScratchSession = vi.spyOn(b.ctx.uiWorkspace, 'startScratchSession')
+      .mockRejectedValueOnce(new Error('refused'))
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    browser.startScratchSession()
+    expect(startScratchSession).toHaveBeenCalledOnce()
+    await vi.waitFor(() => { expect(warning).toHaveBeenCalledWith('new session failed:', expect.any(Error)) })
     browser.open('session' as never)
     expect(b.open).toHaveBeenCalledWith('session')
     const signal = new AbortController().signal
@@ -197,14 +206,28 @@ describe('ui-workspace apply', () => {
       .rejects.toThrow('index unavailable')
   })
 
+  it('contributes the session-count, multi-select, and status-presentation General Settings rows', async () => {
+    const b = await bench()
+    declare(b.slots, 'settings.general.item')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    expect(b.slots.entries('settings.general.item').map(entry => [entry.options.id, entry.options.order])).toEqual([
+      ['workspace-session-count', 25],
+      ['workspace-multi-select', 26],
+      ['workspace-session-status', 27],
+    ])
+    expect(b.locale.bind('workspace')('sessionStatus.settings.title')).toBe('对话状态动画')
+  })
+
   it('unregisters every entry on teardown', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace')
+    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'settings.general.item')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
+    expect(b.slots.entries('settings.general.item')).toHaveLength(3)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)
+    expect(b.slots.entries('settings.general.item')).toHaveLength(0)
     // expect(b.slots.entries('conversation.empty.workspace')).toHaveLength(0)
   })
 })

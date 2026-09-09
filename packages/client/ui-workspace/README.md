@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-workspace` is the shared Workspace browser and picker of the dsh Web client. Users browse grouped, flat, or archived Session rows; start a Workspace-backed or ungrouped scratch Session; and manage Session placement, selection, directories, archive state, and permanent deletion. Pending user interactions surface as amber warning dots, active Schedule projections surface as non-interactive alarm markers, nested forks render under their selected parent, and the shared sidebar projection hides subagent-origin Sessions. Distinct canonical paths remain separate id-keyed Workspaces, and folder choices go through child slots filled by a composed picker package.
+`dsh-client-ui-workspace` is the shared Workspace browser and picker of the dsh Web client. Users browse grouped, flat, or archived Session rows; start a Workspace-backed or ungrouped scratch Session; and manage Session placement, selection, directories, archive state, and permanent deletion. Pending user interactions surface as amber warning dots; active, completed, and failed Sessions can add subdued status perimeters; active Schedule projections surface as non-interactive alarm markers; nested forks render under their selected parent; and the shared sidebar projection hides subagent-origin Sessions. Distinct canonical paths remain separate id-keyed Workspaces, and folder choices go through child slots filled by a composed picker package.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Use the sidebar to browse Workspaces and their Sessions, reorder them, and start new ones; use the picker in the Session Intent hero to choose a Workspace or start without a folder. A collapsed Workspace shows five non-blank Sessions by default and keeps the selected blank **New Session** as one provisional extra row until its first prompt. The view menu and General Settings can set that count from 5 through 20 or to automatic sizing. **Show more** reveals the hidden remainder; closing and reopening the Workspace restores the folded projection.
+Use the sidebar to browse Workspaces and their Sessions, reorder them, and start new ones; the ＋ on a Workspace header starts a Session in that Workspace, and the ＋ on the Ungrouped header reuses or creates a blank Session outside every Workspace. Use the picker in the Session Intent hero to choose a Workspace or start without a folder. A collapsed Workspace shows five non-blank Sessions by default and keeps the selected blank **New Session** as one provisional extra row until its first prompt. The view menu and General Settings can set that count from 5 through 20 or to automatic sizing. **Show more** reveals the hidden remainder; closing and reopening the Workspace restores the folded projection.
 
 On phones, **Workspaces** opens a full-width Workspace list with an Ungrouped group when present. Selecting a Workspace shows its Session list; **Back** returns to the Workspace list, and selecting a Session opens the conversation. The drill-down uses the shared Session projection and ordering rather than a second Workspace account. Its header's icon-only **Search and manage** control opens the shared management browser; its accessible name identifies the action without a separate text row.
 
@@ -45,6 +45,12 @@ The Session row's Rename action opens a dialog prefilled with the display title.
 
 Session rows render the runtime's live `pendingInteraction` classification: approvals report **Waiting for approval**, plan reviews report **Plan awaiting review**, and ordinary questions report **Waiting for answer**. Every pending interaction uses an amber warning dot that takes precedence over the running indicator.
 
+### Session status presentation
+
+A Session that owns a running Turn receives a low-opacity perimeter with one long highlight rotating every eight seconds. Completed reminders and a durable `sessionDigest.outcome === 'error'` use static success or error perimeters; aborted, blocked, token-limited, and interrupted outcomes are not relabeled as errors. A pending interaction suppresses the perimeter, and descendant-only activity retains its existing dot and label without marking the idle owner as running.
+
+General Settings offers **Animation on (default)**, **Motion off**, and **Completely off**. Motion off keeps the state-colored track with no rotation. Completely off removes only the perimeter; status dots and screen-reader labels remain. The browser's `prefers-reduced-motion: reduce` media query also stops rotation while preserving the static track.
+
 ### Active Schedule markers
 
 Grouped and flat Session rows, plus search results, show an outline alarm when `SessionSummary.projectionValues.schedule` is a non-empty array. The marker sits after the title; an ordinary row keeps its update time after the marker, while a search result has no update time. It is not a button, has no independent pointer action or tab stop, and clicking its area still opens the row. The localized tooltip and matching screen-reader label say **Has active scheduled task**.
@@ -59,7 +65,7 @@ The value is intentionally best effort for cold Sessions. An identity-matching u
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package fills the sidebar browser and Session Intent picker slots and contributes the Session-count and multi-selection rows to General Settings. `apply` uses `slots.inject()` for each declaration lifetime and re-registers after a declaring slot is restored. A persisted viewing store owns grouping, ordering, expansion, and row-count preferences; a separate non-persisted store owns the current multi-selection.
+The package fills the sidebar browser and Session Intent picker slots and contributes the Session-count, multi-selection, and status-presentation rows to General Settings. `apply` uses `slots.inject()` for each declaration lifetime and re-registers after a declaring slot is restored. A persisted viewing store owns grouping, ordering, expansion, row-count, and status-perimeter preferences; a separate non-persisted store owns the current multi-selection.
 
 ### The directory-flow hole
 
@@ -67,7 +73,7 @@ Each registration declares a **directory-flow child hole** (`single` kind: `conv
 
 ### View state
 
-Once the Workspace list baseline is ready, browser-persisted expansion and Session-order records retain only current Workspace ids plus Ungrouped and the flat-list account. Real Workspaces initialize from `WorkspaceView.sessionIds`, while Ungrouped and the cross-Workspace flat list initialize from recency. The shared sidebar projection hides rows whose durable Session summary has `origin: 'subagent'`, and each visible ordinary row inherits the blue activity indicator while any descendant reached through uninterrupted subagent-origin lineage is running. The same pure derivation reads the Schedule key from list projection values for grouped, flat, and search nodes; the package uses only the type-only `@deepseek-ai/dsh-schedule/client` dependency and does not import the Schedule runtime or `ui-schedule`.
+Once the Workspace list baseline is ready, browser-persisted expansion and Session-order records retain only current Workspace ids plus Ungrouped and the flat-list account. Real Workspaces initialize from `WorkspaceView.sessionIds`, while Ungrouped and the cross-Workspace flat list initialize from recency. The shared sidebar projection hides rows whose durable Session summary has `origin: 'subagent'`, and each visible ordinary row keeps the blue activity dot while any descendant reached through uninterrupted subagent-origin lineage is running; descendant-only activity never claims the own-running perimeter. The same pure derivation reads the Schedule and `sessionDigest` list projection values for grouped, flat, archived, and search nodes; the package uses only the type-only `@deepseek-ai/dsh-schedule/client` and `@deepseek-ai/dsh-session-digest/types` dependencies and imports neither feature runtime.
 
 ### Hover cards
 

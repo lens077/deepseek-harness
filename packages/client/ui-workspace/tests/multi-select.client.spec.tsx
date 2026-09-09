@@ -66,6 +66,7 @@ function mountRows(names: readonly string[], overrides: Partial<WorkspaceBrowser
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
     startSession: vi.fn(),
+    startScratchSession: vi.fn(),
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,

@@ -125,6 +125,35 @@ describe('WorkspaceBrowser.module.css list', () => {
     }
   })
 
+  it('draws a slow token-colored status perimeter without reusing drag markers', () => {
+    const perimeter = rowDeclarations('.sessionStatusPerimeter')
+    expect(perimeter?.get('position')).toBe('absolute')
+    expect(perimeter?.get('inset')).toBe('1px')
+    expect(perimeter?.get('pointer-events')).toBe('none')
+    expect(rowDeclarations('.sessionRow')?.get('position')).toBe('relative')
+    expect(rowDeclarations('.searchResultRow')?.get('position')).toBe('relative')
+    expect(rowDeclarations('.sessionStatusPerimeterRunning')?.get('--session-status-color'))
+      .toBe('var(--dsw-alias-state-business-primary)')
+    expect(rowDeclarations('.sessionStatusPerimeterCompleted')?.get('--session-status-color'))
+      .toBe('var(--dsw-alias-state-success-primary)')
+    expect(rowDeclarations('.sessionStatusPerimeterError')?.get('--session-status-color'))
+      .toBe('var(--dsw-alias-state-error-primary)')
+    // The overlay is the static ring mask and clip; the rotating gradient is a
+    // centered square inside it, so no part of the sweep paints outside the row.
+    const animated = rowDeclarations('.sessionStatusPerimeterAnimated')
+    expect(animated?.get('overflow')).toBe('hidden')
+    expect(animated?.get('mask-composite')).toBe('exclude')
+    const arc = rowDeclarations('.sessionStatusPerimeterAnimated::before')
+    expect(arc?.get('aspect-ratio')).toBe('1')
+    expect(arc?.get('width')).toBe('120%')
+    expect(arc?.get('translate')).toBe('-50% -50%')
+    expect(rowsCss).toContain('animation: session-status-orbit 8s linear infinite;')
+    expect(rowsCss).toContain('to { rotate: 1turn; }')
+    expect(rowsCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.sessionStatusPerimeterAnimated::before[\s\S]*animation: none;/,
+    )
+  })
+
   it('keeps the compact fade, overflow control, search field, and row heights', () => {
     expect(declarations('.fade')?.get('height')).toBe('24px')
     expect(declarations('.sessionOverflowButton')?.get('height')).toBe('28px')

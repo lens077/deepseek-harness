@@ -34,7 +34,7 @@ import {
   type RowActivationEvent, type RowContextMenuEvent,
 } from './Rows.tsx'
 import {
-  FLAT_SESSION_ORDER_KEY, type CollapsedSessionCount, type SessionGroupBy,
+  FLAT_SESSION_ORDER_KEY, type CollapsedSessionCount, type SessionGroupBy, type SessionStatusIndicatorMode,
 } from '../stores.ts'
 import {
   clickRow, detectApplePlatform, isToggleModifier, moveLead, pruneSelection,
@@ -420,7 +420,7 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
-  'useSessions' | 'useSessionPendingInteraction' | 'startSession' | 'open' | 'forkSession'
+  'useSessions' | 'useSessionPendingInteraction' | 'startSession' | 'startScratchSession' | 'open' | 'forkSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
 > & {
   /** Host account home for POSIX hover-path abbreviation. */
@@ -466,6 +466,8 @@ type SessionTreeProps = Pick<
   orderBy: SessionOrderBy
   /** Shift/Ctrl range and toggle selection setting. */
   multiSelect: boolean
+  /** Status perimeter preference for every Session row. */
+  sessionStatusIndicatorMode: SessionStatusIndicatorMode
   /** Current multi-selection snapshot. */
   selection: SelectionState
   /** Commit a new multi-selection. */
@@ -480,12 +482,12 @@ type SessionTreeProps = Pick<
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
-  useSessions, useSessionPendingInteraction, startSession, open, forkSession, workspaces, archivedSessionIds,
-  workspaceReady,
+  useSessions, useSessionPendingInteraction, startSession, startScratchSession, open, forkSession, workspaces,
+  archivedSessionIds, workspaceReady,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   onSessionContextMenu, onSessionDelete, onSessionDirectories, renderSelectionActions,
   insertWorkspaceBefore, insertSessionBefore, orderBy, collapsedSessionCount,
-  groupExpansion, setGroupExpanded, multiSelect, selection, setSelection, clearSelection,
+  groupExpansion, setGroupExpanded, multiSelect, sessionStatusIndicatorMode, selection, setSelection, clearSelection,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
   ungroupedNestedUnder, home, t,
   revealSessionId, onSessionRevealed,
@@ -819,10 +821,9 @@ function SessionTree({
                   setGroupExpanded(group.key, !group.expanded)
                 }}
                 onCreate={() => {
-                  if (group.workspaceId !== undefined) {
-                    setGroupExpanded(group.key, true)
-                    startSession(group.workspaceId)
-                  }
+                  setGroupExpanded(group.key, true)
+                  if (group.workspaceId === undefined) startScratchSession()
+                  else startSession(group.workspaceId)
                 }}
                 drag={workspaceDragProps}
                 actions={group.workspaceId === undefined
@@ -887,6 +888,7 @@ function SessionTree({
                       onSessionRevealed: acknowledgeReveal,
                       isSelected: rowSelection.isSelected,
                       isLead: rowSelection.isLead,
+                      statusIndicatorMode: sessionStatusIndicatorMode,
                       t,
                     }}
                     drag={dragProps}
@@ -921,7 +923,7 @@ function FlatList({
   useSessions, useSessionPendingInteraction, open, forkSession, onSessionRename, onSessionArchive,
   onSessionContextMenu, onSessionDelete, onSessionDirectories, archivedSessionIds,
   orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
-  multiSelect, selection, setSelection, clearSelection,
+  multiSelect, sessionStatusIndicatorMode, selection, setSelection, clearSelection,
   revealSessionId, onSessionRevealed, t,
 }: Pick<
   SessionTreeProps,
@@ -941,6 +943,7 @@ function FlatList({
   | 'syncSessionOrderAccount'
   | 'setSessionOrder'
   | 'multiSelect'
+  | 'sessionStatusIndicatorMode'
   | 'selection'
   | 'setSelection'
   | 'clearSelection'
@@ -1046,6 +1049,7 @@ function FlatList({
               flat
               multiSelected={rowSelection.isSelected(node.id)}
               multiLead={rowSelection.isLead(node.id)}
+              statusIndicatorMode={sessionStatusIndicatorMode}
               drag={{
                 start: () => {
                   dropCommitted.current = false
@@ -1084,6 +1088,7 @@ function ArchivedList({
   error,
   onUnarchive,
   onDelete,
+  sessionStatusIndicatorMode,
   t,
 }: Pick<WorkspaceBrowserProps, 'useSessions' | 't'> & {
   workspaces: readonly WorkspaceView[]
@@ -1092,6 +1097,7 @@ function ArchivedList({
   error: string | null
   onUnarchive: (sessionId: SessionId) => void
   onDelete: (sessionId: SessionId) => void
+  sessionStatusIndicatorMode: SessionStatusIndicatorMode
 }) {
   const list = useSessions(state => state)
   const rows = useMemo(
@@ -1117,6 +1123,7 @@ function ArchivedList({
             busy={pending.has(node.session.id)}
             onUnarchive={onUnarchive}
             onDelete={onDelete}
+            statusIndicatorMode={sessionStatusIndicatorMode}
             t={t}
           />
         ))}
@@ -1144,6 +1151,7 @@ function SearchResults({
   remote,
   resultLimit,
   multiSelect,
+  sessionStatusIndicatorMode,
   selection,
   setSelection,
   clearSelection,
@@ -1152,7 +1160,7 @@ function SearchResults({
 }: Pick<
   SessionTreeProps,
   'useSessions' | 'useSessionPendingInteraction' | 'open' | 'onSessionContextMenu'
-  | 'multiSelect' | 'selection' | 'setSelection' | 'clearSelection' | 't'
+  | 'multiSelect' | 'sessionStatusIndicatorMode' | 'selection' | 'setSelection' | 'clearSelection' | 't'
 > & {
   workspaces: readonly WorkspaceView[]
   archivedSessionIds: readonly SessionNode['id'][]
@@ -1212,6 +1220,7 @@ function SearchResults({
               onContextMenu={onSessionContextMenu}
               multiSelected={rowSelection.isSelected(result.id)}
               multiLead={rowSelection.isLead(result.id)}
+              statusIndicatorMode={sessionStatusIndicatorMode}
               t={t}
             />
           ))}
@@ -1291,6 +1300,7 @@ function DesktopWorkspaceBrowser({
   useStore,
   actions,
   startSession,
+  startScratchSession,
   open,
   renameSession,
   sessionDirectories,
@@ -1332,6 +1342,7 @@ function DesktopWorkspaceBrowser({
   const groupBy = useStore(s => s.groupBy)
   const orderBy = useStore(s => s.orderBy)
   const multiSelect = useStore(s => s.multiSelect)
+  const sessionStatusIndicatorMode = useStore(s => s.sessionStatusIndicatorMode)
   const selection = useSessionSelection(state => state)
   const collapsedSessionCount = useStore(s => s.collapsedSessionCount)
   const groupExpansion = useStore(s => s.groupExpansion)
@@ -2045,6 +2056,7 @@ function DesktopWorkspaceBrowser({
               error={unarchiveError}
               onUnarchive={onSessionUnarchive}
               onDelete={(sessionId) => { requestSessionDelete([sessionId]) }}
+              sessionStatusIndicatorMode={sessionStatusIndicatorMode}
               t={t}
             />
           )
@@ -2060,6 +2072,7 @@ function DesktopWorkspaceBrowser({
                 remote={remoteSearch}
                 resultLimit={searchResultLimit}
                 multiSelect={multiSelect}
+                sessionStatusIndicatorMode={sessionStatusIndicatorMode}
                 selection={selection}
                 setSelection={setSessionSelection}
                 clearSelection={clearSessionSelection}
@@ -2083,6 +2096,7 @@ function DesktopWorkspaceBrowser({
                   syncSessionOrderAccount={actions.syncSessionOrderAccount}
                   setSessionOrder={actions.setSessionOrder}
                   multiSelect={multiSelect}
+                  sessionStatusIndicatorMode={sessionStatusIndicatorMode}
                   selection={selection}
                   setSelection={setSessionSelection}
                   clearSelection={clearSessionSelection}
@@ -2113,12 +2127,14 @@ function DesktopWorkspaceBrowser({
                   ungroupedNestedUnder={ungroupedNestedUnder}
                   archivedSessionIds={archivedSessionIds}
                   startSession={startSession}
+                  startScratchSession={startScratchSession}
                   open={open}
                   insertWorkspaceBefore={insertWorkspaceBefore}
                   insertSessionBefore={insertSessionBefore}
                   orderBy={orderBy}
                   collapsedSessionCount={collapsedSessionCount}
                   multiSelect={multiSelect}
+                  sessionStatusIndicatorMode={sessionStatusIndicatorMode}
                   selection={selection}
                   setSelection={setSessionSelection}
                   clearSelection={clearSessionSelection}

@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 选择标题来源
 
-标题来自三个来源，最新者胜出。内置回退在配置上限内从第一条符合条件用户消息的开头若干词派生；已注册提供方对符合条件的消息生成标题；显式 `rename()` 接受用户提供的标题。只有人类 `user/message` 事件中的文本块符合条件，空提示词或非文本提示词会等待后续符合条件的输入。用户来源的最新标题会钉住会话——后续用户消息不再安排自动修订，显式 `refresh()` 仍是有意的解钉手段。
+标题来自三个来源，最新者胜出。内置回退在配置上限内从第一条符合条件用户消息的开头若干词派生；已注册提供方对符合条件的消息生成标题；显式 `rename()` 接受用户提供的标题。只有人类 `user/message` 事件中的文本块符合条件，空提示词或非文本提示词会等待后续符合条件的输入。用户来源的最新标题会钉住会话——后续用户消息不再安排自动修订，显式 `refresh()` 仍是有意的解钉手段——除非 `automaticOverridesUserRename` 为 `true`，此时已注册提供方的节奏会在下一条符合条件的消息上取代用户标题。
 
 ### 最小配置
 
@@ -49,6 +49,7 @@ kind: "package-reference"
 | `fallbackMaxWords` | 必填 | 确定性回退中以空白分隔的最大词数 |
 | `fallbackMaxBytes` | 必填 | 回退允许的最大 UTF-8 字节数；不得超过 `maxTitleBytes` |
 | `maxTitleBytes` | 必填 | 接受任何来源标题的最大 UTF-8 字节数 |
+| `automaticOverridesUserRename` | `false` | 显式用户改名之后，后续人类消息是否仍安排自动生成 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-session-title)是每个受支持字段及其 JSDoc 的穷尽式真源。
 

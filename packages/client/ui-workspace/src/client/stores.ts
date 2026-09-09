@@ -16,6 +16,12 @@ export type SessionGroupBy = 'workspace' | 'flat' | 'archived'
 export type SessionOrderBy = 'manual' | 'updated'
 /** Collapsed rows per Workspace, or automatic sizing from available height. */
 export type CollapsedSessionCount = number | 'auto'
+/**
+ * Session-row status perimeter: `animated` rotates the running highlight,
+ * `static` keeps the state-colored track without motion, and `hidden` omits
+ * the perimeter while status dots and accessible labels remain.
+ */
+export type SessionStatusIndicatorMode = 'animated' | 'static' | 'hidden'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
@@ -41,6 +47,8 @@ type WorkspaceViewState = {
    * modifier keys entirely.
    */
   multiSelect: boolean
+  /** Presentation of the running/completed/error perimeter on Session rows. */
+  sessionStatusIndicatorMode: SessionStatusIndicatorMode
 }
 
 /**
@@ -52,6 +60,7 @@ type WorkspaceViewActions = {
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
   setCollapsedSessionCount: (draft: WorkspaceViewState, count: CollapsedSessionCount) => void
   setMultiSelect: (draft: WorkspaceViewState, enabled: boolean) => void
+  setSessionStatusIndicatorMode: (draft: WorkspaceViewState, mode: SessionStatusIndicatorMode) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
   retainAccountKeys: (draft: WorkspaceViewState, workspaceKeys: readonly string[]) => void
   syncSessionOrderAccount: (
@@ -79,13 +88,19 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       sessionUpdatedAtByAccount: {},
       ungroupedNestedUnder: {},
       multiSelect: true,
+      sessionStatusIndicatorMode: 'animated',
     }),
-    persist: 'dsh.workspace.view.v8',
+    // Persistence restores the whole value, so a state field addition bumps
+    // the key: an older value could not supply the required field.
+    persist: 'dsh.workspace.view.v9',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
       setCollapsedSessionCount: (d, count: CollapsedSessionCount) => { d.collapsedSessionCount = count },
       setMultiSelect: (d, enabled: boolean) => { d.multiSelect = enabled },
+      setSessionStatusIndicatorMode: (d, mode: SessionStatusIndicatorMode) => {
+        d.sessionStatusIndicatorMode = mode
+      },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
       retainAccountKeys: (d, workspaceKeys: readonly string[]) => {
         const retained = new Set(workspaceKeys)

@@ -31,6 +31,7 @@ import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 import { SessionCountSettingsRow } from './SessionCountSettingsRow.tsx'
 import { MultiSelectSettingsRow } from './MultiSelectSettingsRow.tsx'
+import { SessionStatusSettingsRow } from './SessionStatusSettingsRow.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type { UiWorkspace } from './navigation.ts'
@@ -114,6 +115,11 @@ export function apply(ctx: Context): void {
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
     startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
+    startScratchSession: () => {
+      uiWorkspace.startScratchSession().catch((reason: unknown) => {
+        console.warn('new session failed:', reason)
+      })
+    },
     open: (sessionId) => { sessions.open(sessionId) },
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
@@ -207,6 +213,14 @@ export function apply(ctx: Context): void {
       inject: () => ({}),
       locale: NS,
     }, MultiSelectSettingsRow)
+    yield ctx.slots.register({
+      name: 'settings.general.item',
+      id: 'workspace-session-status',
+      order: 27,
+      store: workspaceViewStore,
+      inject: () => ({}),
+      locale: NS,
+    }, SessionStatusSettingsRow)
   })
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {

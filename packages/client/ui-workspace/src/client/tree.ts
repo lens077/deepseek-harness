@@ -11,6 +11,8 @@ import type {
   SessionPendingInteractionBase,
 } from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-schedule/client'
+// Type-only: pulls the `sessionDigest` projection key merge.
+import type {} from '@deepseek-ai/dsh-session-digest/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 import {
@@ -52,6 +54,8 @@ export interface SessionNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** The newest Turn in the durable digest ended with `outcome === 'error'`. */
+  failed: boolean
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   updatedAt: number
@@ -97,6 +101,8 @@ export interface SearchResultNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** The newest Turn in the durable digest ended with `outcome === 'error'`. */
+  failed: boolean
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   snippet?: string
@@ -187,6 +193,14 @@ function sessionTitle(session: SessionSummary): string {
 /** The list projection alone owns the best-effort active-Schedule indicator. */
 function hasActiveSchedule(session: SessionSummary): boolean {
   return (session.projectionValues?.schedule?.length ?? 0) > 0
+}
+
+/**
+ * Only the exact `error` outcome is a failure; aborted, blocked, token-limited,
+ * and interrupted Turns keep their own meaning and receive no error treatment.
+ */
+function hasFailedOutcome(session: SessionSummary): boolean {
+  return session.projectionValues?.sessionDigest?.outcome === 'error'
 }
 
 /**
@@ -308,6 +322,7 @@ function sessionNode(
     running: s.running,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
     completed: s.completed === true,
+    failed: hasFailedOutcome(s),
     hasActiveSchedule: hasActiveSchedule(s),
     updatedAt: s.updatedAt,
     children,
@@ -593,6 +608,7 @@ export function deriveSearchResults(
           ? {}
           : { pendingInteraction }),
         completed: summary.completed === true,
+        failed: hasFailedOutcome(summary),
         hasActiveSchedule: hasActiveSchedule(summary),
         ...match === undefined ? {} : { snippet: match.snippet },
       }

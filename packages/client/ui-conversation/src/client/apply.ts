@@ -93,6 +93,7 @@ interface WorkspaceNavigation {
   connectWorkspace(
     workspaceId: Parameters<ConversationInjected['selectWorkspace']>[0],
   ): Promise<SessionId>
+  startScratchSession(): Promise<SessionId>
 }
 
 /** Resolve the session-scoped Conversation action face, failing loud. */
@@ -298,8 +299,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         sessions.open(nextId)
       },
       startScratchSession: async () => {
-        const nextId = await sessions.create()
-        sessions.open(nextId)
+        await workspaceNavigation.startScratchSession()
       },
     }),
   }, ConversationRoot)

@@ -185,6 +185,37 @@ describe('deriveGroups', () => {
     ).items.map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
   })
 
+  it('derives failed only from the exact error digest outcome', () => {
+    const digest = (outcome: 'completed' | 'error' | 'blocked' | 'aborted' | null) => ({
+      question: 'q', questionTruncated: false, questionSeq: 1, questionAt: 1,
+      reply: null, replyTruncated: false, outcome, replySeq: null, repliedAt: null,
+      changedFiles: [], changedFileCount: 0, history: [],
+    })
+    const absent = summary('absent', 5)
+    const open = { ...summary('open', 4), projectionValues: { sessionDigest: digest(null) } }
+    const errored = { ...summary('errored', 3), projectionValues: { sessionDigest: digest('error') } }
+    const blocked = { ...summary('blocked', 2), projectionValues: { sessionDigest: digest('blocked') } }
+    const aborted = { ...summary('aborted', 1), projectionValues: { sessionDigest: digest('aborted') } }
+    const sessions = list(absent, open, errored, blocked, aborted)
+    const workspaces = [workspace('project', ['absent', 'open', 'errored', 'blocked', 'aborted'], 'Project')]
+    const expected = [
+      [sid('absent'), false],
+      [sid('open'), false],
+      [sid('errored'), true],
+      [sid('blocked'), false],
+      [sid('aborted'), false],
+    ]
+
+    expect(deriveGroups(
+      sessions, workspaces, noArchive, noAttention, view(['project']),
+    )[0]!.sessions.map(node => [node.id, node.failed])).toEqual(expected)
+    expect(deriveFlat(sessions, noArchive, noAttention)
+      .map(node => [node.id, node.failed])).toEqual(expected)
+    expect(deriveSearchResults(
+      sessions, workspaces, 'project', noArchive, noAttention, { items: [], hasMore: false }, 10,
+    ).items.map(node => [node.id, node.failed])).toEqual(expected)
+  })
+
   it('hides subagent-origin sessions without hiding ordinary forks', () => {
     const parent = summary('parent', 1)
     const subagent = {
@@ -430,6 +461,7 @@ describe('deriveSearchResults', () => {
           runningSubagentCount: 0,
           pendingInteraction: 'plan-review',
           completed: false,
+          failed: false,
           hasActiveSchedule: false,
           snippet: 'title session body excerpt',
         },
@@ -440,6 +472,7 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
+          failed: false,
           hasActiveSchedule: false,
         },
         {
@@ -449,6 +482,7 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
+          failed: false,
           hasActiveSchedule: false,
           snippet: 'body needle excerpt',
         },
@@ -530,6 +564,8 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setSessionOrder('alpha', ['one', 'two'])
     expect(store.getSnapshot().ungroupedNestedUnder).toEqual({})
     store.actions.setUngroupedNesting('child', 'parent')
+    expect(store.getSnapshot().sessionStatusIndicatorMode).toBe('animated')
+    store.actions.setSessionStatusIndicatorMode('static')
     expect(store.getSnapshot().groupBy).toBe('flat')
     expect(store.getSnapshot()).toMatchObject({
       orderBy: 'updated',
@@ -537,6 +573,7 @@ describe('createWorkspaceViewStore', () => {
       sessionOrderByAccount: { alpha: ['one', 'two'] },
       sessionUpdatedAtByAccount: { alpha: { one: 1, two: 2 } },
       ungroupedNestedUnder: { child: 'parent' },
+      sessionStatusIndicatorMode: 'static',
     })
   })
 

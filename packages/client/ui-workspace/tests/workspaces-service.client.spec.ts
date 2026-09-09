@@ -317,6 +317,43 @@ describe('UiWorkspaceService', () => {
     })
   })
 
+  it('reuses only an unarchived loose blank for a scratch session, coalescing creation and opening the result', async () => {
+    const memberBlank = sid('member-blank')
+    const archivedLoose = sid('archived-loose')
+    const looseBlank = sid('loose-blank')
+    const summaries: readonly SessionSummary[] = [
+      summary('member-blank', { blank: true, cwd: '/w/alpha' }),
+      summary('archived-loose', { blank: true }),
+      summary('loose-active'),
+      summary('loose-blank', { blank: true }),
+    ]
+    const b = bench({
+      sessions: { ...sessionState(summaries, sid('loose-active')), ids: [sid('missing'), ...summaries.map(item => item.id)] },
+      workspaces: workspaceState([workspace('alpha', [memberBlank])], [archivedLoose]),
+    })
+
+    await expect(b.uiWorkspace.startScratchSession()).resolves.toBe(looseBlank)
+    expect(b.sessions.create).not.toHaveBeenCalled()
+    expect(b.sessions.open).toHaveBeenLastCalledWith(looseBlank)
+
+    const fresh = bench({ sessions: sessionState([summary('loose-active')], sid('loose-active')), workspaces: workspaceState([]) })
+    const creation = Promise.withResolvers<SessionId>()
+    fresh.sessions.create.mockImplementation(() => creation.promise)
+    const first = fresh.uiWorkspace.startScratchSession()
+    const second = fresh.uiWorkspace.startScratchSession()
+    expect(fresh.sessions.create).toHaveBeenCalledTimes(1)
+    expect(fresh.sessions.create).toHaveBeenCalledWith()
+    creation.resolve(sid('fresh-loose'))
+    await expect(Promise.all([first, second])).resolves.toEqual([sid('fresh-loose'), sid('fresh-loose')])
+    expect(fresh.sessions.open).toHaveBeenLastCalledWith(sid('fresh-loose'))
+
+    fresh.sessions.create.mockRejectedValueOnce(new Error('create failed'))
+    await expect(fresh.uiWorkspace.startScratchSession()).rejects.toThrow('create failed')
+    // The settled failure releases the coalescing slot for the next attempt.
+    fresh.sessions.create.mockResolvedValueOnce(sid('retry-loose'))
+    await expect(fresh.uiWorkspace.startScratchSession()).resolves.toBe(sid('retry-loose'))
+  })
+
   it('opens the recent Workspace after both baselines arrive', async () => {
     const b = bench()
     b.sessions.create.mockResolvedValue(sid('initial'))

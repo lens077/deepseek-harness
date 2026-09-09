@@ -25,6 +25,11 @@ export interface UiWorkspace {
    */
   startSession(workspaceId?: WorkspaceId): void
   /**
+   * Open the reusable or newly created blank Session outside every Workspace.
+   * @returns the opened Session; rejects when the Host refuses creation.
+   */
+  startScratchSession(): Promise<SessionId>
+  /**
    * Archive a Session and clear it when it is the current selection.
    * @param sessionId - Session to archive.
    */
@@ -70,6 +75,7 @@ export class DirectoryBrowseError extends Error {
 /** Implements Workspace archive and directory UI operations. */
 class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
+  private connectingScratch: Promise<SessionId> | undefined
 
   /**
    * @param ctx - Client root Context.
@@ -132,6 +138,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     )
   }
 
+  async startScratchSession(): Promise<SessionId> {
+    const sessionId = await this.connectScratch()
+    this.sessions.open(sessionId)
+    return sessionId
+  }
+
   async archiveSession(sessionId: SessionId): Promise<void> {
     await this.workspaces.archiveSession(sessionId)
   }
@@ -152,6 +164,26 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const result = await this.directoryPicker.createDirectory(path, name)
     if (!result.ok) throw new DirectoryBrowseError(result.error)
     return result.value
+  }
+
+  /**
+   * Resolve the reusable or newly created blank Session that no Workspace
+   * accounts for; concurrent calls share one creation.
+   */
+  private connectScratch(): Promise<SessionId> {
+    if (this.connectingScratch !== undefined) return this.connectingScratch
+    const { items, archivedSessionIds } = this.workspaces.list.getSnapshot()
+    const sessions = this.sessions.list.getSnapshot()
+    for (const id of sessions.ids) {
+      const summary = sessions.byId[id]
+      if (summary !== undefined && summary.blank
+        && !archivedSessionIds.includes(summary.id)
+        && !items.some(workspace => workspace.sessionIds.includes(summary.id))) return Promise.resolve(summary.id)
+    }
+    const attempt = this.sessions.create()
+      .finally(() => { this.connectingScratch = undefined })
+    this.connectingScratch = attempt
+    return attempt
   }
 
   private watchNavigation(): () => void {
