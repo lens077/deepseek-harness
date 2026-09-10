@@ -434,6 +434,85 @@ Source: [`packages/feedback/message-feedback/src/types.ts:53`](../packages/feedb
 
 Source: [`packages/feedback/command-feedback/src/index.ts:25`](../packages/feedback/command-feedback/src/index.ts)
 
+### `file-lock/*`
+
+<a id="file-lockacquired--log-only"></a>
+
+#### `file-lock/acquired` — log-only
+
+```ts persistence-catalog
+/** This session leased `path` for modification until the current turn ends. */
+'file-lock/acquired': { path: string }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:54`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockanswered--log-only"></a>
+
+#### `file-lock/answered` — log-only
+
+```ts persistence-catalog
+/** A read against a live foreign lease was decided: by the user's answer or by the delegated-read policy. */
+'file-lock/answered': { path: string; choice: 'read-now' | 'keep-waiting'; by: FileLockReadNowDecider }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:60`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockasked--log-only"></a>
+
+#### `file-lock/asked` — log-only
+
+```ts persistence-catalog
+/** The silent read wait expired; the user was asked whether to read now or keep waiting. */
+'file-lock/asked': { path: string; holder: FileLockHolder; waitedMs: number }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:58`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockreleased--log-only"></a>
+
+#### `file-lock/released` — log-only
+
+```ts persistence-catalog
+/** Leases this session held were released before its turn ended. */
+'file-lock/released': { paths: string[]; reason: 'ttl' }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:66`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-locksettled--log-only"></a>
+
+#### `file-lock/settled` — log-only
+
+```ts persistence-catalog
+/** The wait for `path` ended; the read or write then proceeded, was refused, or was cancelled. */
+'file-lock/settled': { path: string; access: FileAccess; outcome: FileLockWaitOutcome; waitedMs: number }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:64`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-locksubscribed--log-only"></a>
+
+#### `file-lock/subscribed` — log-only
+
+```ts persistence-catalog
+/** A read subscribed for the release of `path` with no time bound. */
+'file-lock/subscribed': { path: string; holder: FileLockHolder }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:62`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockwaiting--log-only"></a>
+
+#### `file-lock/waiting` — log-only
+
+```ts persistence-catalog
+/** A call of this session started waiting for another session's lease on `path`. */
+'file-lock/waiting': { path: string; access: FileAccess; holder: FileLockHolder }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:56`](../packages/guard/file-lock/src/types.ts)
+
 ### `goal/*`
 
 <a id="goalchange--log-only"></a>

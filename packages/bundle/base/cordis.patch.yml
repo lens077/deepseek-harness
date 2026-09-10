@@ -424,6 +424,12 @@
     - id: timeout-policy
       name: '@deepseek-ai/dsh-tool-call-timeout-policy'
 
+    # Cross-session file leases over the shipped fs tools; the user-editable
+    # waits live in the `file-lock` settings namespace. The tool rules default
+    # to the shipped fs tools; an overlay adds rules for other path-taking tools.
+    - id: file-lock
+      name: '@deepseek-ai/dsh-tool-call-file-lock'
+
     - id: spill-local
       name: '@deepseek-ai/dsh-spill-local'
 

@@ -2911,6 +2911,57 @@ export interface Config {
 
 Source: [`packages/shell/tool-bash-persistent/src/index.ts:439`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-call-file-lock"></a>
+
+## `@deepseek-ai/dsh-tool-call-file-lock`
+
+Requires: `tools` · `agents` · `fs` · `sessionProjections`
+
+```ts config-catalog
+/** Complete plugin configuration: the user-editable section plus the tool rules. */
+export interface Config extends FileLockSettings {
+  /** Tools the policy covers; a tool absent here is never locked. */
+  readonly tools: ToolAccessRule[]
+}
+
+/** The user-editable section stored under the `file-lock` settings namespace. */
+export interface FileLockSettings {
+  /** Milliseconds a foreign read waits silently before the user is asked. */
+  readonly readWaitMs: number
+  /** Milliseconds a foreign write waits for the lease before it is refused. */
+  readonly writeWaitMs: number
+  /** Milliseconds after which a lease is released even though its turn has not ended. */
+  readonly leaseTtlMs: number
+  /** Read behavior after the wait expires when no human can be asked. */
+  readonly delegatedReadTimeout: DelegatedReadTimeoutPolicy
+}
+
+/** Which argument of one tool names the file and which access the call performs. */
+export interface ToolAccessRule {
+  /** Registered tool name. */
+  readonly tool: string
+  /** Argument carrying the path the tool resolves. */
+  readonly pathArgument: string
+  /** Access the call performs unless `readWhenArgument` carries one of `readWhenValues`. */
+  readonly access: FileAccess
+  /** Argument whose value can turn a `write` rule into a read for one call. */
+  readonly readWhenArgument?: string
+  /** Values of `readWhenArgument` under which the call only reads. */
+  readonly readWhenValues?: string[]
+}
+
+/**
+ * What a read does when its wait expires and no human can be asked: the
+ * caller is a delegated agent, or no user-questions service is mounted.
+ */
+export type DelegatedReadTimeoutPolicy = 'wait' | 'read-now'
+
+/** Which file access a tool call performs, decided from its arguments. */
+export type FileAccess = 'read' | 'write'
+```
+
+Source: [`packages/guard/file-lock/src/index.ts:66`](../packages/guard/file-lock/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`

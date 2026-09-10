@@ -2916,6 +2916,54 @@ export interface Config {
 
 来源：[`packages/shell/tool-bash-persistent/src/index.ts:439`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-call-file-lock"></a>
+
+## `@deepseek-ai/dsh-tool-call-file-lock`
+
+需要：`tools` · `agents` · `fs` · `sessionProjections`
+
+```ts config-catalog
+/** 完整的插件配置：用户可编辑的设置节加上工具规则。 */
+export interface Config extends FileLockSettings {
+  /** 策略覆盖的工具；不在此列的工具永不加锁。 */
+  readonly tools: ToolAccessRule[]
+}
+
+/** 存于 `file-lock` 设置命名空间下的用户可编辑设置节。 */
+export interface FileLockSettings {
+  /** 外部读取在询问用户前静默等待的毫秒数。 */
+  readonly readWaitMs: number
+  /** 外部写入在被拒绝前等待租约的毫秒数。 */
+  readonly writeWaitMs: number
+  /** 超过此毫秒数后即使 turn 未结束也释放租约。 */
+  readonly leaseTtlMs: number
+  /** 等待到期且无法询问人类时的读取行为。 */
+  readonly delegatedReadTimeout: DelegatedReadTimeoutPolicy
+}
+
+/** 某工具的哪个参数指明文件，以及该调用执行哪种访问。 */
+export interface ToolAccessRule {
+  /** 已注册的工具名。 */
+  readonly tool: string
+  /** 携带工具所解析路径的参数。 */
+  readonly pathArgument: string
+  /** 除非 `readWhenArgument` 取 `readWhenValues` 之一，否则调用执行的访问类型。 */
+  readonly access: FileAccess
+  /** 其取值可在单次调用中把 `write` 规则转为读取的参数。 */
+  readonly readWhenArgument?: string
+  /** `readWhenArgument` 取这些值时调用仅读取。 */
+  readonly readWhenValues?: string[]
+}
+
+/** 等待到期且无法询问人类（调用方是受委托的 Agent，或未挂载 user-questions 服务）时读取的行为。 */
+export type DelegatedReadTimeoutPolicy = 'wait' | 'read-now'
+
+/** 由参数决定的工具调用文件访问类型。 */
+export type FileAccess = 'read' | 'write'
+```
+
+来源：[`packages/guard/file-lock/src/index.ts:66`](../packages/guard/file-lock/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
