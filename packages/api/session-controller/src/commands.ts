@@ -413,6 +413,8 @@ export class SessionCommandController {
    * degrades to its effort on the baseline route, and an effort the baseline
    * model rejects, or a router failure, keeps the baseline. Every outcome is
    * recorded as one `model/route` event; nothing here can reject the prompt.
+   * While the person switched routing off, the router is not consulted and a
+   * Session still on a routed selection returns to its baseline.
    * @param router - mounted route selection service.
    * @param agent - live Agent receiving the prompt.
    * @param content - prompt parts about to be queued.
@@ -423,6 +425,14 @@ export class SessionCommandController {
     content: SessionPromptRequest['content'],
   ): Promise<void> {
     const baseline = this.agents.baselineFor(agent)
+    if (!router.enabled()) {
+      const current = this.agents.selectionFor(agent).current
+      if (current.provider !== baseline.provider || current.model !== baseline.model
+        || current.reasoningEffort !== baseline.reasoningEffort) {
+        this.recordRoute(agent, baseline, baseline, 'routing switched off: baseline restored')
+      }
+      return
+    }
     const prompt = {
       text: content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'),
       hasImage: content.some(part => part.type === 'image'),

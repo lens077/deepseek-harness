@@ -146,6 +146,25 @@ export function textField(field: string): CardFieldSpec {
 }
 
 /**
+ * A switch field staged as the text `true` or `false`. An empty draft clears
+ * the field; any other text blocks the save.
+ * @param field - field name inside the namespace section.
+ * @returns the field's conversion spec.
+ */
+export function booleanField(field: string): CardFieldSpec {
+  return {
+    field,
+    format: value => typeof value === 'boolean' ? String(value) : '',
+    parse: (text) => {
+      const trimmed = text.trim()
+      if (trimmed === '') return { kind: 'clear' }
+      if (trimmed === 'true' || trimmed === 'false') return { kind: 'set', value: trimmed === 'true' }
+      return undefined
+    },
+  }
+}
+
+/**
  * Stages one card's edits over one settings namespace and writes them on save.
  *
  * The form publishes through a snapshot store because slot components read

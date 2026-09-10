@@ -1049,7 +1049,16 @@ Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 
 Abstract prompt-driven route selection. Load one implementation per context as `ctx.modelRouter`. Implementations are pure decision functions: they never validate a route against the live LLM registry, never mutate the session, and answer with the baseline when nothing applies.
 
+Mounting any implementation serves the `model-routing` settings section while a settings provider is present; its `enabled` switch lets a person stop routing without unmounting the provider, and consumers read it through ModelRouter.enabled before every prompt.
+
 ```ts cordis-catalog
+/**
+ * Whether the person left routing on. Without a settings provider the
+ * answer is always true.
+ * @returns the current `model-routing.enabled` value.
+ */
+enabled(): boolean
+
 /**
  * Propose the route for the prompt about to be queued. The call sits in the
  * prompt's admission path, so an implementation that performs I/O must bound

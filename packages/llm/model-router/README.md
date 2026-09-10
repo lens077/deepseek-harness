@@ -37,6 +37,14 @@ Before a human prompt is queued, the consumer reads the **baseline** — the rou
 
 The consumer enforces its own constraints before applying an answer. A route change is applied only when at least two routes are configured, the proposal names one of them, an image prompt lands on a route declaring image input, the Session's measured tokens fit the route's context window when both are known, and the proposed effort resolves on that model; otherwise the proposal degrades to its effort on the baseline route — with one configured model, routing is effort-only. An effort the baseline model rejects, or a provider failure, keeps the baseline. Every refused constraint is recorded in the event's `reason`. Routing never rejects a prompt and never calls `agentDefaultModel.saveSelection()`, so new Sessions start from the person's default.
 
+### Switching routing off
+
+Mounting any provider serves the `model-routing` settings section with one field, `enabled` (default on), which the Plugins settings page renders as the Model routing card. While it is off, prompts do not consult the router, and a Session still on a routed selection returns to its baseline at its next prompt with a `model/route` reason of `routing switched off: baseline restored`. The switch changes nothing about the mounted provider or its rules.
+
+### When the routed model fails
+
+If the request on a routed route ends in a terminal failure that `dsh-llm-retry` does not recover — the provider is down, keeps timing out, or rejects the model — the Web prompt path moves the same step back to the baseline route and retries once there, recording `fallback: <code> on <provider>/<model>: <message>` as the `model/route` reason. A failure on the baseline itself ends the turn as before.
+
 ### Implementing a provider
 
 Subclass `ModelRouter` and implement `route(input)`; mount the subclass as `ctx.modelRouter`. `input.baseline` is the owner's route, `input.candidates` lists the configured routes a proposal may name, and `input.prompt` carries the concatenated prompt text and whether an image is attached. An effort belongs to the proposed model: a proposal that changes the model without an effort asks for that model's default. Answer with the baseline unchanged when nothing applies. Providers are pure decision functions: they never validate against the live LLM registry and never write to the Session. A provider that performs I/O runs in the prompt's admission path and must bound its own latency.
@@ -96,7 +104,8 @@ These limits define the current routing surface; they are current package constr
 - **No switch-cost guard** — a route change is accepted whenever the constraints above hold, however long the Session is; the prefix recomputation and the retained notice are the deployment's cost to weigh when writing rules.
 - **Image checks read the prompt, not the history** — a switch away from an image-capable model with image blocks in earlier turns is not refused.
 - **Web prompts only** — headless, ACP, SDK, and webhook sessions keep their explicit routes and never consult the router.
-- **No per-session opt-out** — with a provider mounted, every human Web prompt is routed; a person's effort choice is the baseline the router overrides per prompt, and a session-level Auto switch is deferred.
+- **One deployment-wide switch** — `model-routing.enabled` stops routing for every Session; a per-Session Auto/pinned state is deferred.
+- **Fallback is one hop** — a failed routed model retries on the baseline only; it never tries a third route.
 - **No cancellation input** — `route()` receives no signal because no shipped consumer owns one; a provider performing I/O bounds its own latency.
 
 <a id="dev-note"></a>

@@ -46,6 +46,8 @@ interface HarnessOptions {
   readonly mountRouter?: boolean
   readonly catalog?: Catalog
   readonly measuredTokens?: number
+  /** Selection the Agent currently carries; the baseline stays fixed. */
+  readonly current?: AgentModelSelection
 }
 
 async function routingHarness(options: HarnessOptions = {}): Promise<{
@@ -107,7 +109,7 @@ async function routingHarness(options: HarnessOptions = {}): Promise<{
   const routeForNextRequest = vi.fn()
   const agents = {
     resolveAgent: () => Promise.resolve({ agent }),
-    selectionFor: () => ({ current: { ...BASELINE } }),
+    selectionFor: () => ({ current: { ...(options.current ?? BASELINE) } }),
     baselineFor: () => ({ ...BASELINE }),
     routeForNextRequest,
     serializeImageAdmission: <Value>(_agent: Agent, operation: () => Promise<Value>) => operation(),
@@ -281,6 +283,24 @@ describe('Session prompt model routing', () => {
     }
     await controller.prompt(prompt('hello'))
     expect(seen[0]?.candidates).toEqual([{ provider: 'fixture', model: 'fixture-model' }, STRONG])
+  })
+
+  it('does not consult a switched-off router and restores a Session left on a routed selection', async () => {
+    const { controller, agent, router, routeForNextRequest } = await routingHarness()
+    let asked = 0
+    router!.answer = () => { asked += 1; return Promise.reject(new Error('must not be asked')) }
+    router!.enabled = () => false
+    await controller.prompt(prompt('hello'))
+    expect(asked).toBe(0)
+    expect(routeForNextRequest).not.toHaveBeenCalled()
+    expect(routeEvents(agent)).toEqual([])
+    const routedHarness = await routingHarness({ current: { ...STRONG, reasoningEffort: 'max' as never } })
+    routedHarness.router!.enabled = () => false
+    await routedHarness.controller.prompt(prompt('hello'))
+    expect(routedHarness.routeForNextRequest).toHaveBeenCalledWith(routedHarness.agent, BASELINE)
+    expect(routeEvents(routedHarness.agent)).toEqual([{
+      baseline: BASELINE, selection: BASELINE, reason: 'routing switched off: baseline restored',
+    }])
   })
 
   it('applies a decision that drops the effort so the model default governs', async () => {

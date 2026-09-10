@@ -7,6 +7,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { AgentLoopCard } from '../src/client/AgentLoopCard.tsx'
 import type { AgentLoopCardProps } from '../src/client/AgentLoopCard.tsx'
 import { BashCard } from '../src/client/BashCard.tsx'
+import { ModelRoutingCard } from '../src/client/ModelRoutingCard.tsx'
+import type { ModelRoutingCardProps } from '../src/client/ModelRoutingCard.tsx'
 import type { BashCardProps } from '../src/client/BashCard.tsx'
 import { ConfigurablePluginsTab } from '../src/client/ConfigurablePluginsTab.tsx'
 import type { ConfigurablePluginsTabProps } from '../src/client/ConfigurablePluginsTab.tsx'
@@ -18,6 +20,7 @@ import { WebSearchCard } from '../src/client/WebSearchCard.tsx'
 import type { WebSearchCardProps } from '../src/client/WebSearchCard.tsx'
 import type { AgentLoopCardState } from '../src/client/agent-loop-card-controller.ts'
 import type { BashCardState } from '../src/client/bash-card-controller.ts'
+import type { ModelRoutingCardState } from '../src/client/model-routing-card-controller.ts'
 import type { CardFieldState, CardShell } from '../src/client/card-form.ts'
 import type { ConfigurablePluginsTabState } from '../src/client/tab-store.ts'
 import type { WebSearchCardState } from '../src/client/web-search-card-controller.ts'
@@ -498,6 +501,49 @@ describe('AgentLoopCard', () => {
     fireEvent.click(screen.getByRole('button', { name: en.reset }))
 
     expect(actions.resetField).toHaveBeenCalledWith('maxParallelToolCalls')
+  })
+})
+
+describe('ModelRoutingCard', () => {
+  function renderModelRouting(enabled: CardFieldState, shell: Partial<CardShell> = {}) {
+    const store = createSnapshotStore<ModelRoutingCardState>({ ...settled, ...shell, enabled })
+    const actions = cardActions()
+    const props = {
+      ...actions,
+      t,
+      useModelRoutingCard: bindSnapshotSelector(store),
+    } as unknown as ModelRoutingCardProps
+    render(<ModelRoutingCard {...props} />)
+    fireEvent.click(screen.getByText(en.modelRoutingTitle))
+    return actions
+  }
+
+  it('reads an absent value as on and stages the switch as text', () => {
+    const actions = renderModelRouting(field(''))
+    const control = screen.getByRole('switch', { name: en.modelRoutingToggle })
+    expect(control.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText(en.modelRoutingOnHint)).toBeTruthy()
+    fireEvent.click(control)
+    expect(actions.edit).toHaveBeenCalledWith('enabled', 'false')
+  })
+
+  it('renders the off state with its hint and stages turning routing back on', () => {
+    const actions = renderModelRouting(field('false', { overridden: true }), { dirty: true })
+    const control = screen.getByRole('switch', { name: en.modelRoutingToggle })
+    expect(control.getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText(en.modelRoutingOffHint)).toBeTruthy()
+    fireEvent.click(control)
+    expect(actions.edit).toHaveBeenCalledWith('enabled', 'true')
+    fireEvent.click(screen.getByRole('button', { name: en.save }))
+    expect(actions.save).toHaveBeenCalledOnce()
+  })
+
+  it('disables the switch on a read-only document', () => {
+    const actions = renderModelRouting(field('true'), { writable: false })
+    const control = screen.getByRole('switch', { name: en.modelRoutingToggle }) as HTMLButtonElement
+    expect(control.disabled).toBe(true)
+    fireEvent.click(control)
+    expect(actions.edit).not.toHaveBeenCalled()
   })
 })
 

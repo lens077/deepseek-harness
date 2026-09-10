@@ -127,6 +127,28 @@ describe('SessionController facade', () => {
     })
     expect(consumeSelection).toHaveBeenCalledTimes(1)
 
+    // A routed-model failure retries on the baseline only when nothing
+    // downstream already retries, the turn is live, and a fallback applies.
+    const fallback = vi.spyOn(
+      (controller as unknown as { agents: ApiSessionAgentController }).agents,
+      'fallbackToBaseline',
+    ).mockReturnValue(true)
+    const requestError = (signal: AbortSignal, next: () => Promise<{ kind: 'retry' } | undefined>) =>
+      ctx.waterfall('agent/request-error', {
+        agent, turn: 1, step: 1, provider: 'fixture', retryPolicy: undefined, signal,
+        failure: { code: 'PROVIDER_UNAVAILABLE', message: 'upstream 503' },
+      }, next)
+    await expect(requestError(new AbortController().signal, () => Promise.resolve({ kind: 'retry' })))
+      .resolves.toEqual({ kind: 'retry' })
+    expect(fallback).not.toHaveBeenCalled()
+    await expect(requestError(AbortSignal.abort(), () => Promise.resolve(undefined))).resolves.toBeUndefined()
+    expect(fallback).not.toHaveBeenCalled()
+    await expect(requestError(new AbortController().signal, () => Promise.resolve(undefined)))
+      .resolves.toEqual({ kind: 'retry' })
+    expect(fallback).toHaveBeenCalledWith(agent, { code: 'PROVIDER_UNAVAILABLE', message: 'upstream 503' })
+    fallback.mockReturnValue(false)
+    await expect(requestError(new AbortController().signal, () => Promise.resolve(undefined))).resolves.toBeUndefined()
+
     const abort = new AbortController()
     const iterator = controller.follow({
       address: { kind: 'session', sessionId },

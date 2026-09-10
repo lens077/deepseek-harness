@@ -10,6 +10,7 @@ import type {
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { LlmFailure } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -385,6 +386,33 @@ export class ApiSessionAgentController {
    */
   routeForNextRequest(agent: Agent, selection: AgentModelSelection): void {
     this.selectionFor(agent).current = selection
+  }
+
+  /**
+   * After a routed model failed, move the next attempt back to the route the
+   * person owns. Applies only to an Agent whose selection this controller
+   * installed, whose latest logged request used a route a router applied, and
+   * whose baseline names another provider or model; the switch takes effect on
+   * the current step's retry and is recorded as one `model/route` event.
+   * @param agent - live Agent whose request failed.
+   * @param failure - terminal failure of the routed request.
+   * @returns whether the selection moved, so the caller should retry the step.
+   */
+  fallbackToBaseline(agent: Agent, failure: LlmFailure): boolean {
+    const installed = this.selections.get(agent)
+    const routed = agent.session.requestHeader()?.config
+    if (installed === undefined || routed === undefined) return false
+    if (this.modelSelectionState(agent).routed === null) return false
+    const baseline = this.baselineFor(agent)
+    if (routed.provider === baseline.provider && routed.model === baseline.model) return false
+    installed.current = baseline
+    installed.assembled = baseline
+    agent.session.append('model/route', {
+      baseline,
+      selection: baseline,
+      reason: `fallback: ${failure.code} on ${routed.provider}/${routed.model}: ${failure.message}`,
+    })
+    return true
   }
 
   private modelSelectionState(agent: Agent): ModelSelectionProjectionState {

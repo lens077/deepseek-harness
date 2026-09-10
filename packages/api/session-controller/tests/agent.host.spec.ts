@@ -324,6 +324,42 @@ describe('ApiSession model selection', () => {
     agents.selectForNextRequest(routed, other)
     expect(agents.baselineFor(routed)).toEqual(other)
   })
+
+  it('falls back to the baseline only for an installed, routed, off-baseline request', async () => {
+    const { ctx, agents } = await harness()
+    const owned = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' as never }
+    const other = { provider: 'other', model: 'other-model' }
+    const failure = { code: 'PROVIDER_UNAVAILABLE', message: 'upstream 503' }
+
+    const uninstalled = agent(ctx, header('fallback-uninstalled'))
+    uninstalled.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    expect(agents.fallbackToBaseline(uninstalled, failure)).toBe(false)
+
+    const unrouted = agent(ctx, header('fallback-unrouted'))
+    agents.selectionFor(unrouted)
+    expect(agents.fallbackToBaseline(unrouted, failure)).toBe(false)
+    unrouted.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    expect(agents.fallbackToBaseline(unrouted, failure)).toBe(false)
+
+    const routed = agent(ctx, header('fallback-routed'))
+    const selection = agents.selectionFor(routed)
+    routed.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    agents.routeForNextRequest(routed, other)
+    routed.session.append('model/route', { baseline: owned, selection: other, reason: 'rule "x" matched' })
+    routed.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    selection.assembled = other
+    expect(agents.fallbackToBaseline(routed, failure)).toBe(true)
+    expect(selection.current).toEqual(owned)
+    expect(selection.assembled).toEqual(owned)
+    expect(routed.session.snapshotEvents().filter(event => event.type === 'model/route').at(-1)?.data).toEqual({
+      baseline: owned,
+      selection: owned,
+      reason: 'fallback: PROVIDER_UNAVAILABLE on other/other-model: upstream 503',
+    })
+    // Once the header is back on the baseline there is nothing further to fall back to.
+    routed.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    expect(agents.fallbackToBaseline(routed, failure)).toBe(false)
+  })
 })
 
 describe('ApiSession create or adoption', () => {
