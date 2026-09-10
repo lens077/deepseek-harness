@@ -18,7 +18,9 @@ import { TaskFlowView, type TaskFlowViewProps } from '../src/client/TaskFlowView
 import type { FlowLane, FlowNode, FlowSnapshot } from '../src/client/flow-contract.ts'
 import { DOCK_METRICS, layoutFlow } from '../src/client/flow-layout.ts'
 import { EMPTY_FLOW_SNAPSHOT } from '../src/client/flow-model.ts'
-import { formatDuration, laneAnchorLabel, laneKindLabel, nodeDetail, nodeTitle, terminalLabel } from '../src/client/format.ts'
+import {
+  countsFact, currentFact, elapsedFact, formatDuration, laneAnchorLabel, laneKindLabel, nodeDetail, nodeTitle, terminalLabel,
+} from '../src/client/format.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { createTaskFlowDockStore } from '../src/client/stores.ts'
 import { FlowStylePolicy } from '../src/client/style-policy.ts'
@@ -35,7 +37,7 @@ function node(partial: Partial<FlowNode> & Pick<FlowNode, 'id' | 'kind' | 'laneI
   return { title: '', status: 'done', anchorSeq: 1, turn: 1, ...partial }
 }
 
-/** Main line with a fan-out, a resolved interjection, and a stopped fork. */
+/** Main line with a fan-out, a resolved interjection, and a stopped sequel. */
 function sample(): FlowSnapshot {
   const nodes: FlowNode[] = [
     node({ id: 'prompt:m1', kind: 'prompt', laneId: 'turn:1', title: '写一本小说', startTime: 1_000 }),
@@ -53,12 +55,15 @@ function sample(): FlowSnapshot {
   const lanes: FlowLane[] = [
     { id: 'turn:1', kind: 'main', turn: 1, ordinal: 1, label: '写一本小说', status: 'running', nodeIds: ['prompt:m1', 'todo:1:0', 'todo:1:1', 'todo:1:2', 'agent:c1', 'agent:c2'], startTime: 1_000 },
     { id: 'turn:2', kind: 'interjection', turn: 2, ordinal: 2, label: '补充要求', status: 'done', parentLaneId: 'turn:1', anchorNodeId: 'todo:1:0', nodeIds: ['prompt:m2', 'steps:2'], startTime: 5_000, endTime: 6_000 },
-    { id: 'turn:3', kind: 'fork', turn: 3, ordinal: 3, label: '看下 CI', status: 'aborted', parentLaneId: 'turn:1', anchorNodeId: 'prompt:m1', nodeIds: ['prompt:m3', 'steps:3', 'end:3'], startTime: 7_000, endTime: 7_500 },
+    { id: 'turn:3', kind: 'sequel', turn: 3, ordinal: 3, label: '看下 CI', status: 'aborted', parentLaneId: 'turn:1', anchorNodeId: 'todo:1:2', nodeIds: ['prompt:m3', 'steps:3', 'end:3'], startTime: 7_000, endTime: 7_500 },
   ]
   return {
     lanes,
     nodes: new Map(nodes.map(entry => [entry.id, entry])),
-    summary: { total: 5, done: 2, running: true, status: 'running', startTime: 1_000, currentNodeId: 'todo:1:1', latestBranchLaneId: 'turn:3' },
+    summary: {
+      lanes: { done: 1, running: 1, stopped: 1 }, running: true, status: 'running', activeMs: 1_500,
+      currentLaneId: 'turn:1', currentNodeId: 'todo:1:1', latestBranchLaneId: 'turn:2',
+    },
   }
 }
 
@@ -76,7 +81,9 @@ describe('FlowGraph drawings', () => {
     expect(onInspect).toHaveBeenCalledWith('c1')
     expect(view.getByText('已中止（手动停止）')).toBeTruthy()
     expect(view.getByText('主线')).toBeTruthy()
-    expect(view.getByText('#3 新问题')).toBeTruthy()
+    expect(view.getByText('#2 插话')).toBeTruthy()
+    expect(view.getByText('后续')).toBeTruthy()
+    expect(view.queryByText('#3 后续')).toBeNull()
     expect(view.getByText('1分31秒')).toBeTruthy()
   })
 
@@ -84,19 +91,26 @@ describe('FlowGraph drawings', () => {
     const view = render(<FlowGraph snapshot={sample()} variant="rail" now={NOW} t={t} onInspect={() => {}} />)
     expect(view.container.querySelector('[data-flow-variant="rail"]')).not.toBeNull()
     const branches = view.container.querySelectorAll('[data-flow-lane]')
-    expect(branches).toHaveLength(2)
+    expect(branches).toHaveLength(1)
     expect(within(branches[0] as HTMLElement).getByText('挂在「规划」 ↳')).toBeTruthy()
-    expect(within(branches[1] as HTMLElement).getByText('从「写一本小说」分叉 ↳')).toBeTruthy()
+    // The stopped sequel continues the track after the main line instead of hanging as a branch.
+    const track = view.container.querySelector('[data-flow-variant="rail"] > :first-child') as HTMLElement
+    const chips = [...track.querySelectorAll('[data-flow-node]')].map(chip => chip.getAttribute('data-flow-node'))
+    expect(chips.slice(-3)).toEqual(['prompt:m3', 'steps:3', 'end:3'])
+    expect(within(track).getByText('#3')).toBeTruthy()
     expect(view.getByText('案卷作者').closest('button')).not.toBeNull()
     expect(view.getAllByText('5秒 · subagent')).toHaveLength(2)
-    const bare: FlowLane = { id: 'turn:9', kind: 'fork', turn: 9, ordinal: 9, label: 'bare', status: 'running', nodeIds: ['missing'], startTime: 1 }
+    const bare: FlowLane = { id: 'turn:9', kind: 'interjection', turn: 9, ordinal: 9, label: 'bare', status: 'running', nodeIds: ['missing'], startTime: 1 }
     const loose: FlowLane = { id: 'turn:8', kind: 'main', turn: 8, ordinal: 8, label: 'loose', status: 'running', nodeIds: ['prompt:m8', 'agent:c8', 'gone'], startTime: 1 }
+    const retry: FlowLane = { id: 'turn:10', kind: 'sequel', turn: 10, ordinal: 10, label: '看下 CI', status: 'running', parentLaneId: 'turn:3', anchorNodeId: 'end:3', retryOfLaneId: 'turn:3', nodeIds: ['prompt:m10'], startTime: 2 }
     const nodes = new Map(sample().nodes)
     nodes.set('prompt:m8', node({ id: 'prompt:m8', kind: 'prompt', laneId: 'turn:8', title: 'loose', turn: 8 }))
     nodes.set('agent:c8', node({ id: 'agent:c8', kind: 'agent', laneId: 'turn:8', title: 'free agent', status: 'running', callId: 'c8', turn: 8 }))
-    const sparse = render(<FlowGraph snapshot={{ ...sample(), lanes: [loose, ...sample().lanes.slice(1), bare], nodes }} variant="rail" now={NOW} t={t} />)
-    expect(sparse.container.querySelectorAll('[data-flow-lane]')).toHaveLength(2)
+    nodes.set('prompt:m10', node({ id: 'prompt:m10', kind: 'prompt', laneId: 'turn:10', title: '看下 CI', turn: 10 }))
+    const sparse = render(<FlowGraph snapshot={{ ...sample(), lanes: [loose, ...sample().lanes.slice(1), bare, retry], nodes }} variant="rail" now={NOW} t={t} />)
+    expect(sparse.container.querySelectorAll('[data-flow-lane]')).toHaveLength(1)
     expect(sparse.getByText('free agent')).toBeTruthy()
+    expect(sparse.getByText('重试 #3')).toBeTruthy()
   })
 
   it('draws lanes with per-route progress and localized status', () => {
@@ -109,6 +123,8 @@ describe('FlowGraph drawings', () => {
     expect(within(lanes[0] as HTMLElement).getByText('2/5')).toBeTruthy()
     expect(within(lanes[1] as HTMLElement).getByText('1/1')).toBeTruthy()
     expect(within(lanes[2] as HTMLElement).getByText('0/1')).toBeTruthy()
+    expect(within(lanes[2] as HTMLElement).getByText('后续')).toBeTruthy()
+    expect(within(lanes[2] as HTMLElement).getByText('看下 CI')).toBeTruthy()
     expect(within(lanes[2] as HTMLElement).getByText('已中止（手动停止）')).toBeTruthy()
   })
 
@@ -142,10 +158,13 @@ describe('card layout', () => {
     expect(at('agent:c1').y).toBeLessThan(at('agent:c2').y)
     expect(at('prompt:m2').x).toBe(at('todo:1:0').x + DOCK_METRICS.gapX)
     expect(at('prompt:m2').y).toBeGreaterThan(at('agent:c2').y)
-    expect(at('prompt:m3').y).toBeGreaterThan(at('prompt:m2').y)
-    expect(layout.rows.map(row => row.lane.id)).toEqual(['turn:1', 'turn:2', 'turn:3'])
-    expect(layout.edges.filter(edge => edge.dashed)).toHaveLength(2)
-    expect(layout.width).toBeGreaterThan(at('todo:1:2').x + DOCK_METRICS.nodeWidth)
+    // The sequel continues the first row after the main line's last column with a solid edge.
+    expect(at('prompt:m3').y).toBe(at('todo:1:2').y)
+    expect(at('prompt:m3').x).toBe(at('todo:1:2').x + DOCK_METRICS.nodeWidth + DOCK_METRICS.gapX)
+    expect(layout.edges.find(edge => edge.id === 'todo:1:2->prompt:m3')).toMatchObject({ dashed: false })
+    expect(layout.rows.map(row => row.lane.id)).toEqual(['turn:1', 'turn:2'])
+    expect(layout.edges.filter(edge => edge.dashed)).toHaveLength(1)
+    expect(layout.width).toBeGreaterThan(at('end:3').x + DOCK_METRICS.nodeWidth)
     expect(layoutFlow(EMPTY_FLOW_SNAPSHOT, DOCK_METRICS)).toMatchObject({ width: DOCK_METRICS.padding, height: 0, nodes: [], edges: [] })
   })
 
@@ -159,6 +178,14 @@ describe('card layout', () => {
     expect(layout.nodes.map(card => card.id)).toEqual(['prompt:m1', 'agent:c9'])
     const empty = layoutFlow({ lanes: [{ ...lane, nodeIds: ['missing'] }], nodes, summary: EMPTY_FLOW_SNAPSHOT.summary }, DOCK_METRICS)
     expect(empty.rows).toHaveLength(0)
+    // An interjection without drawable nodes takes no row; one without a placed anchor starts at the padding, undashed.
+    nodes.set('prompt:m2', node({ id: 'prompt:m2', kind: 'prompt', laneId: 'turn:2', turn: 2 }))
+    const bare: FlowLane = { id: 'turn:2', kind: 'interjection', turn: 2, ordinal: 2, label: 'y', status: 'done', parentLaneId: 'turn:1', nodeIds: ['missing'], startTime: 2 }
+    const loose: FlowLane = { ...bare, id: 'turn:3', nodeIds: ['prompt:m2'] }
+    const branches = layoutFlow({ lanes: [lane, bare, loose, { ...loose, id: 'turn:4', anchorNodeId: 'gone' }], nodes, summary: EMPTY_FLOW_SNAPSHOT.summary }, DOCK_METRICS)
+    expect(branches.rows.map(row => row.lane.id)).toEqual(['turn:1', 'turn:3', 'turn:4'])
+    expect(branches.nodes.filter(card => card.id === 'prompt:m2').map(card => card.x)).toEqual([DOCK_METRICS.padding, DOCK_METRICS.padding])
+    expect(branches.edges.filter(edge => edge.dashed)).toHaveLength(0)
   })
 })
 
@@ -175,13 +202,52 @@ describe('format helpers', () => {
       id: 'auth', kind: 'terminal', laneId: 'l', status: 'error', failureCode: 'AUTH',
     }))).toBe('出错 · API 密钥无效')
     expect(terminalLabel(t, node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'interrupted' }))).toBe('异常中断')
-    const lane: FlowLane = { id: 'x', kind: 'fork', turn: 2, ordinal: 2, label: '', status: 'done', anchorNodeId: 'gone', nodeIds: [], startTime: 1 }
+    const lane: FlowLane = { id: 'x', kind: 'interjection', turn: 2, ordinal: 2, label: '', status: 'done', anchorNodeId: 'gone', nodeIds: [], startTime: 1 }
     expect(laneAnchorLabel(t, lane, new Map())).toBeUndefined()
-    expect(laneKindLabel(t, { ...lane, kind: 'main', ordinal: 1 })).toBe('#1 主线')
-    expect(laneKindLabel(t, { ...lane, kind: 'interjection' })).toBe('#2 插话')
+    expect(laneKindLabel(t, { ...lane, kind: 'main', ordinal: 1 }, [])).toBe('#1 主线')
+    expect(laneKindLabel(t, lane, [])).toBe('#2 插话')
+    expect(laneKindLabel(t, { ...lane, kind: 'sequel', retryOfLaneId: 'gone' }, [])).toBe('#2 后续')
     const { anchorNodeId: _anchor, ...unanchored } = lane
     expect(laneAnchorLabel(t, unanchored, new Map())).toBeUndefined()
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
+  })
+
+  it('composes the header facts from the summary', () => {
+    const base = sample()
+    expect(countsFact(t, base.summary.lanes)).toBe('进行中 1 · 已完成 1 · 已中止 1')
+    expect(countsFact(t, { done: 0, running: 0, stopped: 0 })).toBe('已完成 0')
+    expect(currentFact(t, base)).toBe('当前：#1 写一本小说 · 修订 2/5')
+    expect(elapsedFact(t, base, NOW)).toBe('本轮 1分39秒')
+    const steps = sample()
+    const stepsLane = { ...steps.lanes[2]!, status: 'running' as const, label: 'x'.repeat(30) }
+    const running: FlowSnapshot = {
+      ...steps,
+      lanes: [steps.lanes[0]!, steps.lanes[1]!, stepsLane],
+      summary: { ...steps.summary, currentLaneId: 'turn:3', currentNodeId: 'steps:3' },
+    }
+    expect(currentFact(t, running)).toBe(`当前：#3 ${'x'.repeat(23)}… · 执行 1 步`)
+    const foreign: FlowSnapshot = { ...running, summary: { ...running.summary, currentNodeId: 'todo:1:1' } }
+    expect(currentFact(t, foreign)).toBe(`当前：#3 ${'x'.repeat(23)}…`)
+    const single: FlowSnapshot = {
+      ...base,
+      lanes: [{ ...base.lanes[0]!, nodeIds: ['prompt:m1', 'todo:1:1'] }, ...base.lanes.slice(1)],
+    }
+    expect(currentFact(t, single)).toBe('当前：#1 写一本小说 · 修订')
+    const unlabeled: FlowSnapshot = {
+      ...running,
+      lanes: [steps.lanes[0]!, steps.lanes[1]!, { ...stepsLane, label: '' }],
+      summary: { ...running.summary, currentNodeId: undefined } as never,
+    }
+    expect(currentFact(t, unlabeled)).toBe('当前：#3 你的任务')
+    expect(currentFact(t, EMPTY_FLOW_SNAPSHOT)).toBeUndefined()
+    expect(elapsedFact(t, EMPTY_FLOW_SNAPSHOT, NOW)).toBeUndefined()
+    const idle: FlowSnapshot = {
+      ...base, summary: { ...base.summary, running: false, currentLaneId: undefined, activeMs: 65_000 } as never,
+    }
+    expect(elapsedFact(t, idle, NOW)).toBe('用时 1分5秒')
+    const missing: FlowSnapshot = { ...base, summary: { ...base.summary, currentLaneId: 'gone' } }
+    expect(currentFact(t, missing)).toBeUndefined()
+    expect(elapsedFact(t, missing, NOW)).toBe('用时 1秒')
   })
 })
 
@@ -192,7 +258,7 @@ function sessionSnapshot(running: boolean): SessionSnapshot {
 function dockProps(snapshot: FlowSnapshot, running = true) {
   const store = createTaskFlowDockStore().create('s1')
   const style = createSnapshotStore({ dock: 'rail' as const, canvas: 'cards' as const, fontSize: 11 })
-  const actions = { stop: vi.fn(), openCanvas: vi.fn(), inspect: vi.fn(), setDockVariant: vi.fn(), setFontSize: vi.fn() }
+  const actions = { stop: vi.fn(), openCanvas: vi.fn(), inspect: vi.fn(), setDockVariant: vi.fn() }
   const props = {
     sessionId: 's1',
     session: sessionSnapshot(running),
@@ -224,16 +290,20 @@ describe('TaskFlowDock', () => {
     vi.setSystemTime(NOW)
     const { props, actions, store } = dockProps(sample())
     const view = render(<TaskFlowDock {...props} />)
-    expect(view.getByText('2/5')).toBeTruthy()
-    expect(view.getByText('用时 1分39秒')).toBeTruthy()
-    expect(view.getByText('当前：修订')).toBeTruthy()
-    expect(view.getByText(/最近分支：#3 新问题 看下 CI/)).toBeTruthy()
-    expect(view.getByText('已中止')).toBeTruthy()
+    expect(view.getByText('进行中 1 · 已完成 1 · 已中止 1')).toBeTruthy()
+    expect(view.getByText('本轮 1分39秒')).toBeTruthy()
+    expect(view.getByText('当前：#1 写一本小说 · 修订 2/5')).toBeTruthy()
+    expect(view.getByText('最近插话：#2 插话 补充要求')).toBeTruthy()
+    expect(view.getByText('已解决')).toBeTruthy()
     expect(view.container.querySelector('[data-flow-variant="rail"]')).not.toBeNull()
     expect((view.container.querySelector('[data-task-flow-dock]') as HTMLElement).style.getPropertyValue('--dsh-task-flow-font-size')).toBe('11px')
     expect(view.getByRole('region', { name: '任务流程图' }).tabIndex).toBe(0)
-    fireEvent.click(view.getByLabelText('增大任务流程字号'))
-    expect(actions.setFontSize).toHaveBeenCalledWith(12)
+    expect(view.queryByLabelText('增大任务流程字号')).toBeNull()
+    // Collapse sits beside the title; stop is the last action.
+    const head = view.getByLabelText('折叠流程图').parentElement as HTMLElement
+    expect(head.firstElementChild).toBe(view.getByLabelText('折叠流程图'))
+    const buttons = [...head.querySelectorAll('button')]
+    expect(buttons.at(-1)?.textContent).toBe('停止任务')
 
     fireEvent.click(view.getByText('停止任务'))
     expect(actions.stop).toHaveBeenCalledTimes(1)
@@ -256,23 +326,28 @@ describe('TaskFlowDock', () => {
     expect(actions.setDockVariant).toHaveBeenCalledWith('lanes')
 
     act(() => { vi.advanceTimersByTime(2_000) })
-    expect(view.getByText('用时 1分41秒')).toBeTruthy()
+    expect(view.getByText('本轮 1分41秒')).toBeTruthy()
   })
 
-  it('hides the stop action while the session is idle and reports a resolved latest branch', () => {
+  it('hides the stop action while the session is idle and reports a resolved latest interjection', () => {
     const base = sample()
-    const idle: FlowSnapshot = { ...base, summary: { total: 5, done: 2, running: false, status: 'done', startTime: 1_000, endTime: 8_000, latestBranchLaneId: 'turn:2' } }
+    const idle: FlowSnapshot = { ...base, summary: { lanes: { done: 2, running: 0, stopped: 1 }, running: false, status: 'done', activeMs: 7_000, latestBranchLaneId: 'turn:2' } }
     const { props } = dockProps(idle, false)
     const view = render(<TaskFlowDock {...props} />)
     expect(view.queryByText('停止任务')).toBeNull()
     expect(view.queryByText(/当前：/)).toBeNull()
+    expect(view.getByText('已完成 2 · 已中止 1')).toBeTruthy()
     expect(view.getByText('用时 7秒')).toBeTruthy()
     expect(view.getByText('已解决')).toBeTruthy()
+    const stopped = dockProps({ ...idle, summary: { ...idle.summary, latestBranchLaneId: 'turn:3' } }, false)
+    view.rerender(<TaskFlowDock {...stopped.props} />)
+    expect(view.getByText('最近插话：#3 后续 看下 CI')).toBeTruthy()
+    expect(view.getByText('已中止')).toBeTruthy()
     const { latestBranchLaneId: _latest, ...noBranch } = idle.summary
     const bare = dockProps({ ...idle, summary: noBranch }, false)
     view.unmount()
     const second = render(<TaskFlowDock {...bare.props} />)
-    expect(within(second.container).queryByText(/最近分支/)).toBeNull()
+    expect(within(second.container).queryByText(/最近插话/)).toBeNull()
   })
 })
 
@@ -358,7 +433,7 @@ describe('TaskFlowView', () => {
     const view = render(<TaskFlowView {...props} />)
     expect(view.getByText(zh['canvas.empty'])).toBeTruthy()
     expect(actions.completeViewRequest).not.toHaveBeenCalled()
-    expect(view.getByText('0/0')).toBeTruthy()
+    expect(view.getByText('已完成 0')).toBeTruthy()
     fireEvent.click(view.getByText('适配全图'))
     expect(view.getByText('120%')).toBeTruthy()
   })

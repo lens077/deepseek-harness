@@ -1,4 +1,4 @@
-/** Independent task-flow font controls for Settings and the resident header. */
+/** Independent task-flow font-size preference row for General Settings. */
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'

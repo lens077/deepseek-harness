@@ -1,7 +1,7 @@
 /**
- * Pure coordinate layout for the card graph: one row per lane, columns per
- * spine node with delegated agents stacked in the column after the todo they
- * served, and branch rows placed under their anchor node.
+ * Pure coordinate layout for the card graph: one row for the main line and its
+ * sequels, columns per spine node with delegated agents stacked in the column
+ * after the todo they served, and interjection rows placed under their anchor node.
  */
 import type { FlowLane, FlowNode, FlowSnapshot } from './flow-contract.ts'
 
@@ -58,6 +58,10 @@ export const DOCK_METRICS: FlowLayoutMetrics = {
 
 /** A drawing column: at least one node. */
 export type FlowColumn = [FlowNode, ...FlowNode[]]
+
+function isRow(columns: readonly FlowColumn[]): columns is [FlowColumn, ...FlowColumn[]] {
+  return columns.length > 0
+}
 
 /**
  * Group a lane's nodes into drawing columns: each spine node, then the agents
@@ -116,17 +120,16 @@ export function layoutFlow(snapshot: FlowSnapshot, metrics: FlowLayoutMetrics): 
   let rowTop = metrics.padding
   let width = 0
 
-  for (const lane of snapshot.lanes) {
-    const columns = columnsOf(lane, snapshot.nodes)
-    const firstColumn = columns[0]
-    if (firstColumn === undefined) continue
+  /**
+   * Place one row of columns from `originX`, chaining solid edges between
+   * neighbouring columns; returns the left-middle point of the row's first card.
+   */
+  const placeRow = (lane: FlowLane, columns: readonly [FlowColumn, ...FlowColumn[]], originX: number): { x: number; y: number } => {
     const stack = Math.max(...columns.map(column => column.length))
     const rowHeight = stack * stepY - metrics.gapY
     const centerY = rowTop + rowHeight / 2
-    const anchor = lane.anchorNodeId === undefined ? undefined : placed.get(lane.anchorNodeId)
-    const originX = anchor === undefined ? metrics.padding : anchor.x + metrics.gapX
     rows.push({ lane, y: rowTop })
-
+    const entry = { x: originX, y: centerY - (columns[0].length * stepY - metrics.gapY) / 2 + metrics.nodeHeight / 2 }
     let previous: FlowLayoutNode[] = []
     for (const [index, column] of columns.entries()) {
       const x = originX + index * stepX
@@ -158,18 +161,32 @@ export function layoutFlow(snapshot: FlowSnapshot, metrics: FlowLayoutMetrics): 
       }
       previous = current
     }
-    const first = placed.get(firstColumn[0].id)
-    if (anchor !== undefined && first !== undefined) {
+    rowTop += rowHeight + metrics.rowGap
+    return entry
+  }
+
+  // The main line and its sequels share the first row; interjections hang below their anchor.
+  const line = snapshot.lanes.filter(lane => lane.kind !== 'interjection')
+  const lineColumns = line.flatMap(lane => columnsOf(lane, snapshot.nodes))
+  const lineLane = line[0]
+  if (lineLane !== undefined && isRow(lineColumns)) placeRow(lineLane, lineColumns, metrics.padding)
+
+  for (const lane of snapshot.lanes) {
+    if (lane.kind !== 'interjection') continue
+    const columns = columnsOf(lane, snapshot.nodes)
+    if (!isRow(columns)) continue
+    const anchor = lane.anchorNodeId === undefined ? undefined : placed.get(lane.anchorNodeId)
+    const entry = placeRow(lane, columns, anchor === undefined ? metrics.padding : anchor.x + metrics.gapX)
+    if (anchor !== undefined) {
       edges.push({
-        id: `${anchor.id}~>${first.id}`,
+        id: `${anchor.id}~>${columns[0][0].id}`,
         x1: anchor.x + anchor.width / 2,
         y1: anchor.y + anchor.height,
-        x2: first.x,
-        y2: first.y + first.height / 2,
+        x2: entry.x,
+        y2: entry.y,
         dashed: true,
       })
     }
-    rowTop += rowHeight + metrics.rowGap
   }
 
   return {

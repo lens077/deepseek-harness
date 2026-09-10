@@ -45,17 +45,12 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: {{clock}} Task flow 0/1 · Elapsed {{duration}}
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
+- text: {{clock}}
+- button "Collapse flow graph" [expanded]:
+  - img
+- text: Task flow 1 stopped · Elapsed {{duration}}
 - button "Switch style":
   - text: Step rail
-  - img
-- button "Collapse flow graph" [expanded]:
   - img
 - button "Open in canvas":
   - img

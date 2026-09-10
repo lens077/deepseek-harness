@@ -1,20 +1,19 @@
 /**
  * TaskFlowDock: the resident task-flow strip above the composer. The header
- * always shows progress, elapsed time, the running node, and the latest
- * branch; the body draws the selected variant and collapses per Session.
+ * always shows lane counts, elapsed time, the lane whose turn is open, and the
+ * latest interjection; the body draws the selected variant and collapses per Session.
  */
 import { useEffect, useState, type CSSProperties } from 'react'
 import clsx from 'clsx'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
-  IconChevronDownOutline14, IconChevronUpOutline14, IconFullscreenOutline16, IconStopFill16, Menu, Tooltip,
+  IconChevronDownOutline14, IconChevronRightOutline14, IconFullscreenOutline16, IconStopFill16, Menu, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import { FLOW_VARIANTS, type FlowVariant } from '../settings.ts'
 import { FlowGraph } from './FlowGraph.tsx'
-import { FlowFontControls } from './FlowFontSizeRow.tsx'
 import type { FlowSnapshot } from './flow-contract.ts'
-import { formatDuration, laneKindLabel, nodeTitle, spanOf, statusLabel, type TaskFlowTranslate } from './format.ts'
+import { countsFact, currentFact, elapsedFact, laneKindLabel, statusLabel, type TaskFlowTranslate } from './format.ts'
 import type { FlowStyle } from './style-policy.ts'
 import type { createTaskFlowDockStore } from './stores.ts'
 import css from './TaskFlowDock.module.css'
@@ -35,8 +34,6 @@ export interface TaskFlowDockInjected {
   inspect: (callId: string) => void
   /** Change the strip variant. */
   setDockVariant: (variant: FlowVariant) => void
-  /** Change text size for the strip and canvas. */
-  setFontSize: (fontSize: number) => void
 }
 
 /** Full props of the dock entry: InputZone owner share, session standard kit, store, injected face, and the locale seat. */
@@ -105,35 +102,40 @@ export function VariantMenu({ value, onSelect, t }: {
   )
 }
 
-/** Header facts derived from the snapshot. */
-function HeaderFacts({ snapshot, now, t }: { snapshot: FlowSnapshot; now: number; t: TaskFlowTranslate }) {
+/**
+ * Header facts shared by the strip and the canvas toolbar: lane counts, elapsed
+ * time, the lane whose turn is open, and the latest interjection other than it.
+ * The current fact keeps a readable minimum width; the interjection fact shrinks first.
+ * @param props - snapshot, clock, and translator.
+ * @returns the fact spans.
+ */
+export function HeaderFacts({ snapshot, now, t }: { snapshot: FlowSnapshot; now: number; t: TaskFlowTranslate }) {
   const { summary } = snapshot
-  const span = spanOf(summary.startTime, summary.endTime, now)
-  const current = summary.currentNodeId === undefined ? undefined : snapshot.nodes.get(summary.currentNodeId)
+  const elapsed = elapsedFact(t, snapshot, now)
+  const current = currentFact(t, snapshot)
   const branch = summary.latestBranchLaneId === undefined
     ? undefined
     : snapshot.lanes.find(lane => lane.id === summary.latestBranchLaneId)
   return (
     <>
-      <span className={css.fact}>{t('progress', { done: summary.done, total: summary.total })}</span>
-      {span !== undefined && (
+      <span className={css.fact}>{countsFact(t, summary.lanes)}</span>
+      {elapsed !== undefined && (
         <>
           <span className={css.sep}>·</span>
-          <span className={css.fact}>{t('elapsed', { time: formatDuration(t, span) })}</span>
+          <span className={css.fact}>{elapsed}</span>
         </>
       )}
       {current !== undefined && (
         <>
           <span className={css.sep}>·</span>
-          <span className={clsx(css.fact, css.shrink)}>{t('current', { node: nodeTitle(t, current) })}</span>
+          <span className={clsx(css.fact, css.current)}>{current}</span>
         </>
       )}
       {branch !== undefined && (
         <>
           <span className={css.sep}>·</span>
-          <span className={clsx(css.fact, css.shrink)}>
-            {t('latestBranch', { lane: `${laneKindLabel(t, branch)} ${branch.label}` })}
-            {' '}
+          <span className={clsx(css.fact, css.branch)}>
+            <span className={css.clip}>{t('latestBranch', { lane: `${laneKindLabel(t, branch, snapshot.lanes)} ${branch.label}` })}</span>
             <span className={clsx(css.statusText, css[branch.status])}>
               {branch.status === 'done' ? t('status.resolved') : statusLabel(t, branch.status)}
             </span>
@@ -150,7 +152,7 @@ function HeaderFacts({ snapshot, now, t }: { snapshot: FlowSnapshot; now: number
  * @returns the strip, or null.
  */
 export function TaskFlowDock({
-  session, useTaskFlow, useFlowStyle, useMobileDock, useStore, actions, stop, openCanvas, inspect, setDockVariant, setFontSize, t,
+  session, useTaskFlow, useFlowStyle, useMobileDock, useStore, actions, stop, openCanvas, inspect, setDockVariant, t,
 }: TaskFlowDockProps) {
   const snapshot = useTaskFlow(value => value)
   const variant = useFlowStyle(style => style.dock)
@@ -163,35 +165,34 @@ export function TaskFlowDock({
     <div className={css.dock} style={{ '--dsh-task-flow-font-size': `${fontSize}px` } as CSSProperties} data-task-flow-dock data-mobile-enabled={mobileDock || undefined}>
       <div className={css.panel}>
         <div className={css.head}>
+          <Tooltip label={expanded ? t('action.collapse') : t('action.expand')} side="bottom" delayMs={500}>
+            <button
+              type="button"
+              className={clsx(css.btn, css.icon, css.toggle)}
+              aria-label={expanded ? t('action.collapse') : t('action.expand')}
+              aria-expanded={expanded}
+              onClick={() => { actions.setExpanded(!expanded) }}
+            >
+              {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+            </button>
+          </Tooltip>
           <span className={css.title}>
             {snapshot.summary.running ? <span className={css.spinner} aria-hidden="true" /> : null}
             {t('title')}
           </span>
           <div className={css.facts}><HeaderFacts snapshot={snapshot} now={now} t={t} /></div>
           <div className={css.actions}>
-            <FlowFontControls fontSize={fontSize} setFontSize={setFontSize} t={t} />
             <VariantMenu value={variant} onSelect={setDockVariant} t={t} />
+            <button type="button" className={clsx(css.btn, css.accent)} onClick={openCanvas}>
+              <IconFullscreenOutline16 size={12} />
+              {t('action.openCanvas')}
+            </button>
             {session.running && (
               <button type="button" className={clsx(css.btn, css.stop)} onClick={stop}>
                 <IconStopFill16 size={12} />
                 {t('action.stop')}
               </button>
             )}
-            <Tooltip label={expanded ? t('action.collapse') : t('action.expand')} side="bottom" delayMs={500}>
-              <button
-                type="button"
-                className={clsx(css.btn, css.icon)}
-                aria-label={expanded ? t('action.collapse') : t('action.expand')}
-                aria-expanded={expanded}
-                onClick={() => { actions.setExpanded(!expanded) }}
-              >
-                {expanded ? <IconChevronDownOutline14 /> : <IconChevronUpOutline14 />}
-              </button>
-            </Tooltip>
-            <button type="button" className={clsx(css.btn, css.accent)} onClick={openCanvas}>
-              <IconFullscreenOutline16 size={12} />
-              {t('action.openCanvas')}
-            </button>
           </div>
         </div>
         {expanded && (

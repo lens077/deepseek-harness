@@ -1,7 +1,7 @@
 /**
  * Pure assembly of the task-flow snapshot from target Nodes and the Turn
  * timeline. Every fact comes from durable events: prompts open lanes, inbox
- * admissions classify a lane as an interjection or a fork, todo snapshots
+ * admissions classify a lane as an interjection or a sequel, todo snapshots
  * form the spine, delegated agents fan out from the todo they served, and
  * `turn/end` reasons decide terminal states.
  */
@@ -18,7 +18,7 @@ import type {
 export const EMPTY_FLOW_SNAPSHOT: FlowSnapshot = {
   lanes: [],
   nodes: new Map(),
-  summary: { total: 0, done: 0, running: false, status: 'idle' },
+  summary: { lanes: { done: 0, running: 0, stopped: 0 }, running: false, status: 'idle', activeMs: 0 },
 }
 
 interface TurnOutcome {
@@ -40,6 +40,15 @@ function outcomeOf(turn: TurnLocation): TurnOutcome {
     endTime: turn.end?.time,
     stepCount: turn.steps.length,
   }
+}
+
+/**
+ * Whether a status is a settled terminal outcome (draws with a terminal glyph).
+ * @param status - drawn state.
+ * @returns true for aborted, error, and interrupted.
+ */
+export function isTerminal(status: FlowStatus): boolean {
+  return status === 'aborted' || status === 'error' || status === 'interrupted'
 }
 
 /** Terminal status of a closed turn, or null when it completed normally. */
@@ -169,11 +178,23 @@ export function buildFlowSnapshot(
   const drafts: LaneDraft[] = []
   const laneByTurn = new Map<number, LaneDraft>()
   const allNodes = new Map<string, FlowNode>()
-  let mainLane: LaneDraft | undefined
+  /** The main lane and its sequels, in order: the line a sequel continues. */
+  const line: LaneDraft[] = []
+  /** The turn lane opened by the previous prompt, whatever its kind: the lane a retry re-sends. */
+  let previousTurnLane: LaneDraft | undefined
 
   const place = (draft: LaneDraft, node: FlowNode): void => {
     draft.nodes.push(node)
     allNodes.set(node.id, node)
+  }
+
+  /** Last drawn spine or terminal node of `draft`, else its prompt: where a sequel continues from. */
+  const tailNodeOf = (draft: LaneDraft): FlowNode => {
+    let tail = draft.prompt
+    for (const node of draft.nodes) {
+      if (node.kind !== 'agent') tail = node
+    }
+    return tail
   }
 
   /** The spine node of `draft` open at `time`, else the latest one started before it, else its prompt. */
@@ -200,7 +221,7 @@ export function buildFlowSnapshot(
     if (location === undefined) continue
     /* v8 ignore stop */
     const outcome = outcomeOf(location)
-    const ordinal = timeline.turnOrder.indexOf(turn) + 1
+    const ordinal = drafts.length + 1
     const existing = laneByTurn.get(turn)
     const admission = admissions.get(prompt.messageId)
     const promptNode: FlowNode = {
@@ -242,25 +263,29 @@ export function buildFlowSnapshot(
       continue
     }
 
-    let kind: FlowLaneKind = 'fork'
+    // A prompt admitted while a loaded turn ran hangs off that turn as an interjection;
+    // every other prompt after the first continues the line as a sequel.
+    const during = admission === undefined || admission.duringTurn === null ? undefined : laneByTurn.get(admission.duringTurn)
+    const lineTail = line.at(-1)
+    let kind: FlowLaneKind = 'main'
     let parent: LaneDraft | undefined
     let anchor: FlowNode | undefined
-    if (mainLane === undefined) {
-      kind = 'main'
-    } else if (admission?.duringTurn !== null && admission?.duringTurn !== undefined) {
-      const during = laneByTurn.get(admission.duringTurn)
-      if (during !== undefined) {
-        kind = 'interjection'
-        parent = during
-        anchor = runningNodeAt(during, admission.time)
-      } else {
-        parent = mainLane
-        anchor = mainLane.prompt
-      }
-    } else {
-      parent = mainLane
-      anchor = mainLane.prompt
+    if (lineTail !== undefined && admission !== undefined && during !== undefined) {
+      kind = 'interjection'
+      parent = during
+      anchor = runningNodeAt(during, admission.time)
+    } else if (lineTail !== undefined) {
+      kind = 'sequel'
+      parent = lineTail
+      anchor = tailNodeOf(lineTail)
     }
+    const retryOf = kind === 'sequel'
+      && previousTurnLane !== undefined
+      && prompt.text !== ''
+      && prompt.text === previousTurnLane.lane.label
+      && terminalStatus(previousTurnLane.outcome.reason) !== null
+      ? previousTurnLane
+      : undefined
     const laneId = `turn:${turn}`
     const lanePrompt: FlowNode = { ...promptNode, laneId }
     const draft: LaneDraft = {
@@ -272,6 +297,7 @@ export function buildFlowSnapshot(
         label: prompt.text,
         ...parent === undefined ? {} : { parentLaneId: parent.lane.id },
         ...anchor === undefined ? {} : { anchorNodeId: anchor.id },
+        ...retryOf === undefined ? {} : { retryOfLaneId: retryOf.lane.id },
         startTime: outcome.startTime ?? prompt.time,
       },
       prompt: lanePrompt,
@@ -281,7 +307,8 @@ export function buildFlowSnapshot(
     place(draft, lanePrompt)
     laneByTurn.set(turn, draft)
     drafts.push(draft)
-    mainLane ??= draft
+    previousTurnLane = draft
+    if (kind !== 'interjection') line.push(draft)
 
     const writes = todosByTurn.get(turn) ?? []
     const latest = writes.at(-1)
@@ -379,35 +406,41 @@ export function buildFlowSnapshot(
     }
   })
 
-  return { lanes, nodes: allNodes, summary: summarize(lanes, allNodes) }
+  const turnLaneIds = new Set([...laneByTurn.values()].map(draft => draft.lane.id))
+  return { lanes, nodes: allNodes, summary: summarize(lanes, allNodes, turnLaneIds) }
 }
 
-function summarize(lanes: readonly FlowLane[], nodes: ReadonlyMap<string, FlowNode>): FlowSummary {
-  let total = 0
-  let done = 0
+/** Header facts; steer lanes share their turn, so only `turnLaneIds` contribute time and the current lane. */
+function summarize(lanes: readonly FlowLane[], nodes: ReadonlyMap<string, FlowNode>, turnLaneIds: ReadonlySet<string>): FlowSummary {
   let currentNodeId: string | undefined
   let currentSeq = -1
   for (const node of nodes.values()) {
     if (node.kind === 'prompt' || node.kind === 'terminal') continue
-    total += 1
-    if (node.status === 'done' || node.status === 'risk') done += 1
     if (node.status === 'running' && node.anchorSeq > currentSeq) {
       currentSeq = node.anchorSeq
       currentNodeId = node.id
     }
   }
-  const running = lanes.some(lane => lane.status === 'running')
+  const counts = { done: 0, running: 0, stopped: 0 }
+  let activeMs = 0
+  let currentLaneId: string | undefined
+  for (const lane of lanes) {
+    if (lane.status === 'running') counts.running += 1
+    else if (isTerminal(lane.status)) counts.stopped += 1
+    else counts.done += 1
+    if (!turnLaneIds.has(lane.id)) continue
+    if (lane.endTime !== undefined) activeMs += lane.endTime - lane.startTime
+    if (lane.status === 'running') currentLaneId ??= lane.id
+  }
+  const running = counts.running > 0
   const last = lanes.at(-1)
-  const latestBranch = lanes.findLast(lane => lane.kind !== 'main')
-  const startTimes = lanes.map(lane => lane.startTime)
-  const endTimes = lanes.flatMap(lane => lane.endTime === undefined ? [] : [lane.endTime])
+  const latestBranch = lanes.findLast(lane => lane.kind === 'interjection' && lane.id !== currentLaneId)
   return {
-    total,
-    done,
+    lanes: counts,
     running,
     status: last === undefined ? 'idle' : running ? 'running' : last.status,
-    ...startTimes.length === 0 ? {} : { startTime: Math.min(...startTimes) },
-    ...running || endTimes.length === 0 ? {} : { endTime: Math.max(...endTimes) },
+    activeMs,
+    ...currentLaneId === undefined ? {} : { currentLaneId },
     ...currentNodeId === undefined ? {} : { currentNodeId },
     ...latestBranch === undefined ? {} : { latestBranchLaneId: latestBranch.id },
   }

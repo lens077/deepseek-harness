@@ -55,7 +55,7 @@ const turnEnd = (seq: number, turn: number, reason: unknown) => at(seq, 'turn/en
 const stepStart = (seq: number, turn: number, step: number) => at(seq, 'step/start', { turn, step })
 const stepEnd = (seq: number, turn: number, step: number) => at(seq, 'step/end', { turn, step })
 
-/** A three-turn session: main line with todos and two agents, a queued interjection stopped by the user, and an open fork. */
+/** A three-turn session: main line with todos and two agents, a queued interjection stopped by the user, and an open sequel. */
 const SCENARIO: readonly SessionLiveEventEntry[] = [
   spliced(1, ['m1']),
   turnStart(2, 1),
@@ -101,7 +101,7 @@ describe('task-flow fold', () => {
     expect(snapshot.lanes.map(lane => [lane.id, lane.kind, lane.ordinal, lane.status, lane.anchorNodeId])).toEqual([
       ['turn:1', 'main', 1, 'risk', undefined],
       ['turn:2', 'interjection', 2, 'aborted', 'todo:1:1'],
-      ['turn:3', 'fork', 3, 'running', 'prompt:m1'],
+      ['turn:3', 'sequel', 3, 'running', 'todo:1:2'],
     ])
     const main = snapshot.lanes[0]!
     expect(main.nodeIds).toEqual(['prompt:m1', 'todo:1:0', 'todo:1:1', 'todo:1:2', 'agent:c1', 'agent:c2'])
@@ -121,19 +121,38 @@ describe('task-flow fold', () => {
     expect(snapshot.nodes.get('steps:2')).toMatchObject({ kind: 'steps', status: 'aborted', stepCount: 1, startTime: 17_000, endTime: 21_000 })
     expect(snapshot.nodes.get('end:2')).toMatchObject({ kind: 'terminal', status: 'aborted', detail: 'user', anchorSeq: 21 })
 
-    const fork = snapshot.lanes[2]!
-    expect(fork.nodeIds).toEqual(['prompt:m3', 'steps:3'])
+    const sequel = snapshot.lanes[2]!
+    expect(sequel.nodeIds).toEqual(['prompt:m3', 'steps:3'])
+    expect(sequel.parentLaneId).toBe('turn:1')
+    expect(sequel.retryOfLaneId).toBeUndefined()
     expect(snapshot.nodes.get('steps:3')).toMatchObject({ status: 'running', stepCount: 1 })
 
+    // Closed turn spans only: turn 1 (2s→16s) and turn 2 (17s→21s); the open turn 3 is the current lane.
     expect(snapshot.summary).toEqual({
-      total: 7,
-      done: 3,
+      lanes: { done: 1, running: 1, stopped: 1 },
       running: true,
       status: 'running',
-      startTime: 2_000,
+      activeMs: 18_000,
+      currentLaneId: 'turn:3',
       currentNodeId: 'steps:3',
-      latestBranchLaneId: 'turn:3',
+      latestBranchLaneId: 'turn:2',
     })
+  })
+
+  it('marks a verbatim re-send after a stopped turn as a retry of that lane', () => {
+    const retried = [
+      ...SCENARIO.slice(0, 22),
+      turnStart(23, 3),
+      user(24, 'm3', '顺便看下 CI'),
+      stepStart(25, 3, 1),
+    ]
+    const snapshot = snapshotOf(assemble(retried))
+    expect(snapshot.lanes[2]).toMatchObject({ kind: 'sequel', retryOfLaneId: 'turn:2', parentLaneId: 'turn:1' })
+    const completed = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'same'), turnEnd(4, 1, { kind: 'completed' }),
+      turnStart(5, 2), user(6, 'm2', 'same'),
+    ]))
+    expect(completed.lanes[1]!.retryOfLaneId).toBeUndefined()
   })
 
   it('produces the same snapshot for live append as for whole replace', () => {
@@ -166,8 +185,10 @@ describe('task-flow fold', () => {
     const snapshot = snapshotOf(assemble(closed))
     expect(snapshot.lanes[2]).toMatchObject({ status: 'error', endTime: 27_000 })
     expect(snapshot.nodes.get('end:3')).toMatchObject({ status: 'error', detail: 'boom' })
-    expect(snapshot.summary).toMatchObject({ running: false, status: 'error', endTime: 27_000 })
+    expect(snapshot.summary).toMatchObject({ running: false, status: 'error', activeMs: 22_000, lanes: { done: 1, running: 0, stopped: 2 } })
     expect(snapshot.summary.currentNodeId).toBeUndefined()
+    expect(snapshot.summary.currentLaneId).toBeUndefined()
+    expect(snapshot.summary.latestBranchLaneId).toBe('turn:2')
   })
 
   it('omits provider authentication messages from the task-flow snapshot', () => {
@@ -231,12 +252,39 @@ describe('task-flow fold', () => {
     expect(buildFlowSnapshot([], { turnOrder: [], turns: new Map() }).summary.status).toBe('idle')
   })
 
-  it('falls back to a fork off the root when the admitting splice is unknown', () => {
+  it('continues the line as a sequel when the admitting splice is unknown', () => {
     const snapshot = snapshotOf(assemble([
       spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'a'), turnEnd(4, 1, { kind: 'completed' }),
       turnStart(5, 2), user(6, 'm2', 'b'),
     ]))
-    expect(snapshot.lanes[1]).toMatchObject({ kind: 'fork', anchorNodeId: 'prompt:m1', parentLaneId: 'turn:1' })
+    expect(snapshot.lanes[1]).toMatchObject({ kind: 'sequel', anchorNodeId: 'steps:1', parentLaneId: 'turn:1' })
+  })
+
+  it('continues a sequel from the prompt when the previous lane drew only agents', () => {
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'a'), stepStart(4, 1, 1),
+      todo(5, []), call(6, 'c1', 'subagent', { description: 'x' }, 1), result(7, 'c1'),
+      stepEnd(8, 1, 1), turnEnd(9, 1, { kind: 'completed' }),
+      spliced(10, ['m2']), turnStart(11, 2), user(12, 'm2', 'b'),
+    ]))
+    expect(snapshot.lanes[0]!.nodeIds).toEqual(['prompt:m1', 'agent:c1'])
+    expect(snapshot.lanes[1]).toMatchObject({ kind: 'sequel', anchorNodeId: 'prompt:m1' })
+  })
+
+  it('chains sequels along the line and numbers every prompt without gaps', () => {
+    const snapshot = snapshotOf(assemble([
+      turnStart(1, 1), stepStart(2, 1, 1), stepEnd(3, 1, 1), turnEnd(4, 1, { kind: 'completed' }),
+      spliced(5, ['m2']), turnStart(6, 2), user(7, 'm2', 'a'), stepStart(8, 2, 1), stepEnd(9, 2, 1), turnEnd(10, 2, { kind: 'aborted', reason: { kind: 'user' } }),
+      spliced(11, ['m3']), turnStart(12, 3), user(13, 'm3', 'b'), stepStart(14, 3, 1), stepEnd(15, 3, 1), turnEnd(16, 3, { kind: 'completed' }),
+      spliced(17, ['m4']), turnStart(18, 4), user(19, 'm4', 'c'),
+    ]))
+    expect(snapshot.lanes.map(lane => [lane.ordinal, lane.kind, lane.parentLaneId, lane.anchorNodeId])).toEqual([
+      [1, 'main', undefined, undefined],
+      [2, 'sequel', 'turn:2', 'end:2'],
+      [3, 'sequel', 'turn:3', 'steps:3'],
+    ])
+    expect(snapshot.summary).toMatchObject({ lanes: { done: 1, running: 1, stopped: 1 }, activeMs: 8_000, currentLaneId: 'turn:4' })
+    expect(snapshot.summary.latestBranchLaneId).toBeUndefined()
   })
 })
 
@@ -272,7 +320,7 @@ describe('task-flow edge cases', () => {
     expect(snapshot.lanes[0]).toMatchObject({ id: 'turn:1', startTime: 5_000, status: 'done' })
     expect(snapshot.nodes.get('steps:1')).toMatchObject({ status: 'running', stepCount: 1 })
     expect(snapshot.nodes.get('steps:1')?.startTime).toBeUndefined()
-    expect(snapshot.summary).toMatchObject({ running: false, status: 'done', startTime: 5_000 })
+    expect(snapshot.summary).toMatchObject({ running: false, status: 'done', activeMs: 0, lanes: { done: 1, running: 0, stopped: 0 } })
   })
 })
 
@@ -299,14 +347,14 @@ describe('task-flow Definition guards', () => {
     expect(todoDefinition.buildViewNode!({ ...pending, matches: [] } as never)).toMatchObject({ location: { kind: 'unresolved' } })
   })
 
-  it('treats a prompt admitted during a turn without a lane as a fork off the root', () => {
+  it('treats a prompt admitted during a turn without a lane as a sequel of the line', () => {
     const snapshot = snapshotOf(assemble([
       spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'a'), turnEnd(4, 1, { kind: 'completed' }),
       turnStart(5, 2), stepStart(6, 2, 1), spliced(7, ['m2']), stepEnd(8, 2, 1), turnEnd(9, 2, { kind: 'completed' }),
       turnStart(10, 3), user(11, 'm2', 'b'),
     ]))
     expect(snapshot.lanes.map(lane => lane.id)).toEqual(['turn:1', 'turn:3'])
-    expect(snapshot.lanes[1]).toMatchObject({ kind: 'fork', parentLaneId: 'turn:1', anchorNodeId: 'prompt:m1' })
+    expect(snapshot.lanes[1]).toMatchObject({ kind: 'sequel', parentLaneId: 'turn:1', anchorNodeId: 'steps:1' })
   })
 })
 

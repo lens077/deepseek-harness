@@ -474,16 +474,17 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: "7/25 {{clock}} Task flow 28/28 · Elapsed {{duration}} · Latest branch: #28 New question m28 Resolved"
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
+- text: 7/25 {{clock}}
+- button "Collapse flow graph" [expanded]:
+  - img
+- text: Task flow 28 done · Elapsed {{duration}}
 - button "Switch style":
   - text: Step rail
   - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 m1 Execution {{duration}} · 1 steps #2 m2 Execution {{duration}} · 1 steps #3 m3 Execution {{duration}} · 1 steps #4 m4 Execution {{duration}} · 1 steps #5 m5 Execution {{duration}} · 1 steps #6 m6 Execution {{duration}} · 1 steps #7 m7 Execution {{duration}} · 1 steps #8 m8 Execution {{duration}} · 1 steps #9 m9 Execution {{duration}} · 1 steps #10 m10 Execution {{duration}} · 1 steps #11 m11 Execution {{duration}} · 1 steps #12 m12 Execution {{duration}} · 1 steps #13 m13 Execution {{duration}} · 1 steps #14 m14 Execution {{duration}} · 1 steps #15 m15 Execution {{duration}} · 1 steps #16 m16 Execution {{duration}} · 1 steps #17 m17 Execution {{duration}} · 1 steps #18 m18 Execution {{duration}} · 1 steps #19 m19 Execution {{duration}} · 1 steps #20 m20 Execution {{duration}} · 1 steps #21 m21 Execution {{duration}} · 1 steps #22 m22 Execution {{duration}} · 1 steps #23 m23 Execution {{duration}} · 1 steps #24 m24 Execution {{duration}} · 1 steps #25 m25 Execution {{duration}} · 1 steps #26 m26 Execution {{duration}} · 1 steps #27 m27 Execution {{duration}} · 1 steps #28 m28 Execution {{duration}} · 1 steps"
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
