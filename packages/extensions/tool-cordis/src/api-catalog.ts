@@ -1348,6 +1348,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'modelRouter',
+    summary: 'Abstract prompt-driven route selection.',
+    description: 'Abstract prompt-driven route selection. Load one implementation per context as `ctx.modelRouter`. Implementations are pure decision functions: they never validate a route against the live LLM registry, never mutate the session, and answer with the baseline when nothing applies.',
+    methods: [
+      {
+        signature: 'abstract route(input: ModelRouteInput): Promise<ModelRouteDecision>',
+        description: 'Propose the route for the prompt about to be queued. The call sits in the prompt\'s admission path, so an implementation that performs I/O must bound its own latency.',
+        parameters: [{ name: 'input', description: 'the owner\'s baseline route and the prompt to classify.' }],
+        returns: 'the proposed route with its justification; the baseline when no rule applies.',
+        throws: ['when classification fails; the consumer keeps the baseline and records the failure.'],
+      },
+    ],
+  },
+  {
     key: 'permissionPresets',
     summary: 'Owns the deployment\'s permission presets and their write path.',
     description: 'Owns the deployment\'s permission presets and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
@@ -4971,6 +4985,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelReasoningEffort {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
   },
   {
+    name: 'ModelRoute',
+    declaration: 'export interface ModelRoute {\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: ReasoningEffortId;\n}',
+  },
+  {
+    name: 'ModelRouteDecision',
+    declaration: 'export interface ModelRouteDecision {\n    readonly selection: ModelRoute;\n    readonly reason: string;\n    readonly rule?: string;\n}',
+  },
+  {
+    name: 'ModelRouteInput',
+    declaration: 'export interface ModelRouteInput {\n    readonly baseline: ModelRoute;\n    readonly prompt: ModelRoutePrompt;\n}',
+  },
+  {
+    name: 'ModelRoutePrompt',
+    declaration: 'export interface ModelRoutePrompt {\n    readonly text: string;\n    readonly hasImage: boolean;\n}',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -5424,7 +5454,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'session/directories\': {\n        additionalDirectories: string[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
   },
   {
     name: 'SessionEventMetadataFilter',

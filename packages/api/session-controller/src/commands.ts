@@ -14,6 +14,7 @@ import {
   ReasoningEffortId, assistantStreamChunks, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ModelRouteDecision, ModelRouter } from '@deepseek-ai/dsh-model-router'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -357,6 +358,7 @@ export class SessionCommandController {
       ...(clientTimeZone === undefined ? {} : { clientTimeZone }),
     }
     const hasImage = request.content.some(part => part.type === 'image')
+    const router = this.ctx.get('modelRouter')
     const admit = async (): Promise<SessionPromptValue> => {
       try {
         if (hasImage) {
@@ -383,6 +385,7 @@ export class SessionCommandController {
             { sessionId: agent.id },
           )
         }
+        if (router !== undefined) await this.routePrompt(router, agent, request.content)
         using binding = this.ctx.fileUploads.bindPrompt(agent, admission.receiptIds, request.requestId)
         if (request.mode === 'steer') agent.steer(message)
         else agent.followup(message)
@@ -396,7 +399,78 @@ export class SessionCommandController {
       }
       return { accepted: true }
     }
-    return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
+    return hasImage || router !== undefined ? this.agents.serializeImageAdmission(agent, admit) : admit()
+  }
+
+  /**
+   * Ask the mounted router for this prompt's route and apply the answer to the
+   * next prompt assembly. Only the reasoning effort may change: a decision
+   * that names another provider or model, an effort the exact model rejects,
+   * or a router failure keeps the baseline. Every outcome is recorded as one
+   * `model/route` event; nothing here can reject the prompt.
+   * @param router - mounted route selection service.
+   * @param agent - live Agent receiving the prompt.
+   * @param content - prompt parts about to be queued.
+   */
+  private async routePrompt(
+    router: ModelRouter,
+    agent: Agent,
+    content: SessionPromptRequest['content'],
+  ): Promise<void> {
+    const baseline = this.agents.baselineFor(agent)
+    const prompt = {
+      text: content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'),
+      hasImage: content.some(part => part.type === 'image'),
+    }
+    let decision: ModelRouteDecision
+    try {
+      decision = await router.route({ baseline, prompt })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.ctx.logger.warn(`session-controller: model routing failed for "${agent.id}": ${message}; keeping the baseline`)
+      this.recordRoute(agent, baseline, baseline, `router failed: ${message}`)
+      return
+    }
+    const proposed = decision.selection
+    if (proposed.provider !== baseline.provider || proposed.model !== baseline.model) {
+      this.recordRoute(agent, baseline, baseline, `refused: routing may change only the reasoning effort (proposed ${proposed.provider}/${proposed.model})`, decision.rule)
+      return
+    }
+    if (proposed.reasoningEffort !== undefined && proposed.reasoningEffort !== baseline.reasoningEffort) {
+      try {
+        await this.ctx.llm.resolveCallConfig({
+          provider: proposed.provider,
+          model: proposed.model,
+          reasoningEffort: proposed.reasoningEffort,
+        })
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.recordRoute(agent, baseline, baseline, `refused: ${message}`, decision.rule)
+        return
+      }
+    }
+    const applied: AgentModelSelection = {
+      provider: baseline.provider,
+      model: baseline.model,
+      ...(proposed.reasoningEffort === undefined ? {} : { reasoningEffort: proposed.reasoningEffort }),
+    }
+    this.recordRoute(agent, baseline, applied, decision.reason, decision.rule)
+  }
+
+  private recordRoute(
+    agent: Agent,
+    baseline: AgentModelSelection,
+    selection: AgentModelSelection,
+    reason: string,
+    rule?: string,
+  ): void {
+    this.agents.routeForNextRequest(agent, selection)
+    agent.session.append('model/route', {
+      baseline,
+      selection,
+      reason,
+      ...(rule === undefined ? {} : { rule }),
+    })
   }
 
   /**

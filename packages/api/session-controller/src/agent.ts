@@ -15,7 +15,7 @@ import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
-import type { ModelSelection } from './types.ts'
+import type { ModelSelection, ModelSelectionProjectionState } from './types.ts'
 
 /** Cold Session identity absent from persistence. */
 export class ApiSessionNotFound extends Error {}
@@ -312,10 +312,7 @@ export class ApiSessionAgentController {
   selectionFor(agent: Agent): InstalledSelection {
     const installed = this.selections.get(agent)
     if (installed !== undefined) return installed
-    const projectionState = this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection')
-    if (projectionState === undefined) {
-      throw new Error('api-session: required modelSelection projection is not registered')
-    }
+    const projectionState = this.modelSelectionState(agent)
     let picked = projectionState.pending === null
       ? undefined
       : agentModelSelection(projectionState.pending)
@@ -362,6 +359,48 @@ export class ApiSessionAgentController {
   selectForNextRequest(agent: Agent, selection: AgentModelSelection): void {
     agent.session.append('model/selection', selection)
     this.selectionFor(agent).current = selection
+  }
+
+  /**
+   * Read the route the human or caller owns for this Session, independent of
+   * any effort a router applied to an earlier request. The provider and model
+   * are the current selection's. The effort is the latest user selection's
+   * when that selection names the same route; otherwise, on a Session no
+   * router touched, the current selection's own effort; otherwise the saved
+   * default's effort when it names the same route; otherwise absent, so the
+   * model's own default applies.
+   * @param agent - live Agent whose Session projection is read.
+   * @returns a detached baseline selection.
+   */
+  baselineFor(agent: Agent): AgentModelSelection {
+    const current = this.selectionFor(agent).current
+    const route = { provider: current.provider, model: current.model }
+    const state = this.modelSelectionState(agent)
+    if (state.baseline !== null && sameRoute(state.baseline, route)) {
+      return agentModelSelection(state.baseline)
+    }
+    if (state.routed === null) return { ...current }
+    const saved = this.ctx.agentDefaultModel.currentSelection()
+    if (!sameRoute(saved, route) || saved.reasoningEffort === undefined) return route
+    return { ...route, reasoningEffort: saved.reasoningEffort }
+  }
+
+  /**
+   * Apply one routed selection to the next prompt assembly without recording a
+   * user selection or touching the saved default.
+   * @param agent - live Agent that owns the selection.
+   * @param selection - route already validated by the caller.
+   */
+  routeForNextRequest(agent: Agent, selection: AgentModelSelection): void {
+    this.selectionFor(agent).current = selection
+  }
+
+  private modelSelectionState(agent: Agent): ModelSelectionProjectionState {
+    const state = this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection')
+    if (state === undefined) {
+      throw new Error('api-session: required modelSelection projection is not registered')
+    }
+    return state
   }
 
   /**
@@ -552,6 +591,13 @@ export class ApiSessionAgentController {
     if (requested === undefined || requested === existing) return
     throw new ApiSessionPresetConflict(sessionId, requested, existing)
   }
+}
+
+function sameRoute(
+  left: Pick<ModelSelection, 'provider' | 'model'>,
+  right: Pick<ModelSelection, 'provider' | 'model'>,
+): boolean {
+  return left.provider === right.provider && left.model === right.model
 }
 
 function agentModelSelection(selection: ModelSelection): AgentModelSelection {

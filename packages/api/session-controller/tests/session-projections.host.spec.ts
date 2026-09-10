@@ -220,6 +220,29 @@ describe('session.history projections block', () => {
       lastUsed: selected,
       next: selected,
     })
+    expect(ctx.sessionProjections.stateOf(session, 'modelSelection')).toEqual({
+      lastUsed: selected,
+      pending: null,
+      baseline: selected,
+      routed: null,
+    })
+
+    // Routing records its applied route without touching the user baseline or the wire view.
+    const routed = { ...selected, reasoningEffort: 'low' }
+    session.append('model/route', { baseline: selected, selection: routed as never, reason: 'rule "short" matched', rule: 'short' })
+    session.append('model/route', { baseline: selected, selection: routed as never, reason: 'rule "short" matched', rule: 'short' })
+    expect(ctx.sessionProjections.stateOf(session, 'modelSelection')).toEqual({
+      lastUsed: selected,
+      pending: null,
+      baseline: selected,
+      routed,
+    })
+    expect(ctx.sessionProjections.snapshot(session).values.modelSelection).toEqual({
+      lastUsed: selected,
+      next: selected,
+    })
+    session.append('model/route', { baseline: selected, selection: selected, reason: 'no rule matched' })
+    expect(ctx.sessionProjections.stateOf(session, 'modelSelection')?.routed).toEqual(selected)
   })
 
   it('serves the unit value on the tail page with asOfSeq = last event seq', async () => {

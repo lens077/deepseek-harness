@@ -237,6 +237,8 @@
     { "path": "./packages/context/agent-instructions" },
     { "path": "./packages/core/agent-loop" },
     { "path": "./packages/llm/llm-retry" },
+    { "path": "./packages/llm/model-router" },
+    { "path": "./packages/llm/model-router-rules" },
     { "path": "./packages/subprocess/subprocess" },
     { "path": "./packages/subprocess/subprocess-local" },
     { "path": "./packages/subprocess/win32-process" },

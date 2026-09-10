@@ -83,7 +83,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:434`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:465`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:420`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:442`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:473`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -525,6 +525,23 @@ Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src
 
 ### `model/*`
 
+<a id="modelroute--log-only"></a>
+
+#### `model/route` — log-only
+
+```ts persistence-catalog
+/**
+ * One routing decision taken for a human prompt before that prompt was
+ * queued. `selection` is the route the consumer applied to the next
+ * request after enforcing its own constraints; when it differs from the
+ * provider's answer, `reason` names the refused constraint. Log-only: the
+ * applied route reaches the model only through the later `request/header`.
+ */
+'model/route': ModelRouteRecord
+```
+
+Source: [`packages/llm/model-router/src/types.ts:20`](../packages/llm/model-router/src/types.ts)
+
 <a id="modelselection--log-only"></a>
 
 #### `model/selection` — log-only
@@ -590,7 +607,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:46`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:377`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:385`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -609,7 +626,7 @@ Source: [`packages/core/session/src/types.ts:377`](../packages/core/session/src/
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:365`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:373`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -669,7 +686,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/directories': { additionalDirectories: string[] }
 ```
 
-Source: [`packages/core/session/src/types.ts:351`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:368`](../packages/core/session/src/types.ts)
 
 <a id="sessionend-seed--log-only"></a>
 
@@ -701,7 +718,7 @@ Source: [`packages/core/session/src/types.ts:351`](../packages/core/session/src/
 'session/end-seed': { inherited?: true }
 ```
 
-Source: [`packages/core/session/src/types.ts:400`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 

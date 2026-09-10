@@ -290,7 +290,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/attachment/attachment-local/src/index.ts:61`](../packages/attachment/attachment-local/src/index.ts)
+来源：[`packages/attachment/attachment-local/src/index.ts:65`](../packages/attachment/attachment-local/src/index.ts)
 
 <a id="deepseek-aidsh-bash-local"></a>
 
@@ -1601,6 +1601,36 @@ export interface Config {
 ```
 
 来源：[`packages/feedback/message-feedback/src/index.ts:39`](../packages/feedback/message-feedback/src/index.ts)
+
+<a id="deepseek-aidsh-model-router-rules"></a>
+
+## `@deepseek-ai/dsh-model-router-rules`
+
+```ts config-catalog
+/** Deployment rule list; a mounted router with no rule is a misconfiguration. */
+export interface Config {
+  /** Ordered rules; the first whose conditions all hold decides, and an empty list fails at load. */
+  rules: RuleConfig[]
+}
+
+/** One ordered routing rule; every present condition must hold for it to match. */
+export interface RuleConfig {
+  /** Unique identifier recorded as `rule` on the durable decision. */
+  readonly id: string
+  /** JavaScript regular expression source tested against the prompt text with the `u` and `s` flags. */
+  readonly pattern?: string
+  /** Match only when the prompt's UTF-8 byte length is at most this value. */
+  readonly maxBytes?: number
+  /** Match only when the prompt's UTF-8 byte length is at least this value. */
+  readonly minBytes?: number
+  /** Match only when image presence equals this value. */
+  readonly hasImage?: boolean
+  /** Adapter-owned reasoning effort applied on the baseline route when the rule matches. */
+  readonly reasoningEffort: string
+}
+```
+
+来源：[`packages/llm/model-router-rules/src/index.ts:32`](../packages/llm/model-router-rules/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -3623,6 +3653,7 @@ export interface Config {
 - `@deepseek-ai/dsh-fs` — 抽象 `FileSystem`（[`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker` — 抽象 `DirectoryPicker`（[`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts)）
 - `@deepseek-ai/dsh-jobs` — 抽象 `JobRegistry`（[`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts)）
+- `@deepseek-ai/dsh-model-router` — 抽象 `ModelRouter`（[`packages/llm/model-router/src/index.ts`](../packages/llm/model-router/src/index.ts)）
 - `@deepseek-ai/dsh-sandbox` — 抽象 `SandboxProvider`（[`packages/sandbox/sandbox/src/index.ts`](../packages/sandbox/sandbox/src/index.ts)）
 - `@deepseek-ai/dsh-session-persistence` — 抽象 `SessionPersistence`（[`packages/session/session-persistence/src/index.ts`](../packages/session/session-persistence/src/index.ts)）
 - `@deepseek-ai/dsh-session-query` — 抽象 `SessionQueryEngine`（[`packages/session-query/session-query/src/index.ts`](../packages/session-query/session-query/src/index.ts)）

@@ -1043,6 +1043,26 @@ Types: [FileAttachmentRef](attachment.zh.md)
 
 Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 
+<a id="ctxmodelrouter--modelrouter-abstract-seam"></a>
+
+### `ctx.modelRouter` — `ModelRouter` (abstract seam)
+
+Abstract prompt-driven route selection. Load one implementation per context as `ctx.modelRouter`. Implementations are pure decision functions: they never validate a route against the live LLM registry, never mutate the session, and answer with the baseline when nothing applies.
+
+```ts cordis-catalog
+/**
+ * Propose the route for the prompt about to be queued. The call sits in the
+ * prompt's admission path, so an implementation that performs I/O must bound
+ * its own latency.
+ * @param input - the owner's baseline route and the prompt to classify.
+ * @returns the proposed route with its justification; the baseline when no rule applies.
+ * @throws when classification fails; the consumer keeps the baseline and records the failure.
+ */
+abstract route(input: ModelRouteInput): Promise<ModelRouteDecision>
+```
+
+Source: [`packages/llm/model-router/src/index.ts`](../../packages/llm/model-router/src/index.ts)
+
 <a id="llm-events"></a>
 
 ### `llm/*` events

@@ -78,6 +78,23 @@
         provider: deepseek-official
         model: deepseek-v4-flash
 
+    # Prompt-driven reasoning-effort routing for Web prompts. Disabled here so
+    # a person's effort choice stays untouched; an overlay enables this same
+    # row with its own rule list. Effort ids are exact-model metadata, so a
+    # rule naming one the selected model lacks is refused per prompt, not at load.
+    - id: model-router
+      name: '@deepseek-ai/dsh-model-router-rules'
+      disabled: true
+      config:
+        rules:
+          - id: short-question
+            maxBytes: 240
+            pattern: '[?？]\s*$'
+            reasoningEffort: low
+          - id: code-block
+            pattern: '```'
+            reasoningEffort: high
+
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'
 

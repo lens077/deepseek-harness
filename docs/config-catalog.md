@@ -213,7 +213,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/api/session-controller/src/index.ts:70`](../packages/api/session-controller/src/index.ts)
+Source: [`packages/api/session-controller/src/index.ts:84`](../packages/api/session-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-settings-controller"></a>
 
@@ -288,7 +288,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/attachment/attachment-local/src/index.ts:61`](../packages/attachment/attachment-local/src/index.ts)
+Source: [`packages/attachment/attachment-local/src/index.ts:65`](../packages/attachment/attachment-local/src/index.ts)
 
 <a id="deepseek-aidsh-bash-local"></a>
 
@@ -1599,6 +1599,36 @@ export interface Config {
 ```
 
 Source: [`packages/feedback/message-feedback/src/index.ts:39`](../packages/feedback/message-feedback/src/index.ts)
+
+<a id="deepseek-aidsh-model-router-rules"></a>
+
+## `@deepseek-ai/dsh-model-router-rules`
+
+```ts config-catalog
+/** Deployment rule list; a mounted router with no rule is a misconfiguration. */
+export interface Config {
+  /** Ordered rules; the first whose conditions all hold decides, and an empty list fails at load. */
+  rules: RuleConfig[]
+}
+
+/** One ordered routing rule; every present condition must hold for it to match. */
+export interface RuleConfig {
+  /** Unique identifier recorded as `rule` on the durable decision. */
+  readonly id: string
+  /** JavaScript regular expression source tested against the prompt text with the `u` and `s` flags. */
+  readonly pattern?: string
+  /** Match only when the prompt's UTF-8 byte length is at most this value. */
+  readonly maxBytes?: number
+  /** Match only when the prompt's UTF-8 byte length is at least this value. */
+  readonly minBytes?: number
+  /** Match only when image presence equals this value. */
+  readonly hasImage?: boolean
+  /** Adapter-owned reasoning effort applied on the baseline route when the rule matches. */
+  readonly reasoningEffort: string
+}
+```
+
+Source: [`packages/llm/model-router-rules/src/index.ts:32`](../packages/llm/model-router-rules/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -3618,6 +3648,7 @@ Abstract service classes — a deployment loads a concrete implementation packag
 - `@deepseek-ai/dsh-fs` — abstract `FileSystem` ([`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts))
 - `@deepseek-ai/dsh-host-directory-picker` — abstract `DirectoryPicker` ([`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts))
 - `@deepseek-ai/dsh-jobs` — abstract `JobRegistry` ([`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts))
+- `@deepseek-ai/dsh-model-router` — abstract `ModelRouter` ([`packages/llm/model-router/src/index.ts`](../packages/llm/model-router/src/index.ts))
 - `@deepseek-ai/dsh-sandbox` — abstract `SandboxProvider` ([`packages/sandbox/sandbox/src/index.ts`](../packages/sandbox/sandbox/src/index.ts))
 - `@deepseek-ai/dsh-session-persistence` — abstract `SessionPersistence` ([`packages/session/session-persistence/src/index.ts`](../packages/session/session-persistence/src/index.ts))
 - `@deepseek-ai/dsh-session-query` — abstract `SessionQueryEngine` ([`packages/session-query/session-query/src/index.ts`](../packages/session-query/session-query/src/index.ts))

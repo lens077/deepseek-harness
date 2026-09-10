@@ -1,6 +1,7 @@
-/** Durable model-selection intent and request-use projection. */
+/** Durable model-selection intent, routing, and request-use projection. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-model-router/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { z } from 'zod'
@@ -19,6 +20,8 @@ const modelSelectionSchema = z.object({
 const modelSelectionProjectionStateSchema = z.object({
   lastUsed: modelSelectionSchema.nullable(),
   pending: modelSelectionSchema.nullable(),
+  baseline: modelSelectionSchema.nullable(),
+  routed: modelSelectionSchema.nullable(),
 }) as unknown as z.ZodType<ModelSelectionProjectionState>
 
 const modelSelectionProjectionSchema = z.object({
@@ -37,9 +40,19 @@ function applyModelSelectionProjection(
   event: SessionEvent,
 ): ModelSelectionProjectionState {
   if (event.type === 'model/selection') {
-    return sameSelection(state.pending, event.data)
+    return sameSelection(state.pending, event.data) && sameSelection(state.baseline, event.data)
       ? state
-      : { lastUsed: state.lastUsed, pending: event.data }
+      : { ...state, pending: event.data, baseline: event.data }
+  }
+  if (event.type === 'model/route') {
+    const routed: ModelSelection = {
+      provider: event.data.selection.provider,
+      model: event.data.selection.model,
+      ...(event.data.selection.reasoningEffort === undefined
+        ? {}
+        : { reasoningEffort: String(event.data.selection.reasoningEffort) }),
+    }
+    return sameSelection(state.routed, routed) ? state : { ...state, routed }
   }
   if (event.type !== 'request/header') return state
   const lastUsed: ModelSelection = {
@@ -52,19 +65,19 @@ function applyModelSelectionProjection(
   const pending = sameSelection(state.pending, lastUsed) ? null : state.pending
   return sameSelection(state.lastUsed, lastUsed) && pending === state.pending
     ? state
-    : { lastUsed, pending }
+    : { ...state, lastUsed, pending }
 }
 
 const modelSelectionProjection = {
   key: 'modelSelection',
   stateSchema: modelSelectionProjectionStateSchema,
-  init: () => ({ lastUsed: null, pending: null }),
+  init: () => ({ lastUsed: null, pending: null, baseline: null, routed: null }),
   apply: applyModelSelectionProjection,
   wire: {
     viewSchema: modelSelectionProjectionSchema,
     view: state => ({ lastUsed: state.lastUsed, next: state.pending ?? state.lastUsed }),
   },
-  stateVersion: 2,
+  stateVersion: 3,
 } satisfies ProjectionDefinition<'modelSelection', ModelSelectionProjectionState>
 
 function sameSelection(left: ModelSelection | null, right: ModelSelection | null): boolean {
