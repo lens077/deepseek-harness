@@ -1,6 +1,7 @@
 /** Locale-routed labels shared by every task-flow drawing. */
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FlowLane, FlowLaneCounts, FlowNode, FlowSnapshot, FlowStatus } from './flow-contract.ts'
+import { countLanes, isTerminal } from './flow-model.ts'
 import type {} from './locales.ts'
 
 /** Translator bound to the taskFlow namespace. */
@@ -67,6 +68,20 @@ export function statusLabel(t: TaskFlowTranslate, status: FlowStatus): string {
 }
 
 /**
+ * Recorded cause of a terminal outcome: the localized cancel cause, the
+ * authentication failure notice, or the verbatim error message.
+ * @param t - namespace translator.
+ * @param node - steps or terminal node.
+ * @returns localized cause, or undefined when none was recorded.
+ */
+export function terminalReason(t: TaskFlowTranslate, node: FlowNode): string | undefined {
+  if (node.failureCode === 'AUTH') return t('failure.auth')
+  if (node.detail === undefined) return undefined
+  const key = ABORT_KEYS[node.detail]
+  return key === undefined ? node.detail : t(key)
+}
+
+/**
  * Terminal-node copy: the status plus the recorded cause when one is known.
  * @param t - namespace translator.
  * @param node - terminal node.
@@ -81,7 +96,8 @@ export function terminalLabel(t: TaskFlowTranslate, node: FlowNode): string {
 }
 
 /**
- * Display title of one node; `steps` and `terminal` nodes carry locale-owned copy.
+ * Display title of one node; `steps` and `terminal` nodes carry locale-owned
+ * copy, and a steps node that ended in a terminal state names that state.
  * @param t - namespace translator.
  * @param node - drawn node.
  * @returns localized or verbatim title.
@@ -89,7 +105,7 @@ export function terminalLabel(t: TaskFlowTranslate, node: FlowNode): string {
 export function nodeTitle(t: TaskFlowTranslate, node: FlowNode): string {
   switch (node.kind) {
     case 'prompt': return node.title === '' ? t('node.prompt') : node.title
-    case 'steps': return t('node.steps')
+    case 'steps': return isTerminal(node.status) ? statusLabel(t, node.status) : t('node.steps')
     case 'terminal': return terminalLabel(t, node)
     case 'todo':
     case 'agent':
@@ -224,4 +240,14 @@ export function countsFact(t: TaskFlowTranslate, counts: FlowLaneCounts): string
   if (counts.done > 0) parts.push(t('count.done', { count: counts.done }))
   if (counts.stopped > 0) parts.push(t('count.stopped', { count: counts.stopped }))
   return parts.length === 0 ? t('count.done', { count: 0 }) : parts.join(' · ')
+}
+
+/**
+ * Caption of the collapsed-history chip: the hidden lane count and their state counts.
+ * @param t - namespace translator.
+ * @param hidden - lanes folded into the chip.
+ * @returns localized copy such as “History 2 · 1 done · 1 stopped”.
+ */
+export function historyLabel(t: TaskFlowTranslate, hidden: readonly FlowLane[]): string {
+  return `${t('history.collapsed', { count: hidden.length })} · ${countsFact(t, countLanes(hidden))}`
 }

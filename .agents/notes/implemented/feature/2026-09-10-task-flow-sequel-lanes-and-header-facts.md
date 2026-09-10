@@ -18,6 +18,8 @@ The three drawings follow: the rail chains the main line and its sequels as one 
 
 The header layout places the collapse toggle before the title with a right/down chevron, drops the font-size stepper (the General settings row remains the only control), and makes `Stop task` the last action.
 
+Three follow-ups came from the first acceptance screenshot. The strip folds history: `FlowGraph` takes an optional history control, and the strip passes one that folds every lane before the newest line lane (with the interjections hanging off them) into one `History n · counts` chip; clicking the chip shows the whole flow and `Hide earlier turns` folds it again. The fold state is strip-local and the canvas never folds. Captions still resolve against the complete lane table, so a retry of a hidden lane keeps naming it. A turn drawn as one steps node no longer gets a separate terminal node: the steps node carries the terminal status as its title, the step count and span as its meta, and the recorded cause as its tooltip; turns with a todo spine keep the terminal node. Cancels (`aborted`) draw in neutral tones instead of the error color, and prompt nodes are neutral in every drawing unless their lane is running, because a prompt records the question, not an outcome.
+
 ## Alternatives considered
 
 **Keep `fork` and add `sequel` beside it.** No durable evidence distinguishes a fork from a sequel: both are prompts admitted between turns. A kind that cannot be observed would never be produced.
@@ -25,6 +27,8 @@ The header layout places the collapse toggle before the title with a right/down 
 **Show both wall-clock and active time in the header.** Two elapsed facts compete for the space the current fact needs; the strip is about what runs now, so the open turn's span wins while running and the active sum answers "how long did this take" afterwards.
 
 **Keep done/total over spine and agent nodes as the leading fact.** The count mixed steps nodes, todos, and agents across lanes, and terminal lanes could never complete. Spine progress stays where it is meaningful: per lane on the lane board and inside the current fact.
+
+**Fold history inside the snapshot with a synthetic node.** A `history` node kind would have to carry a lane id, a turn, and an anchor seq it does not have, and the lane board's "prompt is always first" rule would break. Folding at the drawing over a filtered lane list keeps the model honest and lets the canvas ignore folding.
 
 **Number lanes by turn index but include turns without prompts.** A turn without a user prompt draws nothing, so its ordinal would still point at an empty slot; positional numbering of prompts is the only sequence the user can verify against the chat.
 

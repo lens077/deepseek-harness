@@ -170,7 +170,7 @@
 .statusText.running { color: var(--dsw-alias-state-business-primary); }
 .statusText.done { color: var(--dsw-alias-state-success-primary); }
 .statusText.risk { color: var(--dsw-alias-state-warn-label); }
+.statusText.aborted { color: var(--dsw-alias-label-secondary); }
 .statusText.error,
-.statusText.aborted,
 .statusText.interrupted { color: var(--dsw-alias-state-error-primary); }
 .statusText.pending { color: var(--dsw-alias-label-tertiary); }

@@ -1,9 +1,10 @@
 /**
  * TaskFlowDock: the resident task-flow strip above the composer. The header
  * always shows lane counts, elapsed time, the lane whose turn is open, and the
- * latest interjection; the body draws the selected variant and collapses per Session.
+ * latest interjection; the body draws the selected variant leading with the
+ * newest turn, folds earlier turns behind a chip, and collapses per Session.
  */
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import clsx from 'clsx'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
@@ -11,7 +12,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import { FLOW_VARIANTS, type FlowVariant } from '../settings.ts'
-import { FlowGraph } from './FlowGraph.tsx'
+import { FlowGraph, type FlowHistoryControl } from './FlowGraph.tsx'
 import type { FlowSnapshot } from './flow-contract.ts'
 import { countsFact, currentFact, elapsedFact, laneKindLabel, statusLabel, type TaskFlowTranslate } from './format.ts'
 import type { FlowStyle } from './style-policy.ts'
@@ -159,6 +160,12 @@ export function TaskFlowDock({
   const fontSize = useFlowStyle(style => style.fontSize)
   const mobileDock = useMobileDock(value => value)
   const expanded = useStore(state => state.expanded)
+  // The strip leads with the newest turn; earlier turns fold behind a chip until asked for.
+  const [historyShown, setHistoryShown] = useState(false)
+  const history = useMemo<FlowHistoryControl>(
+    () => ({ collapsed: !historyShown, onToggle: () => { setHistoryShown(value => !value) } }),
+    [historyShown],
+  )
   const now = useClock(snapshot.summary.running)
   if (snapshot.lanes.length === 0) return null
   return (
@@ -197,7 +204,7 @@ export function TaskFlowDock({
         </div>
         {expanded && (
           <div className={css.body} role="region" aria-label={t('graph.label')} tabIndex={0}>
-            <FlowGraph snapshot={snapshot} variant={variant} now={now} t={t} onInspect={inspect} />
+            <FlowGraph snapshot={snapshot} variant={variant} now={now} t={t} onInspect={inspect} history={history} />
           </div>
         )}
       </div>

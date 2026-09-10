@@ -55,7 +55,7 @@
 - button "Open in canvas":
   - img
   - text: Open in canvas
-- region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Execution {{duration}} · 1 steps Stopped（stopped manually）"
+- region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Stopped {{duration}} · 1 steps"
 - button "2 queued messages" [expanded]
 - list:
   - listitem:

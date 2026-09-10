@@ -59,6 +59,33 @@ export const DOCK_METRICS: FlowLayoutMetrics = {
 /** A drawing column: at least one node. */
 export type FlowColumn = [FlowNode, ...FlowNode[]]
 
+/** Lanes kept on a history-collapsed drawing and the lanes folded away. */
+export interface FlowHistorySplit {
+  readonly visible: readonly FlowLane[]
+  readonly hidden: readonly FlowLane[]
+}
+
+/**
+ * Split lanes for a drawing that shows only the newest turn: the latest lane
+ * on the line stays, with the interjections hanging off it; every earlier lane
+ * is hidden. A flow with a single line lane hides nothing.
+ * @param lanes - drawn lanes in order.
+ * @returns visible and hidden lanes, each in the original order.
+ */
+export function splitHistory(lanes: readonly FlowLane[]): FlowHistorySplit {
+  const line = lanes.filter(lane => lane.kind !== 'interjection')
+  const latest = line.at(-1)
+  if (latest === undefined || line.length < 2) return { visible: lanes, hidden: [] }
+  const visibleIds = new Set([latest.id])
+  for (const lane of lanes) {
+    if (lane.kind === 'interjection' && lane.parentLaneId !== undefined && visibleIds.has(lane.parentLaneId)) visibleIds.add(lane.id)
+  }
+  return {
+    visible: lanes.filter(lane => visibleIds.has(lane.id)),
+    hidden: lanes.filter(lane => !visibleIds.has(lane.id)),
+  }
+}
+
 function isRow(columns: readonly FlowColumn[]): columns is [FlowColumn, ...FlowColumn[]] {
   return columns.length > 0
 }

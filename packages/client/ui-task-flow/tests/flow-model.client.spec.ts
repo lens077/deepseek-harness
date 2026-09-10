@@ -116,10 +116,11 @@ describe('task-flow fold', () => {
     expect(snapshot.nodes.get('agent:c2')).toMatchObject({ title: '第一章案卷作者', status: 'error', parentId: 'todo:1:1' })
     expect(snapshot.nodes.has('agent:c3')).toBe(false)
 
+    // A steps-only turn carries its terminal outcome on the steps node; no separate terminal node repeats it.
     const interjection = snapshot.lanes[1]!
-    expect(interjection.nodeIds).toEqual(['prompt:m2', 'steps:2', 'end:2'])
-    expect(snapshot.nodes.get('steps:2')).toMatchObject({ kind: 'steps', status: 'aborted', stepCount: 1, startTime: 17_000, endTime: 21_000 })
-    expect(snapshot.nodes.get('end:2')).toMatchObject({ kind: 'terminal', status: 'aborted', detail: 'user', anchorSeq: 21 })
+    expect(interjection.nodeIds).toEqual(['prompt:m2', 'steps:2'])
+    expect(snapshot.nodes.get('steps:2')).toMatchObject({ kind: 'steps', status: 'aborted', detail: 'user', stepCount: 1, startTime: 17_000, endTime: 21_000 })
+    expect(snapshot.nodes.has('end:2')).toBe(false)
 
     const sequel = snapshot.lanes[2]!
     expect(sequel.nodeIds).toEqual(['prompt:m3', 'steps:3'])
@@ -184,7 +185,8 @@ describe('task-flow fold', () => {
     ]
     const snapshot = snapshotOf(assemble(closed))
     expect(snapshot.lanes[2]).toMatchObject({ status: 'error', endTime: 27_000 })
-    expect(snapshot.nodes.get('end:3')).toMatchObject({ status: 'error', detail: 'boom' })
+    expect(snapshot.nodes.get('steps:3')).toMatchObject({ status: 'error', detail: 'boom', failureCode: 'UNKNOWN' })
+    expect(snapshot.nodes.has('end:3')).toBe(false)
     expect(snapshot.summary).toMatchObject({ running: false, status: 'error', activeMs: 22_000, lanes: { done: 1, running: 0, stopped: 2 } })
     expect(snapshot.summary.currentNodeId).toBeUndefined()
     expect(snapshot.summary.currentLaneId).toBeUndefined()
@@ -198,7 +200,7 @@ describe('task-flow fold', () => {
       stepEnd(26, 3, 1),
       turnEnd(27, 3, { kind: 'error', error: { message, code: 'AUTH' } }),
     ]))
-    const terminal = snapshot.nodes.get('end:3')
+    const terminal = snapshot.nodes.get('steps:3')
     expect(terminal?.detail).toBeUndefined()
     expect(terminal).toMatchObject({ status: 'error', failureCode: 'AUTH' })
     expect(JSON.stringify([...snapshot.nodes.values()])).not.toContain(message)
@@ -240,10 +242,30 @@ describe('task-flow fold', () => {
     for (const [reason, status, detail] of outcomes) {
       const snapshot = snapshotOf(assemble([...base, turnEnd(6, 1, reason)]))
       expect(snapshot.lanes[0]!.status).toBe(status)
-      const terminal = snapshot.nodes.get('end:1')
-      if (status === 'done') expect(terminal).toBeUndefined()
-      else expect(terminal).toMatchObject({ status, ...detail === undefined ? {} : { detail } })
+      expect(snapshot.nodes.has('end:1')).toBe(false)
+      const steps = snapshot.nodes.get('steps:1')
+      expect(steps).toMatchObject({ status, ...detail === undefined ? {} : { detail } })
+      if (status === 'done') expect(steps?.detail).toBeUndefined()
     }
+  })
+
+  it('keeps a separate terminal node on a turn whose spine holds todos', () => {
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'x'), stepStart(4, 1, 1),
+      todo(5, [['A', 'in_progress']]), stepEnd(6, 1, 1), turnEnd(7, 1, { kind: 'aborted', reason: { kind: 'user' } }),
+    ]))
+    expect(snapshot.lanes[0]!.nodeIds).toEqual(['prompt:m1', 'todo:1:0', 'end:1'])
+    expect(snapshot.nodes.get('end:1')).toMatchObject({ kind: 'terminal', status: 'aborted', detail: 'user', anchorSeq: 7 })
+    expect(snapshot.nodes.get('todo:1:0')).toMatchObject({ status: 'aborted' })
+    const planned = [
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'x'), stepStart(4, 1, 1),
+      todo(5, [['A', 'in_progress']]), stepEnd(6, 1, 1),
+    ]
+    const crashed = snapshotOf(assemble([...planned, turnEnd(7, 1, { kind: 'interrupted' })]))
+    expect(crashed.nodes.get('end:1')).toMatchObject({ status: 'interrupted' })
+    expect(crashed.nodes.get('end:1')?.detail).toBeUndefined()
+    const failed = snapshotOf(assemble([...planned, turnEnd(7, 1, { kind: 'error', error: { message: 'boom', code: 'UNKNOWN' } })]))
+    expect(failed.nodes.get('end:1')).toMatchObject({ status: 'error', detail: 'boom', failureCode: 'UNKNOWN' })
   })
 
   it('ignores prompts and todos whose turn boundary is outside the window', () => {
@@ -280,7 +302,7 @@ describe('task-flow fold', () => {
     ]))
     expect(snapshot.lanes.map(lane => [lane.ordinal, lane.kind, lane.parentLaneId, lane.anchorNodeId])).toEqual([
       [1, 'main', undefined, undefined],
-      [2, 'sequel', 'turn:2', 'end:2'],
+      [2, 'sequel', 'turn:2', 'steps:2'],
       [3, 'sequel', 'turn:3', 'steps:3'],
     ])
     expect(snapshot.summary).toMatchObject({ lanes: { done: 1, running: 1, stopped: 1 }, activeMs: 8_000, currentLaneId: 'turn:4' })

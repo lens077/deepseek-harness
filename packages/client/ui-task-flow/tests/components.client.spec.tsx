@@ -16,10 +16,11 @@ import { FlowStyleRow, type FlowStyleRowProps } from '../src/client/FlowStyleRow
 import { TaskFlowDock, type TaskFlowDockProps } from '../src/client/TaskFlowDock.tsx'
 import { TaskFlowView, type TaskFlowViewProps } from '../src/client/TaskFlowView.tsx'
 import type { FlowLane, FlowNode, FlowSnapshot } from '../src/client/flow-contract.ts'
-import { DOCK_METRICS, layoutFlow } from '../src/client/flow-layout.ts'
+import { DOCK_METRICS, layoutFlow, splitHistory } from '../src/client/flow-layout.ts'
 import { EMPTY_FLOW_SNAPSHOT } from '../src/client/flow-model.ts'
 import {
   countsFact, currentFact, elapsedFact, formatDuration, laneAnchorLabel, laneKindLabel, nodeDetail, nodeTitle, terminalLabel,
+  terminalReason,
 } from '../src/client/format.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { createTaskFlowDockStore } from '../src/client/stores.ts'
@@ -148,6 +149,36 @@ describe('FlowGraph drawings', () => {
   })
 })
 
+describe('history folding', () => {
+  it('keeps the newest line lane and its interjections, hiding everything earlier', () => {
+    const base = sample()
+    const onto: FlowLane = { id: 'turn:4', kind: 'interjection', turn: 4, ordinal: 4, label: 'late', status: 'done', parentLaneId: 'turn:3', anchorNodeId: 'steps:3', nodeIds: ['prompt:m4'], startTime: 8 }
+    const split = splitHistory([...base.lanes, onto])
+    expect(split.visible.map(lane => lane.id)).toEqual(['turn:3', 'turn:4'])
+    expect(split.hidden.map(lane => lane.id)).toEqual(['turn:1', 'turn:2'])
+    const single = splitHistory(base.lanes.slice(0, 2))
+    expect(single).toEqual({ visible: base.lanes.slice(0, 2), hidden: [] })
+    expect(splitHistory([])).toEqual({ visible: [], hidden: [] })
+  })
+
+  it('folds the card graph and the lane board behind the history chip', () => {
+    const onToggle = vi.fn()
+    const cards = render(<FlowGraph snapshot={sample()} variant="cards" now={NOW} t={t} history={{ collapsed: true, onToggle }} />)
+    expect(cards.container.querySelectorAll('[data-flow-node]')).toHaveLength(3)
+    fireEvent.click(cards.getByLabelText('展开历史轮次'))
+    expect(onToggle).toHaveBeenCalledTimes(1)
+    const lanes = render(<FlowGraph snapshot={sample()} variant="lanes" now={NOW} t={t} history={{ collapsed: false, onToggle }} />)
+    expect(lanes.container.querySelectorAll('[data-flow-lane]')).toHaveLength(3)
+    expect(lanes.getByLabelText('收起历史轮次')).toBeTruthy()
+    // A flow with one line lane has nothing to fold and draws no chip.
+    const single: FlowSnapshot = { ...sample(), lanes: sample().lanes.slice(0, 2) }
+    const flat = render(<FlowGraph snapshot={single} variant="cards" now={NOW} t={t} history={{ collapsed: true, onToggle }} />)
+    expect(flat.container.querySelector('[data-flow-history]')).toBeNull()
+    const rail = render(<FlowGraph snapshot={single} variant="rail" now={NOW} t={t} history={{ collapsed: true, onToggle }} />)
+    expect(rail.container.querySelector('[data-flow-history]')).toBeNull()
+  })
+})
+
 describe('card layout', () => {
   it('places fan-out agents in one stacked column and branch rows under their anchor', () => {
     const layout = layoutFlow(sample(), DOCK_METRICS)
@@ -202,6 +233,11 @@ describe('format helpers', () => {
       id: 'auth', kind: 'terminal', laneId: 'l', status: 'error', failureCode: 'AUTH',
     }))).toBe('出错 · API 密钥无效')
     expect(terminalLabel(t, node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'interrupted' }))).toBe('异常中断')
+    expect(terminalReason(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'aborted', detail: 'user' }))).toBe('手动停止')
+    expect(terminalReason(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'error', failureCode: 'AUTH' }))).toBe('API 密钥无效')
+    expect(terminalReason(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'error', detail: 'boom' }))).toBe('boom')
+    expect(terminalReason(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'done' }))).toBeUndefined()
+    expect(nodeTitle(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'aborted', detail: 'user' }))).toBe('已中止')
     const lane: FlowLane = { id: 'x', kind: 'interjection', turn: 2, ordinal: 2, label: '', status: 'done', anchorNodeId: 'gone', nodeIds: [], startTime: 1 }
     expect(laneAnchorLabel(t, lane, new Map())).toBeUndefined()
     expect(laneKindLabel(t, { ...lane, kind: 'main', ordinal: 1 }, [])).toBe('#1 主线')
@@ -220,8 +256,11 @@ describe('format helpers', () => {
     expect(elapsedFact(t, base, NOW)).toBe('本轮 1分39秒')
     const steps = sample()
     const stepsLane = { ...steps.lanes[2]!, status: 'running' as const, label: 'x'.repeat(30) }
+    const runningNodes = new Map(steps.nodes)
+    runningNodes.set('steps:3', { ...steps.nodes.get('steps:3')!, status: 'running' })
     const running: FlowSnapshot = {
       ...steps,
+      nodes: runningNodes,
       lanes: [steps.lanes[0]!, steps.lanes[1]!, stepsLane],
       summary: { ...steps.summary, currentLaneId: 'turn:3', currentNodeId: 'steps:3' },
     }
@@ -299,6 +338,20 @@ describe('TaskFlowDock', () => {
     expect((view.container.querySelector('[data-task-flow-dock]') as HTMLElement).style.getPropertyValue('--dsh-task-flow-font-size')).toBe('11px')
     expect(view.getByRole('region', { name: '任务流程图' }).tabIndex).toBe(0)
     expect(view.queryByLabelText('增大任务流程字号')).toBeNull()
+    // The strip leads with the newest turn; the two earlier lanes fold into one chip until expanded.
+    expect(view.queryByText('案卷作者')).toBeNull()
+    const chips = [...view.container.querySelectorAll('[data-flow-node]')].map(chip => chip.getAttribute('data-flow-node'))
+    expect(chips).toEqual(['prompt:m3', 'steps:3', 'end:3'])
+    const history = view.getByLabelText('展开历史轮次')
+    expect(history.textContent).toBe('历史 2 轮 · 进行中 1 · 已完成 1')
+    // Captions still resolve against the folded lanes: a retry of a hidden lane keeps naming it.
+    const retry = dockProps({ ...sample(), lanes: sample().lanes.map(lane => lane.id === 'turn:3' ? { ...lane, retryOfLaneId: 'turn:2' } : lane) })
+    const folded = render(<TaskFlowDock {...retry.props} />)
+    expect(folded.getByText('重试 #2')).toBeTruthy()
+    folded.unmount()
+    fireEvent.click(history)
+    expect(view.getByText('案卷作者')).toBeTruthy()
+    expect(view.getByLabelText('收起历史轮次').textContent).toBe('收起历史轮次')
     // Collapse sits beside the title; stop is the last action.
     const head = view.getByLabelText('折叠流程图').parentElement as HTMLElement
     expect(head.firstElementChild).toBe(view.getByLabelText('折叠流程图'))

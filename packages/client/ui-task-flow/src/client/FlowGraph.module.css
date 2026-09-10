@@ -25,8 +25,8 @@
 .glyph.running { color: var(--dsh-flow-accent); }
 .glyph.done { color: var(--dsh-flow-success); }
 .glyph.risk { color: var(--dsh-flow-warn); }
+.glyph.aborted { color: var(--dsw-alias-label-secondary); }
 .glyph.error,
-.glyph.aborted,
 .glyph.interrupted { color: var(--dsh-flow-error); }
 
 .spinner {
@@ -65,8 +65,8 @@
 .statusText.running { color: var(--dsh-flow-accent); }
 .statusText.done { color: var(--dsh-flow-success); }
 .statusText.risk { color: var(--dsw-alias-state-warn-label); }
+.statusText.aborted { color: var(--dsw-alias-label-secondary); }
 .statusText.error,
-.statusText.aborted,
 .statusText.interrupted { color: var(--dsh-flow-error); }
 
 .empty {
@@ -130,11 +130,13 @@
 .card.running { border-width: 1px; border-color: var(--dsh-flow-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsh-flow-accent) 18%, transparent); }
 .card.done { border-width: 1px; border-color: color-mix(in srgb, var(--dsh-flow-success) 55%, transparent); }
 .card.risk { border-width: 1px; border-color: color-mix(in srgb, var(--dsh-flow-warn) 65%, transparent); }
+.card.aborted { border-width: 1px; border-color: var(--dsw-alias-border-l3); }
 .card.error,
-.card.aborted,
 .card.interrupted { border-width: 1px; border-color: color-mix(in srgb, var(--dsh-flow-error) 60%, transparent); }
 .card.pending { border-width: 1px; border-style: dashed; opacity: 0.6; }
 .card.prompt { background: var(--dsw-alias-bg-layer-3); }
+/* A prompt card records the question, not an outcome: only a running lane colors it. */
+.card.prompt:not(.running) { border-width: 0.5px; border-color: var(--dsw-alias-border-l2); box-shadow: none; }
 
 .cardTitle {
   display: flex;
@@ -215,9 +217,18 @@
 .chip.done { border-width: 1px; border-color: color-mix(in srgb, var(--dsh-flow-success) 45%, transparent); }
 .chip.risk { border-width: 1px; border-color: color-mix(in srgb, var(--dsh-flow-warn) 65%, transparent); }
 .chip.pending { border-width: 1px; border-style: dashed; opacity: 0.6; }
+.chip.aborted { border-width: 1px; border-color: var(--dsw-alias-border-l3); color: var(--dsw-alias-label-secondary); }
 .chip.error,
-.chip.aborted,
 .chip.interrupted { border-width: 1px; border-color: color-mix(in srgb, var(--dsh-flow-error) 60%, transparent); color: var(--dsh-flow-error); }
+/* A prompt chip records the question, not an outcome: only a running lane colors it. */
+.chip.prompt:not(.running) { border: 0.5px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); opacity: 1; }
+.chip.history {
+  border-style: dashed;
+  border-color: var(--dsw-alias-border-l3);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.chip.history:hover { background: var(--dsw-alias-interactive-bg-hover-solid); }
 .chip.running {
   border-width: 1px;
   padding: 6px 14px;
@@ -369,8 +380,8 @@
 .block.done { border-color: transparent; background: color-mix(in srgb, var(--dsh-flow-success) 16%, transparent); }
 .block.running { border-width: 1px; border-color: var(--dsh-flow-accent); background: color-mix(in srgb, var(--dsh-flow-accent) 18%, transparent); color: var(--dsw-alias-label-primary); }
 .block.risk { border-color: transparent; background: color-mix(in srgb, var(--dsh-flow-warn) 16%, transparent); }
+.block.aborted { border-color: transparent; background: color-mix(in srgb, var(--dsw-alias-label-secondary) 14%, transparent); }
 .block.error,
-.block.aborted,
 .block.interrupted { border-color: transparent; background: color-mix(in srgb, var(--dsh-flow-error) 16%, transparent); }
 .block.pending { border-width: 1px; border-style: dashed; opacity: 0.55; }
 
@@ -416,6 +427,23 @@
   height: 100%;
   background: var(--dsh-flow-success);
 }
+
+/* History chip beside a card graph or above a lane board when earlier turns are folded. */
+.folded {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px 0;
+}
+
+.folded.foldedRows {
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 14px 0;
+}
+
+.folded > .graph { flex: none; }
+.foldedRows > .graph { align-self: stretch; }
 
 /* The dock owns scrolling; graph rows retain their intrinsic width. */
 :global([data-task-flow-dock]) .rail {

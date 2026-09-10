@@ -10,7 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionEvent, TurnEndReason } from '@deepseek-ai/dsh-session/types'
 import type {
-  FlowAgentContribution, FlowConversationViewNode, FlowInboxContribution, FlowLane, FlowLaneKind, FlowNode,
+  FlowAgentContribution, FlowConversationViewNode, FlowInboxContribution, FlowLane, FlowLaneCounts, FlowLaneKind, FlowNode,
   FlowPromptContribution, FlowSnapshot, FlowStatus, FlowSummary, FlowTodoContribution,
 } from './flow-contract.ts'
 
@@ -352,7 +352,12 @@ export function buildFlowSnapshot(
         callId: agent.callId,
       })
     }
-    if (latest === undefined && agents.length === 0) {
+    const end = outcome.end
+    const terminal = end === undefined ? null : terminalStatusOf(end.data.reason)
+    const stepsOnly = latest === undefined && agents.length === 0
+    if (stepsOnly) {
+      // A turn drawn as one steps node carries its own terminal outcome; a separate terminal node would repeat it.
+      const detail = end === undefined || terminal === null ? undefined : abortDetail(end.data.reason)
       place(draft, {
         id: `steps:${turn}`,
         laneId,
@@ -360,15 +365,15 @@ export function buildFlowSnapshot(
         title: '',
         status: outcome.status === 'closed' ? terminalStatus(outcome.reason) ?? 'done' : 'running',
         stepCount: outcome.stepCount,
+        ...detail === undefined ? {} : { detail },
+        ...end !== undefined && end.data.reason.kind === 'error' ? { failureCode: end.data.reason.error.code } : {},
         ...outcome.startTime === undefined ? {} : { startTime: outcome.startTime },
         ...outcome.endTime === undefined ? {} : { endTime: outcome.endTime },
         anchorSeq: prompt.seq,
         turn,
       })
     }
-    const end = outcome.end
-    const terminal = end === undefined ? null : terminalStatusOf(end.data.reason)
-    if (end !== undefined && terminal !== null) {
+    if (end !== undefined && terminal !== null && !stepsOnly) {
       const detail = abortDetail(end.data.reason)
       place(draft, {
         id: `end:${turn}`,
@@ -410,6 +415,21 @@ export function buildFlowSnapshot(
   return { lanes, nodes: allNodes, summary: summarize(lanes, allNodes, turnLaneIds) }
 }
 
+/**
+ * Count lanes by settled state.
+ * @param lanes - drawn lanes.
+ * @returns running, stopped (every terminal state), and done (including at-risk) counts.
+ */
+export function countLanes(lanes: readonly FlowLane[]): FlowLaneCounts {
+  const counts = { done: 0, running: 0, stopped: 0 }
+  for (const lane of lanes) {
+    if (lane.status === 'running') counts.running += 1
+    else if (isTerminal(lane.status)) counts.stopped += 1
+    else counts.done += 1
+  }
+  return counts
+}
+
 /** Header facts; steer lanes share their turn, so only `turnLaneIds` contribute time and the current lane. */
 function summarize(lanes: readonly FlowLane[], nodes: ReadonlyMap<string, FlowNode>, turnLaneIds: ReadonlySet<string>): FlowSummary {
   let currentNodeId: string | undefined
@@ -421,13 +441,10 @@ function summarize(lanes: readonly FlowLane[], nodes: ReadonlyMap<string, FlowNo
       currentNodeId = node.id
     }
   }
-  const counts = { done: 0, running: 0, stopped: 0 }
+  const counts = countLanes(lanes)
   let activeMs = 0
   let currentLaneId: string | undefined
   for (const lane of lanes) {
-    if (lane.status === 'running') counts.running += 1
-    else if (isTerminal(lane.status)) counts.stopped += 1
-    else counts.done += 1
     if (!turnLaneIds.has(lane.id)) continue
     if (lane.endTime !== undefined) activeMs += lane.endTime - lane.startTime
     if (lane.status === 'running') currentLaneId ??= lane.id
