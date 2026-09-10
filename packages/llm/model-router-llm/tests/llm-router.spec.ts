@@ -1,5 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { ModelRouteInput } from '@deepseek-ai/dsh-model-router'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -32,7 +32,7 @@ class ScriptedAdapter extends LlmAdapter {
   efforts: readonly string[] | undefined = ['low', 'high']
 
   override listModels(): Promise<readonly LlmModelInfo[]> {
-    return Promise.resolve([{ id: BASELINE.model, name: 'Baseline' }])
+    return Promise.resolve([{ provider: BASELINE.provider, id: BASELINE.model, name: 'Baseline' }])
   }
 
   override resolveModel(_provider: string, model: string): Promise<LlmResolvedModelInfo> {
@@ -42,8 +42,8 @@ class ScriptedAdapter extends LlmAdapter {
       name: model,
       ...(this.efforts === undefined
         ? {}
-        : { reasoning: { efforts: this.efforts.map(id => ({ id, name: id })) } }),
-    } as LlmResolvedModelInfo)
+        : { reasoning: { efforts: this.efforts.map(id => ({ id: ReasoningEffortId(id), name: id })) } }),
+    })
   }
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
