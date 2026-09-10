@@ -124,6 +124,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.session.rail': { kind: 'single'; scope: 'session' }
     /** Strict per-Session title, actions, and View navigation. */
     'conversation.session.header': { kind: 'single'; scope: 'session' }
+    /** Controls before the Session breadcrumb title, in ascending order. */
+    'conversation.session.header.leading': { kind: 'list'; scope: 'session' }
     /** Optional replacement for one Session breadcrumb title. */
     'conversation.session.header.lineage': {
       kind: 'single'
@@ -430,7 +432,8 @@ export type ConversationSessionSlotProps =
 export type ConversationSessionHeaderSlotProps =
   PropsRuntime<'conversation.session.header'>
   & PropsRenderSlots<
-    'conversation.session.header.lineage'
+    'conversation.session.header.leading'
+    | 'conversation.session.header.lineage'
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.tabs.leading'

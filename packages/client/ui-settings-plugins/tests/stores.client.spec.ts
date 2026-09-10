@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError, stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { CardForm, numberField, textField } from '../src/client/card-form.ts'
-import { ModelRoutingCardController, type ModelRoutingSettings } from '../src/client/model-routing-card-controller.ts'
 import { AgentLoopCardController, type AgentLoopSettings } from '../src/client/agent-loop-card-controller.ts'
 import { BashCardController, type BashSettings } from '../src/client/bash-card-controller.ts'
 import {
@@ -431,48 +430,6 @@ describe('AgentLoopCardController', () => {
     host.publish({ status: 'ready', writable: false, value: { maxParallelToolCalls: 10 } })
 
     expect(controller.inject().hooks.agentLoopCard.getSnapshot().writable).toBe(false)
-  })
-})
-
-describe('ModelRoutingCardController', () => {
-  it('reads an absent value as on, writes on toggle, and reports a write that did not land', async () => {
-    const host = stubSettingsScope<ModelRoutingSettings>()
-    const controller = new ModelRoutingCardController(host.scope)
-    const face = controller.inject()
-    expect(face.hooks.modelRoutingCard.getSnapshot()).toMatchObject({ available: false, enabled: true })
-
-    host.publish({ status: 'ready', writable: true, value: {}, base: {}, user: {} })
-    expect(face.hooks.modelRoutingCard.getSnapshot()).toMatchObject({ available: true, writable: true, enabled: true })
-
-    acceptWrites(host)
-    face.toggle(false)
-    expect(face.hooks.modelRoutingCard.getSnapshot().saving).toBe(true)
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledWith('enabled', false) })
-    await vi.waitFor(() => {
-      expect(face.hooks.modelRoutingCard.getSnapshot()).toMatchObject({ enabled: false, saving: false, failed: false })
-    })
-
-    // A write the Host accepted without republishing the value did not land.
-    host.set.mockResolvedValueOnce(undefined)
-    face.toggle(true)
-    await vi.waitFor(() => { expect(face.hooks.modelRoutingCard.getSnapshot()).toMatchObject({ enabled: false, failed: true }) })
-
-    host.set.mockRejectedValueOnce(new Error('offline'))
-    face.toggle(true)
-    await vi.waitFor(() => { expect(face.hooks.modelRoutingCard.getSnapshot()).toMatchObject({ failed: true, saving: false }) })
-  })
-
-  it('ignores a toggle while a write is in flight', async () => {
-    const host = stubSettingsScope<ModelRoutingSettings>()
-    host.publish({ status: 'ready', writable: true, value: { enabled: true }, base: {}, user: {} })
-    const pending = Promise.withResolvers<undefined>()
-    host.set.mockReturnValueOnce(pending.promise)
-    const face = new ModelRoutingCardController(host.scope).inject()
-    face.toggle(false)
-    face.toggle(true)
-    expect(host.set).toHaveBeenCalledTimes(1)
-    pending.resolve(undefined)
-    await vi.waitFor(() => { expect(face.hooks.modelRoutingCard.getSnapshot().saving).toBe(false) })
   })
 })
 

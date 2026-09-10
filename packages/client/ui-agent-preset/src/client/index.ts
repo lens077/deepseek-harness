@@ -1,13 +1,13 @@
 /**
  * Agent-preset surface plugin, browser half — three surfaces over one roster:
  * a chip on the new-session screen for the session about to start, a
- * read-only label in the composer tool row, and a settings section that manages
+ * read-only label at the head of the Session header, and a settings section that manages
  * the roster (copy, delete, default, and the way into a preset's own files).
  *
  * A running session keeps the composition it began with (the host refuses to
  * adopt an existing session under a different preset). That is what splits
  * the choice from the display: the hero chip is before-the-fact, while the
- * composer label only reports what a session already runs. The default preset is
+ * header label only reports what a session already runs. The default preset is
  * edited where the roster is visible — the settings section's "make default"
  * — so General settings carries no duplicate control for the same field.
  */
@@ -59,7 +59,7 @@ export const inject = [
 ]
 
 /**
- * Mount the roster surfaces: hero chip, composer label, settings section.
+ * Mount the roster surfaces: hero chip, header label, settings section.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
@@ -100,7 +100,7 @@ export function apply(ctx: ClientContext): void {
   // render and simply hides the button while no flow exists.
   let creatorDraft: (() => void) | undefined
 
-  // The new-session chip and the composer label: one controller, because the
+  // The new-session chip and the header label: one controller, because the
   // staged choice belongs to the flow rather than to any one session.
   ctx.inject(['slots', 'conversation', 'sessions', 'uiWorkspace'], (scope: ClientContext) => {
     const seat = new AgentPresetSeatController(scope, () => {
@@ -156,9 +156,9 @@ export function apply(ctx: ClientContext): void {
         inject: seatInjected,
       }, AgentPresetSeat)
       const label = scope.slots.register({
-        name: 'conversation.input.right',
+        name: 'conversation.session.header.leading',
         id: 'agent-preset',
-        // Static session context leads the trailing composer controls.
+        // Static session context opens the header, before the title.
         order: -10,
         locale: 'settings.agentPreset',
         inject: labelInjected,
@@ -171,7 +171,7 @@ export function apply(ctx: ClientContext): void {
         chip()
         label()
       }
-    }, 'ui-agent-preset: new-session chip and composer label')
+    }, 'ui-agent-preset: new-session chip and header label')
   })
 
   const sectionInjected = (): AgentPresetSectionInjected => ({

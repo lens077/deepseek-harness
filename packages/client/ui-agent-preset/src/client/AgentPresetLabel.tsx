@@ -1,5 +1,5 @@
 /**
- * The composer tool row's agent-preset label.
+ * The Session header's agent-preset label, placed before the title.
  *
  * Read-only by construction: a session's composition is fixed once its
  * conversation starts, and the label only shows after that. Offering a control
@@ -12,14 +12,14 @@ import { useEffect } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconAgentPresetOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-// Type-only: pulls the ui-conversation SlotMap merge (the composer tool row).
+// Type-only: pulls the ui-conversation SlotMap merge (the header leading seat).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import type { AgentPresetSettingsState } from './settings-store.ts'
 import { presetDisplayText } from './locales.ts'
 import css from './AgentPresetLabel.module.css'
 
-/** Registration-side business face for the composer label. */
+/** Registration-side business face for the header label. */
 export interface AgentPresetLabelInjected {
   hooks: {
     /** Roster snapshot bound by the renderer as useAgentPresets. */
@@ -31,12 +31,12 @@ export interface AgentPresetLabelInjected {
 
 /** Full component props. */
 export type AgentPresetLabelProps =
-  PropsRuntime<'conversation.input.right'>
+  PropsRuntime<'conversation.session.header.leading'>
   & PropsLocale<'settings.agentPreset'>
   & InjectFace<AgentPresetLabelInjected>
 
 /**
- * Render this session's agent-preset name in the composer tool row.
+ * Render this session's agent-preset name at the head of the Session header.
  * @param props - composed slot props.
  * @returns the label, or null while the session is blank or records no preset.
  */

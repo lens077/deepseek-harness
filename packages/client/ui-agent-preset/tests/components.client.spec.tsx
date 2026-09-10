@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The two conversation-adjacent surfaces: the new-session chip naming the
- * next session's preset, and the composer tool row's read-only label. The split
+ * next session's preset, and the Session header's read-only label. The split
  * is the host's rule — a session's history is produced under its preset's
  * tools, so the choice is only ever offered before one starts.
  */
@@ -283,7 +283,7 @@ describe('the chip introduce cue', () => {
   })
 })
 
-describe('the composer label', () => {
+describe('the header label', () => {
   it('names the preset the session runs, and never offers a switch', async () => {
     const { load } = renderLabel({
       blank: false,

@@ -125,24 +125,6 @@ describe('ui-settings-plugins apply', () => {
     }
   })
 
-  it('places the model-routing switch in the Models page footer once that slot is declared', async () => {
-    const { ctx, slots } = await bench()
-    declareRoot(slots)
-    await ctx.plugin({ inject: [...inject], apply }).await()
-    expect(slots.entries('settings.models.footer')).toEqual([])
-
-    slots.register({
-      name: 'settings.section',
-      id: 'models',
-      children: { 'settings.models.footer': { kind: 'list', scope: 'root' } },
-    } as never, () => null)
-    const entries = slots.entries('settings.models.footer')
-    expect(entries.map(entry => (entry.options as { id?: string }).id)).toEqual(['model-routing'])
-    const face = (entries[0] as { inject?: () => unknown }).inject?.() as { hooks: Record<string, unknown>; toggle: unknown }
-    expect(Object.keys(face.hooks)).toEqual(['modelRoutingCard'])
-    expect(typeof face.toggle).toBe('function')
-  })
-
   it('keys each card it ships on the settings namespace that card edits', async () => {
     const { ctx, slots } = await bench()
     declareRoot(slots)

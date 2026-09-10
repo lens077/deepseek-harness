@@ -39,7 +39,7 @@ The consumer enforces its own constraints before applying an answer. A route cha
 
 ### Switching routing off
 
-Mounting any provider serves the `model-routing` settings section with one field, `enabled` (default on), which the Models settings page renders as the model-routing switch below the provider rows. While it is off, prompts do not consult the router, and a Session still on a routed selection returns to its baseline at its next prompt with a `model/route` reason of `routing switched off: baseline restored`. The switch changes nothing about the mounted provider or its rules.
+Mounting any provider serves the `model-routing` settings section with one field, `enabled` (default on), which `dsh-client-ui-model-routing` renders as a switch below the provider rows on the Models settings page and as a chip in the composer tool row. While it is off, prompts do not consult the router, and a Session still on a routed selection returns to its baseline at its next prompt with a `model/route` reason of `routing switched off: baseline restored`. The switch changes nothing about the mounted provider or its rules.
 
 ### When the routed model fails
 

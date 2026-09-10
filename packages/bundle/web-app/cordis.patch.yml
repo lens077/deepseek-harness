@@ -362,6 +362,11 @@
     - id: ui-model-selection
       name: '@deepseek-ai/dsh-client-ui-model-selection'
 
+    # Model routing: the composer chip and Models-page row over the
+    # `model-routing` setting a mounted router serves; nothing renders otherwise.
+    - id: ui-model-routing
+      name: '@deepseek-ai/dsh-client-ui-model-routing'
+
     - id: ui-permission
       name: '@deepseek-ai/dsh-client-ui-permission-presets'
 

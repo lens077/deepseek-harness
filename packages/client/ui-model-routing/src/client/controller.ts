@@ -1,4 +1,4 @@
-/** The model-routing switch over the `model-routing` settings namespace, written on toggle. */
+/** The model-routing switch over the `model-routing` settings namespace, written on toggle and shared by both surfaces. */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -15,8 +15,8 @@ export interface ModelRoutingSettings {
   enabled?: boolean
 }
 
-/** What the model-routing switch renders. */
-export interface ModelRoutingCardState {
+/** What both model-routing surfaces render. */
+export interface ModelRoutingState {
   /** False while the namespace is not served to this client, which means no router is mounted; the card renders nothing. */
   available: boolean
   /** Whether the Host document accepts writes. */
@@ -29,11 +29,11 @@ export interface ModelRoutingCardState {
   failed: boolean
 }
 
-/** The registration-side face the model-routing entry injects. */
-export interface ModelRoutingCardFace {
+/** The registration-side face both model-routing entries inject. */
+export interface ModelRoutingFace {
   hooks: {
-    /** Switch snapshot bound by the renderer as useModelRoutingCard. */
-    modelRoutingCard: SnapshotStore<ModelRoutingCardState>
+    /** Switch snapshot bound by the renderer as useModelRouting. */
+    modelRouting: SnapshotStore<ModelRoutingState>
   }
   /** Write the switch position; one toggle is one settings write, with no staging. */
   toggle: (next: boolean) => void
@@ -44,8 +44,8 @@ export interface ModelRoutingCardFace {
  * draft: the Host answers by republishing the scope, and a write that did not
  * land reports `failed` while the switch keeps showing the Host's value.
  */
-export class ModelRoutingCardController {
-  private readonly store: SnapshotStore<ModelRoutingCardState>
+export class ModelRoutingController {
+  private readonly store: SnapshotStore<ModelRoutingState>
   private saving = false
   private failed = false
 
@@ -55,7 +55,7 @@ export class ModelRoutingCardController {
     scope.subscribe(() => { this.publish() })
   }
 
-  private projection(): ModelRoutingCardState {
+  private projection(): ModelRoutingState {
     const snapshot = this.scope.getSnapshot()
     return {
       available: snapshot.status === 'ready',
@@ -71,12 +71,12 @@ export class ModelRoutingCardController {
   }
 
   /**
-   * Build the face the entry's slot registration injects.
+   * Build the face each slot registration injects.
    * @returns the switch snapshot and its toggle action.
    */
-  inject(): ModelRoutingCardFace {
+  inject(): ModelRoutingFace {
     return {
-      hooks: { modelRoutingCard: this.store },
+      hooks: { modelRouting: this.store },
       toggle: (next) => { void this.write(next) },
     }
   }

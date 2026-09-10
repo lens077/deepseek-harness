@@ -1,6 +1,6 @@
 /**
  * Registration: the General row, the settings section, the new-session chip,
- * and the composer label all come from one apply, and each defers until the slot
+ * and the header label all come from one apply, and each defers until the slot
  * it fills has been declared. A pushed settings change refreshes the surfaces
  * that are already showing, so a default set from one converges the other.
  */
@@ -135,7 +135,7 @@ function declareConversation(slots: SlotRegistry): () => void {
     name: 'conversation',
     children: {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
-      'conversation.input.right': { kind: 'list', scope: 'session' },
+      'conversation.session.header.leading': { kind: 'list', scope: 'session' },
     },
   } as never, () => null)
 }
@@ -306,12 +306,12 @@ describe('ui-agent-preset apply', () => {
 
     const chip = slots.entries('conversation.hero.agentPreset')[0]!
     expect(chip.component).toBe(AgentPresetSeat)
-    const label = slots.entries('conversation.input.right')[0]!
+    const label = slots.entries('conversation.session.header.leading')[0]!
     expect(label.component).toBe(AgentPresetLabel)
     expect(label.options).toMatchObject({ id: 'agent-preset', order: -10 })
     await fiber.dispose()
     expect(slots.entries('conversation.hero.agentPreset')).toHaveLength(0)
-    expect(slots.entries('conversation.input.right')).toHaveLength(0)
+    expect(slots.entries('conversation.session.header.leading')).toHaveLength(0)
     expect(slots.entries('settings.section')).toHaveLength(0)
     conversation()
   })
@@ -474,7 +474,7 @@ describe('ui-agent-preset apply', () => {
     ctx.provide('sessions', sessionsDouble({ byId: {} }) as never)
     ctx.provide('uiWorkspace', uiWorkspaceDouble() as never)
     await ctx.plugin({ inject: [...inject, 'conversation', 'sessions', 'uiWorkspace'], apply }).await()
-    const label = (slots.entries('conversation.input.right')[0]!
+    const label = (slots.entries('conversation.session.header.leading')[0]!
       .inject as unknown as () => AgentPresetLabelInjected)()
 
     await label.load()

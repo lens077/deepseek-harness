@@ -140,6 +140,17 @@
   flex: none;
 }
 
+.headerLeading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerLeading:empty {
+  display: none;
+}
+
 .headerActions {
   display: flex;
   flex: none;

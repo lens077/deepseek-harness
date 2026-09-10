@@ -140,6 +140,7 @@ root
 │  │     ├─ conversation.message.images
 │  │     └─ conversation.trajectory.images
 │  ├─ conversation.session.header
+│  │  ├─ conversation.session.header.leading
 │  │  ├─ conversation.session.header.lineage
 │  │  ├─ conversation.session.header.actions
 │  │  ├─ conversation.session.header.utilities
