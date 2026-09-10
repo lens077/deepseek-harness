@@ -24,6 +24,8 @@ import {
 } from '../src/client/index.ts'
 import { apply as nodeApply, TASK_FLOW_SETTINGS_NAMESPACE } from '../src/index.ts'
 import type { FlowSnapshot } from '../src/client/flow-contract.ts'
+import type { FlowFontSizeRowInjected } from '../src/client/FlowFontSizeRow.tsx'
+import type { MobileDockRowInjected } from '../src/client/MobileDockRow.tsx'
 import { EMPTY_FLOW_SNAPSHOT } from '../src/client/flow-model.ts'
 
 const ROOT = 'root-1' as SessionId
@@ -144,10 +146,11 @@ describe('ui-task-flow browser plugin', () => {
     await Promise.resolve()
     expect(b.session.cancel).toHaveBeenCalledTimes(2)
 
-    dock.setFontSize(14)
+    const fontRow = b.rowInjected('task-flow-font-size') as unknown as FlowFontSizeRowInjected
+    fontRow.setFontSize(14)
     expect(b.settingsStub.set).toHaveBeenCalledWith('fontSize', 14)
     expect(dock.hooks.flowStyle.getSnapshot()).toEqual({ dock: 'rail', canvas: 'cards', fontSize: 14 })
-    dock.setFontSize(11)
+    fontRow.setFontSize(11)
     dock.setDockVariant('lanes')
     expect(b.settingsStub.set).toHaveBeenCalledWith('dockVariant', 'lanes')
     const view = b.viewInjected()
@@ -158,6 +161,10 @@ describe('ui-task-flow browser plugin', () => {
     await Promise.resolve()
     expect(b.session.cancel).toHaveBeenCalledTimes(3)
 
+    const mobileRow = b.rowInjected('task-flow-mobile') as unknown as MobileDockRowInjected
+    mobileRow.setMobileDock(true)
+    expect(b.settingsStub.set).toHaveBeenCalledWith('mobileDock', true)
+    expect(mobileRow.hooks.mobileDock.getSnapshot()).toBe(true)
     const dockRow = b.rowInjected('task-flow-dock')
     const canvasRow = b.rowInjected('task-flow-canvas')
     expect(dockRow.target).toBe('dock')

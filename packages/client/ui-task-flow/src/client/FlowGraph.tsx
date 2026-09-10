@@ -7,12 +7,21 @@ import { useMemo } from 'react'
 import clsx from 'clsx'
 import type { FlowVariant } from '../settings.ts'
 import type { FlowLane, FlowNode, FlowSnapshot, FlowStatus } from './flow-contract.ts'
-import { columnsOf, DOCK_METRICS, layoutFlow, type FlowLayoutMetrics } from './flow-layout.ts'
+import { columnsOf, DOCK_METRICS, layoutFlow, splitHistory, type FlowLayoutMetrics } from './flow-layout.ts'
+import { isTerminal } from './flow-model.ts'
 import {
-  formatDuration, isTerminal, laneAnchorLabel, laneKindLabel, nodeDetail, nodeTitle, spanOf, statusLabel,
-  type TaskFlowTranslate,
+  formatDuration, historyLabel, laneAnchorLabel, laneKind, laneKindLabel, laneProgress, nodeDetail, nodeTitle, spanOf,
+  statusLabel, terminalReason, type TaskFlowTranslate,
 } from './format.ts'
 import css from './FlowGraph.module.css'
+
+/** History folding for a drawing that leads with the newest turn. */
+export interface FlowHistoryControl {
+  /** Whether earlier turns are folded into one chip. */
+  collapsed: boolean
+  /** Toggle between the folded and the complete drawing. */
+  onToggle: () => void
+}
 
 /** Props shared by every drawing. */
 export interface FlowGraphProps {
@@ -25,6 +34,8 @@ export interface FlowGraphProps {
   onInspect?: ((callId: string) => void) | undefined
   /** Card metrics for the `cards` variant. */
   metrics?: FlowLayoutMetrics | undefined
+  /** Fold earlier turns behind a chip; absent on drawings that always show the whole flow. */
+  history?: FlowHistoryControl | undefined
 }
 
 function StatusGlyph({ status }: { status: FlowStatus }) {
@@ -51,9 +62,18 @@ function ordinalOf(t: TaskFlowTranslate, lane: FlowLane): string {
   return t('lane.ordinal', { ordinal: lane.ordinal })
 }
 
+/** Prompt caption: the main line names the task, an interjection shows its status, a sequel its kind or retry. */
+function promptMeta(t: TaskFlowTranslate, node: FlowNode, lane: FlowLane | undefined, lanes: readonly FlowLane[]): string {
+  if (lane === undefined || lane.kind === 'interjection') return statusLabel(t, node.status)
+  return lane.kind === 'main' ? t('node.prompt') : laneKind(t, lane, lanes)
+}
+
+/** Drawing inputs: the (possibly folded) snapshot plus the complete lane table for label lookups. */
+type DrawingProps = Omit<FlowGraphProps, 'variant'> & { laneTable: readonly FlowLane[] }
+
 /* ---------- cards ---------- */
 
-function FlowCards({ snapshot, now, t, onInspect, metrics = DOCK_METRICS }: Omit<FlowGraphProps, 'variant'>) {
+function FlowCards({ snapshot, laneTable, now, t, onInspect, metrics = DOCK_METRICS }: DrawingProps) {
   const layout = useMemo(() => layoutFlow(snapshot, metrics), [snapshot, metrics])
   const laneById = useMemo(() => new Map(snapshot.lanes.map(lane => [lane.id, lane])), [snapshot])
   return (
@@ -71,7 +91,7 @@ function FlowCards({ snapshot, now, t, onInspect, metrics = DOCK_METRICS }: Omit
       </svg>
       {layout.rows.map(row => (
         <span key={row.lane.id} className={css.rowLabel} style={{ top: row.y - 15 }}>
-          {row.lane.kind === 'main' ? t('lane.main') : laneKindLabel(t, row.lane)}
+          {row.lane.kind === 'main' ? t('lane.main') : laneKindLabel(t, row.lane, laneTable)}
         </span>
       ))}
       {layout.nodes.map((card) => {
@@ -81,6 +101,9 @@ function FlowCards({ snapshot, now, t, onInspect, metrics = DOCK_METRICS }: Omit
         const time = elapsed(t, node, now)
         const inspect = inspectable(node, onInspect)
         const Tag = inspect === undefined ? 'div' : 'button'
+        const stoppedSteps = node.kind === 'steps' && isTerminal(node.status)
+        // A prompt records the question, not an outcome: it carries a status glyph only while its lane runs.
+        const promptAtRest = node.kind === 'prompt' && node.status !== 'running'
         return (
           <Tag
             key={card.id}
@@ -88,7 +111,7 @@ function FlowCards({ snapshot, now, t, onInspect, metrics = DOCK_METRICS }: Omit
             className={clsx(css.card, css[node.status], css[node.kind], inspect !== undefined && css.clickable)}
             style={{ left: card.x, top: card.y, width: card.width, height: card.height }}
             onClick={inspect}
-            title={inspect === undefined ? undefined : t('action.inspect')}
+            title={inspect === undefined ? terminalReason(t, node) : t('action.inspect')}
             data-flow-node={node.id}
           >
             <span className={css.cardTitle}>
@@ -96,11 +119,11 @@ function FlowCards({ snapshot, now, t, onInspect, metrics = DOCK_METRICS }: Omit
               {node.kind === 'prompt' && lane !== undefined && <span className={css.tag}>{ordinalOf(t, lane)}</span>}
             </span>
             <span className={css.cardMeta}>
-              <span className={clsx(css.statusText, css[node.status])}>
-                <StatusGlyph status={node.status} />
-                {node.kind === 'prompt' ? (lane?.kind === 'main' ? t('node.prompt') : statusLabel(t, node.status)) : node.kind === 'terminal' ? null : statusLabel(t, node.status)}
+              <span className={clsx(css.statusText, !promptAtRest && css[node.status])}>
+                {!promptAtRest && <StatusGlyph status={node.status} />}
+                {node.kind === 'prompt' ? promptMeta(t, node, lane, laneTable) : node.kind === 'terminal' ? null : stoppedSteps ? detail : statusLabel(t, node.status)}
               </span>
-              <span>{time ?? detail}</span>
+              <span>{stoppedSteps ? time : time ?? detail}</span>
             </span>
           </Tag>
         )
@@ -111,18 +134,26 @@ function FlowCards({ snapshot, now, t, onInspect, metrics = DOCK_METRICS }: Omit
 
 /* ---------- rail ---------- */
 
-function Chip({ node, lane, now, t, onInspect }: { node: FlowNode; lane: FlowLane | undefined; now: number; t: TaskFlowTranslate; onInspect: FlowGraphProps['onInspect'] }) {
+function Chip({ node, lane, lanes, now, t, onInspect }: {
+  node: FlowNode
+  lane: FlowLane | undefined
+  lanes: readonly FlowLane[]
+  now: number
+  t: TaskFlowTranslate
+  onInspect: FlowGraphProps['onInspect']
+}) {
   const inspect = inspectable(node, onInspect)
   const Tag = inspect === undefined ? 'span' : 'button'
   const time = elapsed(t, node, now)
   const detail = nodeDetail(t, node)
-  const meta = [time, node.kind === 'terminal' ? undefined : detail].filter(value => value !== undefined).join(' · ')
+  const retry = node.kind === 'prompt' && lane?.retryOfLaneId !== undefined ? laneKind(t, lane, lanes) : undefined
+  const meta = [time, node.kind === 'terminal' ? undefined : detail, retry].filter(value => value !== undefined).join(' · ')
   return (
     <Tag
       type={inspect === undefined ? undefined : 'button'}
-      className={clsx(css.chip, css[node.status], inspect !== undefined && css.clickable)}
+      className={clsx(css.chip, css[node.status], node.kind === 'prompt' && css.prompt, inspect !== undefined && css.clickable)}
       onClick={inspect}
-      title={inspect === undefined ? undefined : t('action.inspect')}
+      title={inspect === undefined ? terminalReason(t, node) : t('action.inspect')}
       data-flow-node={node.id}
     >
       {node.kind === 'prompt' && lane !== undefined ? <span className={css.ordinal}>{ordinalOf(t, lane)}</span> : <StatusGlyph status={node.status} />}
@@ -132,39 +163,66 @@ function Chip({ node, lane, now, t, onInspect }: { node: FlowNode; lane: FlowLan
   )
 }
 
-function FlowRail({ main, snapshot, now, t, onInspect }: Omit<FlowGraphProps, 'variant'> & { main: FlowLane }) {
-  const branches = snapshot.lanes.slice(1)
-  const columns = columnsOf(main, snapshot.nodes)
+/**
+ * The chip standing in for folded earlier turns, or the control that folds
+ * them again once shown. Rendered only when the drawing owns history folding.
+ */
+function HistoryChip({ history, hidden, t }: { history: FlowHistoryControl; hidden: readonly FlowLane[]; t: TaskFlowTranslate }) {
+  return (
+    <button
+      type="button"
+      className={clsx(css.chip, css.history)}
+      aria-label={history.collapsed ? t('history.expand') : t('history.collapse')}
+      aria-expanded={!history.collapsed}
+      onClick={history.onToggle}
+      data-flow-history
+    >
+      <span className={css.chipText}>{history.collapsed ? historyLabel(t, hidden) : t('history.collapse')}</span>
+    </button>
+  )
+}
+
+/** The rail track: the main line and every sequel, chained in order; interjections hang below as branch rows. */
+function FlowRail({ snapshot, laneTable, now, t, onInspect, history, hidden }: DrawingProps & { hidden: readonly FlowLane[] }) {
+  const { lanes, nodes } = snapshot
+  const track = lanes
+    .filter(lane => lane.kind !== 'interjection')
+    .flatMap(lane => columnsOf(lane, nodes).map(column => ({ lane, column })))
+  const branches = lanes.filter(lane => lane.kind === 'interjection')
+  const foldable = history !== undefined && hidden.length > 0
   return (
     <div className={clsx(css.graph, css.rail)} data-flow-variant="rail">
       <div className={css.track}>
-        {columns.map((column, index) => (
+        {foldable && <HistoryChip history={history} hidden={hidden} t={t} />}
+        {track.map(({ lane, column }, index) => (
           <span key={column[0].id} className={css.track}>
-            {index > 0 && <span className={css.link} />}
+            {(index > 0 || foldable) && <span className={css.link} />}
             {column.length === 1
-              ? <Chip node={column[0]} lane={main} now={now} t={t} onInspect={onInspect} />
+              ? <Chip node={column[0]} lane={lane} lanes={laneTable} now={now} t={t} onInspect={onInspect} />
               : (
                 <span className={css.parallel}>
-                  {column.map(node => <Chip key={node.id} node={node} lane={main} now={now} t={t} onInspect={onInspect} />)}
+                  {column.map(node => (
+                    <Chip key={node.id} node={node} lane={lane} lanes={laneTable} now={now} t={t} onInspect={onInspect} />
+                  ))}
                 </span>
               )}
           </span>
         ))}
       </div>
       {branches.map((lane) => {
-        const anchor = laneAnchorLabel(t, lane, snapshot.nodes)
-        const [head, ...rest] = lane.nodeIds.flatMap(id => snapshot.nodes.get(id) ?? [])
+        const anchor = laneAnchorLabel(t, lane, nodes)
+        const [head, ...rest] = lane.nodeIds.flatMap(id => nodes.get(id) ?? [])
         if (head === undefined) return null
         const tail = rest.filter(node => node.kind !== 'agent')
         return (
           <div key={lane.id} className={css.branchRow} data-flow-lane={lane.id}>
             <span className={css.hook} />
             {anchor !== undefined && <span className={css.from}>{anchor} ↳</span>}
-            <Chip node={{ ...head, status: lane.status }} lane={lane} now={now} t={t} onInspect={onInspect} />
+            <Chip node={{ ...head, status: lane.status }} lane={lane} lanes={laneTable} now={now} t={t} onInspect={onInspect} />
             {tail.map(node => (
               <span key={node.id} className={css.track}>
                 <span className={css.link} />
-                <Chip node={node} lane={lane} now={now} t={t} onInspect={onInspect} />
+                <Chip node={node} lane={lane} lanes={laneTable} now={now} t={t} onInspect={onInspect} />
               </span>
             ))}
           </div>
@@ -185,7 +243,7 @@ function Block({ node, now, t, onInspect }: { node: FlowNode; now: number; t: Ta
       type={inspect === undefined ? undefined : 'button'}
       className={clsx(css.block, css[node.status], inspect !== undefined && css.clickable)}
       onClick={inspect}
-      title={inspect === undefined ? undefined : t('action.inspect')}
+      title={inspect === undefined ? terminalReason(t, node) : t('action.inspect')}
       data-flow-node={node.id}
     >
       <StatusGlyph status={node.status} />
@@ -195,22 +253,21 @@ function Block({ node, now, t, onInspect }: { node: FlowNode; now: number; t: Ta
   )
 }
 
-function FlowLanes({ snapshot, now, t, onInspect }: Omit<FlowGraphProps, 'variant'>) {
+function FlowLanes({ snapshot, laneTable, now, t, onInspect }: DrawingProps) {
   return (
     <div className={clsx(css.graph, css.lanes)} data-flow-variant="lanes">
       {snapshot.lanes.map((lane) => {
         const all = columnsOf(lane, snapshot.nodes)
         const prompt = all[0]?.[0].kind === 'prompt' ? all[0][0] : undefined
         const columns = prompt === undefined ? all : all.slice(1)
-        const spine = columns.flat().filter(node => node.kind !== 'prompt' && node.kind !== 'terminal')
-        const done = spine.filter(node => node.status === 'done' || node.status === 'risk').length
+        const { done, total } = laneProgress(lane, snapshot.nodes)
         const span = (lane.endTime ?? now) - lane.startTime
         const anchor = laneAnchorLabel(t, lane, snapshot.nodes)
         return (
           <div key={lane.id} className={clsx(css.lane, lane.kind === 'main' && css.main)} data-flow-lane={lane.id}>
             <div className={css.laneName}>
               <span className={css.ordinal}>{ordinalOf(t, lane)}</span>
-              <span>{lane.kind === 'main' ? t('lane.main') : lane.kind === 'interjection' ? t('lane.interjection') : t('lane.fork')}</span>
+              <span>{laneKind(t, lane, laneTable)}</span>
               <span className={css.laneSub}>{anchor ?? lane.label}</span>
             </div>
             <div className={css.blocks}>
@@ -231,8 +288,8 @@ function FlowLanes({ snapshot, now, t, onInspect }: Omit<FlowGraphProps, 'varian
               )}
             </div>
             <div className={css.laneStat}>
-              {spine.length > 0
-                ? <><b>{t('progress', { done, total: spine.length })}</b>{` · ${formatDuration(t, span)}`}<div className={css.bar}><i style={{ width: `${Math.round(done / spine.length * 100)}%` }} /></div></>
+              {total > 0
+                ? <><b>{t('progress', { done, total })}</b>{` · ${formatDuration(t, span)}`}<div className={css.bar}><i style={{ width: `${Math.round(done / total * 100)}%` }} /></div></>
                 : <span className={clsx(css.statusText, css[lane.status])}>{lane.status === 'done' && lane.kind !== 'main' ? t('status.resolved') : statusLabel(t, lane.status)}</span>}
             </div>
           </div>
@@ -248,13 +305,32 @@ function FlowLanes({ snapshot, now, t, onInspect }: Omit<FlowGraphProps, 'varian
  * @returns the drawing, or the empty caption when no lane exists.
  */
 export function FlowGraph(props: FlowGraphProps) {
-  const main = props.snapshot.lanes[0]
-  if (main === undefined) {
-    return <div className={clsx(css.graph, css.empty)}>{props.t('canvas.empty')}</div>
+  const { snapshot, history, t } = props
+  const collapsed = history?.collapsed === true
+  const split = useMemo(() => splitHistory(snapshot.lanes), [snapshot])
+  const view = useMemo(
+    () => collapsed && split.hidden.length > 0 ? { ...snapshot, lanes: split.visible } : snapshot,
+    [snapshot, split, collapsed],
+  )
+  // A drawing without a history control always shows the whole flow and never folds.
+  const hidden = history === undefined ? [] : split.hidden
+  if (snapshot.lanes.length === 0) {
+    return <div className={clsx(css.graph, css.empty)}>{t('canvas.empty')}</div>
   }
   switch (props.variant) {
-    case 'cards': return <FlowCards {...props} />
-    case 'rail': return <FlowRail {...props} main={main} />
-    case 'lanes': return <FlowLanes {...props} />
+    case 'rail': return <FlowRail {...props} snapshot={view} laneTable={snapshot.lanes} hidden={hidden} />
+    case 'cards':
+    case 'lanes': {
+      const drawing = props.variant === 'cards'
+        ? <FlowCards {...props} snapshot={view} laneTable={snapshot.lanes} />
+        : <FlowLanes {...props} snapshot={view} laneTable={snapshot.lanes} />
+      if (history === undefined || hidden.length === 0) return drawing
+      return (
+        <div className={clsx(css.folded, props.variant === 'lanes' && css.foldedRows)}>
+          <HistoryChip history={history} hidden={hidden} t={t} />
+          {drawing}
+        </div>
+      )
+    }
   }
 }

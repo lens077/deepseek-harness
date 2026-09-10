@@ -111,7 +111,6 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       openCanvas: () => { ctx.uiConversation.openView(sessionId, TASK_FLOW_TARGET) },
       inspect: (callId) => { ctx.uiConversation.openView(sessionId, 'trajectory', callId) },
       setDockVariant: (variant) => { style.setDock(variant) },
-      setFontSize: (fontSize) => { style.setFontSize(fontSize) },
     }),
   }, TaskFlowDock))
 

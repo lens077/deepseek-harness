@@ -474,16 +474,19 @@
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
-- text: "7/25 {{clock}} Task flow 28/28 · Elapsed {{duration}} · Latest branch: #28 New question m28 Resolved"
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
+- text: 7/25 {{clock}}
+- button "Collapse flow graph" [expanded]:
+  - img
+- text: Task flow 28 done · Elapsed {{duration}}
 - button "Switch style":
   - text: Step rail
   - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph":
+  - button "Show earlier turns": History 27 · 27 done
+  - text: "#28 m28 Execution {{duration}} · 1 steps"
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img

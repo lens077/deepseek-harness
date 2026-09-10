@@ -1,6 +1,7 @@
 /** Locale-routed labels shared by every task-flow drawing. */
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { FlowLane, FlowNode, FlowStatus } from './flow-contract.ts'
+import type { FlowLane, FlowLaneCounts, FlowNode, FlowSnapshot, FlowStatus } from './flow-contract.ts'
+import { countLanes, isTerminal } from './flow-model.ts'
 import type {} from './locales.ts'
 
 /** Translator bound to the taskFlow namespace. */
@@ -67,6 +68,20 @@ export function statusLabel(t: TaskFlowTranslate, status: FlowStatus): string {
 }
 
 /**
+ * Recorded cause of a terminal outcome: the localized cancel cause, the
+ * authentication failure notice, or the verbatim error message.
+ * @param t - namespace translator.
+ * @param node - steps or terminal node.
+ * @returns localized cause, or undefined when none was recorded.
+ */
+export function terminalReason(t: TaskFlowTranslate, node: FlowNode): string | undefined {
+  if (node.failureCode === 'AUTH') return t('failure.auth')
+  if (node.detail === undefined) return undefined
+  const key = ABORT_KEYS[node.detail]
+  return key === undefined ? node.detail : t(key)
+}
+
+/**
  * Terminal-node copy: the status plus the recorded cause when one is known.
  * @param t - namespace translator.
  * @param node - terminal node.
@@ -81,7 +96,8 @@ export function terminalLabel(t: TaskFlowTranslate, node: FlowNode): string {
 }
 
 /**
- * Display title of one node; `steps` and `terminal` nodes carry locale-owned copy.
+ * Display title of one node; `steps` and `terminal` nodes carry locale-owned
+ * copy, and a steps node that ended in a terminal state names that state.
  * @param t - namespace translator.
  * @param node - drawn node.
  * @returns localized or verbatim title.
@@ -89,7 +105,7 @@ export function terminalLabel(t: TaskFlowTranslate, node: FlowNode): string {
 export function nodeTitle(t: TaskFlowTranslate, node: FlowNode): string {
   switch (node.kind) {
     case 'prompt': return node.title === '' ? t('node.prompt') : node.title
-    case 'steps': return t('node.steps')
+    case 'steps': return isTerminal(node.status) ? statusLabel(t, node.status) : t('node.steps')
     case 'terminal': return terminalLabel(t, node)
     case 'todo':
     case 'agent':
@@ -110,36 +126,128 @@ export function nodeDetail(t: TaskFlowTranslate, node: FlowNode): string | undef
 }
 
 /**
+ * Lane kind copy: main line, interjection, sequel, or a retry naming the lane it re-sent.
+ * @param t - namespace translator.
+ * @param lane - drawn lane.
+ * @param lanes - lane table, resolving the retried lane's ordinal.
+ * @returns for example “Interjection” or “Retry of #3”.
+ */
+export function laneKind(t: TaskFlowTranslate, lane: FlowLane, lanes: readonly FlowLane[]): string {
+  const retried = lane.retryOfLaneId === undefined ? undefined : lanes.find(entry => entry.id === lane.retryOfLaneId)
+  if (retried !== undefined) return t('lane.retryOf', { ordinal: t('lane.ordinal', { ordinal: retried.ordinal }) })
+  switch (lane.kind) {
+    case 'main': return t('lane.main')
+    case 'interjection': return t('lane.interjection')
+    case 'sequel': return t('lane.sequel')
+  }
+}
+
+/**
  * Lane kind copy with its ordinal.
  * @param t - namespace translator.
  * @param lane - drawn lane.
+ * @param lanes - lane table, resolving the retried lane's ordinal.
  * @returns for example “#2 Interjection”.
  */
-export function laneKindLabel(t: TaskFlowTranslate, lane: FlowLane): string {
-  const kind = lane.kind === 'main' ? t('lane.main') : lane.kind === 'interjection' ? t('lane.interjection') : t('lane.fork')
-  return `${t('lane.ordinal', { ordinal: lane.ordinal })} ${kind}`
+export function laneKindLabel(t: TaskFlowTranslate, lane: FlowLane, lanes: readonly FlowLane[]): string {
+  return `${t('lane.ordinal', { ordinal: lane.ordinal })} ${laneKind(t, lane, lanes)}`
 }
 
 /**
- * Where a branch lane hangs.
+ * Where an interjection hangs.
  * @param t - namespace translator.
- * @param lane - branch lane.
+ * @param lane - drawn lane.
  * @param nodes - node table.
- * @returns localized anchor copy, or undefined for the main line or an unknown anchor.
+ * @returns localized anchor copy, or undefined for main and sequel lanes or an unknown anchor.
  */
 export function laneAnchorLabel(t: TaskFlowTranslate, lane: FlowLane, nodes: ReadonlyMap<string, FlowNode>): string | undefined {
-  if (lane.anchorNodeId === undefined) return undefined
+  if (lane.kind !== 'interjection' || lane.anchorNodeId === undefined) return undefined
   const anchor = nodes.get(lane.anchorNodeId)
   if (anchor === undefined) return undefined
-  const node = nodeTitle(t, anchor)
-  return lane.kind === 'fork' ? t('lane.forkFrom', { node }) : t('lane.anchor', { node })
+  return t('lane.anchor', { node: nodeTitle(t, anchor) })
 }
 
 /**
- * Whether a status is a settled terminal outcome (draws with a terminal glyph).
- * @param status - drawn state.
- * @returns true for aborted, error, and interrupted.
+ * Spine progress of one lane: done over every spine and agent node.
+ * @param lane - drawn lane.
+ * @param nodes - node table.
+ * @returns counts, with `total` 0 for a lane holding only its prompt.
  */
-export function isTerminal(status: FlowStatus): boolean {
-  return status === 'aborted' || status === 'error' || status === 'interrupted'
+export function laneProgress(lane: FlowLane, nodes: ReadonlyMap<string, FlowNode>): { done: number; total: number } {
+  let done = 0
+  let total = 0
+  for (const id of lane.nodeIds) {
+    const node = nodes.get(id)
+    if (node === undefined || node.kind === 'prompt' || node.kind === 'terminal') continue
+    total += 1
+    if (node.status === 'done' || node.status === 'risk') done += 1
+  }
+  return { done, total }
+}
+
+/** Longest lane label kept in a header fact, in code units. */
+const HEADER_LABEL_LIMIT = 24
+
+function clipLabel(text: string): string {
+  return text.length > HEADER_LABEL_LIMIT ? `${text.slice(0, HEADER_LABEL_LIMIT - 1)}…` : text
+}
+
+/**
+ * Header copy naming the lane whose turn is open: its ordinal, clipped prompt,
+ * and the running spine node with its step count or the lane's spine progress.
+ * @param t - namespace translator.
+ * @param snapshot - assembled task flow.
+ * @returns localized copy, or undefined while no turn is open.
+ */
+export function currentFact(t: TaskFlowTranslate, snapshot: FlowSnapshot): string | undefined {
+  const { summary } = snapshot
+  const lane = summary.currentLaneId === undefined ? undefined : snapshot.lanes.find(entry => entry.id === summary.currentLaneId)
+  if (lane === undefined) return undefined
+  const parts = [`${t('lane.ordinal', { ordinal: lane.ordinal })} ${clipLabel(lane.label === '' ? t('node.prompt') : lane.label)}`]
+  const node = summary.currentNodeId === undefined ? undefined : snapshot.nodes.get(summary.currentNodeId)
+  if (node !== undefined && node.laneId === lane.id) {
+    const progress = laneProgress(lane, snapshot.nodes)
+    const detail = node.kind === 'steps' ? nodeDetail(t, node) : progress.total > 1 ? t('progress', progress) : undefined
+    parts.push(detail === undefined ? clipLabel(nodeTitle(t, node)) : `${clipLabel(nodeTitle(t, node))} ${detail}`)
+  }
+  return t('current', { lane: parts.join(' · ') })
+}
+
+/**
+ * Header elapsed copy: the open turn's span while one runs, otherwise the sum of closed turn spans.
+ * @param t - namespace translator.
+ * @param snapshot - assembled task flow.
+ * @param now - current time for the open span.
+ * @returns localized copy, or undefined before any lane exists.
+ */
+export function elapsedFact(t: TaskFlowTranslate, snapshot: FlowSnapshot, now: number): string | undefined {
+  const { summary } = snapshot
+  const lane = summary.currentLaneId === undefined ? undefined : snapshot.lanes.find(entry => entry.id === summary.currentLaneId)
+  if (lane !== undefined) return t('elapsed.turn', { time: formatDuration(t, (lane.endTime ?? now) - lane.startTime) })
+  if (snapshot.lanes.length === 0) return undefined
+  return t('elapsed', { time: formatDuration(t, summary.activeMs) })
+}
+
+/**
+ * Header lane counts: non-zero done, running, and stopped lane counts joined with a middle dot.
+ * @param t - namespace translator.
+ * @param counts - lane counts.
+ * @returns localized copy; `count.done` with 0 when every count is zero.
+ */
+export function countsFact(t: TaskFlowTranslate, counts: FlowLaneCounts): string {
+  const parts: string[] = []
+  if (counts.running > 0) parts.push(t('count.running', { count: counts.running }))
+  if (counts.done > 0) parts.push(t('count.done', { count: counts.done }))
+  if (counts.stopped > 0) parts.push(t('count.stopped', { count: counts.stopped }))
+  return parts.length === 0 ? t('count.done', { count: 0 }) : parts.join(' · ')
+}
+
+/**
+ * Caption of the collapsed-history chip: the hidden lane count and their state counts.
+ * @param t - namespace translator.
+ * @param hidden - lanes folded into the chip.
+ * @returns localized copy such as “History 2 · 1 done · 1 stopped”.
+ */
+export function historyLabel(t: TaskFlowTranslate, hidden: readonly FlowLane[]): string {
+  return `${t('history.collapsed', { count: hidden.length })} · ${countsFact(t, countLanes(hidden))}`
 }

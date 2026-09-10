@@ -33,24 +33,18 @@
   - text: Context injection @deepseek-ai/dsh-system-prompt
 - paragraph: partial
 - status: Deep diving...
-- text: "Task flow 0/1 · Elapsed {{duration}} · Current: Execution"
-- group "Task-flow font size":
-  - button "Decrease task-flow font size":
-    - img
-  - text: 11px
-  - button "Increase task-flow font size":
-    - img
+- button "Collapse flow graph" [expanded]:
+  - img
+- text: "Task flow 1 running · This turn {{duration}} · Current: #1 Reply with a one-senten… · Execution 1 steps"
 - button "Switch style":
   - text: Step rail
-  - img
-- button "Stop task":
-  - img
-  - text: Stop task
-- button "Collapse flow graph" [expanded]:
   - img
 - button "Open in canvas":
   - img
   - text: Open in canvas
+- button "Stop task":
+  - img
+  - text: Stop task
 - region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Execution {{duration}} · 1 steps"
 - button "2 queued messages"
 - textbox "Cmd/Ctrl+Enter steers all queued messages"

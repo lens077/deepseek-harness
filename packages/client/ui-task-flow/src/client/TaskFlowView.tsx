@@ -14,7 +14,7 @@ import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FlowVariant } from '../settings.ts'
 import { FlowGraph } from './FlowGraph.tsx'
 import type { FlowLayoutMetrics } from './flow-layout.ts'
-import { formatDuration, spanOf } from './format.ts'
+import { countsFact, elapsedFact } from './format.ts'
 import type { FlowStyle } from './style-policy.ts'
 import { useClock, VariantMenu } from './TaskFlowDock.tsx'
 import css from './TaskFlowView.module.css'
@@ -124,7 +124,7 @@ export function TaskFlowView({
     setDragging(false)
   }, [])
 
-  const span = spanOf(snapshot.summary.startTime, snapshot.summary.endTime, now)
+  const elapsed = elapsedFact(t, snapshot, now)
   const onInspect = (callId: string): void => { openView('trajectory', callId) }
 
   return (
@@ -152,8 +152,8 @@ export function TaskFlowView({
         )}
       <div className={css.toolbar}>
         <span className={css.fact}>
-          {t('progress', { done: snapshot.summary.done, total: snapshot.summary.total })}
-          {span === undefined ? null : ` · ${t('elapsed', { time: formatDuration(t, span) })}`}
+          {countsFact(t, snapshot.summary.lanes)}
+          {elapsed === undefined ? null : ` · ${elapsed}`}
         </span>
         <VariantMenu value={variant} onSelect={setCanvasVariant} t={t} />
         {running && (

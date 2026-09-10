@@ -72,8 +72,11 @@ export interface FlowConversationViewNode extends ConversationViewNode {
 /** Drawn state of one node or route. */
 export type FlowStatus = 'pending' | 'running' | 'done' | 'risk' | 'error' | 'aborted' | 'interrupted'
 
-/** How a route relates to the main line. */
-export type FlowLaneKind = 'main' | 'interjection' | 'fork'
+/**
+ * How a route relates to the conversation: the first prompt, a prompt admitted
+ * while a turn was running, or a follow-up prompt sent after the previous turn closed.
+ */
+export type FlowLaneKind = 'main' | 'interjection' | 'sequel'
 
 /** One drawn node. */
 export interface FlowNode {
@@ -99,33 +102,45 @@ export interface FlowNode {
   readonly callId?: string
 }
 
-/** One route: the main line, an interjection hanging off a running node, or a fork off the root. */
+/** One route: the main line, an interjection hanging off a running node, or a sequel continuing the line. */
 export interface FlowLane {
   readonly id: string
   readonly kind: FlowLaneKind
   readonly turn: number
-  /** Ordinal of the turn among loaded turns, shown as `#n`. */
+  /** Position of the prompt among loaded prompts, shown as `#n`; gap-free from 1. */
   readonly ordinal: number
   readonly label: string
   readonly status: FlowStatus
   readonly parentLaneId?: string
-  /** Node in the parent lane the route hangs from. */
+  /** Node in the parent lane the route hangs from (interjections) or continues after (sequels). */
   readonly anchorNodeId?: string
+  /** Lane whose prompt this sequel re-sent verbatim after that lane stopped. */
+  readonly retryOfLaneId?: string
   /** Node ids in drawing order: prompt, spine nodes, optional terminal. */
   readonly nodeIds: readonly string[]
   readonly startTime: number
   readonly endTime?: number
 }
 
+/** Lane counts by settled state: `done` includes at-risk lanes, `stopped` every terminal state. */
+export interface FlowLaneCounts {
+  readonly done: number
+  readonly running: number
+  readonly stopped: number
+}
+
 /** Header facts for the collapsed strip. */
 export interface FlowSummary {
-  readonly total: number
-  readonly done: number
+  readonly lanes: FlowLaneCounts
   readonly running: boolean
   readonly status: FlowStatus | 'idle'
-  readonly startTime?: number
-  readonly endTime?: number
+  /** Sum of closed turn spans, excluding idle time between turns. */
+  readonly activeMs: number
+  /** Lane whose turn is open. */
+  readonly currentLaneId?: string
+  /** Most recently started running spine node. */
   readonly currentNodeId?: string
+  /** Latest interjection other than the current lane. */
   readonly latestBranchLaneId?: string
 }
 
