@@ -830,6 +830,11 @@ describe('DigestNavEntry', () => {
   it('renders phone destinations and excludes personal todos from the attention badge', () => {
     const e = mountEntry({ mobileView: 'overview', rows: [], snapshot: inbox({ todos: [todo('manual', 'a')] }) })
     expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual([zh['mobile.overview'], zh['mobile.pending']])
+    // The small layout hides these labels, so the two destinations must stay
+    // distinguishable by glyph alone.
+    const glyphs = screen.getAllByRole('button').map(button => button.querySelector('svg')?.innerHTML)
+    expect(glyphs[0]).toBeTruthy()
+    expect(glyphs[0]).not.toBe(glyphs[1])
     fireEvent.click(screen.getByRole('button', { name: zh['mobile.pending'] }))
     expect(e.navigateMobile).toHaveBeenCalledWith('pending')
     expect(e.store.getSnapshot().open).toBe(false)

@@ -41,6 +41,8 @@ Compose this plugin in a browser-facing host that serves the built Web shell: it
 
 Requests are served from the dist root (the directory containing `distIndex`). The dist root and the configured index path render `index.html` with HTTP 200; any other existing file is served directly with its MIME type, and unknown extensions ship as `application/octet-stream`. A path that resolves outside the root is rejected with 403, so a crafted path cannot read files above the dist. An absent or non-file target inside the dist root — a missing file, a directory, or a missing configured index — returns an empty 404. Non-GET/HEAD requests without a matching named route are answered 405. Every successful index response is rendered through the webserver's `renderIndex`, so the boot manifest reaches the page on `/` and on the configured index path.
 
+Responses carry HTTP caching so a page refresh re-downloads only what changed. A file whose basename ends in Vite's `-<8-character hash>` (every chunk, stylesheet, font, grammar, and source map under `assets/` and `preview/`) is `public, max-age=31536000, immutable`: its URL changes with its bytes, so the browser keeps it until the next build. The rendered index is `private, no-cache`, and every other unhashed file (`favicon.svg`, `manifest.webmanifest`, `preview.html`) is `no-cache`; both carry a strong `ETag` over the response bytes and answer a matching `If-None-Match` with an empty 304 for GET and HEAD. The index tag covers the injected boot manifest and taps, so a Host restart that changes the plugin graph invalidates the page while the shell assets stay cached.
+
 Root and configured-index responses call `ctx.connection.authorizeIndex` before reading HTML. A valid process token receives a 303 redirect plus the persistent browser cookie; an existing valid cookie serves the index; every other index request receives the Connection-owned 401 response. Non-index files remain public static assets. Connection owns the token, cookie, expiry, and signing-record semantics.
 
 ### Observable failures
@@ -67,7 +69,7 @@ The package is one function plugin around `serveStatic`: `apply` resolves the di
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `serveStatic` and `apply`: fallback claim, traversal rejection, index rendering, MIME table |
+| [`src/index.ts`](src/index.ts) | `serveStatic` and `apply`: fallback claim, traversal rejection, index rendering, MIME table, cache headers and ETag revalidation |
 
 </details>
 

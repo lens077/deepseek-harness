@@ -1023,9 +1023,9 @@
 .compactCard .action,
 .compactCard .openSession {
   align-self: stretch;
-  min-height: var(--dsh-mobile-control-size, 44px);
+  min-height: var(--dsh-digest-action-size, 36px);
   margin: 0;
-  padding: 8px;
+  padding: 4px 8px;
   font-size: var(--dsh-mobile-meta-size, 13px);
   line-height: 1.5;
   white-space: normal;
@@ -1135,8 +1135,22 @@
     display: none;
   }
 
-  .close, .tab, .groupButton, .chip, .action, .cardTitleButton {
+  .close, .tab, .groupButton, .chip, .cardTitleButton {
     min-height: var(--dsh-mobile-control-size, 44px);
+  }
+
+  /* Row actions (jump / continue / remove, open / handled) sit under text the
+     user has already read, so they take a shorter target than the chrome
+     controls above: a 44px row of three pills doubles a todo's height. The
+     small layout tightens once more. */
+  .action, .openSession {
+    min-height: var(--dsh-digest-action-size, 36px);
+    padding: 4px 10px;
+  }
+
+  :global([data-mobile-layout="small"]) .action,
+  :global([data-mobile-layout="small"]) .openSession {
+    --dsh-digest-action-size: 32px;
   }
 
   .close {
@@ -1190,6 +1204,11 @@
 
   .todoAdd, .todoRow, .todoActions {
     flex-wrap: wrap;
+  }
+
+  .todoRow {
+    gap: var(--dsh-mobile-row-gap, 6px) 10px;
+    padding: 6px 10px 8px;
   }
 
   .todoInput {

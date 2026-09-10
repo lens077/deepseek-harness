@@ -41,6 +41,8 @@ kind: "package-reference"
 
 请求从 dist 根目录（包含 `distIndex` 的目录）提供。dist 根目录与配置的 index 路径以 HTTP 200 渲染 `index.html`；任何其他已有文件按自身 MIME 类型直接提供，未知扩展名按 `application/octet-stream` 提供。解析到根目录之外的路径以 403 拒绝，因此精心构造的路径无法读取 dist 之上的文件。dist 根目录内缺失或非文件的 target——文件缺失、目录或配置的 index 缺失——返回空 404。没有匹配具名路由的非 GET／HEAD 请求回答 405。每个成功的 index 响应都经 webserver 的 `renderIndex` 渲染，因此启动 manifest 在 `/` 与配置的 index 路径上到达页面。
 
+响应带有 HTTP 缓存头，因此刷新页面只重新下载真正变化的内容。文件名以 Vite 的 `-<8 位哈希>` 结尾的文件（`assets/` 与 `preview/` 下的每个 chunk、样式表、字体、语法与 source map）为 `public, max-age=31536000, immutable`：其 URL 随字节变化，浏览器可一直保留到下次构建。渲染后的 index 为 `private, no-cache`，其余未哈希文件（`favicon.svg`、`manifest.webmanifest`、`preview.html`）为 `no-cache`；两者都带有对响应字节计算的强 `ETag`，并在 `If-None-Match` 匹配时对 GET 与 HEAD 回答空 304。Index 的 tag 覆盖注入的启动 manifest 与转换器，因此改变插件图的 Host 重启会让页面失效，而壳资产仍保持缓存。
+
 根路径与配置的 index 响应会在读取 HTML 前调用 `ctx.connection.authorizeIndex`。有效进程 token 会得到 303 重定向与持久浏览器 cookie；已有有效 cookie 时直接提供 index；其他 index 请求得到 Connection 所有的 401 响应。非 index 文件仍是公开静态资源。Token、cookie、过期时间与签名记录语义都归 Connection 所有。
 
 ### 可观察的失败
@@ -67,7 +69,7 @@ kind: "package-reference"
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `serveStatic` 与 `apply`：回退占据、遍历拒绝、index 渲染、MIME 表 |
+| [`src/index.ts`](src/index.ts) | `serveStatic` 与 `apply`：回退占据、遍历拒绝、index 渲染、MIME 表、缓存头与 ETag 重验证 |
 
 </details>
 
