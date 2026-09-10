@@ -29,7 +29,7 @@ Mount one provider and routing runs for every Web prompt; this package alone rou
 
 ### When to choose it
 
-Choose `dsh-model-router-rules` when deterministic conditions on the prompt — byte length, a regular expression, an image — decide the model or the reasoning effort. Choose this package when you implement a different decision procedure, such as a model classifier, or when you build a prompt path that should consult the mounted router. Do not mount it alone.
+Choose `dsh-model-router-rules` when deterministic conditions on the prompt — byte length, a regular expression, an image — decide the model or the reasoning effort. Choose `dsh-model-router-llm` when the person's own model should read the prompt and pick among described choices. Choose this package when you implement another decision procedure or build a prompt path that should consult the mounted router. Do not mount it alone.
 
 ### What routing looks like
 
@@ -69,6 +69,7 @@ The baseline is the `modelSelection` projection's `baseline`: the latest user `m
 ## Further Exploration
 
 - [Rule-list router](../model-router-rules/README.md) — the shipped deterministic provider and its rule conditions.
+- [Model-classified router](../model-router-llm/README.md) — the provider that asks the baseline model for a verdict.
 - [Session Controller](../../api/session-controller/README.md) — the Web prompt path that applies and records decisions.
 - [Prompt-driven routing Agent Note](../../../.agents/notes/proposed/feature/2026-09-10-prompt-driven-model-routing.md) — the full design, constraints, and delivery order beyond effort-only routing.
 - [Model-visible route-change notices](../../../.agents/notes/implemented/feature/2026-09-07-model-switch-notice.md) — why a provider/model change would add a history notice and why effort-only routing does not.

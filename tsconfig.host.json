@@ -238,6 +238,7 @@
     { "path": "./packages/core/agent-loop" },
     { "path": "./packages/llm/llm-retry" },
     { "path": "./packages/llm/model-router" },
+    { "path": "./packages/llm/model-router-llm" },
     { "path": "./packages/llm/model-router-rules" },
     { "path": "./packages/subprocess/subprocess" },
     { "path": "./packages/subprocess/subprocess-local" },

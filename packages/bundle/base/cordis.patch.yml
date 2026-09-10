@@ -100,6 +100,26 @@
             provider: deepseek-official
             model: deepseek-v4-pro
 
+    # The model-classified alternative: the person's own model reads each
+    # prompt and answers with one described choice. Mount one router only.
+    - id: model-router-llm
+      name: '@deepseek-ai/dsh-model-router-llm'
+      disabled: true
+      config:
+        choices:
+          - id: fast
+            description: Short factual questions, greetings, and quick lookups.
+            provider: deepseek-official
+            model: deepseek-v4-flash
+            reasoningEffort: low
+          - id: strong
+            description: Design, debugging, or changes across several files.
+            provider: deepseek-official
+            model: deepseek-v4-pro
+        maxInputBytes: 8192
+        maxOutputTokens: 16
+        timeoutMs: 20000
+
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'
 

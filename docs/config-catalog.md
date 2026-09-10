@@ -1600,6 +1600,48 @@ export interface Config {
 
 Source: [`packages/feedback/message-feedback/src/index.ts:39`](../packages/feedback/message-feedback/src/index.ts)
 
+<a id="deepseek-aidsh-model-router-llm"></a>
+
+## `@deepseek-ai/dsh-model-router-llm`
+
+Requires: `llm`
+
+```ts config-catalog
+/** Required deployment policy for the classifier request. */
+export interface Config {
+  /** Choices offered to the classifier; the first whose id it answers with decides, and an empty list fails at load. */
+  choices: ChoiceConfig[]
+  /** Maximum UTF-8 bytes of the framed prompt sent to the classifier; a longer prompt keeps the baseline. */
+  maxInputBytes: number
+  /** Classifier output-token cap; a verdict is a few tokens. */
+  maxOutputTokens: number
+  /** End-to-end classifier deadline in milliseconds; the prompt waits this long at most. */
+  timeoutMs: number
+  /**
+   * Reasoning effort for the classifier call on the baseline model; absent
+   * means the first effort that model advertises, which adapters order from
+   * least to most thinking, or the model's default when it advertises none.
+   */
+  classifierReasoningEffort?: string
+}
+
+/** One choice the classifier may name; every present route or effort becomes the proposal. */
+export interface ChoiceConfig {
+  /** Unique verdict token the classifier answers with; `baseline` is reserved. */
+  readonly id: string
+  /** When the classifier should pick this choice, written for the model. */
+  readonly description: string
+  /** Registered provider of the route to propose; requires `model` and must be a configured route. */
+  readonly provider?: string
+  /** Provider-owned model id of the route to propose; requires `provider`. */
+  readonly model?: string
+  /** Adapter-owned reasoning effort on the proposed route, or the baseline route when no model is named. */
+  readonly reasoningEffort?: string
+}
+```
+
+Source: [`packages/llm/model-router-llm/src/index.ts:40`](../packages/llm/model-router-llm/src/index.ts)
+
 <a id="deepseek-aidsh-model-router-rules"></a>
 
 ## `@deepseek-ai/dsh-model-router-rules`

@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 何时选择它
 
-当提示词上的确定性条件——字节长度、正则、图片——足以决定模型或推理强度时，选择 `dsh-model-router-rules`。当你实现另一种决策过程（例如模型分类器），或构建一条应当咨询已挂载路由器的提示词路径时，选择本包。不要单独挂载它。
+当提示词上的确定性条件——字节长度、正则、图片——足以决定模型或推理强度时，选择 `dsh-model-router-rules`。当应由用户自己的模型阅读提示词并在已描述的选项中挑选时，选择 `dsh-model-router-llm`。当你实现另一种决策过程，或构建一条应当咨询已挂载路由器的提示词路径时，选择本包。不要单独挂载它。
 
 ### 路由是什么样子
 
@@ -69,6 +69,7 @@ kind: "package-reference"
 ## 进一步探索
 
 - [规则列表路由器](../model-router-rules/README.zh.md)——随产品发布的确定性提供方及其规则条件。
+- [模型分类路由器](../model-router-llm/README.zh.md)——向基线模型索取裁决的提供方。
 - [Session Controller](../../api/session-controller/README.zh.md)——应用并记录决策的 Web 提示词路径。
 - [按提示词驱动的路由 Agent Note](../../../.agents/notes/proposed/feature/2026-09-10-prompt-driven-model-routing.zh.md)——超出仅路由强度范围的完整设计、约束与交付顺序。
 - [模型可见的路由变更通知](../../../.agents/notes/implemented/feature/2026-09-07-model-switch-notice.zh.md)——为什么 provider/model 变化会追加一条历史通知，而仅改强度不会。
