@@ -334,6 +334,7 @@
       "@deepseek-ai/dsh-model-router": ["./packages/llm/model-router/src"],
       "@deepseek-ai/dsh-model-router-rules": ["./packages/llm/model-router-rules/src"],
       "@deepseek-ai/dsh-native-command": ["./packages/util/native-command/src"],
+      "@deepseek-ai/dsh-model-router-llm": ["./packages/llm/model-router-llm/src"],
       "@deepseek-ai/dsh-output-retention": ["./packages/util/output-retention/src"],
       "@deepseek-ai/dsh-package-manifest": ["./packages/util/package-manifest/src"],
       "@deepseek-ai/dsh-permission-presets": ["./packages/interaction/permission-presets/src"],

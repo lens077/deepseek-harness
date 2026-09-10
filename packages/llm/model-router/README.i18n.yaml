@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/llm/model-router/README.md
-README.md: 1dd52d8764fd61652208109f6087b9156201741b
-README.zh.md: 482da66e16ef43cef46e563588c5f7ecc4296470
+README.md: bf86d98e413d8a2d0d6f1f502aee9b54140bed89
+README.zh.md: 694e9fc47dd65465937ae617d8b5abb53693d3ff

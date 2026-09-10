@@ -9,7 +9,7 @@ kind: "package-group"
 
 ## 概述
 
-llm 组提供 harness 的模型调用能力：一个提供方无关的服务，任何组合都可以通过它向模型提供方发起流式请求，外加适配器、提供方专用请求元数据、重试执行、计量与路由。核心 `llm` 包定义所有插件与会话日志使用的消息、内容块与流式分片词汇；适配器把某个提供方的协议格式翻译为该词汇；DeepSeek 请求扩展插件在模型输入之外贡献具有生命周期归属的元数据；`llm-retry` 在 agent 步骤边界上重跑失败的请求；`token-meter` 从持久日志测量上下文压力；`model-router` 为每条提示词提出推理强度。每个包 README 负责各自的包级约定。
+llm 组提供 harness 的模型调用能力：一个提供方无关的服务，任何组合都可以通过它向模型提供方发起流式请求，外加适配器、提供方专用请求元数据、重试执行、计量与路由。核心 `llm` 包定义所有插件与会话日志使用的消息、内容块与流式分片词汇；适配器把某个提供方的协议格式翻译为该词汇；DeepSeek 请求扩展插件在模型输入之外贡献具有生命周期归属的元数据；`llm-retry` 在 agent 步骤边界上重跑失败的请求；`token-meter` 从持久日志测量上下文压力；`model-router` 及其规则列表或模型分类提供方为每条提示词提出路由。每个包 README 负责各自的包级约定。
 
 ## 目录
 
@@ -32,7 +32,8 @@ llm 组提供 harness 的模型调用能力：一个提供方无关的服务，�
 | [`llm-retry/`](llm-retry/README.zh.md) | 在持久 agent 步骤边界上按各提供方策略重试失败的模型请求 | 监听 `agent/request-error` |
 | [`token-meter/`](token-meter/README.zh.md) | 用固定启发式规则从持久会话日志测量请求与上下文压力 | `ctx.tokenMeter` |
 | [`model-router/`](model-router/README.zh.md) | 定义按提示词驱动的路由选择与持久的 `model/route` 记录；Web 提示词路径应用提供方的答案 | `ctx.modelRouter` |
-| [`model-router-rules/`](model-router-rules/README.zh.md) | 按有序配置的规则列表，依据提示词长度、正则与图片存在选择推理强度 | 提供 `ctx.modelRouter` |
+| [`model-router-rules/`](model-router-rules/README.zh.md) | 按有序规则列表，依据提示词长度、正则与图片存在选择已配置的路由或强度 | 提供 `ctx.modelRouter` |
+| [`model-router-llm/`](model-router-llm/README.zh.md) | 让会话自己的模型为每条提示词挑选一个已描述的选项 | 提供 `ctx.modelRouter` |
 
 -----
 

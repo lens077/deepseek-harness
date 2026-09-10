@@ -1,6 +1,6 @@
 # Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write docs/subsystems/llm-streaming.md
-llm-streaming.md: 1ee3bdea4f9a138d3f0d0494cea998f59d930e3f
-llm-streaming.zh.md: 9d7b136b620c8d629ede32bc4933d05595dfa4da
+#   pnpm run verify-translation-pairing --write packages/llm/model-router-llm/README.md
+README.md: 5ad393ed1351596c19704a3d4d0a4d9c57ebd52f
+README.zh.md: 78b5ec9cf2e00fb85ce9ee131580eac7b2b4ea21

@@ -138,7 +138,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'model-router',
     title: 'Prompt-driven model routing',
     mode: 'seam',
-    implementations: ['model-router-rules'],
+    implementations: ['model-router-rules', 'model-router-llm'],
     consumers: ['api-session-controller'],
     note: 'A provider proposes a route for one human prompt; the Web prompt path enforces effort-only application and records the durable decision.',
   },

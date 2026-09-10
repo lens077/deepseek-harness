@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The llm group provides the harness's model-call capability: one provider-neutral service through which any composition streams requests to a model provider, plus adapters, provider-specific request metadata, retry execution, measurement, and routing. The core `llm` package defines the message, content-block, and stream-chunk vocabulary every plugin and the session log use; adapters translate a provider's wire format into it; DeepSeek request-extension plugins contribute lifecycle-owned metadata outside model input; `llm-retry` re-runs failed requests at agent-step boundaries; `token-meter` measures context pressure from the durable log; and `model-router` proposes a per-prompt reasoning effort. Each package README owns its per-package contract.
+The llm group provides the harness's model-call capability: one provider-neutral service through which any composition streams requests to a model provider, plus adapters, provider-specific request metadata, retry execution, measurement, and routing. The core `llm` package defines the message, content-block, and stream-chunk vocabulary every plugin and the session log use; adapters translate a provider's wire format into it; DeepSeek request-extension plugins contribute lifecycle-owned metadata outside model input; `llm-retry` re-runs failed requests at agent-step boundaries; `token-meter` measures context pressure from the durable log; and `model-router` with its rule-list or model-classified provider proposes a per-prompt route. Each package README owns its per-package contract.
 
 ## Table of Contents
 
@@ -32,7 +32,8 @@ The llm group provides the harness's model-call capability: one provider-neutral
 | [`llm-retry/`](llm-retry/README.md) | Retries failed model requests under each provider's policy at durable agent-step boundaries | listens to `agent/request-error` |
 | [`token-meter/`](token-meter/README.md) | Measures request and context pressure from the durable session log with a fixed heuristic | `ctx.tokenMeter` |
 | [`model-router/`](model-router/README.md) | Defines prompt-driven route selection and the durable `model/route` record; the Web prompt path applies a provider's answer | `ctx.modelRouter` |
-| [`model-router-rules/`](model-router-rules/README.md) | Picks the reasoning effort from an ordered, configured rule list over prompt length, pattern, and image presence | provides `ctx.modelRouter` |
+| [`model-router-rules/`](model-router-rules/README.md) | Picks a configured route or effort from an ordered rule list over prompt length, pattern, and image presence | provides `ctx.modelRouter` |
+| [`model-router-llm/`](model-router-llm/README.md) | Asks the session's own model to pick a described choice for each prompt | provides `ctx.modelRouter` |
 
 -----
 
