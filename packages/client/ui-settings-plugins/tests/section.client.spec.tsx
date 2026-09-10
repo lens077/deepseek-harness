@@ -505,45 +505,44 @@ describe('AgentLoopCard', () => {
 })
 
 describe('ModelRoutingCard', () => {
-  function renderModelRouting(enabled: CardFieldState, shell: Partial<CardShell> = {}) {
-    const store = createSnapshotStore<ModelRoutingCardState>({ ...settled, ...shell, enabled })
-    const actions = cardActions()
-    const props = {
-      ...actions,
-      t,
-      useModelRoutingCard: bindSnapshotSelector(store),
-    } as unknown as ModelRoutingCardProps
+  function renderModelRouting(state: Partial<ModelRoutingCardState> = {}) {
+    const store = createSnapshotStore<ModelRoutingCardState>({
+      available: true, writable: true, enabled: true, saving: false, failed: false, ...state,
+    })
+    const toggle = vi.fn()
+    const props = { t, toggle, useModelRoutingCard: bindSnapshotSelector(store) } as unknown as ModelRoutingCardProps
     render(<ModelRoutingCard {...props} />)
-    fireEvent.click(screen.getByText(en.modelRoutingTitle))
-    return actions
+    return toggle
   }
 
-  it('reads an absent value as on and stages the switch as text', () => {
-    const actions = renderModelRouting(field(''))
+  it('renders nothing while no router serves the namespace', () => {
+    renderModelRouting({ available: false })
+    expect(screen.queryByRole('switch')).toBeNull()
+  })
+
+  it('writes the switch position on toggle and explains each state', () => {
+    const toggle = renderModelRouting()
     const control = screen.getByRole('switch', { name: en.modelRoutingToggle })
     expect(control.getAttribute('aria-checked')).toBe('true')
     expect(screen.getByText(en.modelRoutingOnHint)).toBeTruthy()
     fireEvent.click(control)
-    expect(actions.edit).toHaveBeenCalledWith('enabled', 'false')
-  })
-
-  it('renders the off state with its hint and stages turning routing back on', () => {
-    const actions = renderModelRouting(field('false', { overridden: true }), { dirty: true })
-    const control = screen.getByRole('switch', { name: en.modelRoutingToggle })
-    expect(control.getAttribute('aria-checked')).toBe('false')
+    expect(toggle).toHaveBeenCalledWith(false)
+    cleanup()
+    renderModelRouting({ enabled: false, failed: true })
+    expect(screen.getByRole('switch', { name: en.modelRoutingToggle }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByText(en.modelRoutingOffHint)).toBeTruthy()
-    fireEvent.click(control)
-    expect(actions.edit).toHaveBeenCalledWith('enabled', 'true')
-    fireEvent.click(screen.getByRole('button', { name: en.save }))
-    expect(actions.save).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert').textContent).toBe(en.modelRoutingWriteFailed)
   })
 
-  it('disables the switch on a read-only document', () => {
-    const actions = renderModelRouting(field('true'), { writable: false })
-    const control = screen.getByRole('switch', { name: en.modelRoutingToggle }) as HTMLButtonElement
+  it('disables the switch on a read-only document and while a write is in flight', () => {
+    const toggle = renderModelRouting({ writable: false })
+    const control = screen.getByRole('switch', { name: en.modelRoutingToggle })
     expect(control.disabled).toBe(true)
     fireEvent.click(control)
-    expect(actions.edit).not.toHaveBeenCalled()
+    expect(toggle).not.toHaveBeenCalled()
+    cleanup()
+    renderModelRouting({ saving: true })
+    expect(screen.getByRole('switch', { name: en.modelRoutingToggle }).disabled).toBe(true)
   })
 })
 

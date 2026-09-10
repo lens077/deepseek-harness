@@ -1,47 +1,44 @@
-/** The model router's card: whether prompts are routed to another model or effort at all. */
+/** The model router's switch on the Models page: whether prompts are routed to another model or effort at all. */
 
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { PluginCard } from './PluginCard.tsx'
+// Type-only: the Models page's SlotMap merge (the 'settings.models.footer' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type { ModelRoutingCardFace } from './model-routing-card-controller.ts'
-import type {} from './slot-contract.ts'
 import css from './ModelRoutingCard.module.css'
 
-/** Props the renderer binds for the model-routing card. */
+/** Props the renderer binds for the model-routing switch. */
 export type ModelRoutingCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'settings.models.footer'>
   & PropsLocale<'settings.plugins'>
   & InjectFace<ModelRoutingCardFace>
 
 /**
- * Render the model-routing card: one switch, staged until saved.
- * @param props - locale copy, the card snapshot, and its form actions.
- * @returns the card.
+ * Render the model-routing switch as one row after the provider rows, or
+ * nothing while no router is mounted.
+ * @param props - locale copy, the switch snapshot, and its toggle action.
+ * @returns the row, or null.
  */
 export function ModelRoutingCard(props: ModelRoutingCardProps) {
   const { t } = props
   const state = props.useModelRoutingCard(snapshot => snapshot)
-  // An absent value inherits the composition default, which is on.
-  const enabled = state.enabled.text !== 'false'
+  if (!state.available) return null
   return (
-    <PluginCard
-      t={t}
-      titleKey="modelRoutingTitle"
-      descriptionKey="modelRoutingDescription"
-      state={state}
-      onSave={props.save}
-      onDiscard={props.discard}
-    >
-      <div className={css.toggleRow}>
-        <span className={css.toggleLabel}>{t('modelRoutingToggle')}</span>
+    <section className={css.card} aria-label={t('modelRoutingTitle')}>
+      <div className={css.head}>
+        <div className={css.identity}>
+          <span className={css.name}>{t('modelRoutingTitle')}</span>
+          <span className={css.description}>{t('modelRoutingDescription')}</span>
+        </div>
         <Switch
-          checked={enabled}
+          checked={state.enabled}
           label={t('modelRoutingToggle')}
           disabled={!state.writable || state.saving}
-          onChange={(next) => { props.edit('enabled', next ? 'true' : 'false') }}
+          onChange={props.toggle}
         />
       </div>
-      <p className={css.hint}>{t(enabled ? 'modelRoutingOnHint' : 'modelRoutingOffHint')}</p>
-    </PluginCard>
+      <p className={css.hint}>{t(state.enabled ? 'modelRoutingOnHint' : 'modelRoutingOffHint')}</p>
+      {state.failed ? <p className={css.failed} role="alert">{t('modelRoutingWriteFailed')}</p> : null}
+    </section>
   )
 }

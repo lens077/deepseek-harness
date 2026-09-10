@@ -39,7 +39,7 @@ The consumer enforces its own constraints before applying an answer. A route cha
 
 ### Switching routing off
 
-Mounting any provider serves the `model-routing` settings section with one field, `enabled` (default on), which the Plugins settings page renders as the Model routing card. While it is off, prompts do not consult the router, and a Session still on a routed selection returns to its baseline at its next prompt with a `model/route` reason of `routing switched off: baseline restored`. The switch changes nothing about the mounted provider or its rules.
+Mounting any provider serves the `model-routing` settings section with one field, `enabled` (default on), which the Models settings page renders as the model-routing switch below the provider rows. While it is off, prompts do not consult the router, and a Session still on a routed selection returns to its baseline at its next prompt with a `model/route` reason of `routing switched off: baseline restored`. The switch changes nothing about the mounted provider or its rules.
 
 ### When the routed model fails
 

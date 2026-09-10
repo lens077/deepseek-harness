@@ -1,8 +1,7 @@
-/** The model-routing card's staged form over the `model-routing` settings namespace. */
+/** The model-routing switch over the `model-routing` settings namespace, written on toggle. */
 
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { CardForm, booleanField, type CardActions, type CardFieldState, type CardShell } from './card-form.ts'
 
 /**
  * Namespace of the mounted model router's user-owned settings. Spelled here
@@ -10,46 +9,91 @@ import { CardForm, booleanField, type CardActions, type CardFieldState, type Car
  */
 export const MODEL_ROUTING_NS = 'model-routing'
 
-/** The model-routing field this card edits. */
+/** The model-routing field this switch edits. */
 export interface ModelRoutingSettings {
   /** Whether prompts consult the router; off keeps every Session on the route its person selected. */
   enabled?: boolean
 }
 
-/** What the model-routing card renders. */
-export interface ModelRoutingCardState extends CardShell {
-  /** The routing switch, staged as `true` or `false`. */
-  enabled: CardFieldState
+/** What the model-routing switch renders. */
+export interface ModelRoutingCardState {
+  /** False while the namespace is not served to this client, which means no router is mounted; the card renders nothing. */
+  available: boolean
+  /** Whether the Host document accepts writes. */
+  writable: boolean
+  /** Effective switch position; an absent value inherits the composition default, which is on. */
+  enabled: boolean
+  /** Whether a write is crossing the wire. */
+  saving: boolean
+  /** Whether the last write did not land; cleared by the next toggle. */
+  failed: boolean
 }
 
-/** The registration-side face the model-routing card's slot entry injects. */
-export interface ModelRoutingCardFace extends CardActions {
+/** The registration-side face the model-routing entry injects. */
+export interface ModelRoutingCardFace {
   hooks: {
-    /** Card snapshot bound by the renderer as useModelRoutingCard. */
+    /** Switch snapshot bound by the renderer as useModelRoutingCard. */
     modelRoutingCard: SnapshotStore<ModelRoutingCardState>
   }
+  /** Write the switch position; one toggle is one settings write, with no staging. */
+  toggle: (next: boolean) => void
 }
 
-/** Bridges the `model-routing` scope onto the card's staged form. */
+/**
+ * Bridges the `model-routing` scope onto one switch. A single boolean needs no
+ * draft: the Host answers by republishing the scope, and a write that did not
+ * land reports `failed` while the switch keeps showing the Host's value.
+ */
 export class ModelRoutingCardController {
-  private readonly form: CardForm<ModelRoutingSettings>
   private readonly store: SnapshotStore<ModelRoutingCardState>
+  private saving = false
+  private failed = false
 
   /** @param scope - the bound settings scope for the `model-routing` namespace. */
-  constructor(scope: SettingsScope<ModelRoutingSettings>) {
-    this.form = new CardForm(scope, [booleanField('enabled')])
-    this.store = this.form.bind(() => this.projection())
+  constructor(private readonly scope: SettingsScope<ModelRoutingSettings>) {
+    this.store = createSnapshotStore(this.projection())
+    scope.subscribe(() => { this.publish() })
   }
 
   private projection(): ModelRoutingCardState {
-    return { ...this.form.shell(), enabled: this.form.field('enabled') }
+    const snapshot = this.scope.getSnapshot()
+    return {
+      available: snapshot.status === 'ready',
+      writable: snapshot.writable,
+      enabled: snapshot.value?.enabled !== false,
+      saving: this.saving,
+      failed: this.failed,
+    }
+  }
+
+  private publish(): void {
+    this.store.set(this.projection())
   }
 
   /**
-   * Build the face the card's slot registration injects.
-   * @returns the card's snapshot and its form actions.
+   * Build the face the entry's slot registration injects.
+   * @returns the switch snapshot and its toggle action.
    */
   inject(): ModelRoutingCardFace {
-    return { hooks: { modelRoutingCard: this.store }, ...this.form.actions() }
+    return {
+      hooks: { modelRoutingCard: this.store },
+      toggle: (next) => { void this.write(next) },
+    }
+  }
+
+  private async write(next: boolean): Promise<void> {
+    if (this.saving) return
+    this.saving = true
+    this.failed = false
+    this.publish()
+    try {
+      await this.scope.set('enabled', next)
+      this.failed = this.scope.getSnapshot().value?.enabled !== next
+    } catch {
+      // The scope owns the transport diagnostic; the switch only reports that the write did not land.
+      this.failed = true
+    }
+    this.saving = false
+    this.publish()
   }
 }

@@ -15,6 +15,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // and the ctx.settingsScope Context merge. Cross-plugin collaboration goes
 // through the service, never a value import (client bundle purity gate).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: the Models page's SlotMap merge (the 'settings.models.footer' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
@@ -168,6 +170,16 @@ export function apply(ctx: ClientContext): void {
     children: { 'settings.plugin.item': { kind: 'keyed', scope: 'root' } },
   }, ConfigurablePluginsTab))
 
+  // The routing switch lives on the Models page, beside the models it chooses
+  // among; it renders only while a router serves its namespace.
+  ctx.slots.inject('settings.models.footer', () => ctx.slots.register({
+    name: 'settings.models.footer',
+    id: MODEL_ROUTING_NS,
+    order: 0,
+    locale: NS,
+    inject: () => modelRouting.inject(),
+  }, ModelRoutingCard))
+
   ctx.slots.inject('settings.plugin.item', function* () {
     yield ctx.slots.register({
       name: 'settings.plugin.item',
@@ -181,12 +193,6 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => agentLoop.inject(),
     }, AgentLoopCard)
-    yield ctx.slots.register({
-      name: 'settings.plugin.item',
-      key: MODEL_ROUTING_NS,
-      locale: NS,
-      inject: () => modelRouting.inject(),
-    }, ModelRoutingCard)
     yield ctx.slots.register({
       name: 'settings.plugin.item',
       key: SUBAGENT_MODEL_SELECTION_NS,

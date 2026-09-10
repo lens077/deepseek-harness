@@ -1,22 +1,52 @@
-.toggleRow {
+/* Matches the Models page's provider row: outlined on the panel fill. */
+.card {
+  margin-top: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 16px;
+  padding: 12px 14px;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-top: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--dsw-alias-label-primary);
+  flex-direction: column;
+  gap: 6px;
 }
 
-.toggleLabel {
-  flex: 1;
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.hint {
-  margin: 6px 0 0;
+.name {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.description {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.hint,
+.failed {
+  margin: 0;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.hint {
   color: var(--dsw-alias-label-tertiary);
+}
+
+.failed {
+  color: var(--dsw-alias-label-error);
 }

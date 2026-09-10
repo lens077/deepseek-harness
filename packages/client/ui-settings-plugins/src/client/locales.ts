@@ -18,7 +18,7 @@ export type PluginsSettingsLocaleKey =
   | 'subagentModelSelectionUnavailableGroup' | 'subagentModelSelectionEmpty'
   | 'subagentModelSelectionRequired' | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
   | 'modelRoutingTitle' | 'modelRoutingDescription' | 'modelRoutingToggle'
-  | 'modelRoutingOnHint' | 'modelRoutingOffHint'
+  | 'modelRoutingOnHint' | 'modelRoutingOffHint' | 'modelRoutingWriteFailed'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -60,10 +60,11 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   webSearchMaxUses: 'Max searches per request',
   webSearchMaxUsesHint: 'How many times one request may search before it must answer.',
   modelRoutingTitle: 'Model routing',
-  modelRoutingDescription: 'Whether each prompt may be answered by a different configured model or reasoning effort.',
-  modelRoutingToggle: 'Route prompts automatically',
+  modelRoutingDescription: 'Let the mounted router pick a configured model and reasoning effort for each prompt.',
+  modelRoutingToggle: 'Assign models automatically',
   modelRoutingOnHint: 'The mounted router reads each prompt and may switch the model or reasoning effort for that reply. Turn this off to always answer with the model selected in the session.',
   modelRoutingOffHint: 'Every prompt is answered by the model selected in the session; a session left on a routed model returns to it at its next prompt.',
+  modelRoutingWriteFailed: 'The deployment did not accept the change; the switch shows the stored value.',
   subagentModelSelectionTitle: 'Subagent',
   subagentModelSelectionDescription: 'Control which models agents may choose for subagents.',
   subagentModelSelectionToggle: 'Allow agents to choose models for subagents',
@@ -121,10 +122,11 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   webSearchMaxUses: '单次请求最多搜索次数',
   webSearchMaxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
   modelRoutingTitle: '模型路由',
-  modelRoutingDescription: '是否允许每条提示词由另一个已配置的模型或推理强度作答。',
+  modelRoutingDescription: '让已挂载的路由器为每条提示词挑选已配置的模型与推理强度。',
   modelRoutingToggle: '自动分配模型',
   modelRoutingOnHint: '已挂载的路由器会读取每条提示词，并可能为这次回答切换模型或推理强度。关闭后始终使用会话中选定的模型作答。',
   modelRoutingOffHint: '每条提示词都由会话中选定的模型作答；停留在被路由模型上的会话会在下一条提示词时回到它。',
+  modelRoutingWriteFailed: '本部署没有接受这次修改；开关显示的是已保存的值。',
   subagentModelSelectionTitle: 'Subagent',
   subagentModelSelectionDescription: '控制 Agent 为 Subagent 选择模型的权限。',
   subagentModelSelectionToggle: '允许 Agent 为 Subagent 选择模型',

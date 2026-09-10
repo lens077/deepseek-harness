@@ -125,6 +125,24 @@ describe('ui-settings-plugins apply', () => {
     }
   })
 
+  it('places the model-routing switch in the Models page footer once that slot is declared', async () => {
+    const { ctx, slots } = await bench()
+    declareRoot(slots)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    expect(slots.entries('settings.models.footer')).toEqual([])
+
+    slots.register({
+      name: 'settings.section',
+      id: 'models',
+      children: { 'settings.models.footer': { kind: 'list', scope: 'root' } },
+    } as never, () => null)
+    const entries = slots.entries('settings.models.footer')
+    expect(entries.map(entry => (entry.options as { id?: string }).id)).toEqual(['model-routing'])
+    const face = (entries[0] as { inject?: () => unknown }).inject?.() as { hooks: Record<string, unknown>; toggle: unknown }
+    expect(Object.keys(face.hooks)).toEqual(['modelRoutingCard'])
+    expect(typeof face.toggle).toBe('function')
+  })
+
   it('keys each card it ships on the settings namespace that card edits', async () => {
     const { ctx, slots } = await bench()
     declareRoot(slots)
@@ -132,7 +150,7 @@ describe('ui-settings-plugins apply', () => {
     await ctx.plugin({ inject: [...inject], apply }).await()
 
     expect(slots.entries('settings.plugin.item').map(entry => entry.options.key))
-      .toEqual(['shell', 'agent-loop', 'model-routing', 'subagent-model-selection', 'web-search-deepseek'])
+      .toEqual(['shell', 'agent-loop', 'subagent-model-selection', 'web-search-deepseek'])
   })
 
   it('dispatches the served namespaces its cards claim, and no others', async () => {
@@ -235,7 +253,7 @@ describe('ui-settings-plugins apply', () => {
     declareRoot(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('settings.plugin.item')).toHaveLength(5)
+    expect(slots.entries('settings.plugin.item')).toHaveLength(4)
 
     await fiber.dispose()
 

@@ -39,7 +39,7 @@ kind: "package-reference"
 
 ### 关闭路由
 
-挂载任一提供方都会提供 `model-routing` 设置分区，只有一个字段 `enabled`（默认开启），Plugins 设置页把它渲染为"模型路由"卡片。关闭期间提示词不再咨询路由器，仍停留在路由选择上的 Session 会在下一条提示词时回到基线，`model/route` 的原因为 `routing switched off: baseline restored`。该开关不改变已挂载的提供方或其规则。
+挂载任一提供方都会提供 `model-routing` 设置分区，只有一个字段 `enabled`（默认开启），「模型」设置页把它渲染为提供方行下方的模型路由开关。关闭期间提示词不再咨询路由器，仍停留在路由选择上的 Session 会在下一条提示词时回到基线，`model/route` 的原因为 `routing switched off: baseline restored`。该开关不改变已挂载的提供方或其规则。
 
 ### 被路由到的模型失败时
 
