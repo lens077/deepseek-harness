@@ -76,8 +76,8 @@ A Host-owned `model-routing` setting, default off, with `enabled`, `tiers` (each
 
 ### Delivery order
 
-1. Seam, rules provider, and effort-only consumer — shipped as `dsh-model-router`, `dsh-model-router-rules`, and the `SessionCommandController.prompt` path: no prefix loss, no capacity risk, no notice, and a measurable thinking-cost reduction. This stage is configuration-driven (a disabled base row an overlay enables), writes `model/route` without a `source` field on `model/selection`, tracks `baseline` and `routed` in the `modelSelection` projection (`stateVersion` 3), and has no per-Session pin: every human Web prompt is routed while a provider is mounted.
-2. Model routing under constraints 2–3, the `source` field, the settings page, the Auto seat state, and Session pinning.
+1. Seam, rules provider, and consumer — shipped as `dsh-model-router`, `dsh-model-router-rules`, and the `SessionCommandController.prompt` path. Rules name a configured route, an effort, or both; the consumer applies a route change only when the live registry advertises at least two routes, the proposal names one of them, an image prompt lands on an image-capable route, the measured Session fits the route's context window when known, and the effort resolves, and otherwise degrades to effort-only on the baseline. This stage is configuration-driven (a disabled base row an overlay enables), writes `model/route` without a `source` field on `model/selection`, carries the baseline forward on every `model/route` so the `modelSelection` projection (`stateVersion` 3) can restore it, and has no per-Session pin and no switch-cost guard: every human Web prompt is routed while a provider is mounted, whatever the Session length.
+2. The switch-cost constraint, the `source` field, the settings page, the Auto seat state, and Session pinning.
 3. Optional LLM classifier provider with recorded e2e fixtures.
 
 ## Alternatives considered

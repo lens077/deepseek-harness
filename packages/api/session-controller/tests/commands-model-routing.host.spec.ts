@@ -14,6 +14,8 @@ import { installSessionReadTestServices } from './test-remote.ts'
 
 const SESSION = SessionId('routing-session')
 const BASELINE: AgentModelSelection = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'high' as never }
+const STRONG: AgentModelSelection = { provider: 'fixture', model: 'strong-model' }
+const VISION: AgentModelSelection = { provider: 'other', model: 'vision-model' }
 
 class ScriptedRouter extends ModelRouter {
   answer: (input: ModelRouteInput) => Promise<ModelRouteDecision> = input =>
@@ -24,7 +26,29 @@ class ScriptedRouter extends ModelRouter {
   }
 }
 
-async function routingHarness(mountRouter = true): Promise<{
+interface Catalog {
+  readonly providers: readonly string[]
+  readonly models: Record<string, readonly string[] | Error>
+  readonly info: Record<string, { inputModalities?: string[]; context?: { contextWindow: number } }>
+}
+
+const DEFAULT_CATALOG: Catalog = {
+  providers: ['fixture', 'other'],
+  models: { fixture: ['fixture-model', 'strong-model'], other: ['vision-model'] },
+  info: {
+    'fixture/fixture-model': {},
+    'fixture/strong-model': { inputModalities: ['text'], context: { contextWindow: 1000 } },
+    'other/vision-model': { inputModalities: ['text', 'image'] },
+  },
+}
+
+interface HarnessOptions {
+  readonly mountRouter?: boolean
+  readonly catalog?: Catalog
+  readonly measuredTokens?: number
+}
+
+async function routingHarness(options: HarnessOptions = {}): Promise<{
   ctx: Context
   controller: SessionCommandController
   agent: Agent
@@ -34,6 +58,7 @@ async function routingHarness(mountRouter = true): Promise<{
   resolveCallConfig: ReturnType<typeof vi.fn>
   warn: ReturnType<typeof vi.fn>
 }> {
+  const catalog = options.catalog ?? DEFAULT_CATALOG
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
@@ -53,10 +78,23 @@ async function routingHarness(mountRouter = true): Promise<{
   ctx.agents.register(agent)
   const resolveCallConfig = vi.fn((config: AgentModelSelection) => Promise.resolve(config))
   ctx.provide('llm', {
-    listProviders: () => [{ id: 'fixture', name: 'Fixture' }],
+    listProviders: () => catalog.providers.map(id => ({ id, name: id })),
+    listModels: (provider: string) => {
+      const models = catalog.models[provider]
+      return models instanceof Error ? Promise.reject(models) : Promise.resolve(models!.map(id => ({ id, name: id })))
+    },
     resolveCallConfig,
-    resolveModelInfo: () => Promise.resolve({ inputModalities: ['text', 'image'] }),
+    resolveModelInfo: (provider: string, model: string) => {
+      const info = catalog.info[`${provider}/${model}`]
+      return info === undefined
+        ? Promise.reject(new LlmError(`unknown model ${provider}/${model}`, 'NO_ADAPTER'))
+        : Promise.resolve({ provider, id: model, name: model, ...info })
+    },
   } as never)
+  if (options.measuredTokens !== undefined) {
+    const totalTokens = options.measuredTokens
+    ctx.provide('tokenMeter', { measure: () => ({ totalTokens }) } as never)
+  }
   ctx.provide('attachments', {
     admitPromptContent: (content: unknown) => Promise.resolve(content),
   } as never)
@@ -74,7 +112,9 @@ async function routingHarness(mountRouter = true): Promise<{
     routeForNextRequest,
     serializeImageAdmission: <Value>(_agent: Agent, operation: () => Promise<Value>) => operation(),
   } as unknown as ApiSessionAgentController
-  const router = mountRouter ? (await ctx.plugin(ScriptedRouter), ctx.modelRouter as ScriptedRouter) : undefined
+  const router = options.mountRouter === false
+    ? undefined
+    : (await ctx.plugin(ScriptedRouter), ctx.modelRouter as ScriptedRouter)
   return {
     ctx,
     controller: new SessionCommandController(ctx, agents, '/workspace'),
@@ -103,16 +143,20 @@ function routeEvents(agent: Agent) {
   return agent.session.snapshotEvents().flatMap(event => event.type === 'model/route' ? [event.data] : [])
 }
 
+function propose(selection: AgentModelSelection, rule: string): (input: ModelRouteInput) => Promise<ModelRouteDecision> {
+  return () => Promise.resolve({ selection, reason: `rule "${rule}" matched`, rule })
+}
+
 describe('Session prompt model routing', () => {
   it('records nothing and applies nothing without a mounted router', async () => {
-    const { controller, agent, followup, routeForNextRequest } = await routingHarness(false)
+    const { controller, agent, followup, routeForNextRequest } = await routingHarness({ mountRouter: false })
     await expect(controller.prompt(prompt('hello'))).resolves.toEqual({ accepted: true })
     expect(followup).toHaveBeenCalledOnce()
     expect(routeForNextRequest).not.toHaveBeenCalled()
     expect(routeEvents(agent)).toEqual([])
   })
 
-  it('applies a validated effort on the baseline route and records the decision before queueing', async () => {
+  it('hands the router the baseline, configured routes, and prompt, then applies a validated effort before queueing', async () => {
     const { controller, agent, router, followup, routeForNextRequest, resolveCallConfig } = await routingHarness()
     const seen: ModelRouteInput[] = []
     router!.answer = (input) => {
@@ -124,17 +168,21 @@ describe('Session prompt model routing', () => {
       })
     }
     await expect(controller.prompt(prompt('hi?'))).resolves.toEqual({ accepted: true })
-    expect(seen).toEqual([{ baseline: BASELINE, prompt: { text: 'hi?', hasImage: false } }])
+    expect(seen).toEqual([{
+      baseline: BASELINE,
+      candidates: [{ provider: 'fixture', model: 'fixture-model' }, STRONG, VISION],
+      prompt: { text: 'hi?', hasImage: false },
+    }])
     expect(resolveCallConfig).toHaveBeenCalledWith({ provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' })
     const applied = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' }
     expect(routeForNextRequest).toHaveBeenCalledWith(agent, applied)
     expect(routeEvents(agent)).toEqual([{ baseline: BASELINE, selection: applied, reason: 'rule "short" matched', rule: 'short' }])
     expect(routeForNextRequest.mock.invocationCallOrder[0]).toBeLessThan(followup.mock.invocationCallOrder[0]!)
     await controller.prompt({ ...prompt('look', true), requestId: 'req-2' as SessionRequestId })
-    expect(seen[1]).toEqual({ baseline: BASELINE, prompt: { text: 'look', hasImage: true } })
+    expect(seen[1]).toMatchObject({ prompt: { text: 'look', hasImage: true } })
   })
 
-  it('restores the baseline effort when no rule matches and skips validation for an unchanged effort', async () => {
+  it('restores the baseline when no rule matches and skips validation for an unchanged effort', async () => {
     const { controller, agent, routeForNextRequest, resolveCallConfig } = await routingHarness()
     await controller.prompt(prompt('a longer sentence'))
     expect(resolveCallConfig).not.toHaveBeenCalled()
@@ -142,38 +190,97 @@ describe('Session prompt model routing', () => {
     expect(routeEvents(agent)).toEqual([{ baseline: BASELINE, selection: BASELINE, reason: 'no rule matched' }])
   })
 
-  it('refuses a decision that changes the provider or model', async () => {
-    const { controller, agent, router, routeForNextRequest } = await routingHarness()
-    router!.answer = () => Promise.resolve({
-      selection: { provider: 'other', model: 'other-model' }, reason: 'cheaper', rule: 'downgrade',
+  it('switches to a configured route, validating its effort and recording the switch', async () => {
+    const { controller, agent, router, routeForNextRequest, resolveCallConfig } = await routingHarness()
+    router!.answer = propose({ ...STRONG, reasoningEffort: 'max' as never }, 'hard')
+    await controller.prompt(prompt('prove it'))
+    expect(resolveCallConfig).toHaveBeenCalledWith({ ...STRONG, reasoningEffort: 'max' })
+    expect(routeForNextRequest).toHaveBeenCalledWith(agent, { ...STRONG, reasoningEffort: 'max' })
+    expect(routeEvents(agent)).toEqual([{
+      baseline: BASELINE, selection: { ...STRONG, reasoningEffort: 'max' }, reason: 'rule "hard" matched', rule: 'hard',
+    }])
+    router!.answer = propose(STRONG, 'plain')
+    resolveCallConfig.mockClear()
+    await controller.prompt({ ...prompt('design'), requestId: 'req-2' as SessionRequestId })
+    expect(resolveCallConfig).not.toHaveBeenCalled()
+    expect(routeForNextRequest).toHaveBeenLastCalledWith(agent, STRONG)
+  })
+
+  it('degrades to the proposed effort on the baseline when fewer than two routes are configured', async () => {
+    const { controller, agent, router, routeForNextRequest, resolveCallConfig } = await routingHarness({
+      catalog: { providers: ['fixture'], models: { fixture: ['fixture-model'] }, info: DEFAULT_CATALOG.info },
     })
+    router!.answer = propose({ ...STRONG, reasoningEffort: 'low' as never }, 'cheap')
     await controller.prompt(prompt('hi?'))
+    expect(resolveCallConfig).toHaveBeenCalledWith({ provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' })
+    expect(routeForNextRequest).toHaveBeenCalledWith(agent, { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' })
+    expect(routeEvents(agent)[0]?.reason).toBe(
+      'rule "cheap" matched; effort only: model switching needs at least two configured routes (found 1)',
+    )
+  })
+
+  it.each<[string, AgentModelSelection, HarnessOptions, boolean, string]>([
+    ['an unconfigured route', { provider: 'fixture', model: 'ghost' }, {}, false, 'fixture/ghost is not a configured route'],
+    ['a text-only route for an image prompt', STRONG, {}, true, 'fixture/strong-model does not declare image input'],
+    ['a context window below the measured Session', STRONG, { measuredTokens: 1001 }, false,
+      "fixture/strong-model context window (1000) is below the Session's 1001 measured tokens"],
+  ])('refuses %s and keeps the baseline', async (_label, proposed, options, image, reason) => {
+    const { controller, agent, router, routeForNextRequest } = await routingHarness(options)
+    router!.answer = propose(proposed, 'switch')
+    await controller.prompt(prompt('look', image))
     expect(routeForNextRequest).toHaveBeenCalledWith(agent, BASELINE)
     expect(routeEvents(agent)).toEqual([{
-      baseline: BASELINE,
-      selection: BASELINE,
-      reason: 'refused: routing may change only the reasoning effort (proposed other/other-model)',
-      rule: 'downgrade',
+      baseline: BASELINE, selection: BASELINE, reason: `rule "switch" matched; effort only: ${reason}`, rule: 'switch',
     }])
   })
 
-  it('refuses an effort the exact model rejects', async () => {
+  it('accepts a switch when the measured Session fits and when no meter or window is known', async () => {
+    const fits = await routingHarness({ measuredTokens: 1000 })
+    fits.router!.answer = propose(STRONG, 'switch')
+    await fits.controller.prompt(prompt('go'))
+    expect(fits.routeForNextRequest).toHaveBeenCalledWith(fits.agent, STRONG)
+    const unknown = await routingHarness({ measuredTokens: 5000 })
+    unknown.router!.answer = propose(VISION, 'switch')
+    await unknown.controller.prompt(prompt('go', true))
+    expect(unknown.routeForNextRequest).toHaveBeenCalledWith(unknown.agent, VISION)
+  })
+
+  it('refuses a route whose effort the registry rejects, then still tries the effort on the baseline', async () => {
     const { controller, agent, router, routeForNextRequest, resolveCallConfig } = await routingHarness()
-    router!.answer = input => Promise.resolve({
-      selection: { ...input.baseline, reasoningEffort: 'ultra' as never }, reason: 'rule "hard" matched', rule: 'hard',
-    })
-    resolveCallConfig.mockRejectedValueOnce(new LlmError('model "fixture-model" does not support reasoning effort "ultra"', 'UNSUPPORTED_REASONING_EFFORT'))
+    router!.answer = propose({ ...STRONG, reasoningEffort: 'ultra' as never }, 'hard')
+    resolveCallConfig.mockRejectedValueOnce(new LlmError('model "strong-model" does not support reasoning effort "ultra"', 'UNSUPPORTED_REASONING_EFFORT'))
+    resolveCallConfig.mockRejectedValueOnce('adapter gone')
     await controller.prompt(prompt('prove it'))
     expect(routeForNextRequest).toHaveBeenCalledWith(agent, BASELINE)
     expect(routeEvents(agent)).toEqual([{
       baseline: BASELINE,
       selection: BASELINE,
-      reason: 'refused: model "fixture-model" does not support reasoning effort "ultra"',
+      reason: 'refused: model "strong-model" does not support reasoning effort "ultra"; adapter gone',
       rule: 'hard',
     }])
-    resolveCallConfig.mockRejectedValueOnce('adapter gone')
+    resolveCallConfig.mockRejectedValueOnce('registry gone')
+    resolveCallConfig.mockRejectedValueOnce(new LlmError('model "fixture-model" does not support reasoning effort "ultra"', 'UNSUPPORTED_REASONING_EFFORT'))
     await controller.prompt({ ...prompt('prove it'), requestId: 'req-2' as SessionRequestId })
-    expect(routeEvents(agent).at(-1)).toMatchObject({ reason: 'refused: adapter gone' })
+    expect(routeEvents(agent).at(-1)?.reason).toBe(
+      'refused: registry gone; model "fixture-model" does not support reasoning effort "ultra"',
+    )
+  })
+
+  it('ignores a provider whose catalog cannot be read', async () => {
+    const { controller, router } = await routingHarness({
+      catalog: {
+        providers: ['fixture', 'broken'],
+        models: { fixture: ['fixture-model', 'strong-model'], broken: new Error('catalog offline') },
+        info: DEFAULT_CATALOG.info,
+      },
+    })
+    const seen: ModelRouteInput[] = []
+    router!.answer = (input) => {
+      seen.push(input)
+      return Promise.resolve({ selection: input.baseline, reason: 'no rule matched' })
+    }
+    await controller.prompt(prompt('hello'))
+    expect(seen[0]?.candidates).toEqual([{ provider: 'fixture', model: 'fixture-model' }, STRONG])
   })
 
   it('applies a decision that drops the effort so the model default governs', async () => {

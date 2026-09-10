@@ -52,7 +52,7 @@ describe('model-router-rules real Loader composition', () => {
 
     expect(context.get('modelRouter')).toBeInstanceOf(RulesModelRouter)
     const baseline = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
-    await expect(context.modelRouter.route({ baseline, prompt: { text: '现在几点？', hasImage: false } }))
+    await expect(context.modelRouter.route({ baseline, candidates: [baseline], prompt: { text: '现在几点？', hasImage: false } }))
       .resolves.toEqual({
         selection: { ...baseline, reasoningEffort: 'low' },
         reason: 'rule "short-question" matched',

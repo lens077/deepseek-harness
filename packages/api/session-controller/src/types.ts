@@ -95,7 +95,7 @@ export interface ModelSelectionProjectionState {
   readonly lastUsed: ModelSelection | null
   /** Later user selection not yet consumed by a matching model request. */
   readonly pending: ModelSelection | null
-  /** Latest user selection in this Session regardless of later requests, or null before one. */
+  /** Route the person owns: the latest user selection, else the baseline the latest routing decision recorded, else null. */
   readonly baseline: ModelSelection | null
   /** Latest route a `model/route` decision applied, or null while the Session was never routed. */
   readonly routed: ModelSelection | null

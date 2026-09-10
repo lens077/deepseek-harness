@@ -243,6 +243,10 @@ describe('session.history projections block', () => {
     })
     session.append('model/route', { baseline: selected, selection: selected, reason: 'no rule matched' })
     expect(ctx.sessionProjections.stateOf(session, 'modelSelection')?.routed).toEqual(selected)
+    // A routing record carries the baseline forward for Sessions without a user selection.
+    const carried = { provider: 'p', model: 'owned', reasoningEffort: 'max' }
+    session.append('model/route', { baseline: carried as never, selection: routed as never, reason: 'rule "short" matched' })
+    expect(ctx.sessionProjections.stateOf(session, 'modelSelection')).toMatchObject({ baseline: carried, routed })
   })
 
   it('serves the unit value on the tail page with asOfSeq = last event seq', async () => {

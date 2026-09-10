@@ -1,8 +1,9 @@
 /**
  * Deterministic rule-list model router: the first configured rule whose
- * conditions all match the prompt selects a reasoning effort on the baseline
- * route; no match answers with the baseline unchanged. Zero latency and
- * replayable, so keyless recorded sessions can pin its decisions.
+ * conditions all match the prompt proposes a configured provider/model route,
+ * a reasoning effort, or both; no match answers with the baseline unchanged.
+ * Zero latency and replayable, so keyless recorded sessions can pin its
+ * decisions.
  * @module @deepseek-ai/dsh-model-router-rules
  */
 
@@ -10,7 +11,7 @@ import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { ModelRouter } from '@deepseek-ai/dsh-model-router'
-import type { ModelRouteDecision, ModelRouteInput } from '@deepseek-ai/dsh-model-router'
+import type { ModelRoute, ModelRouteDecision, ModelRouteInput } from '@deepseek-ai/dsh-model-router'
 
 /** One ordered routing rule; every present condition must hold for it to match. */
 export interface RuleConfig {
@@ -24,8 +25,12 @@ export interface RuleConfig {
   readonly minBytes?: number
   /** Match only when image presence equals this value. */
   readonly hasImage?: boolean
-  /** Adapter-owned reasoning effort applied on the baseline route when the rule matches. */
-  readonly reasoningEffort: string
+  /** Registered provider of the route to propose; requires `model` and must be a configured route. */
+  readonly provider?: string
+  /** Provider-owned model id of the route to propose; requires `provider`. */
+  readonly model?: string
+  /** Adapter-owned reasoning effort on the proposed route, or the baseline route when no model is named. */
+  readonly reasoningEffort?: string
 }
 
 /** Deployment rule list; a mounted router with no rule is a misconfiguration. */
@@ -40,7 +45,8 @@ interface CompiledRule {
   readonly maxBytes: number | undefined
   readonly minBytes: number | undefined
   readonly hasImage: boolean | undefined
-  readonly reasoningEffort: ReasoningEffortId
+  readonly route: Pick<ModelRoute, 'provider' | 'model'> | undefined
+  readonly reasoningEffort: ReasoningEffortId | undefined
 }
 
 const ruleSchema: z<RuleConfig> = z.object({
@@ -49,7 +55,9 @@ const ruleSchema: z<RuleConfig> = z.object({
   maxBytes: z.number().step(1).min(0),
   minBytes: z.number().step(1).min(0),
   hasImage: z.boolean(),
-  reasoningEffort: z.string().required(),
+  provider: z.string(),
+  model: z.string(),
+  reasoningEffort: z.string(),
 })
 
 /** Fail loudly at load on any rule the router could never apply as written. */
@@ -63,7 +71,18 @@ function compileRules(rules: readonly RuleConfig[]): CompiledRule[] {
     if (rule.id.length === 0) throw new Error('model-router-rules: every rule needs a non-empty id')
     if (ids.has(rule.id)) throw new Error(`${label} is declared more than once`)
     ids.add(rule.id)
-    if (rule.reasoningEffort.length === 0) throw new Error(`${label} needs a non-empty reasoningEffort`)
+    if ((rule.provider === undefined) !== (rule.model === undefined)) {
+      throw new Error(`${label} must name provider and model together`)
+    }
+    if (rule.provider !== undefined && (rule.provider.length === 0 || rule.model?.length === 0)) {
+      throw new Error(`${label} needs a non-empty provider and model`)
+    }
+    if (rule.reasoningEffort !== undefined && rule.reasoningEffort.length === 0) {
+      throw new Error(`${label} needs a non-empty reasoningEffort`)
+    }
+    if (rule.provider === undefined && rule.reasoningEffort === undefined) {
+      throw new Error(`${label} needs a route (provider and model), a reasoningEffort, or both`)
+    }
     if (rule.pattern === undefined && rule.maxBytes === undefined
       && rule.minBytes === undefined && rule.hasImage === undefined) {
       throw new Error(`${label} needs at least one of pattern, maxBytes, minBytes, or hasImage`)
@@ -85,15 +104,18 @@ function compileRules(rules: readonly RuleConfig[]): CompiledRule[] {
       maxBytes: rule.maxBytes,
       minBytes: rule.minBytes,
       hasImage: rule.hasImage,
-      reasoningEffort: ReasoningEffortId(rule.reasoningEffort),
+      route: rule.provider === undefined || rule.model === undefined
+        ? undefined
+        : { provider: rule.provider, model: rule.model },
+      reasoningEffort: rule.reasoningEffort === undefined ? undefined : ReasoningEffortId(rule.reasoningEffort),
     }
   })
 }
 
 /**
  * Rule-list router. Rules are tested in configuration order and the first
- * complete match decides; the answer keeps the baseline provider and model and
- * replaces only the reasoning effort.
+ * complete match decides. A rule naming a route proposes that route with its
+ * own effort, if any; a rule naming only an effort keeps the baseline route.
  */
 export class RulesModelRouter extends ModelRouter {
   static Config: z<Config> = z.object({
@@ -105,7 +127,8 @@ export class RulesModelRouter extends ModelRouter {
   /**
    * @param ctx - Host context receiving `ctx.modelRouter`.
    * @param config - validated rule list.
-   * @throws when the list is empty, an id repeats, a rule has no condition, its byte bounds cross, or its pattern does not compile.
+   * @throws when the list is empty, an id repeats, a rule has no condition or no outcome, names provider
+   * without model, its byte bounds cross, or its pattern does not compile.
    */
   constructor(ctx: Context, config: Config) {
     super(ctx)
@@ -115,7 +138,7 @@ export class RulesModelRouter extends ModelRouter {
   /**
    * Select the first rule whose conditions all hold for the prompt.
    * @param input - baseline route and prompt to classify.
-   * @returns the baseline with the matched rule's effort, or the baseline unchanged.
+   * @returns the matched rule's proposal, or the baseline unchanged.
    */
   route(input: ModelRouteInput): Promise<ModelRouteDecision> {
     const byteLength = new TextEncoder().encode(input.prompt.text).length
@@ -124,8 +147,12 @@ export class RulesModelRouter extends ModelRouter {
       if (rule.minBytes !== undefined && byteLength < rule.minBytes) continue
       if (rule.hasImage !== undefined && rule.hasImage !== input.prompt.hasImage) continue
       if (rule.pattern !== undefined && !rule.pattern.test(input.prompt.text)) continue
+      const route = rule.route ?? { provider: input.baseline.provider, model: input.baseline.model }
       return Promise.resolve({
-        selection: { ...input.baseline, reasoningEffort: rule.reasoningEffort },
+        selection: {
+          ...route,
+          ...(rule.reasoningEffort === undefined ? {} : { reasoningEffort: rule.reasoningEffort }),
+        },
         reason: `rule "${rule.id}" matched`,
         rule: rule.id,
       })

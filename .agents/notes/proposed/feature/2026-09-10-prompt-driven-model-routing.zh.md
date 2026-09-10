@@ -76,8 +76,8 @@ RouteDecision = { tier: string, selection: ModelSelection, reason: string, rule?
 
 ### 交付顺序
 
-1. 接缝、规则提供方与仅路由强度的消费方——已作为 `dsh-model-router`、`dsh-model-router-rules` 与 `SessionCommandController.prompt` 路径交付：不丢前缀、无容量风险、无通知，并带来可度量的 thinking 成本下降。本阶段由配置驱动（base 中一条禁用的行，由 overlay 启用），写入 `model/route` 而不给 `model/selection` 加 `source` 字段，在 `modelSelection` 投影（`stateVersion` 3）中跟踪 `baseline` 与 `routed`，且没有按 Session 的固定：挂载提供方期间每条人类 Web 提示词都会被路由。
-2. 在约束 2–3 下的模型路由、`source` 字段、设置页、Auto 座位状态与 Session 固定。
+1. 接缝、规则提供方与消费方——已作为 `dsh-model-router`、`dsh-model-router-rules` 与 `SessionCommandController.prompt` 路径交付。规则指名已配置的路由、强度或两者；只有当实时注册表公布至少两条路由、提案指名其中之一、带图片的提示词落在支持图片的路由上、已测得的 Session 在窗口已知时放得下、且强度可解析时，消费方才应用路由变化，否则降级为基线上的仅改强度。本阶段由配置驱动（base 中一条禁用的行，由 overlay 启用），写入 `model/route` 而不给 `model/selection` 加 `source` 字段，在每条 `model/route` 上向前携带基线以便 `modelSelection` 投影（`stateVersion` 3）恢复它，且没有按 Session 的固定、也没有切换成本守卫：挂载提供方期间每条人类 Web 提示词都会被路由，无论 Session 多长。
+2. 切换成本约束、`source` 字段、设置页、Auto 座位状态与 Session 固定。
 3. 可选的 LLM 分类器提供方及录制的 e2e fixture。
 
 ## Alternatives considered

@@ -4994,7 +4994,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelRouteInput',
-    declaration: 'export interface ModelRouteInput {\n    readonly baseline: ModelRoute;\n    readonly prompt: ModelRoutePrompt;\n}',
+    declaration: 'export interface ModelRouteInput {\n    readonly baseline: ModelRoute;\n    readonly candidates: readonly ModelRoute[];\n    readonly prompt: ModelRoutePrompt;\n}',
   },
   {
     name: 'ModelRoutePrompt',

@@ -1,5 +1,5 @@
 ---
-description: "Rule-list model routing for deployments that want short questions answered with thinking low and code-heavy prompts with thinking high: writing rule conditions, ordering them, and debugging why a prompt was routed."
+description: "Rule-list model routing for deployments that want short questions on a fast configured model and code-heavy prompts on the strongest: writing rule conditions and outcomes, ordering them, and debugging why a prompt was routed."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-model-router-rules` picks the reasoning effort for each Web prompt from an ordered list of conditions you write in `cordis.yml`: prompt byte length, a regular expression, or whether an image is attached. The first rule whose conditions all hold wins; no match keeps the person's own effort. Decisions cost no model call and replay identically, so a keyless recorded session can pin them. Effort ids are exact-model metadata, so a rule naming one the selected model lacks is refused per prompt rather than at load.
+`dsh-model-router-rules` picks the model, the reasoning effort, or both for each Web prompt from an ordered list of conditions you write in `cordis.yml`: prompt byte length, a regular expression, or whether an image is attached. A rule names one of your configured provider/model routes, an effort, or both; the first rule whose conditions all hold wins, and no match keeps the person's own route. Decisions cost no model call and replay identically. Routes and effort ids are checked against the live registry per prompt, so a rule naming a model you later remove is refused, not fatal.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Mount this package in the host plane of a Web composition and write rules from c
 
 ### When to choose it
 
-Choose this package when a few prompt features decide the effort well enough. Choose another `dsh-model-router` provider when the decision needs semantic classification. The shipped base composition carries this row disabled; enable it in an overlay with your own rule list.
+Choose this package when a few prompt features decide the model and effort well enough. Choose another `dsh-model-router` provider when the decision needs semantic classification. The shipped base composition carries this row disabled; enable it in an overlay with your own rule list.
 
 ### Minimal configuration
 
@@ -40,9 +40,15 @@ Choose this package when a few prompt features decide the effort well enough. Ch
       - id: short-question
         maxBytes: 240
         pattern: '[?？]\s*$'
+        provider: deepseek-official
+        model: deepseek-v4-flash
         reasoningEffort: low
       - id: code-block
         pattern: '```'
+        provider: deepseek-official
+        model: deepseek-v4-pro
+      - id: long-prompt
+        minBytes: 1200
         reasoningEffort: high
 ```
 
@@ -54,13 +60,15 @@ Choose this package when a few prompt features decide the effort well enough. Ch
 | `rules[].maxBytes` | — | Match only when the prompt's UTF-8 byte length is at most this value |
 | `rules[].minBytes` | — | Match only when the prompt's UTF-8 byte length is at least this value |
 | `rules[].hasImage` | — | Match only when image presence equals this value |
-| `rules[].reasoningEffort` | required | Adapter-owned effort id applied on the person's provider and model |
+| `rules[].provider` | — | Registered provider of the route to propose; requires `model`, and the route must be one the registry advertises |
+| `rules[].model` | — | Provider-owned model id of the route to propose; requires `provider` |
+| `rules[].reasoningEffort` | — | Adapter-owned effort id on the proposed route, or on the person's route when no model is named |
 
-The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-model-router-rules) is the exhaustive source for every accepted field. Loading fails with a named rule when the list is empty, an id repeats, a rule has no condition, `minBytes` exceeds `maxBytes`, or a pattern does not compile.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-model-router-rules) is the exhaustive source for every accepted field. A rule needs at least one condition and at least one outcome (a route, an effort, or both). Loading fails with a named rule when the list is empty, an id repeats, a rule has no condition or no outcome, names `provider` without `model`, `minBytes` exceeds `maxBytes`, or a pattern does not compile.
 
 ### Reading a decision
 
-Each Web prompt appends one `model/route` event. `rule` names the winning rule and `reason` reads `rule "<id>" matched`; `no rule matched` means the baseline was applied again. When the consumer refused the rule's effort — the selected model does not declare it — `reason` starts with `refused:` and the baseline was applied; change the rule's `reasoningEffort` to an id that model advertises, or select a model that has it.
+Each Web prompt appends one `model/route` event. `rule` names the winning rule and `reason` reads `rule "<id>" matched`; `no rule matched` means the baseline was applied again. A `reason` containing `effort only:` means the consumer refused the rule's route — fewer than two configured routes, a route the registry does not advertise, a text-only route for an image prompt, or a context window below the Session's measured tokens — and applied only the effort on the person's model. A `reason` starting with `refused:` means even that effort was rejected and the baseline was applied; change the rule to a route and effort the registry advertises.
 
 -----
 
@@ -70,7 +78,7 @@ Each Web prompt appends one `model/route` event. `rule` names the winning rule a
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`RulesModelRouter` compiles the rule list once in its constructor, failing loudly on any rule it could never apply. `route()` measures the prompt text in UTF-8 bytes, tests rules in order, and returns the baseline with the first matching rule's effort; provider and model are never changed. The class is a pure decision function: the consumer validates the effort against the exact model and writes the durable record.
+`RulesModelRouter` compiles the rule list once in its constructor, failing loudly on any rule it could never apply. `route()` measures the prompt text in UTF-8 bytes, tests rules in order, and returns the first matching rule's route — or the baseline route when the rule names none — with the rule's effort when it has one. The class is a pure decision function: the consumer checks the route against the configured candidates, validates the effort against the exact model, and writes the durable record.
 
 ### Source map
 
@@ -100,7 +108,7 @@ Indirectly, through the reasoning effort the `dsh-model-router` consumer applies
 
 #### KV Cache effect
 
-Selecting an effort leaves the assembled prefix untouched, so this provider preserves an already-reusable prefix.
+A rule that names only an effort leaves the assembled prefix untouched; a rule that names another route forfeits provider-side reuse of the history on the new route, which the deployment weighs when writing rules.
 
 ## Known Limitations and Deferred Work
 
@@ -110,8 +118,8 @@ Selecting an effort leaves the assembled prefix untouched, so this provider pres
 These limits define what the rule list can express; they are current package constraints, not a task backlog.
 
 - **Prompt features only** — rules see the prompt's text and image presence, not the conversation, the workspace, or token pressure.
-- **Effort ids are not validated at load** — a rule's effort is checked against the selected model only when a prompt matches it, because the model is chosen per Session.
-- **No rule can select a model** — the seam's consumer accepts effort changes only.
+- **Routes and effort ids are not validated at load** — a rule's route is checked against the registry and its effort against the exact model only when a prompt matches it, because the catalog is user-editable and the baseline model is chosen per Session.
+- **No cost or tier metadata** — rules name exact routes; the router has no notion of a cheaper or stronger model beyond what the rule author encodes.
 
 <a id="dev-note"></a>
 ### Dev Note

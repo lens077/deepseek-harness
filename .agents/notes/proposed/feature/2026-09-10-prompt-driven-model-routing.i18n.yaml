@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-09-10-prompt-driven-model-routing.md
-2026-09-10-prompt-driven-model-routing.md: 7ec8648dffd2fdb1714cba19c43818bbe249249b
-2026-09-10-prompt-driven-model-routing.zh.md: 8cb246ed430a8f4e6797180cedfbfaffa7299cda
+2026-09-10-prompt-driven-model-routing.md: 59ad31634012e75772c9d0fca32d1b1c6d6f5def
+2026-09-10-prompt-driven-model-routing.zh.md: 3dc119cf3c4d6cf95d6e388110cead9ba076c794

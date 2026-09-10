@@ -15,6 +15,8 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
 import type { ModelRouteDecision, ModelRouter } from '@deepseek-ai/dsh-model-router'
+// Type-only: makes the optional token meter available to `ctx.get()`.
+import type {} from '@deepseek-ai/dsh-token-meter'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -404,10 +406,13 @@ export class SessionCommandController {
 
   /**
    * Ask the mounted router for this prompt's route and apply the answer to the
-   * next prompt assembly. Only the reasoning effort may change: a decision
-   * that names another provider or model, an effort the exact model rejects,
-   * or a router failure keeps the baseline. Every outcome is recorded as one
-   * `model/route` event; nothing here can reject the prompt.
+   * next prompt assembly. A route change is applied only when the deployment
+   * configures at least two routes, the proposal names one of them, the
+   * prompt's image fits its input modalities, the Session's measured tokens
+   * fit its context window, and its effort resolves; otherwise the proposal
+   * degrades to its effort on the baseline route, and an effort the baseline
+   * model rejects, or a router failure, keeps the baseline. Every outcome is
+   * recorded as one `model/route` event; nothing here can reject the prompt.
    * @param router - mounted route selection service.
    * @param agent - live Agent receiving the prompt.
    * @param content - prompt parts about to be queued.
@@ -422,9 +427,10 @@ export class SessionCommandController {
       text: content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'),
       hasImage: content.some(part => part.type === 'image'),
     }
+    const candidates = await this.configuredRoutes()
     let decision: ModelRouteDecision
     try {
-      decision = await router.route({ baseline, prompt })
+      decision = await router.route({ baseline, candidates, prompt })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
       this.ctx.logger.warn(`session-controller: model routing failed for "${agent.id}": ${message}; keeping the baseline`)
@@ -432,29 +438,92 @@ export class SessionCommandController {
       return
     }
     const proposed = decision.selection
+    const reasons: string[] = []
     if (proposed.provider !== baseline.provider || proposed.model !== baseline.model) {
-      this.recordRoute(agent, baseline, baseline, `refused: routing may change only the reasoning effort (proposed ${proposed.provider}/${proposed.model})`, decision.rule)
-      return
+      const refusal = await this.refuseRouteChange(agent, proposed, candidates, prompt.hasImage)
+      if (refusal === undefined) {
+        this.recordRoute(agent, baseline, { ...proposed }, decision.reason, decision.rule)
+        return
+      }
+      reasons.push(refusal)
     }
-    if (proposed.reasoningEffort !== undefined && proposed.reasoningEffort !== baseline.reasoningEffort) {
+    // A proposal without an effort asked for the proposed model's default; on
+    // the baseline model that means the baseline's own effort, not none.
+    const effort = reasons.length > 0 && proposed.reasoningEffort === undefined
+      ? baseline.reasoningEffort
+      : proposed.reasoningEffort
+    if (effort !== undefined && effort !== baseline.reasoningEffort) {
       try {
-        await this.ctx.llm.resolveCallConfig({
-          provider: proposed.provider,
-          model: proposed.model,
-          reasoningEffort: proposed.reasoningEffort,
-        })
+        await this.ctx.llm.resolveCallConfig({ provider: baseline.provider, model: baseline.model, reasoningEffort: effort })
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error)
-        this.recordRoute(agent, baseline, baseline, `refused: ${message}`, decision.rule)
+        reasons.push(error instanceof Error ? error.message : String(error))
+        this.recordRoute(agent, baseline, baseline, `refused: ${reasons.join('; ')}`, decision.rule)
         return
       }
     }
     const applied: AgentModelSelection = {
       provider: baseline.provider,
       model: baseline.model,
-      ...(proposed.reasoningEffort === undefined ? {} : { reasoningEffort: proposed.reasoningEffort }),
+      ...(effort === undefined ? {} : { reasoningEffort: effort }),
     }
-    this.recordRoute(agent, baseline, applied, decision.reason, decision.rule)
+    const reason = reasons.length === 0
+      ? decision.reason
+      : `${decision.reason}; effort only: ${reasons.join('; ')}`
+    this.recordRoute(agent, baseline, applied, reason, decision.rule)
+  }
+
+  /** Every provider/model route the live registry advertises; a provider whose catalog fails contributes none. */
+  private async configuredRoutes(): Promise<AgentModelSelection[]> {
+    const routes: AgentModelSelection[] = []
+    for (const provider of this.ctx.llm.listProviders()) {
+      let models: readonly { readonly id: string }[]
+      try {
+        models = await this.ctx.llm.listModels(provider.id)
+      } catch {
+        // A provider whose advisory catalog cannot be read offers no candidate; the prompt still queues.
+        continue
+      }
+      for (const model of models) routes.push({ provider: provider.id, model: model.id })
+    }
+    return routes
+  }
+
+  /**
+   * Name the constraint that forbids switching to the proposed route, or
+   * return undefined when the switch may be applied.
+   */
+  private async refuseRouteChange(
+    agent: Agent,
+    proposed: AgentModelSelection,
+    candidates: readonly AgentModelSelection[],
+    hasImage: boolean,
+  ): Promise<string | undefined> {
+    const target = `${proposed.provider}/${proposed.model}`
+    if (candidates.length < 2) {
+      return `model switching needs at least two configured routes (found ${candidates.length})`
+    }
+    if (!candidates.some(route => route.provider === proposed.provider && route.model === proposed.model)) {
+      return `${target} is not a configured route`
+    }
+    let info: Awaited<ReturnType<typeof this.ctx.llm.resolveModelInfo>>
+    try {
+      info = await this.ctx.llm.resolveModelInfo(proposed.provider, proposed.model)
+      if (proposed.reasoningEffort !== undefined) await this.ctx.llm.resolveCallConfig({ ...proposed })
+    } catch (error: unknown) {
+      return error instanceof Error ? error.message : String(error)
+    }
+    if (hasImage && info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+      return `${target} does not declare image input`
+    }
+    const meter = this.ctx.get('tokenMeter')
+    const contextWindow = info.context?.contextWindow
+    if (meter !== undefined && contextWindow !== undefined) {
+      const measured = meter.measure(agent.session).totalTokens
+      if (measured > contextWindow) {
+        return `${target} context window (${contextWindow}) is below the Session's ${measured} measured tokens`
+      }
+    }
+    return undefined
   }
 
   private recordRoute(

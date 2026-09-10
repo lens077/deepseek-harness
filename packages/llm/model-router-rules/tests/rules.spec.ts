@@ -5,6 +5,7 @@ import { RulesModelRouter } from '../src/index.ts'
 import type { Config, RuleConfig } from '../src/index.ts'
 
 const baseline = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+const strong = { provider: 'deepseek-official', model: 'deepseek-v4-pro' }
 
 async function router(rules: RuleConfig[]): Promise<RulesModelRouter> {
   const ctx = new Context()
@@ -13,7 +14,7 @@ async function router(rules: RuleConfig[]): Promise<RulesModelRouter> {
 }
 
 function input(text: string, hasImage = false): ModelRouteInput {
-  return { baseline, prompt: { text, hasImage } }
+  return { baseline, candidates: [baseline, strong], prompt: { text, hasImage } }
 }
 
 describe('RulesModelRouter', () => {
@@ -36,6 +37,23 @@ describe('RulesModelRouter', () => {
     })
   })
 
+  it('proposes a named route with its own effort, or the route alone for the model default', async () => {
+    const routed = await router([
+      { id: 'strong-thinking', pattern: 'prove', provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max' },
+      { id: 'strong', pattern: 'design', provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+    ])
+    await expect(routed.route(input('prove it'))).resolves.toEqual({
+      selection: { ...strong, reasoningEffort: 'max' },
+      reason: 'rule "strong-thinking" matched',
+      rule: 'strong-thinking',
+    })
+    await expect(routed.route(input('design it'))).resolves.toEqual({
+      selection: strong,
+      reason: 'rule "strong" matched',
+      rule: 'strong',
+    })
+  })
+
   it('measures prompt length in UTF-8 bytes and matches patterns with the u and s flags', async () => {
     const routed = await router([
       { id: 'long', minBytes: 100, reasoningEffort: 'max' },
@@ -55,6 +73,9 @@ describe('RulesModelRouter', () => {
       { id: 'a', minBytes: 1, reasoningEffort: 'low' },
     ], /declared more than once/],
     ['an empty effort', [{ id: 'a', maxBytes: 1, reasoningEffort: '' }], /non-empty reasoningEffort/],
+    ['a provider without a model', [{ id: 'a', maxBytes: 1, provider: 'p' }], /provider and model together/],
+    ['an empty route', [{ id: 'a', maxBytes: 1, provider: '', model: '' }], /non-empty provider and model/],
+    ['no outcome', [{ id: 'a', maxBytes: 1 }], /a route \(provider and model\), a reasoningEffort, or both/],
     ['no condition', [{ id: 'a', reasoningEffort: 'low' }], /at least one of pattern/],
     ['crossed byte bounds', [{ id: 'a', minBytes: 5, maxBytes: 4, reasoningEffort: 'low' }], /minBytes greater than maxBytes/],
     ['an invalid pattern', [{ id: 'a', pattern: '(', reasoningEffort: 'low' }], /invalid pattern/],

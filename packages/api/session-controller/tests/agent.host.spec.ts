@@ -296,37 +296,33 @@ describe('ApiSession model selection', () => {
     expect(agents.consumeSelection(untouched, 'fixture', 'fixture-model', undefined)).toBe(false)
   })
 
-  it('derives the routing baseline from the user selection, then the unrouted header, then the saved default', async () => {
+  it('derives the routing baseline from the projection, else the current selection', async () => {
     const { ctx, agents } = await harness()
     const routedLow = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' as never }
+    const owned = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' as never }
 
-    // A Session no router touched keeps whatever its logged header carries.
-    const unrouted = agent(ctx, header('unrouted-baseline'))
-    unrouted.session.append('request/header', {
-      header: { config: { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' as never } },
-      reason: 'initial',
-    })
-    expect(agents.baselineFor(unrouted)).toEqual({ provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' })
+    // A Session neither routed nor selected keeps whatever its logged header carries.
+    const untouched = agent(ctx, header('untouched-baseline'))
+    untouched.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    expect(agents.baselineFor(untouched)).toEqual(owned)
 
-    // After a routed request the header effort belongs to the router; the saved default's effort is the baseline.
+    // A routed request neither records a user selection nor moves the carried baseline.
     const routed = agent(ctx, header('routed-baseline'))
+    routed.session.append('request/header', { header: { config: owned }, reason: 'initial' })
     agents.routeForNextRequest(routed, routedLow)
-    routed.session.append('model/route', { baseline: { provider: 'fixture', model: 'fixture-model' }, selection: routedLow, reason: 'test' })
+    routed.session.append('model/route', { baseline: owned, selection: routedLow, reason: 'test' })
     expect(agents.selectionFor(routed).current).toEqual(routedLow)
     expect(routed.session.snapshotEvents().filter(event => event.type === 'model/selection')).toEqual([])
     routed.session.append('request/header', { header: { config: routedLow }, reason: 'initial' })
-    expect(agents.baselineFor(routed)).toEqual({ provider: 'fixture', model: 'fixture-model' })
-    vi.spyOn(ctx.agentDefaultModel, 'currentSelection').mockReturnValue({
-      provider: 'fixture', model: 'fixture-model', reasoningEffort: 'high' as never,
-    })
-    expect(agents.baselineFor(routed)).toEqual({ provider: 'fixture', model: 'fixture-model', reasoningEffort: 'high' })
-    vi.spyOn(ctx.agentDefaultModel, 'currentSelection').mockReturnValue({ provider: 'other', model: 'other-model' })
-    expect(agents.baselineFor(routed)).toEqual({ provider: 'fixture', model: 'fixture-model' })
+    expect(agents.baselineFor(routed)).toEqual(owned)
+    const other = { provider: 'other', model: 'other-model' }
+    routed.session.append('model/route', { baseline: owned, selection: other, reason: 'test' })
+    routed.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    expect(agents.baselineFor(routed)).toEqual(owned)
 
-    // An explicit user selection on the same route is the baseline regardless of later routed headers.
-    agents.selectForNextRequest(routed, { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' as never })
-    routed.session.append('request/header', { header: { config: routedLow }, reason: 'initial' })
-    expect(agents.baselineFor(routed)).toEqual({ provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' })
+    // An explicit user selection replaces the carried baseline.
+    agents.selectForNextRequest(routed, other)
+    expect(agents.baselineFor(routed)).toEqual(other)
   })
 })
 

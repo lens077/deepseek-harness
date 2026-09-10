@@ -1623,12 +1623,16 @@ export interface RuleConfig {
   readonly minBytes?: number
   /** Match only when image presence equals this value. */
   readonly hasImage?: boolean
-  /** Adapter-owned reasoning effort applied on the baseline route when the rule matches. */
-  readonly reasoningEffort: string
+  /** Registered provider of the route to propose; requires `model` and must be a configured route. */
+  readonly provider?: string
+  /** Provider-owned model id of the route to propose; requires `provider`. */
+  readonly model?: string
+  /** Adapter-owned reasoning effort on the proposed route, or the baseline route when no model is named. */
+  readonly reasoningEffort?: string
 }
 ```
 
-Source: [`packages/llm/model-router-rules/src/index.ts:32`](../packages/llm/model-router-rules/src/index.ts)
+Source: [`packages/llm/model-router-rules/src/index.ts:37`](../packages/llm/model-router-rules/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 

@@ -363,26 +363,18 @@ export class ApiSessionAgentController {
 
   /**
    * Read the route the human or caller owns for this Session, independent of
-   * any effort a router applied to an earlier request. The provider and model
-   * are the current selection's. The effort is the latest user selection's
-   * when that selection names the same route; otherwise, on a Session no
-   * router touched, the current selection's own effort; otherwise the saved
-   * default's effort when it names the same route; otherwise absent, so the
-   * model's own default applies.
+   * anything a router applied to an earlier request: the projection's
+   * baseline — the latest user selection, else the baseline the latest routing
+   * decision carried forward — or, on a Session neither touched, the current
+   * selection.
    * @param agent - live Agent whose Session projection is read.
    * @returns a detached baseline selection.
    */
   baselineFor(agent: Agent): AgentModelSelection {
-    const current = this.selectionFor(agent).current
-    const route = { provider: current.provider, model: current.model }
     const state = this.modelSelectionState(agent)
-    if (state.baseline !== null && sameRoute(state.baseline, route)) {
-      return agentModelSelection(state.baseline)
-    }
-    if (state.routed === null) return { ...current }
-    const saved = this.ctx.agentDefaultModel.currentSelection()
-    if (!sameRoute(saved, route) || saved.reasoningEffort === undefined) return route
-    return { ...route, reasoningEffort: saved.reasoningEffort }
+    return state.baseline === null
+      ? { ...this.selectionFor(agent).current }
+      : agentModelSelection(state.baseline)
   }
 
   /**
@@ -591,13 +583,6 @@ export class ApiSessionAgentController {
     if (requested === undefined || requested === existing) return
     throw new ApiSessionPresetConflict(sessionId, requested, existing)
   }
-}
-
-function sameRoute(
-  left: Pick<ModelSelection, 'provider' | 'model'>,
-  right: Pick<ModelSelection, 'provider' | 'model'>,
-): boolean {
-  return left.provider === right.provider && left.model === right.model
 }
 
 function agentModelSelection(selection: ModelSelection): AgentModelSelection {

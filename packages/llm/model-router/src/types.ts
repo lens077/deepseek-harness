@@ -43,13 +43,23 @@ export interface ModelRoutePrompt {
 export interface ModelRouteInput {
   /** The route the human or caller owns; the answer when no rule applies. */
   readonly baseline: ModelRoute
+  /**
+   * Every provider/model route the deployment configures, without efforts.
+   * The consumer refuses a proposal naming a route outside this list, and
+   * refuses any route change while the list holds fewer than two routes.
+   */
+  readonly candidates: readonly ModelRoute[]
   /** The prompt about to be queued. */
   readonly prompt: ModelRoutePrompt
 }
 
 /** A provider's answer for one prompt. */
 export interface ModelRouteDecision {
-  /** Route the provider proposes; equal to the baseline when nothing applies. */
+  /**
+   * Route the provider proposes; equal to the baseline when nothing applies.
+   * An effort belongs to the proposed model, so a proposal that changes the
+   * model without naming an effort asks for that model's default.
+   */
   readonly selection: ModelRoute
   /** Short human-readable justification recorded in the session log. */
   readonly reason: string

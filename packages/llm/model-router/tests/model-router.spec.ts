@@ -15,7 +15,7 @@ describe('ModelRouter Service Definition', () => {
     const fiber = await ctx.plugin(EchoRouter)
     expect(ctx.get('modelRouter')).toBeInstanceOf(EchoRouter)
     const baseline = { provider: 'p', model: 'm' }
-    await expect(ctx.modelRouter.route({ baseline, prompt: { text: 'hi', hasImage: false } }))
+    await expect(ctx.modelRouter.route({ baseline, candidates: [baseline], prompt: { text: 'hi', hasImage: false } }))
       .resolves.toEqual({ selection: baseline, reason: 'echo' })
     await fiber.dispose()
     expect(ctx.get('modelRouter')).toBeUndefined()

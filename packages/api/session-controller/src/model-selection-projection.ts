@@ -45,14 +45,11 @@ function applyModelSelectionProjection(
       : { ...state, pending: event.data, baseline: event.data }
   }
   if (event.type === 'model/route') {
-    const routed: ModelSelection = {
-      provider: event.data.selection.provider,
-      model: event.data.selection.model,
-      ...(event.data.selection.reasoningEffort === undefined
-        ? {}
-        : { reasoningEffort: String(event.data.selection.reasoningEffort) }),
-    }
-    return sameSelection(state.routed, routed) ? state : { ...state, routed }
+    const routed = wireSelection(event.data.selection)
+    const baseline = wireSelection(event.data.baseline)
+    return sameSelection(state.routed, routed) && sameSelection(state.baseline, baseline)
+      ? state
+      : { ...state, routed, baseline }
   }
   if (event.type !== 'request/header') return state
   const lastUsed: ModelSelection = {
@@ -79,6 +76,15 @@ const modelSelectionProjection = {
   },
   stateVersion: 3,
 } satisfies ProjectionDefinition<'modelSelection', ModelSelectionProjectionState>
+
+/** Copy a logged route into the wire selection form, dropping the branded effort type. */
+function wireSelection(route: { provider: string; model: string; reasoningEffort?: string }): ModelSelection {
+  return {
+    provider: route.provider,
+    model: route.model,
+    ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
+  }
+}
 
 function sameSelection(left: ModelSelection | null, right: ModelSelection | null): boolean {
   return left === right || (left !== null && right !== null
