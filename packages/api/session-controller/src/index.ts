@@ -165,6 +165,13 @@ export class SessionController extends TypertRemoteService {
     ctx.on('agent/error', ({ agent, error }) => {
       ctx.emit('api-session/error', agent.id, errorChain(error))
     })
+    // A routed model that stays unresponsive after llm-retry's own policy
+    // hands the step to the person's route instead of ending the turn.
+    ctx.on('agent/request-error', async ({ agent, failure, signal }, next) => {
+      const downstream = await next()
+      if (downstream?.kind === 'retry' || signal.aborted) return downstream
+      return this.agents.fallbackToBaseline(agent, failure) ? { kind: 'retry' } : downstream
+    })
     ctx.on('session/event', (session, event) => {
       if (event.type === 'request/header') {
         const agent = ctx.agents.get(session.id)

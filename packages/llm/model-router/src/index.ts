@@ -8,6 +8,8 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import type {} from '@deepseek-ai/dsh-settings'
 import type { ModelRouteDecision, ModelRouteInput } from './types.ts'
 
 export type {
@@ -24,15 +26,58 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/** User-settings section every mounted router serves. */
+export const MODEL_ROUTING_SETTINGS_NAMESPACE = 'model-routing'
+
+/** Stored user preference over the mounted router. */
+export interface ModelRoutingSettings {
+  /** Whether prompts consult the router; off keeps every Session on the route its person selected. */
+  enabled: boolean
+}
+
+/** Schema served to settings clients for the preference. */
+export const MODEL_ROUTING_SETTINGS_SCHEMA: z<ModelRoutingSettings> = z.object({
+  enabled: z.boolean().default(true),
+})
+
 /**
  * Abstract prompt-driven route selection. Load one implementation per
  * context as `ctx.modelRouter`. Implementations are pure decision functions:
  * they never validate a route against the live LLM registry, never mutate the
  * session, and answer with the baseline when nothing applies.
+ *
+ * Mounting any implementation serves the `model-routing` settings section
+ * while a settings provider is present; its `enabled` switch lets a person
+ * stop routing without unmounting the provider, and consumers read it through
+ * {@link ModelRouter.enabled} before every prompt.
  */
 export abstract class ModelRouter extends Service {
+  private source: () => ModelRoutingSettings = () => ({ enabled: true })
+
   constructor(ctx: Context) {
     super(ctx, 'modelRouter')
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.installSection(
+        ctx,
+        MODEL_ROUTING_SETTINGS_NAMESPACE,
+        MODEL_ROUTING_SETTINGS_SCHEMA,
+        { enabled: true },
+        {
+          setSource: (source) => { this.source = source },
+          // Consumers read the switch per prompt, so a change needs no re-judging here.
+          onChange: () => {},
+        },
+      )
+    })
+  }
+
+  /**
+   * Whether the person left routing on. Without a settings provider the
+   * answer is always true.
+   * @returns the current `model-routing.enabled` value.
+   */
+  enabled(): boolean {
+    return this.source().enabled
   }
 
   /**

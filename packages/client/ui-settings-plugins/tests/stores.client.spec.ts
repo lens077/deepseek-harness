@@ -6,7 +6,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError, stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import { CardForm, numberField, textField } from '../src/client/card-form.ts'
+import { CardForm, booleanField, numberField, textField } from '../src/client/card-form.ts'
+import { ModelRoutingCardController, type ModelRoutingSettings } from '../src/client/model-routing-card-controller.ts'
 import { AgentLoopCardController, type AgentLoopSettings } from '../src/client/agent-loop-card-controller.ts'
 import { BashCardController, type BashSettings } from '../src/client/bash-card-controller.ts'
 import {
@@ -430,6 +431,44 @@ describe('AgentLoopCardController', () => {
     host.publish({ status: 'ready', writable: false, value: { maxParallelToolCalls: 10 } })
 
     expect(controller.inject().hooks.agentLoopCard.getSnapshot().writable).toBe(false)
+  })
+})
+
+describe('booleanField', () => {
+  it('formats stored booleans, parses the two spellings, clears on empty, and blocks other text', () => {
+    const spec = booleanField('enabled')
+    expect(spec.format(true)).toBe('true')
+    expect(spec.format(false)).toBe('false')
+    expect(spec.format(undefined)).toBe('')
+    expect(spec.parse(' true ')).toEqual({ kind: 'set', value: true })
+    expect(spec.parse('false')).toEqual({ kind: 'set', value: false })
+    expect(spec.parse('')).toEqual({ kind: 'clear' })
+    expect(spec.parse('yes')).toBeUndefined()
+  })
+})
+
+describe('ModelRoutingCardController', () => {
+  it('saves the switch it owns', async () => {
+    const host = stubSettingsScope<ModelRoutingSettings>()
+    acceptWrites(host)
+    const controller = new ModelRoutingCardController(host.scope)
+    host.publish({
+      status: 'ready',
+      writable: true,
+      value: { enabled: true },
+      base: { enabled: true },
+      user: {},
+    })
+    const face = controller.inject()
+
+    face.edit('enabled', 'false')
+    face.save()
+    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledWith('enabled', false) })
+
+    expect(face.hooks.modelRoutingCard.getSnapshot()).toMatchObject({
+      dirty: false,
+      enabled: { text: 'false', overridden: true },
+    })
   })
 })
 
