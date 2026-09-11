@@ -59,6 +59,30 @@ A session's first `write` or `edit` of a file leases it; the lease covers every 
 
 The `fileLocks` projection of each session carries `held`, the display paths it leases in the open turn, and `waiting`, the call currently behind a foreign lease with its holder and phase (`waiting`, `asked`, or `subscribed`). Both reset at `turn/end`.
 
+### How a contended file is handled
+
+This section walks the three mechanisms in the order they act: the lease that one session holds, the read that runs into it, and the subscription that wakes that read.
+
+#### The lease is held until the modifying turn ends
+
+The lease is taken on the session's first `write` or `edit` of a file and is not released when that tool call returns. A modification is usually several calls — read, edit, edit again, run a check, edit once more — and releasing between them would let another session read the file half-changed. The lease is therefore held for the whole turn and released at the session's `turn/end`: the moment the agent stops calling tools and replies. Later calls in the same turn, and calls from agents this session owns, join the same lease without waiting. Two fallbacks free a lease whose turn never closes: `agent/disposed` when the session is closed, and `leaseTtlMs` (default 30 minutes) counted from the first acquisition, recorded as `file-lock/released` with `reason: ttl`.
+
+#### A read behind a foreign lease moves through three phases
+
+| Phase | What happens | Ends when |
+|---|---|---|
+| 1. Silent wait | The read records `file-lock/waiting` and waits up to `readWaitMs` (default 30 seconds) without involving anyone. | The lease is released — the read proceeds with a notice giving the wait — or the window expires. |
+| 2. Ask the user | The plugin records `file-lock/asked` and asks through `ctx.userQuestions`: **Shared file** — read the file as it is right now, or wait until the other conversation is done with it? The session shows as waiting for the user. | The user answers, or the lease is released first: the question is withdrawn and the read proceeds as in phase 1. |
+| 3. Subscribe | After **Keep waiting**, the read records `file-lock/subscribed` and registers as a subscriber of that file with no time bound. | The lease is released; the subscriber is woken at once and reads. |
+
+**Read now** in phase 2 reads the current on-disk content, appends a notice that the other conversation may not be finished with it, and is remembered for the rest of the turn, so a second read of the same file in this turn does not ask again. Every phase ends with `file-lock/settled` carrying the outcome (`released`, `read-now`, or `aborted`) and the total wait. Phase 2 is only reachable for a top-level session with a user-questions answerer; a subagent, or a composition without an answerer, applies `delegatedReadTimeout` instead: `wait` goes straight to phase 3, `read-now` reads at once.
+
+#### Subscription: the release wakes the reader, nothing polls
+
+A subscriber does not retry on a timer. `FileLockRegistry.awaitRelease(key, family, signal)` with no wait bound queues the call as a reader of that key and returns a promise that the release itself settles: when the holder's `turn/end`, disposal, or TTL frees the lease, `releaseAll` settles every queued reader with `free` before it grants the first queued writer, so a read that waited through phases 1 to 3 is never pushed behind a write that arrived later. The woken read then runs the tool body and appends the same released-read notice, with the wait measured from phase 1. The subscription is cancelled when the calling turn is cancelled (`file-lock/settled` with `aborted`) or the plugin is disposed; it has no other exit, by design — the user chose to wait for the correct content, and cancelling the turn is the way to stop.
+
+Which phase a session is in is visible without reading the log: the `fileLocks` projection's `waiting.phase` is `waiting`, `asked`, or `subscribed`, and the holder's own projection lists the file under `held`.
+
 -----
 
 <a id="understand-the-implementation"></a>
