@@ -6,7 +6,8 @@
  * card's save is the single point where a draft becomes a document mutation.
  */
 
-import { Pill, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import clsx from 'clsx'
 import css from './fields.module.css'
 
 /** What every field control needs regardless of its value type. */
@@ -97,10 +98,11 @@ export interface FieldChoice {
 }
 
 /**
- * A staged choice between fixed tokens. Selecting a pill stages that token the
- * same way typing stages text, so the card's save remains the only write. A
- * stored token outside the offered set leaves every pill unselected and is
- * reported as invalid rather than being replaced by a guess.
+ * A staged choice between fixed tokens, drawn as one segmented control.
+ * Selecting a segment stages that token the same way typing stages text, so
+ * the card's save remains the only write. A stored token outside the offered
+ * set leaves every segment unselected and is reported as invalid rather than
+ * being replaced by a guess.
  * @param props - the field's copy, its staged token, and the offered choices.
  * @returns the labelled choice row.
  */
@@ -132,16 +134,17 @@ export function ChoiceField(props: Omit<FieldProps, 'onEdit'> & {
       </div>
       <div className={css.choices} role="radiogroup" aria-labelledby={props.id}>
         {props.choices.map(choice => (
-          <Pill
+          <button
             key={choice.value}
-            active={choice.value === props.text}
+            type="button"
+            className={clsx(css.choice, choice.value === props.text && css.choiceActive)}
             role="radio"
             aria-checked={choice.value === props.text}
             disabled={props.disabled}
             onClick={() => { props.onEdit(choice.value) }}
           >
             {choice.label}
-          </Pill>
+          </button>
         ))}
       </div>
       <p className={props.invalid ? css.invalid : css.hint}>

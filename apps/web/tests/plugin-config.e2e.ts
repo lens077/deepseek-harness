@@ -233,7 +233,7 @@ describe('web e2e: plugin configuration section', () => {
     expect(await dialog.getByLabel('写锁（分钟）').inputValue()).toBe('10')
 
     await readWait.fill('5')
-    await dialog.getByRole('radio', { name: '照现在的样子读' }).click()
+    await dialog.getByRole('radio', { name: '照当前的样子读' }).click()
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
 
     // Seconds on screen, milliseconds in the document.
