@@ -6,7 +6,7 @@
  * card's save is the single point where a draft becomes a document mutation.
  */
 
-import { Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Pill, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './fields.module.css'
 
 /** What every field control needs regardless of its value type. */
@@ -81,6 +81,69 @@ export function ValueField(props: FieldProps & {
         disabled={props.disabled}
         onChange={(event) => { props.onEdit(event.target.value) }}
       />
+      <p className={props.invalid ? css.invalid : css.hint}>
+        {props.invalid ? props.invalidLabel : props.hint}
+      </p>
+    </div>
+  )
+}
+
+/** One selectable token of a {@link ChoiceField}. */
+export interface FieldChoice {
+  /** Token stored in the settings section. */
+  value: string
+  /** Visible label for that token. */
+  label: string
+}
+
+/**
+ * A staged choice between fixed tokens. Selecting a pill stages that token the
+ * same way typing stages text, so the card's save remains the only write. A
+ * stored token outside the offered set leaves every pill unselected and is
+ * reported as invalid rather than being replaced by a guess.
+ * @param props - the field's copy, its staged token, and the offered choices.
+ * @returns the labelled choice row.
+ */
+export function ChoiceField(props: Omit<FieldProps, 'onEdit'> & {
+  /** Tokens this control offers, in display order. */
+  choices: readonly FieldChoice[]
+  /** Stage the selected token. */
+  onEdit: (value: string) => void
+}) {
+  return (
+    <div className={css.field}>
+      <div className={css.head}>
+        <span className={css.label} id={props.id}>{props.label}</span>
+        {props.overridden
+          ? (
+            <span className={css.badges}>
+              <Tag tone="neutral">{props.overriddenLabel}</Tag>
+              <button
+                type="button"
+                className={css.reset}
+                disabled={props.disabled}
+                onClick={props.onReset}
+              >
+                {props.resetLabel}
+              </button>
+            </span>
+          )
+          : null}
+      </div>
+      <div className={css.choices} role="radiogroup" aria-labelledby={props.id}>
+        {props.choices.map(choice => (
+          <Pill
+            key={choice.value}
+            active={choice.value === props.text}
+            role="radio"
+            aria-checked={choice.value === props.text}
+            disabled={props.disabled}
+            onClick={() => { props.onEdit(choice.value) }}
+          >
+            {choice.label}
+          </Pill>
+        ))}
+      </div>
       <p className={props.invalid ? css.invalid : css.hint}>
         {props.invalid ? props.invalidLabel : props.hint}
       </p>

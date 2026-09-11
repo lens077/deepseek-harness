@@ -25,7 +25,9 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-打开设置中的「插件」分区并选择**插件配置**标签页，即可编辑本部署所组装的宿主平面插件。卡片依次为 shell 执行器（`bash`）、agent 循环的工具调用并行度（`agent-loop`）、subagent 模型选择（`subagent-model-selection`）以及 DeepSeek 搜索提供方（`web-search-deepseek`）。
+打开设置中的「插件」分区并选择**插件配置**标签页，即可编辑本部署所组装的宿主平面插件。卡片依次为 shell 执行器（`bash`）、agent 循环的工具调用并行度（`agent-loop`）、跨会话文件锁（`file-lock`）、subagent 模型选择（`subagent-model-selection`）以及 DeepSeek 搜索提供方（`web-search-deepseek`）。
+
+字段可以用比文档更粗的单位编辑。文件锁的几个等待时长以毫秒存储、以秒或分钟编辑，因此文档里是 `30000` 时控件显示 `30`；保存时把草稿乘回并取整为整毫秒。取值为固定 token 的字段渲染为一排选项而非文本框；已存的 token 若不在本次构建提供的选项中，则所有选项都不选中并阻止保存，而不是被替换掉。
 
 ### 这里会出现什么
 

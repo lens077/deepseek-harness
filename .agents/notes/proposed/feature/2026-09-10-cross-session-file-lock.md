@@ -36,17 +36,18 @@ A read against a foreign lease waits `readWaitMs` (default 30 seconds) silently.
 
 ## Delivery order
 
-1. **This change** — the plugin, its events and projection, the settings section, base-bundle wiring, and the real-composition suite over two root agents.
-2. A resource ledger (`subprocess`, `dsh-mcp-client` child processes, jobs per session) and a `resource-governance` Remote that serves the lease table, the ledger, and orphan processes, with an explicit-id `reclaim` behind a confirmation.
-3. `dsh-client-ui-digest`: a **等锁** inbox section after **运行中**, a `blocked` nav badge, a **资源** tab (locks, per-session ledger, orphans with confirmed termination on desktop only), the settings card that claims the `file-lock` namespace, and the morning-report lines.
-4. Optional heavy-command serialization for `bash` (`pnpm run build|typecheck|test:coverage`) as pure mutual exclusion, no water levels.
+1. The plugin, its events and projection, the settings section, base-bundle wiring, and the real-composition suite over two root agents.
+2. **This change** — the **File lock** card in `dsh-client-ui-settings-plugins`, so the three waits and the delegated-read behavior are editable from the Web Plugins page. Each wait is edited in the unit it is chosen in (seconds for the read wait, minutes for the write queue and the lease TTL) while the document keeps milliseconds, and the delegated-read behavior is a two-token choice rather than free text.
+3. A resource ledger (`subprocess`, `dsh-mcp-client` child processes, jobs per session) and a `resource-governance` Remote that serves the lease table, the ledger, and orphan processes, with an explicit-id `reclaim` behind a confirmation.
+4. `dsh-client-ui-digest`: a **等锁** inbox section after **运行中**, a `blocked` nav badge, a **资源** tab (locks, per-session ledger, orphans with confirmed termination on desktop only), and the morning-report lines.
+5. Optional heavy-command serialization for `bash` (`pnpm run build|typecheck|test:coverage`) as pure mutual exclusion, no water levels.
 
 ## Alternatives considered
 
 - **Lock per tool call.** Rejected: a modification is the whole turn; releasing after `write` returns would let another session read between two edits of one change.
 - **Lock at `fs/write-intent` / `fs/edit-intent`.** Rejected: reads do not pass those waterfalls, and the read side is where the human decision lives; `tools/execute` sees both accesses at one point.
 - **Filesystem locks (`flock`, lock files under `/tmp`).** Rejected for now: all sessions share one Host process; a file-backed table is deferred until a CLI and a Web Host need to coordinate.
-- **Host water-level admission (memory, disk, PSI).** Rejected for this deployment; the design keeps the room for it in delivery step 4 as a plain mutex.
+- **Host water-level admission (memory, disk, PSI).** Rejected for this deployment; the design keeps the room for it in delivery step 5 as a plain mutex.
 - **Bounded subscription with a second question.** Rejected: the user asked for an unbounded wait; the turn's cancellation is the exit.
 
 ## Acceptance criteria

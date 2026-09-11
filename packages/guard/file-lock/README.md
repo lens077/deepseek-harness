@@ -47,7 +47,7 @@ Mount the plugin; every field has a default:
       - { tool: write, pathArgument: file_path, access: write }
 ```
 
-`readWaitMs`, `writeWaitMs`, `leaseTtlMs`, and `delegatedReadTimeout` form the `file-lock` settings section: the composition values are the base layer, and a user layer written by a settings provider (the `settings.yaml` document under `$DSH_HOME`, or the Web settings surface once a card claims the namespace) overrides them live. `tools` is composition-only. A rule with `readWhenArgument` and `readWhenValues` turns a write rule into a read for one call, as the shipped `str_replace_editor` rule does for `command: view`. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-call-file-lock) lists every field.
+`readWaitMs`, `writeWaitMs`, `leaseTtlMs`, and `delegatedReadTimeout` form the `file-lock` settings section: the composition values are the base layer, and a user layer written by a settings provider — the `settings.yaml` document under `$DSH_HOME`, or the **File lock** card on the Web Plugins settings page, which edits the waits in seconds and minutes — overrides them live. `tools` is composition-only. A rule with `readWhenArgument` and `readWhenValues` turns a write rule into a read for one call, as the shipped `str_replace_editor` rule does for `command: view`. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-call-file-lock) lists every field.
 
 ### What you get
 
@@ -149,7 +149,6 @@ These limits define when the policy is a poor fit. They are current package cons
 
 - **Only rule-listed tools are covered** — a file changed through `bash`, `git`, or a tool absent from `tools` takes no lease and waits for none.
 - **One process** — the table is process-local; a `dsh` CLI and a `dsh web` Host on the same machine do not see each other's leases.
-- **No Web settings card yet** — the `file-lock` namespace is served, but the Plugins settings page renders a namespace only after a card claims it; until then the user layer is edited in the settings document.
 - **A subscribed read blocks its turn** — `Keep waiting` and the `wait` policy have no upper bound by design; cancelling the turn is the way out.
 
 <a id="dev-note"></a>

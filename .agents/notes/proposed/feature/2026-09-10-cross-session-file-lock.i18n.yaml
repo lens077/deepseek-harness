@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-09-10-cross-session-file-lock.md
-2026-09-10-cross-session-file-lock.md: e55c818a6c7bb61aa7d8dab6fa2e1ad653acf1e0
-2026-09-10-cross-session-file-lock.zh.md: c15c26f02f9dd7b56086bdd74d521f1ab4ddc844
+2026-09-10-cross-session-file-lock.md: 2a739d2ae25b68649340b61f79fa9d6dafddba28
+2026-09-10-cross-session-file-lock.zh.md: c5fc452936842ba40cbc62392b7f24f81e95ecf0

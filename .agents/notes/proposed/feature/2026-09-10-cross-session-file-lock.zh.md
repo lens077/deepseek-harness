@@ -36,17 +36,18 @@ Status: proposed
 
 ## 交付顺序
 
-1. **本次变更**——插件、其事件与投影、设置节、基础 bundle 接线，以及两个根 Agent 上的真实组合测试套件。
-2. 资源清单（每会话的 `subprocess`、`dsh-mcp-client` 子进程、jobs）与提供租约表、清单和无主进程的 `resource-governance` Remote，含需确认的显式 id `reclaim`。
-3. `dsh-client-ui-digest`：**运行中**之后的**等锁**收件箱分区、`blocked` 导航徽章、**资源** tab（锁、每会话清单、仅桌面端可确认终止的无主进程）、认领 `file-lock` 命名空间的设置卡片，以及晨报条目。
-4. 可选的 `bash` 重命令串行化（`pnpm run build|typecheck|test:coverage`），仅做互斥，不做水位。
+1. 插件、其事件与投影、设置节、基础 bundle 接线，以及两个根 Agent 上的真实组合测试套件。
+2. **本次变更**——`dsh-client-ui-settings-plugins` 中的**文件锁**卡片，使三个等待时长与受委托读取的行为可在 Web 插件设置页编辑。每个等待时长按各自选定的单位编辑（读取等待用秒，写入排队与租约 TTL 用分钟），而文档仍保存毫秒；受委托读取的行为是两个 token 的选择而非自由文本。
+3. 资源清单（每会话的 `subprocess`、`dsh-mcp-client` 子进程、jobs）与提供租约表、清单和无主进程的 `resource-governance` Remote，含需确认的显式 id `reclaim`。
+4. `dsh-client-ui-digest`：**运行中**之后的**等锁**收件箱分区、`blocked` 导航徽章、**资源** tab（锁、每会话清单、仅桌面端可确认终止的无主进程），以及晨报条目。
+5. 可选的 `bash` 重命令串行化（`pnpm run build|typecheck|test:coverage`），仅做互斥，不做水位。
 
 ## 曾考虑的替代方案
 
 - **按工具调用加锁。** 拒绝：一次修改是整个 turn；`write` 返回即释放会让另一会话在同一改动的两次编辑之间读到文件。
 - **在 `fs/write-intent` / `fs/edit-intent` 加锁。** 拒绝：读取不经过这些 waterfall，而人类决策正在读取一侧；`tools/execute` 在一处同时看到两种访问。
 - **文件系统锁（`flock`、`/tmp` 下的锁文件）。** 暂时拒绝：所有会话共享一个 Host 进程；文件后端的表延后到 CLI 与 Web Host 需要协调时。
-- **宿主水位准入（内存、磁盘、PSI）。** 对本部署拒绝；设计在交付步骤 4 中为其保留了纯互斥的位置。
+- **宿主水位准入（内存、磁盘、PSI）。** 对本部署拒绝；设计在交付步骤 5 中为其保留了纯互斥的位置。
 - **有上限的订阅加第二次提问。** 拒绝：用户要求无上限等待；turn 的取消即是出口。
 
 ## 验收标准

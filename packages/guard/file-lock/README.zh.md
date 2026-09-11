@@ -47,7 +47,7 @@ kind: "package-reference"
       - { tool: write, pathArgument: file_path, access: write }
 ```
 
-`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层（`$DSH_HOME` 下的 `settings.yaml` 文档，或某张卡片认领该命名空间后的 Web 设置界面）会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
+`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层——`$DSH_HOME` 下的 `settings.yaml` 文档，或 Web 插件设置页上以秒和分钟编辑这些等待时长的**文件锁**卡片——会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
 
 ### 你会得到什么
 
@@ -149,7 +149,6 @@ kind: "package-reference"
 
 - **只覆盖规则中列出的工具**——通过 `bash`、`git` 或 `tools` 中未列出的工具修改的文件既不取得租约，也不等待任何租约。
 - **单进程**——租约表是进程局部的；同一台机器上的 `dsh` CLI 与 `dsh web` Host 看不到彼此的租约。
-- **尚无 Web 设置卡片**——`file-lock` 命名空间已提供，但插件设置页只在某张卡片认领后才渲染该命名空间；在此之前用户层在设置文档中编辑。
 - **订阅中的读取会阻塞其 turn**——`Keep waiting` 与 `wait` 策略按设计没有上限；取消 turn 是唯一出口。
 
 <a id="dev-note"></a>

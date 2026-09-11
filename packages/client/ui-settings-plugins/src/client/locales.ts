@@ -8,6 +8,12 @@ export type PluginsSettingsLocaleKey =
   | 'bashTitle' | 'bashDescription' | 'bashTimeoutMs' | 'bashTimeoutMsHint'
   | 'bashMaxOutputBytes' | 'bashMaxOutputBytesHint'
   | 'agentLoopTitle' | 'agentLoopDescription' | 'agentLoopMaxParallel' | 'agentLoopMaxParallelHint'
+  | 'fileLockTitle' | 'fileLockDescription'
+  | 'fileLockReadWait' | 'fileLockReadWaitHint'
+  | 'fileLockWriteWait' | 'fileLockWriteWaitHint'
+  | 'fileLockLeaseTtl' | 'fileLockLeaseTtlHint'
+  | 'fileLockDelegated' | 'fileLockDelegatedHint' | 'fileLockDelegatedInvalid'
+  | 'fileLockDelegatedWait' | 'fileLockDelegatedReadNow'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
@@ -47,6 +53,19 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'How the agent dispatches tool calls.',
   agentLoopMaxParallel: 'Parallel tool calls',
   agentLoopMaxParallelHint: 'Upper bound on parallel-safe calls running at once within one step.',
+  fileLockTitle: 'File lock',
+  fileLockDescription: 'How long a session waits for a file another session is modifying.',
+  fileLockReadWait: 'Read wait before asking (seconds)',
+  fileLockReadWaitHint: 'A read of a file being modified waits this long; after it, you choose to read now or keep waiting.',
+  fileLockWriteWait: 'Write queue limit (minutes)',
+  fileLockWriteWaitHint: 'A write queues this long for the file, then fails with the holding session named.',
+  fileLockLeaseTtl: 'Lease time limit (minutes)',
+  fileLockLeaseTtlHint: 'A lease is released after this long even if its turn never ended.',
+  fileLockDelegated: 'When nobody can be asked',
+  fileLockDelegatedHint: 'What a subagent read does after its wait, since only a top-level session can ask you.',
+  fileLockDelegatedInvalid: 'Stored value is not one of these choices.',
+  fileLockDelegatedWait: 'Keep waiting',
+  fileLockDelegatedReadNow: 'Read immediately',
   webSearchTitle: 'Web search',
   webSearchDescription: 'The DeepSeek search provider.',
   webSearchApiKey: 'API key',
@@ -103,6 +122,19 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'Agent 如何派发工具调用。',
   agentLoopMaxParallel: '并行工具调用数',
   agentLoopMaxParallelHint: '同一步内最多同时运行多少个可并行的调用。',
+  fileLockTitle: '文件锁',
+  fileLockDescription: '会话等待另一个会话正在修改的文件多久。',
+  fileLockReadWait: '读取等待后询问（秒）',
+  fileLockReadWaitHint: '读取正被修改的文件时先等这么久，之后由你选择立即读取还是继续等待。',
+  fileLockWriteWait: '写入排队上限（分钟）',
+  fileLockWriteWaitHint: '写入为该文件排队这么久，超时则失败并指明持有该文件的会话。',
+  fileLockLeaseTtl: '租约存活上限（分钟）',
+  fileLockLeaseTtlHint: '即使 turn 始终没有结束，租约也会在这么久之后释放。',
+  fileLockDelegated: '无人可询问时',
+  fileLockDelegatedHint: '子 Agent 的读取等待结束后的行为——只有顶层会话才能询问你。',
+  fileLockDelegatedInvalid: '已存的值不在这些选项之中。',
+  fileLockDelegatedWait: '继续等待',
+  fileLockDelegatedReadNow: '立即读取',
   webSearchTitle: '网页搜索',
   webSearchDescription: 'DeepSeek 搜索提供方。',
   webSearchApiKey: 'API Key',
