@@ -47,14 +47,14 @@ kind: "package-reference"
       - { tool: write, pathArgument: file_path, access: write }
 ```
 
-`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层——`$DSH_HOME` 下的 `settings.yaml` 文档，或 Web 插件设置页上以秒和分钟编辑这些等待时长的**文件锁**卡片——会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
+`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层——`$DSH_HOME` 下的 `settings.yaml` 文档，或 Web 插件设置页上以秒和分钟、用日常用语编辑这些等待时长的**共用文件**卡片——会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
 
 ### 你会得到什么
 
 会话对某文件的第一次 `write` 或 `edit` 会租下它；租约覆盖同一运行时家族（一个根 Agent 及其拥有的 Agent）的全部会话，并随租约会话的 `turn/end`、其销毁或 `leaseTtlMs` 结束。面对外部租约时：
 
 - **写入**按 FIFO 排队最多 `writeWaitMs`。释放后继续执行并接管租约；超时则模型收到 `Error: file lock: "<path>" is being modified by session "<title>" (workspace <cwd>) since <time>; waited <n>s. Wait for that session to finish its turn, or work on a different file.`，错误码为 `FILE_LOCKED`。
-- **读取**等待 `readWaitMs`。窗口内释放则恢复读取，并附加一条说明持有者与等待时长的通知。窗口过后，拥有用户提问应答方的根会话会提出 **File lock** 问题：`Read now` 读取当前内容并附上内容可能不完整的通知，且本轮 turn 内记住该选择；`Keep waiting` 订阅释放、不设上限。提问挂起期间发生释放会撤回问题并直接读取。受委托的调用方或没有应答方的组合则改为遵循 `delegatedReadTimeout`。
+- **读取**等待 `readWaitMs`。窗口内释放则恢复读取，并附加一条说明持有者与等待时长的通知。窗口过后，拥有用户提问应答方的根会话会提出 **Shared file** 问题：`Read now` 读取当前内容并附上内容可能不完整的通知，且本轮 turn 内记住该选择；`Keep waiting` 订阅释放、不设上限。提问挂起期间发生释放会撤回问题并直接读取。受委托的调用方或没有应答方的组合则改为遵循 `delegatedReadTimeout`。
 - 取消调用方的 turn 会以 `aborted` 结束任何等待，并让工具自行报告取消。
 
 每个会话的 `fileLocks` 投影包含 `held`（本轮 turn 内租下的显示路径）与 `waiting`（当前被外部租约挡住的调用，含持有者与阶段：`waiting`、`asked` 或 `subscribed`）。两者都在 `turn/end` 时重置。
