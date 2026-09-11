@@ -42,6 +42,10 @@
           - text: Agent 循环 Agent 如何派发工具调用。
           - img
       - listitem:
+        - 'button "展开设置: 文件共享锁"':
+          - text: 文件共享锁 多 Agent 同时竞争同一文件时的解决方案。
+          - img
+      - listitem:
         - 'button "展开设置: Subagent"':
           - text: Subagent 控制 Agent 为 Subagent 选择模型的权限。
           - img

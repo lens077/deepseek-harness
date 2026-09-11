@@ -47,17 +47,41 @@ kind: "package-reference"
       - { tool: write, pathArgument: file_path, access: write }
 ```
 
-`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层（`$DSH_HOME` 下的 `settings.yaml` 文档，或某张卡片认领该命名空间后的 Web 设置界面）会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
+`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层——`$DSH_HOME` 下的 `settings.yaml` 文档，或 Web 插件设置页上以秒和分钟编辑这些等待时长的**文件共享锁**卡片——会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
 
 ### 你会得到什么
 
 会话对某文件的第一次 `write` 或 `edit` 会租下它；租约覆盖同一运行时家族（一个根 Agent 及其拥有的 Agent）的全部会话，并随租约会话的 `turn/end`、其销毁或 `leaseTtlMs` 结束。面对外部租约时：
 
 - **写入**按 FIFO 排队最多 `writeWaitMs`。释放后继续执行并接管租约；超时则模型收到 `Error: file lock: "<path>" is being modified by session "<title>" (workspace <cwd>) since <time>; waited <n>s. Wait for that session to finish its turn, or work on a different file.`，错误码为 `FILE_LOCKED`。
-- **读取**等待 `readWaitMs`。窗口内释放则恢复读取，并附加一条说明持有者与等待时长的通知。窗口过后，拥有用户提问应答方的根会话会提出 **File lock** 问题：`Read now` 读取当前内容并附上内容可能不完整的通知，且本轮 turn 内记住该选择；`Keep waiting` 订阅释放、不设上限。提问挂起期间发生释放会撤回问题并直接读取。受委托的调用方或没有应答方的组合则改为遵循 `delegatedReadTimeout`。
+- **读取**等待 `readWaitMs`。窗口内释放则恢复读取，并附加一条说明持有者与等待时长的通知。窗口过后，拥有用户提问应答方的根会话会提出 **Shared file** 问题：`Read now` 读取当前内容并附上内容可能不完整的通知，且本轮 turn 内记住该选择；`Keep waiting` 订阅释放、不设上限。提问挂起期间发生释放会撤回问题并直接读取。受委托的调用方或没有应答方的组合则改为遵循 `delegatedReadTimeout`。
 - 取消调用方的 turn 会以 `aborted` 结束任何等待，并让工具自行报告取消。
 
 每个会话的 `fileLocks` 投影包含 `held`（本轮 turn 内租下的显示路径）与 `waiting`（当前被外部租约挡住的调用，含持有者与阶段：`waiting`、`asked` 或 `subscribed`）。两者都在 `turn/end` 时重置。
+
+### 被争用的文件如何处理
+
+本节按发生顺序讲三个机制：一个会话持有的租约、撞上租约的读取、以及唤醒该读取的订阅。
+
+#### 租约持有到修改它的 turn 结束
+
+租约在会话第一次对某文件 `write` 或 `edit` 时取得，工具调用返回时并不释放。一次修改通常是好几次调用——读、改、再改、跑一次检查、再改一处——如果在调用之间释放，另一个会话就会读到改了一半的文件。因此租约持有整个 turn，在该会话的 `turn/end` 释放：也就是 Agent 停止调用工具、开始回复的那一刻。同一 turn 内的后续调用，以及该会话所拥有的 Agent 的调用，直接加入同一份租约、不等待。turn 始终不关闭时有两道兜底：会话被关闭时的 `agent/disposed`，以及从首次取得算起的 `leaseTtlMs`（默认 30 分钟），后者记录为带 `reason: ttl` 的 `file-lock/released`。
+
+#### 撞上外部租约的读取经过三个阶段
+
+| 阶段 | 发生什么 | 何时结束 |
+|---|---|---|
+| 1. 静默等待 | 读取记录 `file-lock/waiting`，最多等待 `readWaitMs`（默认 30 秒），不惊动任何人。 | 租约被释放——读取继续，并附带一条说明等待时长的通知——或窗口到期。 |
+| 2. 询问用户 | 插件记录 `file-lock/asked`，通过 `ctx.userQuestions` 提问：**Shared file**——是照当前的样子读，还是等另一个会话用完？该会话显示为等待用户回复。 | 用户作答；或租约先被释放：问题被撤回，读取按阶段 1 的方式继续。 |
+| 3. 订阅 | 用户选 **Keep waiting** 后，读取记录 `file-lock/subscribed`，登记为该文件的订阅者，不设时限。 | 租约被释放；订阅者立即被唤醒并读取。 |
+
+阶段 2 里选 **Read now** 会读取磁盘上当前的内容，附上一条"另一个会话可能还没改完"的通知，并在本轮 turn 剩余时间内记住该选择，因此本轮再读同一文件不会再问。每个阶段都以携带结果（`released`、`read-now` 或 `aborted`）与总等待时长的 `file-lock/settled` 结束。只有拥有用户提问应答方的顶层会话才会进入阶段 2；子 Agent 或没有应答方的组合改为应用 `delegatedReadTimeout`：`wait` 直接进入阶段 3，`read-now` 立即读取。
+
+#### 订阅：由释放唤醒读者，没有轮询
+
+订阅者不靠定时重试。不带时限的 `FileLockRegistry.awaitRelease(key, family, signal)` 把这次调用登记为该键的读者，返回一个由释放本身来结算的 promise：当持有者的 `turn/end`、销毁或 TTL 释放租约时，`releaseAll` 先把每个排队中的读者结算为 `free`，再授予队首的写者，因此一次经历了阶段 1 到 3 的读取绝不会被后来的写入压到后面。被唤醒的读取随后执行工具体，并附上同样的"释放后读取"通知，等待时长从阶段 1 起算。订阅在调用方的 turn 被取消（`file-lock/settled` 为 `aborted`）或插件被销毁时取消；按设计没有其它出口——用户选的是等到正确的内容，取消 turn 就是停止的方式。
+
+会话处在哪个阶段不必读日志：`fileLocks` 投影的 `waiting.phase` 为 `waiting`、`asked` 或 `subscribed`，持有者自己的投影则把该文件列在 `held` 下。
 
 -----
 
@@ -149,7 +173,6 @@ kind: "package-reference"
 
 - **只覆盖规则中列出的工具**——通过 `bash`、`git` 或 `tools` 中未列出的工具修改的文件既不取得租约，也不等待任何租约。
 - **单进程**——租约表是进程局部的；同一台机器上的 `dsh` CLI 与 `dsh web` Host 看不到彼此的租约。
-- **尚无 Web 设置卡片**——`file-lock` 命名空间已提供，但插件设置页只在某张卡片认领后才渲染该命名空间；在此之前用户层在设置文档中编辑。
 - **订阅中的读取会阻塞其 turn**——`Keep waiting` 与 `wait` 策略按设计没有上限；取消 turn 是唯一出口。
 
 <a id="dev-note"></a>

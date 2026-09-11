@@ -8,6 +8,12 @@ export type PluginsSettingsLocaleKey =
   | 'bashTitle' | 'bashDescription' | 'bashTimeoutMs' | 'bashTimeoutMsHint'
   | 'bashMaxOutputBytes' | 'bashMaxOutputBytesHint'
   | 'agentLoopTitle' | 'agentLoopDescription' | 'agentLoopMaxParallel' | 'agentLoopMaxParallelHint'
+  | 'fileLockTitle' | 'fileLockDescription'
+  | 'fileLockReadWait' | 'fileLockReadWaitHint'
+  | 'fileLockWriteWait' | 'fileLockWriteWaitHint'
+  | 'fileLockLeaseTtl' | 'fileLockLeaseTtlHint'
+  | 'fileLockDelegated' | 'fileLockDelegatedHint' | 'fileLockDelegatedInvalid'
+  | 'fileLockDelegatedWait' | 'fileLockDelegatedReadNow'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
@@ -47,6 +53,19 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'How the agent dispatches tool calls.',
   agentLoopMaxParallel: 'Parallel tool calls',
   agentLoopMaxParallelHint: 'Upper bound on parallel-safe calls running at once within one step.',
+  fileLockTitle: 'File sharing lock',
+  fileLockDescription: 'How agents that compete for the same file at the same time are resolved.',
+  fileLockReadWait: 'Read lock (seconds)',
+  fileLockReadWaitHint: 'How long the current agent waits when a file is being modified by another agent. After that, you decide: read it as it is, or keep waiting.',
+  fileLockWriteWait: 'Write lock (minutes)',
+  fileLockWriteWaitHint: 'How long a write waits for the lock to be released. After that, the current agent gives up the edit and tells you which agent holds the file.',
+  fileLockLeaseTtl: 'Force-release lock after (minutes)',
+  fileLockLeaseTtlHint: 'An agent releases its lock when its reply completes. If it never completes, the lock is force-released after this long so other agents can use the file.',
+  fileLockDelegated: 'When a background agent cannot ask',
+  fileLockDelegatedHint: 'A subagent running in the background cannot ask you. Choose what it does when the file it needs is being modified by another agent.',
+  fileLockDelegatedInvalid: 'The saved value is not one of these options.',
+  fileLockDelegatedWait: 'Wait for the lock to release',
+  fileLockDelegatedReadNow: 'Read it as it is',
   webSearchTitle: 'Web search',
   webSearchDescription: 'The DeepSeek search provider.',
   webSearchApiKey: 'API key',
@@ -103,6 +122,19 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'Agent 如何派发工具调用。',
   agentLoopMaxParallel: '并行工具调用数',
   agentLoopMaxParallelHint: '同一步内最多同时运行多少个可并行的调用。',
+  fileLockTitle: '文件共享锁',
+  fileLockDescription: '多 Agent 同时竞争同一文件时的解决方案。',
+  fileLockReadWait: '读锁（秒）',
+  fileLockReadWaitHint: '当一个文件被其他 Agent 修改时，当前 Agent 等待的时间。超时后由你决定：照当前的样子读，还是继续等。',
+  fileLockWriteWait: '写锁（分钟）',
+  fileLockWriteWaitHint: '写锁等待释放的时间。超时后当前 Agent 放弃修改，并告诉你文件在哪个 Agent 手里。',
+  fileLockLeaseTtl: '锁强制释放（分钟）',
+  fileLockLeaseTtlHint: 'Agent 回复完成即释放锁。若一直未完成，超过这个时间也会强制释放，让其他 Agent 能用。',
+  fileLockDelegated: '后台 Agent 无法询问时',
+  fileLockDelegatedHint: '后台运行的子 Agent 无法向你提问。它要读的文件正被其他 Agent 修改时，选择它怎么做。',
+  fileLockDelegatedInvalid: '已保存的值不在这几个选项里。',
+  fileLockDelegatedWait: '等到锁释放',
+  fileLockDelegatedReadNow: '照当前的样子读',
   webSearchTitle: '网页搜索',
   webSearchDescription: 'DeepSeek 搜索提供方。',
   webSearchApiKey: 'API Key',

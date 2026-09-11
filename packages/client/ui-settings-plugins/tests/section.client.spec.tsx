@@ -7,6 +7,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { AgentLoopCard } from '../src/client/AgentLoopCard.tsx'
 import type { AgentLoopCardProps } from '../src/client/AgentLoopCard.tsx'
 import { BashCard } from '../src/client/BashCard.tsx'
+import { FileLockCard } from '../src/client/FileLockCard.tsx'
+import type { FileLockCardProps } from '../src/client/FileLockCard.tsx'
 import type { BashCardProps } from '../src/client/BashCard.tsx'
 import { ConfigurablePluginsTab } from '../src/client/ConfigurablePluginsTab.tsx'
 import type { ConfigurablePluginsTabProps } from '../src/client/ConfigurablePluginsTab.tsx'
@@ -18,6 +20,7 @@ import { WebSearchCard } from '../src/client/WebSearchCard.tsx'
 import type { WebSearchCardProps } from '../src/client/WebSearchCard.tsx'
 import type { AgentLoopCardState } from '../src/client/agent-loop-card-controller.ts'
 import type { BashCardState } from '../src/client/bash-card-controller.ts'
+import type { FileLockCardState } from '../src/client/file-lock-card-controller.ts'
 import type { CardFieldState, CardShell } from '../src/client/card-form.ts'
 import type { ConfigurablePluginsTabState } from '../src/client/tab-store.ts'
 import type { WebSearchCardState } from '../src/client/web-search-card-controller.ts'
@@ -455,6 +458,71 @@ describe('SubagentModelSelectionCard', () => {
     expect(control.disabled).toBe(true)
     fireEvent.click(control)
     expect(actions.toggleEnabled).not.toHaveBeenCalled()
+  })
+})
+
+function renderFileLockCard(state: Partial<FileLockCardState> = {}) {
+  const store = createSnapshotStore<FileLockCardState>({
+    ...settled,
+    readWaitSeconds: field('30'),
+    writeWaitMinutes: field('10'),
+    leaseTtlMinutes: field('30'),
+    delegatedReadTimeout: field('wait'),
+    ...state,
+  })
+  const actions = cardActions()
+  const props = { ...actions, t, useFileLockCard: bindSnapshotSelector(store) } as unknown as FileLockCardProps
+  render(<FileLockCard {...props} />)
+  return actions
+}
+
+describe('FileLockCard', () => {
+  it('edits each wait in its own unit and names the field the Host stores', () => {
+    const actions = renderFileLockCard({ dirty: true })
+
+    fireEvent.click(screen.getByText(en.fileLockTitle))
+    fireEvent.change(screen.getByLabelText(en.fileLockReadWait), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText(en.fileLockWriteWait), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText(en.fileLockLeaseTtl), { target: { value: '15' } })
+    fireEvent.click(screen.getByRole('button', { name: en.save }))
+
+    expect(actions.edit.mock.calls).toEqual([
+      ['readWaitMs', '5'], ['writeWaitMs', '2'], ['leaseTtlMs', '15'],
+    ])
+    expect(actions.save).toHaveBeenCalledOnce()
+  })
+
+  it('stages the delegated-read choice and its reset', () => {
+    const actions = renderFileLockCard({ delegatedReadTimeout: field('read-now', { overridden: true }) })
+
+    fireEvent.click(screen.getByText(en.fileLockTitle))
+    fireEvent.click(screen.getByRole('radio', { name: en.fileLockDelegatedWait }))
+    fireEvent.click(screen.getAllByRole('button', { name: en.reset }).at(-1)!)
+
+    expect(actions.edit).toHaveBeenCalledWith('delegatedReadTimeout', 'wait')
+    expect(actions.resetField).toHaveBeenCalledWith('delegatedReadTimeout')
+  })
+
+  it('stages a reset for every wait it owns', () => {
+    const actions = renderFileLockCard({
+      readWaitSeconds: field('5', { overridden: true }),
+      writeWaitMinutes: field('2', { overridden: true }),
+      leaseTtlMinutes: field('15', { overridden: true }),
+    })
+
+    fireEvent.click(screen.getByText(en.fileLockTitle))
+    for (const button of screen.getAllByRole('button', { name: en.reset })) fireEvent.click(button)
+
+    expect(actions.resetField.mock.calls).toEqual([['readWaitMs'], ['writeWaitMs'], ['leaseTtlMs']])
+  })
+
+  it('disables every control while the document is read-only', () => {
+    renderFileLockCard({ writable: false })
+
+    fireEvent.click(screen.getByText(en.fileLockTitle))
+
+    expect(screen.getByLabelText(en.fileLockReadWait)).toHaveProperty('disabled', true)
+    expect(screen.getByRole('radio', { name: en.fileLockDelegatedWait })).toHaveProperty('disabled', true)
   })
 })
 

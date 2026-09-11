@@ -76,14 +76,16 @@ describe('web e2e: plugin configuration section', () => {
     const dialog = await openPlugins()
 
     // Every card the shipped web composition exposes: the shell executor, the
-    // agent loop, subagent selection, and the DeepSeek search provider.
+    // agent loop, the file lock, subagent selection, and the DeepSeek search provider.
     await dialog.getByText('Subagent', { exact: true }).waitFor({ timeout: 10_000 })
     expect(await dialog.getByRole('button', { name: '展开设置: Subagent' }).count()).toBe(1)
     await dialog.getByText('终端', { exact: true }).waitFor({ timeout: 10_000 })
     expect(await dialog.getByText('Agent 循环', { exact: true }).count()).toBe(1)
+    expect(await dialog.getByText('文件共享锁', { exact: true }).count()).toBe(1)
     expect(await dialog.getByText('网页搜索', { exact: true }).count()).toBe(1)
     // Collapsed: a card's fields appear only once it is expanded.
     expect(await dialog.getByLabel('命令超时（毫秒）').count()).toBe(0)
+    expect(await dialog.getByLabel('读锁（秒）').count()).toBe(0)
 
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(SECTION_EXPECTED, snapshot, MODE)
@@ -216,6 +218,28 @@ describe('web e2e: plugin configuration section', () => {
     await expandTerminal.click()
     expect(await timeout.inputValue()).toBe('60000')
     expect(await dialog.getByText('已覆盖').count()).toBe(0)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('stores a file-lock wait in the unit the Host keeps, not the one shown', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-file-lock'))
+    const dialog = await openPlugins()
+    await dialog.getByText('文件共享锁', { exact: true }).click()
+
+    const readWait = dialog.getByLabel('读锁（秒）')
+    await readWait.waitFor({ timeout: 10_000 })
+    // The shipped 30,000 ms default, shown in the seconds the field is edited in.
+    expect(await readWait.inputValue()).toBe('30')
+    expect(await dialog.getByLabel('写锁（分钟）').inputValue()).toBe('10')
+
+    await readWait.fill('5')
+    await dialog.getByRole('radio', { name: '照当前的样子读' }).click()
+    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+
+    // Seconds on screen, milliseconds in the document.
+    await expect.poll(async () => (await settingsDocument()).includes('readWaitMs: 5000'), { timeout: 10_000 })
+      .toBe(true)
+    expect(await settingsDocument()).toContain('delegatedReadTimeout: read-now')
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 

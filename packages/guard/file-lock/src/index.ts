@@ -305,11 +305,11 @@ export function apply(ctx: Context, config: Config): void {
         signal: controller.signal,
         questions: [{
           id: 'file-lock',
-          header: 'File lock',
-          question: `"${target.path}" is being modified by ${holderLabel(holder)}. Read it now, or keep waiting until that session finishes?`,
+          header: 'Shared file',
+          question: `Another conversation, ${holderLabel(holder)}, is still editing "${target.path}". Read the file as it is right now, or wait until that conversation is done with it?`,
           options: [
-            { label: READ_NOW_LABEL, description: 'Read the current content; it may be incomplete.' },
-            { label: KEEP_WAITING_LABEL, description: 'Resume the read as soon as the lock is released.' },
+            { label: READ_NOW_LABEL, description: 'Read what is on disk now; the other conversation may not be finished with it.' },
+            { label: KEEP_WAITING_LABEL, description: 'Pause here and read the file the moment the other conversation lets go of it.' },
           ],
         }],
       })
