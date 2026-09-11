@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo } from 'react'
 import clsx from 'clsx'
-import { IconChecklistOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutline14, IconGaugeOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DigestNavEntryProps } from './contract/slots.ts'
 import type { NavBadgeState } from '../nav-settings.ts'
 import { selectInbox } from './select.ts'
@@ -101,11 +101,14 @@ export function DigestNavEntry({
 
   if (mobileView !== undefined) {
     const attention = counts.waiting + counts.unread
+    // The small phone layout hides the labels, so the two entries must differ
+    // by glyph alone: the overview takes the gauge, the pending list keeps
+    // the checklist the sidebar entry uses.
     return (
       <>
         <button type="button" className={css.mobileEntry} aria-label={t('mobile.overview')} aria-current={mobileView === 'overview' ? 'page' : undefined}
           onClick={() => { navigateMobile?.('overview') }}>
-          <IconChecklistOutline14 size={20} />
+          <IconGaugeOutline16 size={20} />
           <span className={css.mobileLabel}>{t('mobile.overview')}</span>
         </button>
         <button type="button" className={css.mobileEntry}
