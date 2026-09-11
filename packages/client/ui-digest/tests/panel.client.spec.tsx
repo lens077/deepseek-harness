@@ -54,6 +54,7 @@ interface MountOptions {
   current?: string
   projects?: Partial<ProjectTodosView>
   mobileView?: DigestPanelProps['mobileView']
+  toggleShortcut?: string
 }
 
 /** Mount the panel over a real store handle, with stub framework hooks. */
@@ -68,6 +69,7 @@ function mountPanel({
   current,
   projects = {},
   mobileView,
+  toggleShortcut = 'Ctrl+1',
 }: MountOptions = {}) {
   const store = createDigestStore().create()
   if (open) store.actions.open()
@@ -78,6 +80,10 @@ function mountPanel({
     : [[session.id, { key: `pending-${session.id}`, sessionId: session.id, ...session.pendingInteraction }] as const]))
   const view: InboxView = { status, snapshot, error }
   const projectsView: ProjectTodosView = { status: 'ready', snapshot: projectsSnapshot(), error: null, scanning: false, ...projects }
+  const navSettings: NavSettingsView = {
+    status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
+    navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut,
+  }
   const calls = {
     navigateMobile: vi.fn(),
     ensureInbox: vi.fn(async () => OK),
@@ -108,6 +114,7 @@ function mountPanel({
     useWorkspaces: ((selector: (s: unknown) => unknown) => selector({ items: workspaces, archivedSessionIds: archived })),
     useInbox: ((selector: (s: InboxView) => unknown) => selector(view)),
     useProjects: ((selector: (s: ProjectTodosView) => unknown) => selector(projectsView)),
+    useNavSettings: ((selector: (s: NavSettingsView) => unknown) => selector(navSettings)),
     ...calls,
     t,
   } as unknown as DigestPanelProps
@@ -240,7 +247,7 @@ describe('DigestPanel inbox tab', () => {
     expect(screen.queryByText('title-archived')).toBeNull()
     expect(screen.getByText('待处理 3')).toBeTruthy()
     expect(screen.getByText('运行中 1')).toBeTruthy()
-    expect(screen.getByText(zh['panel.keys'])).toBeTruthy()
+    expect(screen.getByText(zh['panel.keys'].replace('{shortcut}', 'Ctrl+1'))).toBeTruthy()
   })
 
   it('shows the empty state, the loading state, and the error bar with retry', () => {
@@ -801,7 +808,7 @@ describe('DigestNavEntry', () => {
     const store = createDigestStore().create()
     const settings: NavSettingsView = {
       status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
-      navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], ...over.settings,
+      navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1', ...over.settings,
     }
     const rows = over.rows ?? [row('a')]
     const sessionState = { ids: rows.map(r => r.id), byId: Object.fromEntries(rows.map(r => [r.id, r])) }
@@ -881,6 +888,31 @@ describe('DigestNavEntry', () => {
     cleanup()
     fireEvent.keyDown(document, { key: '1', code: 'Digit1', ctrlKey: true })
     expect(e.store.getSnapshot().open).toBe(false)
+  })
+
+  it('follows the configured chord: a modified chord stays live in text fields, a bare key does not', () => {
+    const e = mountEntry({ settings: { toggleShortcut: 'Ctrl+Shift+I' } })
+    fireEvent.keyDown(document, { key: '1', code: 'Digit1', ctrlKey: true })
+    expect(e.store.getSnapshot().open).toBe(false)
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    fireEvent.keyDown(input, { key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true })
+    expect(e.store.getSnapshot().open).toBe(true)
+    // The tooltip names the configured chord; keyboard focus shows it at once.
+    fireEvent.focus(screen.getByRole('button', { name: /汇总/ }))
+    expect(screen.getByRole('tooltip').textContent).toBe('汇总 · 完成未读 1 · Ctrl+Shift+I')
+    cleanup()
+    // The viewing store persists whole-value; a fresh handle must start closed.
+    localStorage.clear()
+    const bare = mountEntry({ settings: { toggleShortcut: 'F2' } })
+    fireEvent.keyDown(input, { key: 'F2', code: 'F2' })
+    expect(bare.store.getSnapshot().open).toBe(false)
+    fireEvent.keyDown(document, { key: 'F2', code: 'F2' })
+    expect(bare.store.getSnapshot().open).toBe(true)
+    // Key repeat holds the panel where it is.
+    fireEvent.keyDown(document, { key: 'F2', code: 'F2', repeat: true })
+    expect(bare.store.getSnapshot().open).toBe(true)
+    input.remove()
   })
 
   it('carries one pill per state in the configured order, and one summed pill on the rail', () => {

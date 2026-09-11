@@ -2,9 +2,9 @@
 /**
  * The digest panel settings: the policy standing on defaults until a scope
  * binds it, mirroring the scope while bound, and routing repaired writes; and
- * the settings page over direct props — the two toggles, the order list
- * reordered by drag and by buttons, the reset, and the disabled and failure
- * states.
+ * the settings page over direct props — the chord recorder, the two toggles,
+ * the order list reordered by drag and by buttons, the resets, and the
+ * disabled and failure states.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -27,18 +27,21 @@ describe('NavSettingsPolicy', () => {
   it('stands on defaults unbound, mirrors a bound scope, and returns to defaults when detached', () => {
     const policy = new NavSettingsPolicy()
     expect(policy.view.getSnapshot()).toEqual({
-      status: 'unavailable', navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, writable: false,
+      status: 'unavailable', navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', writable: false,
     })
     const stub = stubSettingsScope<DigestSettings>()
     const detach = policy.bind(stub.scope)
     expect(policy.view.getSnapshot()).toMatchObject({ status: 'loading', navBadges: true })
-    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'failed'] } })
+    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'failed'], toggleShortcut: 'Alt+D' } })
     // A repeated or missing state in the document is repaired for display.
     expect(policy.view.getSnapshot()).toEqual({
-      status: 'ready', writable: true, navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'],
+      status: 'ready', writable: true, navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'Alt+D',
     })
+    // A hand-written chord the schema pattern admits but editing owns reads as the default.
+    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+C' } })
+    expect(policy.view.getSnapshot()).toMatchObject({ toggleShortcut: 'Ctrl+1' })
     stub.publish({ status: 'unavailable', value: undefined, writable: false })
-    expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: false, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'] })
+    expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1' })
     detach()
     expect(stub.listenerCount()).toBe(0)
     expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: true, navBadgeOrder: DEFAULT_ORDER })
@@ -52,8 +55,9 @@ describe('NavSettingsPolicy', () => {
     await policy.setNavBadges(false)
     await policy.setNavFinishedBadge(true)
     await policy.setNavBadgeOrder(['running', 'waiting'])
+    await policy.setToggleShortcut('F2')
     expect(stub.set.mock.calls).toEqual([
-      ['navBadges', false], ['navFinishedBadge', true], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']],
+      ['navBadges', false], ['navFinishedBadge', true], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'F2'],
     ])
   })
 })
@@ -62,14 +66,16 @@ type SectionCalls = {
   setNavBadges: ReturnType<typeof vi.fn<(show: boolean) => Promise<void>>>
   setNavFinishedBadge: ReturnType<typeof vi.fn<(show: boolean) => Promise<void>>>
   setNavBadgeOrder: ReturnType<typeof vi.fn<(order: readonly NavBadgeState[]) => Promise<void>>>
+  setToggleShortcut: ReturnType<typeof vi.fn<(shortcut: string) => Promise<void>>>
 }
 
 function mount(view: Partial<NavSettingsView> = {}, over: Partial<SectionCalls> = {}) {
-  const state: NavSettingsView = { status: 'ready', writable: true, navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, ...view }
+  const state: NavSettingsView = { status: 'ready', writable: true, navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', ...view }
   const calls: SectionCalls = {
     setNavBadges: vi.fn<(show: boolean) => Promise<void>>(async () => undefined),
     setNavFinishedBadge: vi.fn<(show: boolean) => Promise<void>>(async () => undefined),
     setNavBadgeOrder: vi.fn<(order: readonly NavBadgeState[]) => Promise<void>>(async () => undefined),
+    setToggleShortcut: vi.fn<(shortcut: string) => Promise<void>>(async () => undefined),
     ...over,
   }
   const props = {
@@ -88,6 +94,36 @@ function rows(): string[] {
 }
 
 describe('DigestSettingsSection', () => {
+  it('records the toggle chord from a press, refuses owned and unsupported keys, and resets to the default', () => {
+    const c = mount({ toggleShortcut: 'F2' })
+    const field = screen.getByLabelText(zh['digestSettings.shortcut']) as HTMLInputElement
+    expect(field.value).toBe('F2')
+    // A bare F-key is off inside text fields; the page says so.
+    expect(screen.getByText(zh['digestSettings.shortcut.plain'])).toBeTruthy()
+    // A modifier alone is a transient press; nothing is written or refused.
+    fireEvent.keyDown(field, { key: 'Control', ctrlKey: true })
+    expect(c.setToggleShortcut).not.toHaveBeenCalled()
+    fireEvent.keyDown(field, { key: 'c', code: 'KeyC', ctrlKey: true })
+    expect(screen.getByRole('alert').textContent).toBe(zh['digestSettings.shortcut.reserved'])
+    fireEvent.keyDown(field, { key: ';', code: 'Semicolon', ctrlKey: true })
+    expect(screen.getByRole('alert').textContent).toBe(zh['digestSettings.shortcut.unsupported'])
+    fireEvent.keyDown(field, { key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true })
+    expect(c.setToggleShortcut).toHaveBeenLastCalledWith('Ctrl+Shift+I')
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Pressing the chord already stored writes nothing.
+    fireEvent.keyDown(field, { key: 'F2', code: 'F2' })
+    expect(c.setToggleShortcut).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(field, { key: 'Tab', code: 'Tab' })
+    fireEvent.blur(field)
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认 Ctrl+1' }))
+    expect(c.setToggleShortcut).toHaveBeenLastCalledWith('Ctrl+1')
+    cleanup()
+    mount()
+    expect((screen.getByRole('button', { name: '恢复默认 Ctrl+1' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByText(zh['digestSettings.shortcut.plain'])).toBeNull()
+  })
+
   it('writes the two toggles, and the finished toggle follows the badges toggle', () => {
     const c = mount()
     const [badges, finished] = screen.getAllByRole('checkbox') as HTMLInputElement[]
@@ -156,6 +192,7 @@ describe('DigestSettingsSection', () => {
     mount({ status: 'loading' })
     expect(screen.getByText(zh['settings.loading'])).toBeTruthy()
     for (const box of screen.getAllByRole('checkbox') as HTMLInputElement[]) expect(box.disabled).toBe(true)
+    expect((screen.getByLabelText(zh['digestSettings.shortcut']) as HTMLInputElement).disabled).toBe(true)
     cleanup()
     mount({ writable: false })
     expect(screen.getByText(zh['settings.unavailable'])).toBeTruthy()
@@ -177,5 +214,10 @@ describe('DigestSettingsSection', () => {
     fireEvent.click(screen.getAllByRole('checkbox')[1]!)
     await act(async () => { await Promise.resolve() })
     expect(screen.getByRole('alert').textContent).toBe('保存失败：nope')
+    cleanup()
+    mount({}, { setToggleShortcut: vi.fn<(shortcut: string) => Promise<void>>(async () => { throw new Error('denied') }) })
+    fireEvent.keyDown(screen.getByLabelText(zh['digestSettings.shortcut']), { key: 'F2', code: 'F2' })
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByRole('alert').textContent).toBe('保存失败：denied')
   })
 })

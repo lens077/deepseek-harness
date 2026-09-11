@@ -22,6 +22,7 @@ import type { InboxTab } from './stores.ts'
 import { ProjectTodos, type ProjectTodosActions } from './ProjectTodos.tsx'
 import { Timeline } from './Timeline.tsx'
 import { TodoList } from './TodoList.tsx'
+import { isEditableTarget } from './editable-target.ts'
 import css from './DigestPanel.module.css'
 
 const DAY_MS = 86_400_000
@@ -37,25 +38,13 @@ const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
 const SECTION_KEYS: readonly InboxSectionKey[] = ['unread', 'seen', 'running', 'pinned', 'needsYou', 'failed', 'handled']
 
 /**
- * Whether a key event originates in an editable control, where single-letter
- * shortcuts must not fire.
- * @param target - the event target.
- * @returns true for inputs, text areas, and contenteditable hosts.
- */
-function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  const tag = target.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.closest('[contenteditable]') !== null
-}
-
-/**
  * Render the inbox panel, or nothing while it is closed.
  * @param props - composed slot props (store share, global hooks, inject, locale).
  * @returns the panel element, or null when closed.
  */
 export function DigestPanel(props: DigestPanelProps) {
   const {
-    useStore, actions, useSessions, useWorkspaces, useSessionPendingInteraction, useInbox, useProjects, t,
+    useStore, actions, useSessions, useWorkspaces, useSessionPendingInteraction, useInbox, useProjects, useNavSettings, t,
     ensureInbox, openSession, openQuestion, continueSession, copyText,
     setHandled, snooze, setPinned, markReviewed, addTodo, fileTodo, updateTodo, removeTodo,
     ensureProjects, rescanProjects, readProjectDocument, openProject, openPath, mobileView, navigateMobile,
@@ -84,6 +73,7 @@ export function DigestPanel(props: DigestPanelProps) {
   const inboxError = useInbox(v => v.error)
   const inbox = useInbox(v => v.snapshot)
   const projectsView = useProjects(v => v)
+  const toggleShortcut = useNavSettings(v => v.toggleShortcut)
 
   const [now, setNow] = useState(() => Date.now())
   const [focus, setFocus] = useState(0)
@@ -202,7 +192,7 @@ export function DigestPanel(props: DigestPanelProps) {
   useEffect(() => {
     if (!open || tab !== 'inbox') return
     const onKey = (event: KeyboardEvent): void => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isEditable(event.target)) return
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isEditableTarget(event.target)) return
       if (mobileView !== undefined) return
       if (event.key === 'Escape') {
         closePanel()
@@ -485,7 +475,7 @@ export function DigestPanel(props: DigestPanelProps) {
                     </div>
                   </section>
                 ))}
-                <p className={css.keys}>{t('panel.keys')}</p>
+                <p className={css.keys}>{t('panel.keys', { shortcut: toggleShortcut })}</p>
               </>
             )
         )}
