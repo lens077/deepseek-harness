@@ -1,14 +1,17 @@
 /**
- * The Digest panel settings page: whether the sidebar entry shows the state
- * badges, whether a grey finished badge joins them, and the order the state
- * badges take. The order list is reordered by dragging a row onto another,
- * or by the move buttons for keyboard users; every edit writes the whole
- * order so the document always holds a permutation.
+ * The Digest panel settings page: the chord that toggles the panel, whether
+ * the sidebar entry shows the state badges, whether a grey finished badge
+ * joins them, and the order the state badges take. The chord is recorded by
+ * pressing it in a read-only field and saved on the spot; a refused press
+ * names its reason beside the field. The order list is reordered by dragging
+ * a row onto another, or by the move buttons for keyboard users; every edit
+ * writes the whole order so the document always holds a permutation.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import clsx from 'clsx'
 import type { DigestSettingsSectionProps } from './contract/slots.ts'
 import { NAV_BADGE_STATES, type NavBadgeState } from '../nav-settings.ts'
+import { DEFAULT_TOGGLE_SHORTCUT, hasCommandModifier, recordToggleShortcut } from '../toggle-shortcut.ts'
 import css from './ProjectSettingsSection.module.css'
 
 /**
@@ -31,9 +34,10 @@ function move<T>(list: readonly T[], from: number, to: number): T[] {
  * @returns the page element.
  */
 export function DigestSettingsSection(props: DigestSettingsSectionProps) {
-  const { useNavSettings, setNavBadges, setNavFinishedBadge, setNavBadgeOrder, t } = props
+  const { useNavSettings, setNavBadges, setNavFinishedBadge, setNavBadgeOrder, setToggleShortcut, t } = props
   const view = useNavSettings(value => value)
   const [error, setError] = useState<string | null>(null)
+  const [refused, setRefused] = useState<'reserved' | 'unsupported' | null>(null)
   const [dragging, setDragging] = useState<NavBadgeState | null>(null)
   const [over, setOver] = useState<NavBadgeState | null>(null)
   useEffect(() => {
@@ -58,6 +62,19 @@ export function DigestSettingsSection(props: DigestSettingsSectionProps) {
     commit(move(order, from, to))
   }
   const isDefault = order.every((state, index) => state === NAV_BADGE_STATES[index])
+  const commitShortcut = (shortcut: string): void => {
+    setRefused(null)
+    if (shortcut === view.toggleShortcut) return
+    void setToggleShortcut(shortcut).catch(failed)
+  }
+  const recordShortcut = (event: KeyboardEvent<HTMLInputElement>): void => {
+    const result = recordToggleShortcut(event)
+    if (result.kind === 'ignored') return
+    // The field is read-only, so the press must reach nothing else either.
+    event.preventDefault()
+    if (result.kind === 'invalid') setRefused(result.reason)
+    else commitShortcut(result.shortcut)
+  }
 
   return (
     <div className={css.section}>
@@ -66,6 +83,32 @@ export function DigestSettingsSection(props: DigestSettingsSectionProps) {
       {view.status === 'loading' && <p className={css.desc}>{t('settings.loading')}</p>}
       {view.status !== 'loading' && disabled && <p className={css.warn}>{t('settings.unavailable')}</p>}
       {error !== null && <p className={css.error} role="alert">{error}</p>}
+
+      <div className={css.field}>
+        <label className={css.label} htmlFor="digest-toggle-shortcut">{t('digestSettings.shortcut')}</label>
+        <p className={css.hint}>{t('digestSettings.shortcut.hint')}</p>
+        <div className={css.addRow}>
+          <input
+            id="digest-toggle-shortcut"
+            className={css.input}
+            readOnly
+            value={view.toggleShortcut}
+            disabled={disabled}
+            onKeyDown={recordShortcut}
+            onBlur={() => { setRefused(null) }}
+          />
+          <button
+            type="button"
+            className={css.action}
+            disabled={disabled || view.toggleShortcut === DEFAULT_TOGGLE_SHORTCUT}
+            onClick={() => { commitShortcut(DEFAULT_TOGGLE_SHORTCUT) }}
+          >
+            {t('digestSettings.shortcut.reset', { shortcut: DEFAULT_TOGGLE_SHORTCUT })}
+          </button>
+        </div>
+        {refused !== null && <p className={css.error} role="alert">{t(`digestSettings.shortcut.${refused}`)}</p>}
+        {!hasCommandModifier(view.toggleShortcut) && <p className={css.warn}>{t('digestSettings.shortcut.plain')}</p>}
+      </div>
 
       <div className={css.field}>
         <label className={css.check}>

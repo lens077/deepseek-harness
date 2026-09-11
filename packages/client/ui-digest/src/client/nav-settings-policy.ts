@@ -1,7 +1,7 @@
 /**
- * The digest entry's badge preferences as the browser sees them: the durable
- * `ui-digest` section mirrored into one reactive view the sidebar entry reads
- * and the settings page writes through. The view exists before any settings
+ * The digest entry's preferences as the browser sees them: the durable
+ * `ui-digest` section (badges and the panel's toggle chord) mirrored into one
+ * reactive view the sidebar entry reads and the settings page writes through. The view exists before any settings
  * scope does, carrying the defaults, so the entry renders the same whether or
  * not this composition serves settings.
  * @module @deepseek-ai/dsh-client-ui-digest/client/nav-settings-policy
@@ -12,6 +12,7 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   DEFAULT_DIGEST_SETTINGS, normalizeBadgeOrder, type DigestSettings, type NavBadgeState,
 } from '../nav-settings.ts'
+import { validateToggleShortcut, type ToggleShortcut } from '../toggle-shortcut.ts'
 
 /** What the sidebar entry and the settings page render. */
 export interface NavSettingsView {
@@ -21,6 +22,8 @@ export interface NavSettingsView {
   navFinishedBadge: boolean
   /** Every state exactly once, in display order. */
   navBadgeOrder: readonly NavBadgeState[]
+  /** Canonical chord that toggles the panel; a reserved stored chord reads as the default. */
+  toggleShortcut: ToggleShortcut
   /** Whether writes reach the Host document. */
   writable: boolean
 }
@@ -30,12 +33,12 @@ const INITIAL: NavSettingsView = Object.freeze({
   navBadges: DEFAULT_DIGEST_SETTINGS.navBadges,
   navFinishedBadge: DEFAULT_DIGEST_SETTINGS.navFinishedBadge,
   navBadgeOrder: Object.freeze([...DEFAULT_DIGEST_SETTINGS.navBadgeOrder]),
+  toggleShortcut: DEFAULT_DIGEST_SETTINGS.toggleShortcut,
   writable: false,
 })
 
 /**
- * Owns the live badge-preference view and routes edits to the durable
- * scope. Constructed once in `apply`; {@link bind} attaches the scope when
+ * Owns the live preference view and routes edits to the durable scope. Constructed once in `apply`; {@link bind} attaches the scope when
  * the settings capability exists.
  */
 export class NavSettingsPolicy {
@@ -91,6 +94,15 @@ export class NavSettingsPolicy {
     return this.write('navBadgeOrder', normalizeBadgeOrder(order))
   }
 
+  /**
+   * Replace the panel's toggle chord.
+   * @param shortcut - a chord the recorder accepted.
+   * @returns settlement of the durable write.
+   */
+  setToggleShortcut(shortcut: ToggleShortcut): Promise<void> {
+    return this.write('toggleShortcut', shortcut)
+  }
+
   private write(field: keyof DigestSettings, value: unknown): Promise<void> {
     if (this.host === undefined) return Promise.reject(new Error('digest settings are unavailable'))
     return this.host.set(field, value)
@@ -107,6 +119,11 @@ export class NavSettingsPolicy {
       navBadges: section?.navBadges ?? current.navBadges,
       navFinishedBadge: section?.navFinishedBadge ?? current.navFinishedBadge,
       navBadgeOrder: section === undefined ? current.navBadgeOrder : Object.freeze(normalizeBadgeOrder(section.navBadgeOrder)),
+      // The schema pattern admits a hand-written chord the recorder refuses
+      // (Ctrl+C and kin); it reads as the default rather than hijacking editing.
+      toggleShortcut: section === undefined
+        ? current.toggleShortcut
+        : validateToggleShortcut(section.toggleShortcut) ? section.toggleShortcut : DEFAULT_DIGEST_SETTINGS.toggleShortcut,
       writable: snapshot.writable,
     }))
   }

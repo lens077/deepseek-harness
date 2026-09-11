@@ -292,19 +292,22 @@ describe('ui-digest browser half', () => {
     const digestBinding = b.bound.find(spec => spec.namespace === 'ui-digest') as { namespace: string; decode?: (section: unknown) => unknown } | undefined
     expect(digestBinding).toBeDefined()
     // The decoder defaults an incomplete wire section rather than passing it through.
-    expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ navBadges: false, navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'] })
+    expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ navBadges: false, navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1' })
     const face = b.digestSettings()
     expect(face.hooks.navSettings).toBe(b.nav().hooks.navSettings)
     expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'loading', navBadges: true, navFinishedBadge: false, writable: false })
-    b.digestScope.publish({ status: 'ready', writable: true, value: { navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'] } })
+    b.digestScope.publish({ status: 'ready', writable: true, value: { navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2' } })
     expect(face.hooks.navSettings.getSnapshot()).toEqual({
-      status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'],
+      status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2',
     })
+    // The panel reads the same view to name the chord in its key legend.
+    expect(b.panel().hooks.navSettings).toBe(face.hooks.navSettings)
     await face.setNavBadges(false)
     await face.setNavFinishedBadge(false)
     await face.setNavBadgeOrder(['running', 'running', 'waiting'])
+    await face.setToggleShortcut('Ctrl+Shift+I')
     expect(b.digestScope.set.mock.calls).toEqual([
-      ['navBadges', false], ['navFinishedBadge', false], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']],
+      ['navBadges', false], ['navFinishedBadge', false], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'Ctrl+Shift+I'],
     ])
     const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'digest')
     b.ctx.locale.setLocale('zh')
@@ -313,7 +316,7 @@ describe('ui-digest browser half', () => {
     expect((entry?.options as { label?: () => string }).label?.()).toBe(en['digestSettings.nav'])
     // Teardown detaches the scope and the view returns to the defaults.
     await b.feature.dispose()
-    expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'unavailable', navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'] })
+    expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'unavailable', navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1' })
     expect(b.digestScope.listenerCount()).toBe(0)
   })
 

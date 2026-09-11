@@ -14,6 +14,8 @@ import clsx from 'clsx'
 import { IconChecklistOutline14, IconGaugeOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DigestNavEntryProps } from './contract/slots.ts'
 import type { NavBadgeState } from '../nav-settings.ts'
+import { hasCommandModifier, matchesToggleShortcut } from '../toggle-shortcut.ts'
+import { isEditableTarget } from './editable-target.ts'
 import { selectInbox } from './select.ts'
 import css from './DigestNavEntry.module.css'
 
@@ -23,18 +25,6 @@ const TONES: Record<NavBadgeState, string | undefined> = {
   unread: css.badgeUnread,
   running: css.badgeRunning,
   failed: css.badgeFailed,
-}
-
-/**
- * Whether the event is the panel's toggle chord. `code` addresses the digit
- * row's physical key so layouts that shift `1` still reach it, with `key` as
- * the fallback for layouts that report no code.
- * @param event - the keyboard event.
- * @returns whether the chord matches.
- */
-function isToggleChord(event: KeyboardEvent): boolean {
-  if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
-  return event.code === 'Digit1' || event.key === '1'
 }
 
 /**
@@ -50,6 +40,7 @@ export function DigestNavEntry({
   const showBadges = useNavSettings(v => v.navBadges)
   const showFinished = useNavSettings(v => v.navFinishedBadge)
   const order = useNavSettings(v => v.navBadgeOrder)
+  const toggleShortcut = useNavSettings(v => v.toggleShortcut)
   const rows = useSessions(s => s.ids.map(id => s.byId[id]).filter(row => row !== undefined))
   const workspaces = useWorkspaces(s => s.items)
   const archived = useWorkspaces(s => s.archivedSessionIds)
@@ -85,19 +76,22 @@ export function DigestNavEntry({
   const rail = pills[0]
 
   // The entry is mounted for the whole session, wide or railed, so it owns the
-  // keyboard path to its own action. The chord carries a modifier, so it stays
+  // keyboard path to its own action. A chord with Ctrl, Meta, or Alt stays
   // live inside the composer and the panel's own inputs — reaching the inbox
-  // mid-sentence is the point — unlike the panel's single-letter triage ring.
+  // mid-sentence is the point — while a chord typing could spell keeps the
+  // silence of the panel's single-letter triage ring there.
   useEffect(() => {
+    const live = hasCommandModifier(toggleShortcut)
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!isToggleChord(event)) return
+      if (!matchesToggleShortcut(toggleShortcut, event)) return
+      if (!live && isEditableTarget(event.target)) return
       event.preventDefault()
       if (mobileView !== undefined) navigateMobile?.(mobileView === 'overview' ? 'conversation' : 'overview')
       else actions.toggle()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [actions, mobileView, navigateMobile])
+  }, [actions, mobileView, navigateMobile, toggleShortcut])
 
   if (mobileView !== undefined) {
     const attention = counts.waiting + counts.unread
@@ -128,7 +122,7 @@ export function DigestNavEntry({
   return (
     // The tooltip states the shortcut in both column states: railed it also
     // names the entry, wide it carries the one fact the row cannot show.
-    <Tooltip label={`${label} · ${t('nav.shortcut')}`} delayMs={500}>
+    <Tooltip label={`${label} · ${toggleShortcut}`} delayMs={500}>
       <button
         type="button"
         className={clsx(css.entry, !wide && css.rail, open && css.active)}

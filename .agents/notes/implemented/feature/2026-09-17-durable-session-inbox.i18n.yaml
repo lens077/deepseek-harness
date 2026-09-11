@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-durable-session-inbox.md
-2026-09-17-durable-session-inbox.md: fcd8fc3dd292007f9944aa8850a907616cdf6630
-2026-09-17-durable-session-inbox.zh.md: a7c0914d0b8fb848b0c43530a800ff72c5f437b4
+2026-09-17-durable-session-inbox.md: ef16a7a1d0f904c62b2ece200196749360922b53
+2026-09-17-durable-session-inbox.zh.md: 9cd2d470bb871f87f276cfa7a6cc31148ff5d526

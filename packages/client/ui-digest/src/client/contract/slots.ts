@@ -19,6 +19,7 @@ import type { ProjectDocumentResult, ProjectTodosView } from '../projects-contro
 import type { ProjectSettingsView } from '../project-settings.ts'
 import type { NavSettingsView } from '../nav-settings-policy.ts'
 import type { NavBadgeState } from '../../nav-settings.ts'
+import type { ToggleShortcut } from '../../toggle-shortcut.ts'
 import type { createDigestStore } from '../stores.ts'
 
 /** Registrant-private reactive fact both entries read: the durable inbox (an object type so it satisfies the hooks record). */
@@ -27,18 +28,21 @@ export type InboxHooks = {
   inbox: HostObservable<InboxView>
 }
 
-/** The panel's reactive facts: the inbox plus the project todo scan. */
-export type PanelHooks = InboxHooks & {
+/** The panel's reactive facts: the inbox, the project todo scan, and the preferences naming the toggle chord. */
+export type PanelHooks = InboxHooks & NavSettingsHooks & {
   /** The project todo scan view; the renderer binds it as `useProjects`. */
   projects: HostObservable<ProjectTodosView>
 }
 
-/** Injected share of the sidebar entry: the inbox view and the badge preferences. */
+/** The digest preferences (badges and the toggle chord) as a hooks compartment member. */
+export type NavSettingsHooks = {
+  /** The preferences view; the renderer binds it as `useNavSettings`. */
+  navSettings: HostObservable<NavSettingsView>
+}
+
+/** Injected share of the sidebar entry: the inbox view and the preferences. */
 export interface DigestNavEntryInjected {
-  hooks: InboxHooks & {
-    /** The badge preferences; the renderer binds it as `useNavSettings`. */
-    navSettings: HostObservable<NavSettingsView>
-  }
+  hooks: InboxHooks & NavSettingsHooks
 }
 
 /** Registrant-private injected share of the panel: runtime actions and inbox mutations. */
@@ -107,13 +111,12 @@ export type ProjectSettingsSectionProps =
 
 /** Registrant-private injected share of the digest panel settings section. */
 export interface DigestSettingsInjected {
-  hooks: {
-    /** The badge preferences; the renderer binds it as `useNavSettings`. */
-    navSettings: HostObservable<NavSettingsView>
-  }
+  hooks: NavSettingsHooks
   setNavBadges: (show: boolean) => Promise<void>
   setNavFinishedBadge: (show: boolean) => Promise<void>
   setNavBadgeOrder: (order: readonly NavBadgeState[]) => Promise<void>
+  /** Replace the panel's toggle chord with one the recorder accepted. */
+  setToggleShortcut: (shortcut: ToggleShortcut) => Promise<void>
 }
 
 /** Full props of the digest panel settings section: the settings view, its writers, and copy. */

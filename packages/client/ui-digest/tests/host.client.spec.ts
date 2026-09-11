@@ -31,17 +31,22 @@ describe('ui-digest host', () => {
     expect(normalizeBadgeOrder(['running', 'unread', 'failed', 'waiting'])).toEqual(['running', 'unread', 'failed', 'waiting'])
   })
 
-  it('registers, validates, and disposes the durable badge preferences', async () => {
+  it('registers, validates, and disposes the durable preferences', async () => {
     const ctx = new Context()
     await ctx.plugin(MemorySettings).await()
     const fiber = ctx.plugin({ apply })
     await fiber.await()
     const ns = DIGEST_SETTINGS_NAMESPACE
     expect(ctx.settings.get(ns)).toEqual(DEFAULT_DIGEST_SETTINGS)
-    await ctx.settings.update(ns, { navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'] })
-    expect(ctx.settings.get(ns)).toEqual({ navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'] })
+    await ctx.settings.update(ns, { navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
+    expect(ctx.settings.get(ns)).toEqual({ navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
     await expect(ctx.settings.update(ns, { navBadgeOrder: ['nope'] })).rejects.toThrow()
     await expect(ctx.settings.update(ns, { navBadges: 'yes' })).rejects.toThrow()
+    // Noncanonical modifier order and unsupported keys never reach the document.
+    await expect(ctx.settings.update(ns, { toggleShortcut: 'Shift+Ctrl+I' })).rejects.toThrow()
+    await expect(ctx.settings.update(ns, { toggleShortcut: 'Ctrl+Escape' })).rejects.toThrow()
+    await ctx.settings.update(ns, { toggleShortcut: 'F2' })
+    expect(ctx.settings.get(ns)).toMatchObject({ toggleShortcut: 'F2' })
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
   })

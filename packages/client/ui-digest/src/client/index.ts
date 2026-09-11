@@ -68,6 +68,7 @@ export type { ProjectDocumentResult, ProjectTodosRemote, ProjectTodosView } from
 export type { ProjectSettingsView } from './project-settings.ts'
 export type { NavSettingsView } from './nav-settings-policy.ts'
 export type { DigestSettings, NavBadgeState } from '../nav-settings.ts'
+export type { ToggleShortcut } from '../toggle-shortcut.ts'
 export { createDigestStore } from './stores.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -154,9 +155,9 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
-  // The sidebar entry's badge preferences. The view stands on defaults
-  // until the settings scope binds it, so the entry renders in a
-  // composition without the settings surface.
+  // The sidebar entry's badge preferences and the panel's toggle chord. The
+  // view stands on defaults until the settings scope binds it, so the entry
+  // renders in a composition without the settings surface.
   const navSettings = new NavSettingsPolicy()
 
   // The two settings pages ride the settings scope service, so a
@@ -178,6 +179,7 @@ export function apply(ctx: ClientContext): void {
         setNavBadges: show => navSettings.setNavBadges(show),
         setNavFinishedBadge: show => navSettings.setNavFinishedBadge(show),
         setNavBadgeOrder: order => navSettings.setNavBadgeOrder(order),
+        setToggleShortcut: shortcut => navSettings.setToggleShortcut(shortcut),
       }),
     }, DigestSettingsSection))
 
@@ -295,7 +297,7 @@ export function apply(ctx: ClientContext): void {
     inject: (actions): DigestPanelInjected => {
       viewActions = actions
       return {
-        hooks: { inbox: controller, projects },
+        hooks: { inbox: controller, projects, navSettings: navSettings.view },
         ensureInbox: () => controller.ensure(),
         ensureProjects: () => projects.ensure(),
         rescanProjects: () => projects.rescan(),
