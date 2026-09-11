@@ -35,7 +35,7 @@ const TODO_QUESTION_CHARS = 120
 
 const TAB_KEYS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
 const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
-const SECTION_KEYS: readonly InboxSectionKey[] = ['unread', 'seen', 'running', 'pinned', 'needsYou', 'failed', 'handled']
+const SECTION_KEYS: readonly InboxSectionKey[] = ['pinned', 'unread', 'seen', 'running', 'needsYou', 'failed', 'handled']
 
 /**
  * Render the inbox panel, or nothing while it is closed.
@@ -44,7 +44,7 @@ const SECTION_KEYS: readonly InboxSectionKey[] = ['unread', 'seen', 'running', '
  */
 export function DigestPanel(props: DigestPanelProps) {
   const {
-    useStore, actions, useSessions, useWorkspaces, useSessionPendingInteraction, useInbox, useProjects, useNavSettings, t,
+    useStore, actions, useSessions, useWorkspaces, useSessionPendingInteraction, useInbox, useProjects, useNavSettings, usePinsSettings, t,
     ensureInbox, openSession, openQuestion, continueSession, copyText,
     setHandled, snooze, setPinned, markReviewed, addTodo, fileTodo, updateTodo, removeTodo,
     ensureProjects, rescanProjects, readProjectDocument, openProject, openPath, mobileView, navigateMobile,
@@ -74,6 +74,10 @@ export function DigestPanel(props: DigestPanelProps) {
   const inbox = useInbox(v => v.snapshot)
   const projectsView = useProjects(v => v)
   const toggleShortcut = useNavSettings(v => v.toggleShortcut)
+  // The master switch hides the card's pin action and its key; the section
+  // switch only changes where a pinned row is listed.
+  const pinning = usePinsSettings(v => v.enabled)
+  const pinnedSection = usePinsSettings(v => v.enabled && v.digestSection)
 
   const [now, setNow] = useState(() => Date.now())
   const [focus, setFocus] = useState(0)
@@ -110,8 +114,9 @@ export function DigestPanel(props: DigestPanelProps) {
       now, window: mobilePending ? 'all' : window,
       workspace: mobilePending ? undefined : workspaceFilter, showHandled: mobilePending ? false : showHandled, ungroupedLabel,
       pendingSessionIds: new Set(pending.keys()),
+      pinnedSection,
     }),
-    [visibleRows, workspaces, inbox, pending, now, window, workspaceFilter, showHandled, ungroupedLabel, mobilePending],
+    [visibleRows, workspaces, inbox, pending, now, window, workspaceFilter, showHandled, ungroupedLabel, mobilePending, pinnedSection],
   )
   const sections = useMemo(() => {
     if (mobileView === 'overview') {
@@ -223,6 +228,7 @@ export function DigestPanel(props: DigestPanelProps) {
           cardActions.addTodo(item)
           break
         case 'p':
+          if (!pinning) return
           cardActions.togglePinned(item)
           break
         case 's':
@@ -235,7 +241,7 @@ export function DigestPanel(props: DigestPanelProps) {
     }
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('keydown', onKey) }
-  }, [open, tab, ring, focus, focusCard, cardActions, closePanel, mobileView])
+  }, [open, tab, ring, focus, focusCard, cardActions, closePanel, mobileView, pinning])
 
   const copyBrief = useCallback(() => {
     const labels: BriefLabels = {
@@ -466,6 +472,7 @@ export function DigestPanel(props: DigestPanelProps) {
                           focused={ring[focus]?.sessionId === item.sessionId}
                           t={t}
                           actions={cardActions}
+                          pinning={pinning}
                           disclosure={mobileView === undefined ? undefined : {
                             expanded: expandedSession === item.sessionId,
                             toggle: () => { setExpandedSession(value => value === item.sessionId ? null : item.sessionId) },

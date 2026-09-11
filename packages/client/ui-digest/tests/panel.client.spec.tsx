@@ -15,6 +15,7 @@ import type { InboxSnapshot } from '@deepseek-ai/dsh-session-inbox/types'
 import { DigestPanel } from '../src/client/DigestPanel.tsx'
 import { DigestNavEntry } from '../src/client/DigestNavEntry.tsx'
 import type { NavSettingsView } from '../src/client/nav-settings-policy.ts'
+import type { PinsSettingsView } from '../src/client/pins-settings-policy.ts'
 import { createDigestStore } from '../src/client/stores.ts'
 import type { DigestNavEntryProps, DigestPanelProps } from '../src/client/contract/slots.ts'
 import type { InboxView } from '../src/client/controller.ts'
@@ -55,6 +56,7 @@ interface MountOptions {
   projects?: Partial<ProjectTodosView>
   mobileView?: DigestPanelProps['mobileView']
   toggleShortcut?: string
+  pins?: Partial<PinsSettingsView>
 }
 
 /** Mount the panel over a real store handle, with stub framework hooks. */
@@ -70,6 +72,7 @@ function mountPanel({
   projects = {},
   mobileView,
   toggleShortcut = 'Ctrl+1',
+  pins = {},
 }: MountOptions = {}) {
   const store = createDigestStore().create()
   if (open) store.actions.open()
@@ -83,6 +86,9 @@ function mountPanel({
   const navSettings: NavSettingsView = {
     status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
     navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut,
+  }
+  const pinsSettings: PinsSettingsView = {
+    status: 'ready', writable: true, enabled: true, sidebarArea: true, sidebarRows: 5, digestSection: true, ...pins,
   }
   const calls = {
     navigateMobile: vi.fn(),
@@ -115,6 +121,7 @@ function mountPanel({
     useInbox: ((selector: (s: InboxView) => unknown) => selector(view)),
     useProjects: ((selector: (s: ProjectTodosView) => unknown) => selector(projectsView)),
     useNavSettings: ((selector: (s: NavSettingsView) => unknown) => selector(navSettings)),
+    usePinsSettings: ((selector: (s: PinsSettingsView) => unknown) => selector(pinsSettings)),
     ...calls,
     t,
   } as unknown as DigestPanelProps
@@ -350,6 +357,25 @@ describe('DigestPanel inbox tab', () => {
     expect(m.setPinned).toHaveBeenCalledWith('a', false)
     fireEvent.click(within(card).getByRole('button', { name: zh['card.todo'] }))
     expect(m.fileTodo).toHaveBeenCalledWith({ sessionId: 'a', questionSeq: 1, text: `跟进：${'x'.repeat(120)}…` })
+  })
+
+  it('lists pinned rows first, demotes them when the digest section is off, and hides the pin action when pinning is off', () => {
+    const rows = [row('fresh', { updatedAt: NOW }), row('starred')]
+    const snapshot = inbox({ sessions: [mark('starred', { pinned: true })] })
+    mountPanel({ rows, snapshot })
+    expect([...document.querySelectorAll<HTMLElement>('[data-section]')].map(el => el.dataset['section'])).toEqual(['pinned', 'unread'])
+    expect(within(section('pinned')).getByRole('button', { name: zh['card.unpin'] })).toBeTruthy()
+    cleanup()
+    mountPanel({ rows, snapshot, pins: { digestSection: false } })
+    expect([...document.querySelectorAll<HTMLElement>('[data-section]')].map(el => el.dataset['section'])).toEqual(['unread'])
+    expect(within(section('unread')).getByRole('button', { name: zh['card.unpin'] })).toBeTruthy()
+    cleanup()
+    const m = mountPanel({ rows, snapshot, pins: { enabled: false } })
+    expect([...document.querySelectorAll<HTMLElement>('[data-section]')].map(el => el.dataset['section'])).toEqual(['unread'])
+    expect(screen.queryByRole('button', { name: zh['card.unpin'] })).toBeNull()
+    expect(screen.queryByRole('button', { name: zh['card.pin'] })).toBeNull()
+    fireEvent.keyDown(document, { key: 'p' })
+    expect(m.setPinned).not.toHaveBeenCalled()
   })
 
   it('omits continue and snooze for waiting and running rows, and hides reply fields while running', () => {

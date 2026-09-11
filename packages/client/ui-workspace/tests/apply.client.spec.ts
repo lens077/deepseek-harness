@@ -206,6 +206,50 @@ describe('ui-workspace apply', () => {
       .rejects.toThrow('index unavailable')
   })
 
+  it('mirrors the optional session-pins seat into the browser hooks and routes pins through it', async () => {
+    const b = await bench()
+    declare(b.slots, 'sidebar.workspaces')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    const disabled = { enabled: false, sidebarArea: false, sidebarRows: 5, pinnedSessionIds: [] }
+    expect(browser.hooks.sessionPins.getSnapshot()).toEqual(disabled)
+    await expect(browser.setPinned(['s1' as never], true)).rejects.toThrow('unavailable')
+
+    // A provider composed in later takes over the view; its changes reach subscribers.
+    let view = { enabled: true, sidebarArea: true, sidebarRows: 4, pinnedSessionIds: ['s1' as never] }
+    const listeners = new Set<() => void>()
+    const setPinned = vi.fn(async () => undefined)
+    const provider = b.ctx.plugin({
+      apply: (providerCtx: Context) => {
+        providerCtx.provide('sessionPins', {
+          view: {
+            getSnapshot: () => view,
+            subscribe: (listener: () => void) => {
+              listeners.add(listener)
+              return () => { listeners.delete(listener) }
+            },
+          },
+          setPinned,
+        } as never)
+      },
+    })
+    await provider.await()
+    const seen = vi.fn()
+    browser.hooks.sessionPins.subscribe(seen)
+    expect(browser.hooks.sessionPins.getSnapshot()).toBe(view)
+    view = { ...view, pinnedSessionIds: ['s1' as never, 's2' as never] }
+    for (const listener of listeners) listener()
+    expect(browser.hooks.sessionPins.getSnapshot()).toBe(view)
+    expect(seen).toHaveBeenCalledTimes(1)
+    await browser.setPinned(['s2' as never], false)
+    expect(setPinned).toHaveBeenCalledWith(['s2'], false)
+
+    // Removing the provider detaches the mirror and restores the disabled view.
+    await provider.dispose()
+    expect(listeners.size).toBe(0)
+    expect(browser.hooks.sessionPins.getSnapshot()).toEqual(disabled)
+  })
+
   it('contributes the session-count, multi-select, and status-presentation General Settings rows', async () => {
     const b = await bench()
     declare(b.slots, 'settings.general.item')

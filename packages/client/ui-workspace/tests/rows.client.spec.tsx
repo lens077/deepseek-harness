@@ -72,6 +72,40 @@ describe('workspace browser rows', () => {
     expect(screen.getByText('Flat Session').previousElementSibling?.querySelector('[data-state="ongoing"]')).toBeTruthy()
   })
 
+  it('offers pin before rename and calls the pin callback', () => {
+    const onPin = vi.fn()
+    const node: SessionNode = {
+      id: sid('pin-row'), title: 'Pin row', blank: false, running: false,
+      runningSubagentCount: 0, completed: false, failed: false, hasActiveSchedule: false, updatedAt: 1,
+    }
+    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} onPin={onPin} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: '会话“Pin row”的操作' }))
+    const items = screen.getAllByRole('menuitem')
+    expect(items[0]?.textContent).toContain('置顶')
+    expect(items[1]?.textContent).toContain('重命名')
+    fireEvent.click(items[0]!)
+    expect(onPin).toHaveBeenCalledWith(node.id, true)
+  })
+
+  it('offers unpin for pinned rows and omits pin for blank rows or absent callbacks', () => {
+    const node: SessionNode = {
+      id: sid('pin-row'), title: 'Pin row', blank: false, running: false,
+      runningSubagentCount: 0, completed: false, failed: false, hasActiveSchedule: false, updatedAt: 1,
+    }
+    const onPin = vi.fn()
+    const view = render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} pinned onPin={onPin} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: '会话“Pin row”的操作' }))
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toContain('取消置顶')
+    fireEvent.click(screen.getAllByRole('menuitem')[0]!)
+    expect(onPin).toHaveBeenCalledWith(node.id, false)
+    view.rerender(<SessionNodeItem node={{ ...node, blank: true }} currentId={undefined} now={0} onOpen={vi.fn()}
+      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} onPin={onPin} t={t} />)
+    expect(screen.queryByRole('button', { name: '会话“新会话”的操作' })).toBeNull()
+    expect(screen.queryByRole('menuitem')).toBeNull()
+  })
+
   it('renders a selected content-search row and opens only its session', () => {
     const onOpen = vi.fn()
     const result: SearchResultNode = {

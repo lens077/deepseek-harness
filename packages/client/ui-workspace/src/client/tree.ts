@@ -424,7 +424,7 @@ export function deriveGroups(
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? nestGroupNodes(g.sessions, g.nestedUnder ?? {}, descendants, pendingInteractions)
+        ? nestGroupNodes(g.sessions, g.nestedUnder, descendants, pendingInteractions)
         : [],
     })
   }
@@ -454,6 +454,31 @@ export function deriveFlat(
     if (s === undefined || !sessionVisible(s, list.current, archived)) continue
     rows.push(s)
   }
+  rows.sort(byRecency)
+  return rows.map(session => sessionNode(session, descendants, pendingInteractions))
+}
+
+/**
+ * Derive the pinned sidebar rows in recency order. Pinned ids that are absent,
+ * archived, blank, or subagent-origin are omitted using the same visibility rule
+ * as the active browser tree.
+ * @param list - sessions list snapshot.
+ * @param pinnedSessionIds - provider-owned pinned ids.
+ * @param archivedSessionIds - registry-global archive set.
+ * @param pendingInteractions - pending UI interactions by Session.
+ * @returns visible pinned rows in newest-first order.
+ */
+export function derivePinned(
+  list: SessionListState,
+  pinnedSessionIds: readonly SessionId[],
+  archivedSessionIds: readonly SessionId[],
+  pendingInteractions: SessionPendingInteractions,
+): SessionNode[] {
+  const archived = new Set(archivedSessionIds)
+  const descendants = indexSubagentDescendants(list.byId)
+  const rows = pinnedSessionIds
+    .map(id => list.byId[id])
+    .filter((s): s is SessionSummary => s !== undefined && sessionVisible(s, list.current, archived) && !s.blank)
   rows.sort(byRecency)
   return rows.map(session => sessionNode(session, descendants, pendingInteractions))
 }

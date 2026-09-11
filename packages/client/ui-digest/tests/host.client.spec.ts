@@ -2,13 +2,17 @@
  * ui-digest node half: the durable `ui-digest` section is registered against
  * a settings provider, defaults absent fields, rejects values outside the
  * schema, and leaves with the plugin fiber; the order repair keeps every
- * badge state exactly once.
+ * badge state exactly once. The `session-pins` section registers beside it
+ * with its own defaults and row bounds.
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { DigestSettingsSchema, normalizeBadgeOrder, type DigestSettings } from '../src/nav-settings.ts'
-import { DEFAULT_DIGEST_SETTINGS, DIGEST_SETTINGS_NAMESPACE, NAV_BADGE_STATES, apply } from '../src/index.ts'
+import {
+  DEFAULT_DIGEST_SETTINGS, DEFAULT_SESSION_PINS_SETTINGS, DIGEST_SETTINGS_NAMESPACE, NAV_BADGE_STATES,
+  SESSION_PINS_SETTINGS_NAMESPACE, SessionPinsSettingsSchema, apply,
+} from '../src/index.ts'
 
 class MemorySettings extends SettingsProvider {
   readonly writable = true
@@ -47,6 +51,24 @@ describe('ui-digest host', () => {
     await expect(ctx.settings.update(ns, { toggleShortcut: 'Ctrl+Escape' })).rejects.toThrow()
     await ctx.settings.update(ns, { toggleShortcut: 'F2' })
     expect(ctx.settings.get(ns)).toMatchObject({ toggleShortcut: 'F2' })
+    await fiber.dispose()
+    expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
+  })
+
+  it('registers the pin section with defaults and row bounds, and disposes it with the fiber', async () => {
+    expect(SessionPinsSettingsSchema({})).toEqual(DEFAULT_SESSION_PINS_SETTINGS)
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings).await()
+    const fiber = ctx.plugin({ apply })
+    await fiber.await()
+    const ns = SESSION_PINS_SETTINGS_NAMESPACE
+    expect(ctx.settings.get(ns)).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 5, digestSection: true })
+    await ctx.settings.update(ns, { enabled: false, sidebarRows: 8, digestSection: false })
+    expect(ctx.settings.get(ns)).toEqual({ enabled: false, sidebarArea: true, sidebarRows: 8, digestSection: false })
+    await expect(ctx.settings.update(ns, { sidebarRows: 0 })).rejects.toThrow()
+    await expect(ctx.settings.update(ns, { sidebarRows: 21 })).rejects.toThrow()
+    await expect(ctx.settings.update(ns, { sidebarRows: 2.5 })).rejects.toThrow()
+    await expect(ctx.settings.update(ns, { sidebarArea: 'no' })).rejects.toThrow()
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
   })

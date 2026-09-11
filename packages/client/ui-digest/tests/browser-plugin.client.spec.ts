@@ -4,8 +4,9 @@
  * registrations against the real SlotRegistry (with fiber teardown proving
  * removal — HMR safety), the inbox wiring (push adoption, reconnect re-read,
  * the seen mark following the current session, the document badge, and the
- * navigation callbacks, the two settings pages), and the invariant
- * companion's ownership reservation; the node half has its own host spec.
+ * navigation callbacks, the three settings pages, the session-pins seat), and
+ * the invariant companion's ownership reservation; the node half has its own
+ * host spec.
  */
 import { Context, Service } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,9 +18,10 @@ import type { InboxSnapshot } from '@deepseek-ai/dsh-session-inbox/types'
 import type { ProjectTodosSnapshot } from '@deepseek-ai/dsh-project-todos/types'
 import { apply, inject } from '../src/client/index.ts'
 import type {
-  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, ProjectSettingsInjected,
+  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, PinsSettingsInjected, ProjectSettingsInjected,
 } from '../src/client/contract/slots.ts'
 import type { DigestSettings } from '../src/nav-settings.ts'
+import type { SessionPinsSettings } from '../src/pins-settings.ts'
 import * as DigestInvariant from '../src/invariant.ts'
 import { en, NS, zh } from '../src/client/locales.ts'
 import { digest, inbox, mark, project, projectFile, projectItem, projectsSnapshot } from './fixtures.client.ts'
@@ -104,10 +106,11 @@ async function bench(initial: InboxSnapshot = inbox()) {
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
   const settingsScope = stubSettingsScope<{ roots: string[]; files: string[]; includeWorkspaces: boolean }>()
   const digestScope = stubSettingsScope<DigestSettings>()
-  const bound: { namespace: string }[] = []
-  ctx.provide('settingsScope', { bind: (spec: { namespace: string }) => {
+  const pinsScope = stubSettingsScope<SessionPinsSettings>()
+  const bound: { namespace: string; decode?: (section: unknown) => unknown }[] = []
+  ctx.provide('settingsScope', { bind: (spec: { namespace: string; decode?: (section: unknown) => unknown }) => {
     bound.push(spec)
-    return spec.namespace === 'ui-digest' ? digestScope.scope : settingsScope.scope
+    return spec.namespace === 'ui-digest' ? digestScope.scope : spec.namespace === 'session-pins' ? pinsScope.scope : settingsScope.scope
   } } as never)
   await runtime.root.declare({
     'sidebar.nav.entry': { kind: 'list', scope: 'root' },
@@ -137,6 +140,11 @@ async function bench(initial: InboxSnapshot = inbox()) {
     if (entry === undefined) throw new Error('digest settings entry missing')
     return (entry.inject as unknown as () => DigestSettingsInjected)()
   }
+  const pinsSettings = (): PinsSettingsInjected => {
+    const entry = ctx.slots.entries('settings.section').find(e => e.options.id === 'session-pins')
+    if (entry === undefined) throw new Error('pins settings entry missing')
+    return (entry.inject as unknown as () => PinsSettingsInjected)()
+  }
   return {
     ctx,
     runtime,
@@ -147,8 +155,10 @@ async function bench(initial: InboxSnapshot = inbox()) {
     nav,
     settings,
     digestSettings,
+    pinsSettings,
     settingsScope,
     digestScope,
+    pinsScope,
     bound,
     setSnapshot: (next: InboxSnapshot) => { snapshot = next },
     setProjects: (next: ProjectTodosSnapshot) => { projects = next },
@@ -171,6 +181,7 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'center.overlay')).toContain('digest')
     expect(entryIds(b.ctx, 'settings.section')).toContain('project-todos')
     expect(entryIds(b.ctx, 'settings.section')).toContain('digest')
+    expect(entryIds(b.ctx, 'settings.section')).toContain('session-pins')
     await b.runtime.flush()
     // The project scan is not read until the tab shows.
     expect(b.calls.map(call => call.method)).toEqual(['get'])
@@ -181,6 +192,7 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'center.overlay')).not.toContain('digest')
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('project-todos')
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('digest')
+    expect(entryIds(b.ctx, 'settings.section')).not.toContain('session-pins')
   })
 
   it('closes the panel on repeated session navigation and releases the listener on teardown', async () => {
@@ -289,7 +301,7 @@ describe('ui-digest browser half', () => {
   it('binds the digest panel page to the ui-digest namespace, shares its view with the entry, and routes its writes', async () => {
     const b = await bench()
     await b.runtime.flush()
-    const digestBinding = b.bound.find(spec => spec.namespace === 'ui-digest') as { namespace: string; decode?: (section: unknown) => unknown } | undefined
+    const digestBinding = b.bound.find(spec => spec.namespace === 'ui-digest')
     expect(digestBinding).toBeDefined()
     // The decoder defaults an incomplete wire section rather than passing it through.
     expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ navBadges: false, navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1' })
@@ -318,6 +330,78 @@ describe('ui-digest browser half', () => {
     await b.feature.dispose()
     expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'unavailable', navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1' })
     expect(b.digestScope.listenerCount()).toBe(0)
+  })
+
+  it('binds the pins page to the session-pins namespace, shares its view with the panel, and routes its writes', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const binding = b.bound.find(spec => spec.namespace === 'session-pins')
+    expect(binding?.decode?.({ sidebarRows: 3 })).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 3, digestSection: true })
+    const face = b.pinsSettings()
+    expect(face.hooks.pinsSettings).toBe(b.panel().hooks.pinsSettings)
+    expect(face.hooks.pinsSettings.getSnapshot()).toMatchObject({ status: 'loading', enabled: true, sidebarRows: 5, writable: false })
+    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: true, sidebarArea: false, sidebarRows: 9, digestSection: false } })
+    expect(face.hooks.pinsSettings.getSnapshot()).toEqual({
+      status: 'ready', writable: true, enabled: true, sidebarArea: false, sidebarRows: 9, digestSection: false,
+    })
+    await face.setEnabled(false)
+    await face.setSidebarArea(true)
+    await face.setSidebarRows(4)
+    await face.setDigestSection(true)
+    expect(b.pinsScope.set.mock.calls).toEqual([['enabled', false], ['sidebarArea', true], ['sidebarRows', 4], ['digestSection', true]])
+    const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'session-pins')
+    expect(entry?.options.order).toBe(46)
+    b.ctx.locale.setLocale('zh')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(zh['pinsSettings.nav'])
+    b.ctx.locale.setLocale('en')
+    expect((entry?.options as { label?: () => string }).label?.()).toBe(en['pinsSettings.nav'])
+    await b.feature.dispose()
+    expect(face.hooks.pinsSettings.getSnapshot()).toMatchObject({ status: 'unavailable', enabled: true, sidebarRows: 5 })
+    expect(b.pinsScope.listenerCount()).toBe(0)
+  })
+
+  it('provides the session-pins seat: pinned ids plus policy, republished only on change, and writes every pin', async () => {
+    const b = await bench(inbox({ sessions: [mark('s2', { pinned: true }), mark('s1', { pinned: true }), mark('s3')] }))
+    await b.runtime.flush()
+    const seat = b.ctx.get('sessionPins')
+    if (seat === undefined) throw new Error('sessionPins not provided')
+    const first = seat.view.getSnapshot()
+    expect(first).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 5, pinnedSessionIds: ['s2', 's1'] })
+    // A push that changes nothing pin-related keeps the snapshot identity.
+    const listener = vi.fn()
+    seat.view.subscribe(listener)
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s2', { pinned: true }), mark('s1', { pinned: true, handledAt: 5 })] })])
+    expect(seat.view.getSnapshot()).toBe(first)
+    expect(listener).not.toHaveBeenCalled()
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { pinned: true })] })])
+    expect(seat.view.getSnapshot()).toMatchObject({ pinnedSessionIds: ['s1'] })
+    expect(listener).toHaveBeenCalledTimes(1)
+    // The policy rides the same view.
+    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: true, sidebarRows: 7, digestSection: true } })
+    expect(seat.view.getSnapshot()).toEqual({ enabled: false, sidebarArea: true, sidebarRows: 7, pinnedSessionIds: ['s1'] })
+    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: true, sidebarRows: 7, digestSection: false } })
+    expect(listener).toHaveBeenCalledTimes(2)
+    // Pinning writes one mark per Session and resolves once every reply landed.
+    await seat.setPinned(['s4' as SessionId, 's5' as SessionId], true)
+    expect(b.calls.filter(call => call.method === 'setPinned').map(call => call.request)).toEqual([
+      { sessionId: 's4', pinned: true }, { sessionId: 's5', pinned: true },
+    ])
+    const namespace = (b.remote as unknown as { sessionInbox: { setPinned: unknown } }).sessionInbox
+    namespace.setPinned = () => Promise.resolve({ ok: false as const, error: { code: 'io', message: 'disk full' } })
+    await expect(seat.setPinned(['s4' as SessionId], false)).rejects.toThrow('disk full')
+  })
+
+  it('rejects a pin while the inbox cannot be read', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    // A reset re-reads the inbox; the failed read leaves the controller retryable, and the pin retries first.
+    const namespace = (b.remote as unknown as { sessionInbox: { get: unknown } }).sessionInbox
+    namespace.get = () => Promise.resolve({ ok: false as const, error: { code: 'io', message: 'host down' } })
+    b.ctx.emit('connection/reset')
+    await b.runtime.flush()
+    const seat = b.ctx.get('sessionPins')!
+    await expect(seat.setPinned(['s1' as SessionId], true)).rejects.toThrow('host down')
+    expect(b.calls.filter(call => call.method === 'setPinned')).toHaveLength(0)
   })
 
   it('adopts pushed snapshots and re-reads after a connection reset', async () => {

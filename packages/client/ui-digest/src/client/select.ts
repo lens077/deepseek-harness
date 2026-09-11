@@ -22,7 +22,7 @@ export type InboxWindow = 'sinceReview' | 'today' | 'week' | 'all'
  */
 export type InboxCategory = 'unread' | 'seen' | 'running' | 'needsYou' | 'failed' | 'handled' | 'snoozed'
 
-/** Section keys: every category the panel lists plus the pinned group between running and waiting rows. */
+/** Section keys: every category the panel lists plus the pinned group that leads them. */
 export type InboxSectionKey = 'pinned' | Exclude<InboxCategory, 'snoozed'>
 
 /** One session as the inbox sees it. */
@@ -104,6 +104,12 @@ export interface InboxSelectOptions {
   workspace: string | null | undefined
   showHandled: boolean
   ungroupedLabel: string
+  /**
+   * Whether pinned rows form their own leading section and stay listed outside
+   * the window. `false` (the pins feature or its digest section is off) lets a
+   * pinned row fall into its ordinary category. Absent means `true`.
+   */
+  pinnedSection?: boolean
 }
 
 /** One question placed on the day it was asked. */
@@ -311,7 +317,7 @@ function buildItems(
   return items
 }
 
-const SECTION_ORDER: readonly InboxSectionKey[] = ['unread', 'seen', 'running', 'pinned', 'needsYou', 'failed', 'handled']
+const SECTION_ORDER: readonly InboxSectionKey[] = ['pinned', 'unread', 'seen', 'running', 'needsYou', 'failed', 'handled']
 
 /**
  * Select and section the inbox.
@@ -321,7 +327,9 @@ const SECTION_ORDER: readonly InboxSectionKey[] = ['unread', 'seen', 'running', 
  * the reason the inbox exists — hiding one behind a time bound would let the
  * agent wait unanswered. The window applies to `seen` and `handled` rows,
  * which are context rather than a call to action. Snoozed rows are counted
- * and never listed.
+ * and never listed. Pinned rows lead the sections (a pinned row is the user's
+ * stated priority) unless they are running; with `pinnedSection: false` the
+ * pin mark neither admits nor sections a row.
  *
  * @param sessions - every session list row, in list order.
  * @param workspaces - current workspace entities, for titles and chips.
@@ -337,6 +345,7 @@ export function selectInbox(
 ): InboxSelection {
   const items = buildItems(sessions, workspaces, inbox, options.now, options.ungroupedLabel, options.pendingSessionIds)
   const since = windowSince(options.window, options.now, inbox.reviewedAt)
+  const pinnedSection = options.pinnedSection ?? true
 
   const counts = new Map<string | null, InboxWorkspaceCount>()
   const countFor = (item: InboxItem): InboxWorkspaceCount => {
@@ -378,14 +387,14 @@ export function selectInbox(
     if (item.category === 'seen') seenCount += 1
     if (item.category === 'handled' && !options.showHandled) continue
     const inWindow = since === null || item.updatedAt >= since
-    if (!actionable && !item.pinned && item.category !== 'running' && !inWindow) continue
+    if (!actionable && !(pinnedSection && item.pinned) && item.category !== 'running' && !inWindow) continue
     if (options.workspace !== undefined && (item.workspaceId ?? null) !== options.workspace) continue
     admitted.push(item)
   }
 
   const buckets = new Map<InboxSectionKey, InboxItem[]>()
   for (const item of admitted) {
-    const key: InboxSectionKey = item.pinned && item.category !== 'running' ? 'pinned' : item.category as InboxSectionKey
+    const key: InboxSectionKey = pinnedSection && item.pinned && item.category !== 'running' ? 'pinned' : item.category as InboxSectionKey
     const bucket = buckets.get(key)
     if (bucket === undefined) buckets.set(key, [item])
     else bucket.push(item)
@@ -405,7 +414,10 @@ export function selectInbox(
   const ungrouped = counts.get(null)
   if (ungrouped !== undefined) orderedCounts.push(ungrouped)
 
-  return { sections, workspaces: orderedCounts, attentionCount, waitingCount, failedCount, unreadCount, seenCount, runningCount, snoozedCount, since }
+  return {
+    sections, workspaces: orderedCounts, attentionCount, waitingCount, failedCount, unreadCount, seenCount,
+    runningCount, snoozedCount, since,
+  }
 }
 
 /**

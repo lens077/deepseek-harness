@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
@@ -78,6 +78,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     expandSidebar: vi.fn(),
     useSessions: hook(sessionState([])),
     useSessionPendingInteraction: hook(noPendingInteraction),
+    useSessionPins: hook({ enabled: false, sidebarArea: false, sidebarRows: 5, pinnedSessionIds: [] }),
     useResource,
     useWorkspaces: hook(workspaceState([])),
     useStore: bindSnapshotSelector(store),
@@ -101,6 +102,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     deleteSession: vi.fn(async id => [id]),
     addTodos: vi.fn(),
     todosAvailable: () => false,
+    setPinned: vi.fn(async () => undefined),
     setSessionMembership: vi.fn(async (_workspaceId, sessionIds) => workspace('moved', [...sessionIds])),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
@@ -536,6 +538,36 @@ describe('WorkspaceBrowser', () => {
     })
     expect(restored.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
     expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
+  })
+
+  it('renders pinned sessions in recency order with pin actions', async () => {
+    const setPinned = vi.fn(async () => undefined)
+    const items = [summary('older', 1), summary('newer', 3), { ...summary('blank', 4), blank: true }, summary('gone', 5)]
+    const pins = { enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [sid('older'), sid('gone'), sid('newer'), sid('blank'), sid('unknown')] }
+    const b = mount({
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer', 'blank', 'gone'])], [sid('gone')])),
+      useSessionPins: hook(pins),
+      setPinned,
+    })
+    const area = screen.getByRole('region', { name: '置顶会话' })
+    expect(area.textContent).toContain('newer')
+    expect(area.textContent).toContain('older')
+    expect(area.textContent).not.toContain('gone')
+    expect(area.textContent).not.toContain('blank')
+    expect(area.querySelector('[style*="--pinned-rows: 3"]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '会话“newer”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    expect(setPinned).toHaveBeenCalledWith([sid('newer')], false)
+    b.view.unmount()
+  })
+
+  it('shows the pinned empty hint only in the enabled wide pinned area', () => {
+    const base = { enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [] }
+    const b = mount({ useSessionPins: hook(base) })
+    expect(screen.getByText('右键会话或使用 ⋯ 菜单可置顶')).toBeTruthy()
+    b.view.rerender(<WorkspaceBrowser {...b.props} wide={false} useSessionPins={hook(base)} />)
+    expect(screen.queryByText('右键会话或使用 ⋯ 菜单可置顶')).toBeNull()
   })
 
   it('archives a session from the row menu and hides archived rows in both modes', async () => {
@@ -1641,5 +1673,80 @@ describe('WorkspaceBrowser', () => {
     fireEvent.change(screen.getByPlaceholderText('搜索会话…'), { target: { value: 'needle' } })
     const row = screen.getByText('Needle A').closest('[role="treeitem"]') as HTMLElement
     expect(row.hasAttribute('draggable')).toBe(false)
+  })
+})
+
+describe('pinned sessions', () => {
+  const pinsView = (over: Partial<{ enabled: boolean; sidebarArea: boolean; sidebarRows: number; pinnedSessionIds: SessionId[] }> = {}) =>
+    hook({ enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [] as SessionId[], ...over })
+  const sessions = () => sessionState([summary('old-s', 1), summary('new-s', 3), summary('other-s', 2), summary('gone-s', 4)])
+  const workspaces = () => workspaceState([workspace('alpha', ['old-s', 'new-s', 'other-s', 'gone-s'])], [sid('gone-s')])
+  const pinnedArea = () => screen.getByRole('region', { name: '置顶会话' })
+  const pinnedTitles = () => [...pinnedArea().querySelectorAll('[role="treeitem"]')]
+    .map(row => row.getAttribute('data-session-id'))
+
+  it('lists pinned rows by recency in a fixed-height area, dropping archived and unknown ids', () => {
+    const b = mount({
+      useSessions: hook(sessions()),
+      useWorkspaces: hook(workspaces()),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('gone-s'), sid('missing'), sid('new-s')] }),
+    })
+    expect(pinnedTitles()).toEqual(['new-s', 'old-s'])
+    const list = pinnedArea().querySelector<HTMLElement>('[role="tree"]')
+    expect(list?.style.getPropertyValue('--pinned-rows')).toBe('3')
+    // Clicking a pinned row opens it; its menu leads with unpin.
+    fireEvent.click(pinnedArea().querySelector('[data-session-id="new-s"]')!)
+    expect(b.props.open).toHaveBeenCalledWith(sid('new-s'))
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: '会话“old-s”的操作' }))
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('取消置顶')
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    expect(b.props.setPinned).toHaveBeenCalledWith([sid('old-s')], false)
+    // The tree's own row offers pin, first, above rename.
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“other-s”的操作' }))
+    expect(screen.getAllByRole('menuitem').slice(0, 2).map(item => item.textContent)).toEqual(['置顶', '重命名'])
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
+    expect(b.props.setPinned).toHaveBeenCalledWith([sid('other-s')], true)
+  })
+
+  it('shows the empty hint, hides the area when the policy or the rail says so, and offers no pin verb while disabled', () => {
+    const b = mount({ useSessions: hook(sessions()), useWorkspaces: hook(workspaces()), useSessionPins: pinsView() })
+    expect(within(pinnedArea()).getByText(zh['pinned.empty'])).toBeTruthy()
+    rerender(b, { useSessionPins: pinsView({ sidebarArea: false }) })
+    expect(screen.queryByRole('region', { name: '置顶会话' })).toBeNull()
+    rerender(b, { useSessionPins: pinsView({ enabled: false }) })
+    expect(screen.queryByRole('region', { name: '置顶会话' })).toBeNull()
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“other-s”的操作' }))
+    expect(screen.queryByRole('menuitem', { name: '置顶' })).toBeNull()
+    rerender(b, { useSessionPins: pinsView(), wide: false })
+    expect(screen.queryByRole('region', { name: '置顶会话' })).toBeNull()
+  })
+
+  it('pins or unpins the whole right-click selection and only warns when the provider refuses', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const setPinned = vi.fn(async () => undefined)
+    const b = mount({
+      useSessions: hook(sessions()),
+      useWorkspaces: hook(workspaces()),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s')] }),
+      useSessionSelection: selector => selector({ selected: [sid('old-s'), sid('new-s')], anchor: sid('old-s'), lead: sid('new-s') }),
+      setPinned,
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.contextMenu(screen.getAllByText('new-s').at(-1)!)
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('置顶')
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
+    await waitFor(() => { expect(setPinned).toHaveBeenCalledWith([sid('old-s'), sid('new-s')], true) })
+    rerender(b, { useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }) })
+    fireEvent.contextMenu(screen.getAllByText('new-s').at(-1)!)
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(setPinned).toHaveBeenCalledWith([sid('old-s'), sid('new-s')], false) })
+    // A single-row pin failure is logged, not thrown into React.
+    setPinned.mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: '会话“old-s”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(warn).toHaveBeenCalledWith('session pin rejected:', expect.any(Error)) })
+    warn.mockRestore()
   })
 })

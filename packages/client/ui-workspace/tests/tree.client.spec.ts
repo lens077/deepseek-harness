@@ -5,7 +5,7 @@ import type { SessionPendingInteractionBase } from '@deepseek-ai/dsh-client-ui-s
 import type { ScheduleId, ScheduleRecord } from '@deepseek-ai/dsh-schedule/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, owningGroupKey, workspaceLabel,
+  deriveFlat, deriveGroups, derivePinned, deriveSearchResults, owningGroupKey, workspaceLabel,
   UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -45,6 +45,27 @@ describe('owningGroupKey', () => {
     const workspaces = [workspace('first', ['owned'])]
     expect(owningGroupKey(workspaces, sid('owned'))).toBe('first')
     expect(owningGroupKey(workspaces, sid('loose'))).toBe(UNGROUPED_KEY)
+  })
+})
+
+describe('derivePinned', () => {
+  it('orders visible pinned sessions by recency and carries pending state', () => {
+    const newest = summary('newest', 30)
+    const awaiting = { ...summary('awaiting', 20), running: true }
+    const archivedRow = summary('archived', 40)
+    const blank = { ...summary('blank', 50), blank: true }
+    const subagent = { ...summary('subagent', 60), origin: 'subagent' as const }
+    const attention: ReadonlyMap<SessionId, SessionPendingInteractionBase> = new Map([[
+      awaiting.id, { key: 'question:1', kind: 'question', sessionId: awaiting.id },
+    ]])
+    const rows = derivePinned(
+      list(newest, awaiting, archivedRow, blank, subagent),
+      [subagent.id, blank.id, archivedRow.id, awaiting.id, sid('unknown'), newest.id],
+      archived('archived'),
+      attention,
+    )
+    expect(rows.map(row => row.id)).toEqual([sid('newest'), sid('awaiting')])
+    expect(rows[1]).toMatchObject({ pendingInteraction: 'question', running: true })
   })
 })
 

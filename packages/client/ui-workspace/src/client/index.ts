@@ -10,6 +10,7 @@
  * packages/client/AGENTS.md.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { IWorkspaces, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -22,7 +23,10 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
+import {
+  DEFAULT_SESSION_PINS_VIEW,
+  type SessionPinsView, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
+} from './contract/slots.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { createSessionSelectionStore } from './selectionStore.ts'
@@ -37,7 +41,8 @@ import { en, zh, type WorkspaceKey } from './locales.ts'
 export type { UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  SessionTodos, WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+  SessionPins, SessionPinsView, SessionTodos,
+  WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
 
@@ -75,6 +80,18 @@ export const inject = [
  * @param ctx - client root context.
  */
 export function apply(ctx: Context): void {
+  const sessionPinsMirror = createSnapshotStore<SessionPinsView>(DEFAULT_SESSION_PINS_VIEW)
+  ctx.inject(['sessionPins'], (pinCtx) => {
+    pinCtx.effect(() => {
+      const sync = (): void => { sessionPinsMirror.set(pinCtx.sessionPins.view.getSnapshot()) }
+      sync()
+      const dispose = pinCtx.sessionPins.view.subscribe(sync)
+      return () => {
+        dispose()
+        sessionPinsMirror.set(DEFAULT_SESSION_PINS_VIEW)
+      }
+    }, 'ui-workspace: session pins')
+  })
   const sessions = ctx.get('sessions') as ISessions
   const workspaces = ctx.get('workspaces') as IWorkspaces
   const uiWorkspace = new UiWorkspaceService(
@@ -159,6 +176,11 @@ export function apply(ctx: Context): void {
     deleteSession: sessionId => ctx.sessions.delete(sessionId),
     addTodos: (sessionIds) => { ctx.get('sessionTodos')?.add(sessionIds) },
     todosAvailable: () => ctx.get('sessionTodos') !== undefined,
+    setPinned: async (sessionIds, pinned) => {
+      const provider = ctx.get('sessionPins')
+      if (provider === undefined) throw new Error('session pinning is unavailable')
+      await provider.setPinned(sessionIds, pinned)
+    },
     setSessionMembership: (workspaceId, sessionIds, member) =>
       ctx.workspaces.setSessionMembership(workspaceId, sessionIds, member),
     insertSessionBefore: async (workspaceId, sessionId, beforeSessionId) => {
@@ -174,6 +196,10 @@ export function apply(ctx: Context): void {
       sessionSelection: {
         getSnapshot: () => sessionSelection.getSnapshot(),
         subscribe: listener => sessionSelection.subscribe(listener),
+      },
+      sessionPins: {
+        getSnapshot: () => sessionPinsMirror.getSnapshot(),
+        subscribe: listener => sessionPinsMirror.subscribe(listener),
       },
     },
   })

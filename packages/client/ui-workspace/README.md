@@ -41,6 +41,10 @@ Collapsed search is one header action beside the view and add actions: activatin
 
 The Session row's Rename action opens a dialog prefilled with the display title. Fork can create a sibling or place the child under the source Session; both fork at the last completed Turn, increment the inherited title, and open the child. **Manage Session directories** keeps the primary cwd fixed and replaces the canonical list of additional writable roots for later commands. Archive hides a Session after the Workspace echo; the archived view can restore it or permanently delete its lineage after confirmation. Multi-selection supports toggle and visible-range gestures, keyboard movement, select all, batch archive, batch delete, Workspace membership changes, and optional todo creation. Workspace Delete removes the registration while its Sessions remain under Ungrouped.
 
+### Pinned sessions
+
+When the optional `sessionPins` seat enables pinning, a Session row menu offers **Pin** or **Unpin**, and the multi-selection context menu applies the same action to every selected Session. Wide sidebars show a recency-sorted **Pinned** area above the Workspace section with a fixed number of scrollable rows; archived, blank, unknown, and subagent-origin Sessions stay out of it.
+
 ### Pending interactions
 
 Session rows render the runtime's live `pendingInteraction` classification: approvals report **Waiting for approval**, plan reviews report **Plan awaiting review**, and ordinary questions report **Waiting for answer**. Every pending interaction uses an amber warning dot that takes precedence over the running indicator.
@@ -65,7 +69,7 @@ The value is intentionally best effort for cold Sessions. An identity-matching u
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package fills the sidebar browser and Session Intent picker slots and contributes the Session-count, multi-selection, and status-presentation rows to General Settings. `apply` uses `slots.inject()` for each declaration lifetime and re-registers after a declaring slot is restored. A persisted viewing store owns grouping, ordering, expansion, row-count, and status-perimeter preferences; a separate non-persisted store owns the current multi-selection.
+The package fills the sidebar browser and Session Intent picker slots and contributes the Session-count, multi-selection, and status-presentation rows to General Settings. `apply` uses `slots.inject()` for each declaration lifetime and re-registers after a declaring slot is restored. A persisted viewing store owns grouping, ordering, expansion, row-count, and status-perimeter preferences; a separate non-persisted store owns the current multi-selection. The optional `sessionPins` seat supplies the live pin view and mutation callback; `apply` mirrors that view for browser hooks and resets it when the provider is removed.
 
 ### The directory-flow hole
 

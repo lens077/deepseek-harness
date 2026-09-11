@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
-  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconFolderOpenOutline16, IconPlusOutline16,
+  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconFolderOpenOutline16, IconPinOutline16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, relativeTime, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -553,13 +553,15 @@ export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, st
  * @param props.branch - nested-children affordance (chevron + count) for rows with a child branch.
  * @param props.multiSelected - the row is in the multi-selection set.
  * @param props.multiLead - the row is the selection lead (arrow-key cursor).
+ * @param props.pinned - whether the session is pinned.
+ * @param props.onPin - pin or unpin the session.
  * @param props.statusIndicatorMode - status perimeter preference (default animated).
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
 export function SessionNodeItem({
   node, currentId, now, onOpen, onContextMenu, onRename, onFork, onDirectories, onArchive, onDelete,
-  onReveal, drag, flat = false, branch, multiSelected = false, multiLead = false, statusIndicatorMode = 'animated', t,
+  onReveal, drag, flat = false, branch, multiSelected = false, multiLead = false, statusIndicatorMode = 'animated', pinned = false, onPin, t,
 }: {
   node: SessionNode
   currentId: string | undefined
@@ -595,6 +597,10 @@ export function SessionNodeItem({
   multiLead?: boolean | undefined
   /** Status perimeter preference; dots and labels render in every mode. */
   statusIndicatorMode?: SessionStatusIndicatorMode
+  /** Whether this session is currently pinned. */
+  pinned?: boolean | undefined
+  /** Pin or unpin this session. */
+  onPin?: ((id: SessionNode['id'], pinned: boolean) => void) | undefined
   t: RowTranslate
 }) {
   const row = node
@@ -614,6 +620,9 @@ export function SessionNodeItem({
   // touches the session log, so it is not styled as destructive and needs no
   // confirmation dialog.
   const sessionMenuItems = [
+    ...row.blank || onPin === undefined ? [] : [
+      { id: 'pin', label: pinned ? t('menu.unpin') : t('menu.pin'), icon: <IconPinOutline16 /> },
+    ],
     ...row.blank ? [] : [
       { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
       { id: 'fork', label: t('menu.forkSibling'), icon: <IconBranchOutline16 /> },
@@ -723,6 +732,7 @@ export function SessionNodeItem({
             items={sessionMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
+              if (id === 'pin') onPin?.(node.id, !pinned)
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id, 'sibling')
               if (id === 'fork-nested') onFork(node.id, 'nested')
@@ -776,6 +786,8 @@ export interface SessionRowContext {
   onSessionRevealed: (id: SessionId) => void
   isSelected: (id: SessionNode['id']) => boolean
   isLead: (id: SessionNode['id']) => boolean
+  isPinned: (id: SessionNode['id']) => boolean
+  onPin?: ((id: SessionNode['id'], pinned: boolean) => void) | undefined
   statusIndicatorMode: SessionStatusIndicatorMode
   t: RowTranslate
 }
@@ -822,6 +834,8 @@ export function SessionBranch({ node, row, drag, collapsedBranches, onToggleBran
         branch={hasChildren ? { expanded, toggle: () => { onToggleBranch(node.id) } } : undefined}
         multiSelected={row.isSelected(node.id)}
         multiLead={row.isLead(node.id)}
+        pinned={row.isPinned(node.id)}
+        onPin={row.onPin}
         statusIndicatorMode={row.statusIndicatorMode}
         t={row.t}
       />

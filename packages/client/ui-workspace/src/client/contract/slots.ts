@@ -104,6 +104,12 @@ export type WorkspaceBrowserInjected = {
      * restore a stale selection on every reload.
      */
     sessionSelection: HostObservable<SelectionState>
+    /**
+     * The pin provider's live view mirrored by `apply`: the pinned Session
+     * ids and the pin policy. Stands on {@link DEFAULT_SESSION_PINS_VIEW}
+     * (pinning disabled) while no {@link SessionPins} provider is composed in.
+     */
+    sessionPins: HostObservable<SessionPinsView>
   }
   /** Commit a new session-row multi-selection. */
   setSessionSelection: (next: SelectionState) => void
@@ -174,6 +180,12 @@ export type WorkspaceBrowserInjected = {
   addTodos: (sessionIds: readonly SessionId[]) => void
   /** Whether a todo provider is composed in. */
   todosAvailable: () => boolean
+  /**
+   * Pin or unpin Sessions through the optional {@link SessionPins} seat.
+   * Rows offer the action only while the mirrored {@link SessionPinsView}
+   * reports `enabled`; without a provider the promise rejects.
+   */
+  setPinned: (sessionIds: readonly SessionId[], pinned: boolean) => Promise<void>
   /** Add or remove several Sessions from one Workspace account atomically. */
   setSessionMembership: (
     workspaceId: WorkspaceId,
@@ -241,9 +253,54 @@ export interface SessionTodos {
   add(sessionIds: readonly SessionId[]): void
 }
 
+/**
+ * What the session browser reads from the pin provider: which Sessions are
+ * pinned and how the sidebar presents them. Plain data so the browser can
+ * mirror it into its hooks compartment without knowing the provider.
+ */
+export interface SessionPinsView {
+  /** Master switch: `false` hides every pin affordance (row menu item, pinned area). */
+  enabled: boolean
+  /** Whether the sidebar renders the pinned area above the browsing section; meaningful only while `enabled`. */
+  sidebarArea: boolean
+  /** Number of session rows the pinned area is sized to hold; more rows scroll inside it. */
+  sidebarRows: number
+  /** Every pinned Session id; the browser orders rows by Session recency and drops archived or unknown ids. */
+  pinnedSessionIds: readonly SessionId[]
+}
+
+/** The view the browser stands on while no pin provider is composed in. */
+export const DEFAULT_SESSION_PINS_VIEW: SessionPinsView = Object.freeze({
+  enabled: false,
+  sidebarArea: false,
+  sidebarRows: 5,
+  pinnedSessionIds: Object.freeze([]),
+})
+
+/**
+ * Optional pin seat, provided by a plugin that owns durable per-Session pin
+ * marks and consumed via `ctx.inject(['sessionPins'], …)`: the session
+ * browser's row menu pins or unpins Sessions and the sidebar lists the pinned
+ * ones in a fixed-height area above the browsing section. An absent provider
+ * hides both.
+ */
+export interface SessionPins {
+  /** Live pinned ids and pin policy; snapshot identity is stable between changes. */
+  readonly view: HostObservable<SessionPinsView>
+  /**
+   * Pin or unpin every listed Session; resolves once the durable marks are
+   * written and `view` has published them.
+   * @param sessionIds - the chosen Sessions.
+   * @param pinned - the desired state for all of them.
+   */
+  setPinned(sessionIds: readonly SessionId[], pinned: boolean): Promise<void>
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Todo provider (a plugin owning a todo list); reach via ctx.get — optional. */
     sessionTodos: SessionTodos
+    /** Pin provider (a plugin owning durable pin marks); reach via ctx.inject — optional. */
+    sessionPins: SessionPins
   }
 }

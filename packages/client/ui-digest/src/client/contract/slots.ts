@@ -17,6 +17,7 @@ import type { InboxAddTodoRequest, InboxTodoId, InboxTodoStatus } from '@deepsee
 import type { InboxActionResult, InboxView } from '../controller.ts'
 import type { ProjectDocumentResult, ProjectTodosView } from '../projects-controller.ts'
 import type { ProjectSettingsView } from '../project-settings.ts'
+import type { PinsSettingsView } from '../pins-settings-policy.ts'
 import type { NavSettingsView } from '../nav-settings-policy.ts'
 import type { NavBadgeState } from '../../nav-settings.ts'
 import type { ToggleShortcut } from '../../toggle-shortcut.ts'
@@ -28,8 +29,14 @@ export type InboxHooks = {
   inbox: HostObservable<InboxView>
 }
 
-/** The panel's reactive facts: the inbox, the project todo scan, and the preferences naming the toggle chord. */
-export type PanelHooks = InboxHooks & NavSettingsHooks & {
+/** The pin settings (master switch, sidebar area and rows, digest section) as a hooks compartment member. */
+export type PinsSettingsHooks = {
+  /** The pin settings view; the renderer binds it as `usePinsSettings`. */
+  pinsSettings: HostObservable<PinsSettingsView>
+}
+
+/** The panel's reactive facts: the inbox, the project todo scan, the preferences naming the toggle chord, and the pin settings. */
+export type PanelHooks = InboxHooks & NavSettingsHooks & PinsSettingsHooks & {
   /** The project todo scan view; the renderer binds it as `useProjects`. */
   projects: HostObservable<ProjectTodosView>
 }
@@ -123,6 +130,25 @@ export interface DigestSettingsInjected {
 export type DigestSettingsSectionProps =
   PropsRuntime<'settings.section'>
   & InjectFace<DigestSettingsInjected>
+  & PropsLocale<'digest'>
+
+/** Registrant-private injected share of the pinned-sessions settings section. */
+export interface PinsSettingsInjected {
+  hooks: PinsSettingsHooks
+  /** Master switch: every pin affordance follows it. */
+  setEnabled: (enabled: boolean) => Promise<void>
+  /** Show or hide the sidebar pinned area. */
+  setSidebarArea: (enabled: boolean) => Promise<void>
+  /** Size the sidebar pinned area in session rows. */
+  setSidebarRows: (rows: number) => Promise<void>
+  /** Show or hide the inbox's pinned section. */
+  setDigestSection: (enabled: boolean) => Promise<void>
+}
+
+/** Full props of the pinned-sessions settings section: the settings view, its writers, and copy. */
+export type PinsSettingsSectionProps =
+  PropsRuntime<'settings.section'>
+  & InjectFace<PinsSettingsInjected>
   & PropsLocale<'digest'>
 
 /** Full props of the panel: the shared store, the global session/workspace hooks, the inbox, and copy. */

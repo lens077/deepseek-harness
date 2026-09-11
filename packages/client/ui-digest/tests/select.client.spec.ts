@@ -88,12 +88,22 @@ describe('selectInbox classification', () => {
     expect(sectionKeys(shown)).toEqual(['unread:resurfaced', 'handled:handled'])
   })
 
-  it('moves pinned rows to the front while keeping their category, and never pins a running row away', () => {
+  it('leads with pinned rows while keeping their category, and never pins a running row away', () => {
     const rows = [row('pinned'), row('run', { running: true }), row('other', { updatedAt: NOW })]
     const marks = inbox({ sessions: [mark('pinned', { pinned: true }), mark('run', { pinned: true })] })
     const selection = selectInbox(rows, [], marks, options())
-    expect(sectionKeys(selection)).toEqual(['unread:other', 'running:run', 'pinned:pinned'])
-    expect(selection.sections[2]?.items[0]).toMatchObject({ pinned: true, category: 'unread' })
+    expect(sectionKeys(selection)).toEqual(['pinned:pinned', 'unread:other', 'running:run'])
+    expect(selection.sections[0]?.items[0]).toMatchObject({ pinned: true, category: 'unread' })
+  })
+
+  it('lets a pinned row fall into its category when the pinned section is off', () => {
+    // A pinned seen row outside the window is admitted only by its pin.
+    const rows = [row('old', { updatedAt: NOW - 10 * DAY }), row('fresh', { updatedAt: NOW })]
+    const marks = inbox({ sessions: [mark('old', { lastSeenSeq: 9, pinned: true }), mark('fresh', { pinned: true })] })
+    expect(sectionKeys(selectInbox(rows, [], marks, options({ window: 'today' })))).toEqual(['pinned:fresh,old'])
+    const demoted = selectInbox(rows, [], marks, options({ window: 'today', pinnedSection: false }))
+    expect(sectionKeys(demoted)).toEqual(['unread:fresh'])
+    expect(demoted.sections[0]?.items[0]).toMatchObject({ pinned: true })
   })
 })
 

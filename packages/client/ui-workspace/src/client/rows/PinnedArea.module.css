@@ -1,0 +1,26 @@
+.area {
+  flex: 0 0 auto;
+  padding: 8px 8px 0;
+}
+
+.label {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 8px;
+}
+
+.list {
+  height: calc(32px * var(--pinned-rows));
+  overflow-y: auto;
+}
+
+.empty {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: var(--dsw-session-row-height);
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

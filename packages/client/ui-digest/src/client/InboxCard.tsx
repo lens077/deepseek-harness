@@ -21,14 +21,16 @@ export interface InboxCardActions {
 
 /**
  * Render one inbox item, with optional controlled phone disclosure.
- * @param props - the item, keyboard focus, localized copy, actions, and phone expansion.
+ * @param props - the item, keyboard focus, localized copy, actions, whether pinning is enabled, and phone expansion.
  * @returns the card element.
  */
-export function InboxCard({ item, focused, t, actions, disclosure }: {
+export function InboxCard({ item, focused, t, actions, pinning, disclosure }: {
   item: InboxItem
   focused: boolean
   t: DigestPanelProps['t']
   actions: InboxCardActions
+  /** Whether the pin action is offered; the pinned marker follows the mark regardless. */
+  pinning: boolean
   disclosure?: { expanded: boolean; toggle: () => void } | undefined
 }) {
   const detailsId = useId()
@@ -135,9 +137,11 @@ export function InboxCard({ item, focused, t, actions, disclosure }: {
             <button type="button" className={css.action} onClick={() => { actions.addTodo(item) }}>
               {t('card.todo')}
             </button>
-            <button type="button" className={css.action} onClick={() => { actions.togglePinned(item) }}>
-              {item.pinned ? t('card.unpin') : t('card.pin')}
-            </button>
+            {pinning && (
+              <button type="button" className={css.action} onClick={() => { actions.togglePinned(item) }}>
+                {item.pinned ? t('card.unpin') : t('card.pin')}
+              </button>
+            )}
             {!item.running && !item.waiting && (
               <button type="button" className={css.action} onClick={() => { actions.snoozeUntilTomorrow(item) }}>
                 {t('card.snooze')}

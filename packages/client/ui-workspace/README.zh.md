@@ -41,6 +41,10 @@ kind: "package-reference"
 
 Session 行内的 Rename 操作打开一个以显示标题预填的对话框。Fork 可以新建平级 Session，也可以把子级放到来源 Session 下；两者都在最后一个已完成 Turn 处分叉、递增继承标题并打开子级。**管理会话目录**保持主 cwd 不变，并替换供后续命令使用的规范化附加可写根目录列表。Archive 会在 Workspace 回声到达后隐藏 Session；归档视图可以恢复它，也可以在确认后永久删除其 lineage。多选支持切换与可见范围手势、键盘移动、全选、批量归档、批量删除、Workspace 成员关系变更和可选的待办创建。Workspace Delete 会移除注册记录，其 Session 留在 Ungrouped 下。
 
+### 置顶会话
+
+可选的 `sessionPins` seat 启用置顶后，Session 行菜单会提供**置顶**或**取消置顶**，多选右键菜单会将同一操作应用于所有选中的 Session。宽侧边栏会在工作区区块上方显示按最近更新时间排序的**置顶**区域，区域固定容纳指定行数并支持滚动；归档、空白、未知和 subagent-origin Session 不会显示在其中。
+
 ### 待处理交互
 
 Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**等待审批**，计划审阅显示**计划待审**，普通问题显示**等待回答**。每个待处理交互都使用一枚琥珀色警告点，优先级高于运行指示器。
@@ -65,7 +69,7 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 <details>
 <summary>实现细节——点击展开</summary>
 
-本包填充侧边栏浏览器与 Session Intent 选择器 slot，并向通用设置贡献 Session 数量、多选与状态呈现三行。`apply` 对每个声明生命周期使用 `slots.inject()`，在目标 slot 恢复后重新注册。持久化 viewing store 拥有分组、顺序、展开状态、行数与状态边框偏好；独立的非持久化 store 拥有当前多选。
+本包填充侧边栏浏览器与 Session Intent 选择器 slot，并向通用设置贡献 Session 数量、多选与状态呈现三行。`apply` 对每个声明生命周期使用 `slots.inject()`，在目标 slot 恢复后重新注册。持久化 viewing store 拥有分组、顺序、展开状态、行数与状态边框偏好；独立的非持久化 store 拥有当前多选。可选的 `sessionPins` seat 提供实时置顶视图和变更回调；`apply` 将该视图镜像到浏览器 hooks，并在 provider 移除时重置。
 
 ### 目录流子 slot
 

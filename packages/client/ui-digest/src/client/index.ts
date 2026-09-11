@@ -19,6 +19,10 @@
  * workspace; the same plugin contributes the settings page that names those
  * roots and file patterns.
  *
+ * The plugin also provides the session browser's `sessionPins` seat (the
+ * pinned ids plus the pin policy from the **置顶** settings page it contributes),
+ * so pinning is one durable mark shown in the sidebar and the inbox alike.
+ *
  * @module @deepseek-ai/dsh-client-ui-digest
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -36,13 +40,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls ui-settings' Context merge (ctx.settingsScope) and the settings.section slot.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-// Type-only: pulls ui-workspace's optional sessionTodos seat.
-import type { SessionTodos } from '@deepseek-ai/dsh-client-ui-workspace/client'
+// Type-only: pulls ui-workspace's optional sessionTodos and sessionPins seats.
+import type { SessionPins, SessionPinsView, SessionTodos } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionDigestView } from '@deepseek-ai/dsh-session-digest/client'
 import type { ProjectTodosSettings } from '@deepseek-ai/dsh-project-todos/types'
 import type {
-  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, ProjectSettingsInjected,
+  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, PinsSettingsInjected, ProjectSettingsInjected,
 } from './contract/slots.ts'
 import { InboxController, type InboxActionResult } from './controller.ts'
 import { ProjectTodosController } from './projects-controller.ts'
@@ -51,6 +56,9 @@ import { ProjectSettingsSection } from './ProjectSettingsSection.tsx'
 import { NavSettingsPolicy } from './nav-settings-policy.ts'
 import { DigestSettingsSection } from './DigestSettingsSection.tsx'
 import { DIGEST_SETTINGS_NAMESPACE, DigestSettingsSchema, type DigestSettings } from '../nav-settings.ts'
+import { PinsSettingsPolicy } from './pins-settings-policy.ts'
+import { PinsSettingsSection } from './PinsSettingsSection.tsx'
+import { SESSION_PINS_SETTINGS_NAMESPACE, SessionPinsSettingsSchema, type SessionPinsSettings } from '../pins-settings.ts'
 import { DigestNavEntry } from './DigestNavEntry.tsx'
 import { DigestPanel } from './DigestPanel.tsx'
 import { createDigestStore } from './stores.ts'
@@ -61,13 +69,16 @@ export type { DigestKey } from './locales.ts'
 export type {
   DigestNavEntryInjected, DigestNavEntryProps, DigestPanelInjected, DigestPanelProps,
   DigestSettingsInjected, DigestSettingsSectionProps,
+  PinsSettingsInjected, PinsSettingsSectionProps,
   ProjectSettingsInjected, ProjectSettingsSectionProps,
 } from './contract/slots.ts'
 export type { InboxActionResult, InboxRemote, InboxView } from './controller.ts'
 export type { ProjectDocumentResult, ProjectTodosRemote, ProjectTodosView } from './projects-controller.ts'
 export type { ProjectSettingsView } from './project-settings.ts'
 export type { NavSettingsView } from './nav-settings-policy.ts'
+export type { PinsSettingsView } from './pins-settings-policy.ts'
 export type { DigestSettings, NavBadgeState } from '../nav-settings.ts'
+export type { SessionPinsSettings } from '../pins-settings.ts'
 export type { ToggleShortcut } from '../toggle-shortcut.ts'
 export { createDigestStore } from './stores.ts'
 
@@ -159,14 +170,22 @@ export function apply(ctx: ClientContext): void {
   // view stands on defaults until the settings scope binds it, so the entry
   // renders in a composition without the settings surface.
   const navSettings = new NavSettingsPolicy()
+  // The pin policy: the master switch, the sidebar area and its size, and
+  // the inbox section. Defaults (everything on, five rows) stand until the
+  // settings scope binds the durable section.
+  const pinsSettings = new PinsSettingsPolicy()
 
-  // The two settings pages ride the settings scope service, so a
+  // The three settings pages ride the settings scope service, so a
   // composition without the settings surface simply has no page.
   ctx.inject(['settingsScope'], (settingsCtx) => {
     settingsCtx.effect(() => navSettings.bind(settingsCtx.settingsScope.bind<DigestSettings>({
       namespace: DIGEST_SETTINGS_NAMESPACE,
       decode: section => DigestSettingsSchema(section as DigestSettings),
     })), 'ui-digest: badge preferences')
+    settingsCtx.effect(() => pinsSettings.bind(settingsCtx.settingsScope.bind<SessionPinsSettings>({
+      namespace: SESSION_PINS_SETTINGS_NAMESPACE,
+      decode: section => SessionPinsSettingsSchema(section as SessionPinsSettings),
+    })), 'ui-digest: pin preferences')
     settingsCtx.slots.inject('settings.section', () => settingsCtx.slots.register({
       name: 'settings.section',
       id: 'digest',
@@ -201,7 +220,63 @@ export function apply(ctx: ClientContext): void {
         pickDirectory: () => ctx.uiWorkspace.pickDirectory(),
       }),
     }, ProjectSettingsSection))
+
+    settingsCtx.slots.inject('settings.section', () => settingsCtx.slots.register({
+      name: 'settings.section',
+      id: 'session-pins',
+      // Right after the project todos page (45).
+      order: 46,
+      locale: NS,
+      label: () => translate('pinsSettings.nav'),
+      inject: (): PinsSettingsInjected => ({
+        hooks: { pinsSettings: pinsSettings.view },
+        setEnabled: enabled => pinsSettings.setEnabled(enabled),
+        setSidebarArea: enabled => pinsSettings.setSidebarArea(enabled),
+        setSidebarRows: rows => pinsSettings.setSidebarRows(rows),
+        setDigestSection: enabled => pinsSettings.setDigestSection(enabled),
+      }),
+    }, PinsSettingsSection))
   })
+
+  // The session browser's pin seat: the pinned ids and the pin policy as one
+  // view, republished only when either actually changed so rows do not
+  // re-render on unrelated inbox pushes.
+  const NO_PINS: readonly SessionId[] = Object.freeze([])
+  const pinsView = createSnapshotStore<SessionPinsView>(Object.freeze({
+    enabled: pinsSettings.view.getSnapshot().enabled,
+    sidebarArea: pinsSettings.view.getSnapshot().sidebarArea,
+    sidebarRows: pinsSettings.view.getSnapshot().sidebarRows,
+    pinnedSessionIds: NO_PINS,
+  }))
+  const republishPins = (): void => {
+    const settings = pinsSettings.view.getSnapshot()
+    const ids = controller.getSnapshot().snapshot.sessions.filter(row => row.pinned).map(row => row.sessionId)
+    const current = pinsView.getSnapshot()
+    if (current.enabled === settings.enabled && current.sidebarArea === settings.sidebarArea
+      && current.sidebarRows === settings.sidebarRows
+      && current.pinnedSessionIds.length === ids.length
+      && current.pinnedSessionIds.every((id, index) => id === ids[index])) return
+    pinsView.set(Object.freeze({
+      enabled: settings.enabled,
+      sidebarArea: settings.sidebarArea,
+      sidebarRows: settings.sidebarRows,
+      pinnedSessionIds: Object.freeze(ids),
+    }))
+  }
+  ctx.effect(() => controller.subscribe(republishPins), 'ui-digest: pins from inbox')
+  ctx.effect(() => pinsSettings.view.subscribe(republishPins), 'ui-digest: pins from settings')
+  republishPins()
+  ctx.provide('sessionPins', {
+    view: pinsView,
+    setPinned: async (sessionIds, pinned) => {
+      const loaded = await controller.ensure()
+      if (!loaded.ok) throw new Error(loaded.error.message)
+      const results = await Promise.all(sessionIds.map(id => controller.setPinned(id, pinned)))
+      for (const result of results) {
+        if (!result.ok) throw new Error(result.error.message)
+      }
+    },
+  } satisfies SessionPins)
 
   // Seen mark: the current session's newest landed seq is what the user has
   // on screen. The controller skips the call when the mark already covers it.
@@ -229,6 +304,7 @@ export function apply(ctx: ClientContext): void {
       badgeCtx.documentBadge.set(selectInbox(rows, workspaces.items, controller.getSnapshot().snapshot, {
         now: Date.now(), window: 'all', workspace: undefined, showHandled: false, ungroupedLabel: '',
         pendingSessionIds: new Set(ctx.uiSession.pendingInteractions.getSnapshot().keys()),
+        pinnedSection: pinsSettings.view.getSnapshot().enabled && pinsSettings.view.getSnapshot().digestSection,
       }).attentionCount)
     }
     badgeCtx.effect(() => ctx.sessions.list.subscribe(recount), 'ui-digest: badge from sessions')
@@ -297,7 +373,7 @@ export function apply(ctx: ClientContext): void {
     inject: (actions): DigestPanelInjected => {
       viewActions = actions
       return {
-        hooks: { inbox: controller, projects, navSettings: navSettings.view },
+        hooks: { inbox: controller, projects, navSettings: navSettings.view, pinsSettings: pinsSettings.view },
         ensureInbox: () => controller.ensure(),
         ensureProjects: () => projects.ensure(),
         rescanProjects: () => projects.rescan(),

@@ -171,6 +171,17 @@ export const zh = {
   'digestSettings.state.unread': '完成未读',
   'digestSettings.state.running': '进行中',
   'digestSettings.state.failed': '错误 / 中断',
+  'pinsSettings.nav': '置顶',
+  'pinsSettings.title': '置顶会话',
+  'pinsSettings.description': '把需要优先处理的会话置顶：会话菜单里的「置顶」、侧边栏的置顶区，以及「汇总 → 收件箱」最前面的置顶分组。',
+  'pinsSettings.enabled': '启用置顶',
+  'pinsSettings.enabled.hint': '关闭后会话菜单不再提供置顶，侧边栏置顶区与汇总面板的置顶分组都隐藏；已有的置顶标记保留。',
+  'pinsSettings.sidebarArea': '侧边栏置顶区',
+  'pinsSettings.sidebarArea.hint': '在「工作区」上方显示置顶会话列表。',
+  'pinsSettings.sidebarRows': '置顶区高度（会话行数）',
+  'pinsSettings.sidebarRows.hint': '置顶区固定容纳这么多行，超出部分在区内滚动；范围 1–20，默认 5。',
+  'pinsSettings.digestSection': '汇总面板置顶分组',
+  'pinsSettings.digestSection.hint': '在「汇总 → 收件箱」最前面列出置顶会话。',
 }
 
 /** English dictionary. */
@@ -341,6 +352,17 @@ export const en: Record<DigestKey, string> = {
   'digestSettings.state.unread': 'Finished, unread',
   'digestSettings.state.running': 'Running',
   'digestSettings.state.failed': 'Failed / interrupted',
+  'pinsSettings.nav': 'Pinned',
+  'pinsSettings.title': 'Pinned sessions',
+  'pinsSettings.description': 'Pin the sessions to handle first: the session menu\'s Pin action, the sidebar pinned area, and a Pinned section at the top of Digest → Inbox.',
+  'pinsSettings.enabled': 'Enable pinning',
+  'pinsSettings.enabled.hint': 'When off, the session menu offers no Pin and both the sidebar pinned area and the digest Pinned section are hidden; existing pin marks are kept.',
+  'pinsSettings.sidebarArea': 'Sidebar pinned area',
+  'pinsSettings.sidebarArea.hint': 'List pinned sessions above Workspaces in the sidebar.',
+  'pinsSettings.sidebarRows': 'Pinned area height (session rows)',
+  'pinsSettings.sidebarRows.hint': 'The area holds this many rows and scrolls beyond them; 1–20, default 5.',
+  'pinsSettings.digestSection': 'Digest Pinned section',
+  'pinsSettings.digestSection.hint': 'List pinned sessions first in Digest → Inbox.',
 }
 
 /** Dictionary key union owned by this plugin. */

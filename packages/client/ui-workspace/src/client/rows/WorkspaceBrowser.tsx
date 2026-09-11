@@ -15,7 +15,7 @@ import {
 } from 'react'
 import clsx from 'clsx'
 import {
-  Button, IconArchiveOutline20, IconChecklistOutline14, IconCloseFill14, IconPersonalizationOutline16,
+  Button, IconArchiveOutline20, IconChecklistOutline14, IconCloseFill14, IconPersonalizationOutline16, IconPinOutline16,
   IconProjectAddOutline16, IconSearchOutline16, IconTrashOutline16, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -26,13 +26,14 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from '../tree.ts'
 import {
-  deriveArchived, deriveFlat, deriveGroups, deriveSearchResults, locateSession,
+  deriveArchived, deriveFlat, deriveGroups, derivePinned, deriveSearchResults, locateSession,
   owningGroupKey, UNGROUPED_KEY,
 } from '../tree.ts'
 import {
   ArchivedSessionItem, ProjectRowItem, SearchResultItem, SessionBranch, SessionNodeItem,
-  type RowActivationEvent, type RowContextMenuEvent,
+  type RowActivationEvent, type RowContextMenuEvent, type SessionRowContext,
 } from './Rows.tsx'
+import { PinnedArea } from './PinnedArea.tsx'
 import {
   FLAT_SESSION_ORDER_KEY, type CollapsedSessionCount, type SessionGroupBy, type SessionStatusIndicatorMode,
 } from '../stores.ts'
@@ -478,6 +479,9 @@ type SessionTreeProps = Pick<
   revealSessionId?: SessionId | undefined
   /** Acknowledge that the chosen Session row has been revealed. */
   onSessionRevealed: (sessionId: SessionId) => void
+  /** Read and update provider-owned pin state. */
+  isPinned: (id: SessionId) => boolean
+  onPin?: ((id: SessionId, pinned: boolean) => void) | undefined
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
@@ -490,7 +494,7 @@ function SessionTree({
   groupExpansion, setGroupExpanded, multiSelect, sessionStatusIndicatorMode, selection, setSelection, clearSelection,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
   ungroupedNestedUnder, home, t,
-  revealSessionId, onSessionRevealed,
+  revealSessionId, onSessionRevealed, isPinned, onPin,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const pendingInteractions = useSessionPendingInteraction(s => s)
@@ -888,6 +892,8 @@ function SessionTree({
                       onSessionRevealed: acknowledgeReveal,
                       isSelected: rowSelection.isSelected,
                       isLead: rowSelection.isLead,
+                      isPinned,
+                      onPin,
                       statusIndicatorMode: sessionStatusIndicatorMode,
                       t,
                     }}
@@ -924,7 +930,7 @@ function FlatList({
   onSessionContextMenu, onSessionDelete, onSessionDirectories, archivedSessionIds,
   orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder,
   multiSelect, sessionStatusIndicatorMode, selection, setSelection, clearSelection,
-  revealSessionId, onSessionRevealed, t,
+  revealSessionId, onSessionRevealed, isPinned, onPin, t,
 }: Pick<
   SessionTreeProps,
   | 'useSessions'
@@ -949,6 +955,8 @@ function FlatList({
   | 'clearSelection'
   | 'revealSessionId'
   | 'onSessionRevealed'
+  | 'isPinned'
+  | 'onPin'
   | 't'
 >) {
   const list = useSessions(s => s)
@@ -1049,6 +1057,8 @@ function FlatList({
               flat
               multiSelected={rowSelection.isSelected(node.id)}
               multiLead={rowSelection.isLead(node.id)}
+              pinned={isPinned(node.id)}
+              onPin={onPin}
               statusIndicatorMode={sessionStatusIndicatorMode}
               drag={{
                 start: () => {
@@ -1324,6 +1334,8 @@ function DesktopWorkspaceBrowser({
   useSessionDirectoryFlow,
   useHostInfo,
   useSessionSelection,
+  useSessionPins,
+  setPinned,
   setSessionSelection,
   clearSessionSelection,
   renderSlot,
@@ -1335,6 +1347,22 @@ function DesktopWorkspaceBrowser({
   const workspaceStreamState = useWorkspaces(state => state.state)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
   const sessionById = useSessions(state => state.byId)
+  // The pin provider's mirrored view: ids plus policy. Pin affordances follow
+  // `enabled`; the area also follows `sidebarArea` and is sized by `sidebarRows`.
+  const pins = useSessionPins(value => value)
+  const pinnedIds = useMemo(() => new Set(pins.pinnedSessionIds), [pins.pinnedSessionIds])
+  const isPinned = useCallback((id: SessionId): boolean => pinnedIds.has(id), [pinnedIds])
+  const onPin = useCallback((id: SessionId, pinned: boolean): void => {
+    setPinned([id], pinned).catch((reason: unknown) => {
+      console.warn('session pin rejected:', reason)
+    })
+  }, [setPinned])
+  const sessionList = useSessions(state => state)
+  const pendingInteractions = useSessionPendingInteraction(state => state)
+  const pinnedRows = useMemo(
+    () => derivePinned(sessionList, pins.pinnedSessionIds, archivedSessionIds, pendingInteractions),
+    [archivedSessionIds, sessionList, pendingInteractions, pins.pinnedSessionIds],
+  )
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
@@ -1724,6 +1752,10 @@ function DesktopWorkspaceBrowser({
   const archiveSelectedSessions = (sessionIds: readonly SessionId[]) => {
     runSessionAction(sessionIds, async () => { await archiveSessions(sessionIds) })
   }
+  const pinSelectedSessions = (sessionIds: readonly SessionId[]) => {
+    const pinned = sessionIds.every(id => pinnedIds.has(id))
+    runSessionAction(sessionIds, async () => { await setPinned(sessionIds, !pinned) })
+  }
   const removeSessions = (workspaceId: WorkspaceId, sessionIds: readonly SessionId[]) => {
     runSessionAction(sessionIds, async () => {
       await setSessionMembership(workspaceId, sessionIds, false)
@@ -1857,6 +1889,13 @@ function DesktopWorkspaceBrowser({
   const contextMenuItems = contextMenu === null
     ? []
     : [
+      ...pins.enabled
+        ? [{
+          id: 'pin',
+          label: contextMenu.sessionIds.every(id => pinnedIds.has(id)) ? t('menu.unpin') : t('menu.pin'),
+          icon: <IconPinOutline16 />,
+        }]
+        : [],
       ...todosAvailable()
         ? [{ id: 'todo', label: t('menu.addTodo'), icon: <IconChecklistOutline14 size={16} /> }]
         : [],
@@ -1883,6 +1922,27 @@ function DesktopWorkspaceBrowser({
       },
     ]
 
+  // Pinned rows are a second listing of Sessions the tree also lists, so they
+  // open on click and stay outside the range selection whose pruning follows
+  // the tree's visible rows; the selection-aware context menu still works.
+  const pinnedRowContext: SessionRowContext = {
+    currentId: currentSessionId,
+    now: Date.now(),
+    onOpen: (id) => { open(id) },
+    onContextMenu: onSessionContextMenu,
+    onRename: onSessionRename,
+    onFork: (id, placement) => { void forkSessionRow(id, placement) },
+    onDirectories: onSessionDirectories,
+    onArchive: onSessionArchive,
+    onDelete: (id) => { requestSessionDelete([id]) },
+    onSessionRevealed: () => undefined,
+    isSelected: () => false,
+    isLead: () => false,
+    isPinned,
+    onPin: pins.enabled ? onPin : undefined,
+    statusIndicatorMode: sessionStatusIndicatorMode,
+    t,
+  }
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
       {showGlobalSelectionBar && renderSelectionActions(selection.selected)}
@@ -1894,6 +1954,7 @@ function DesktopWorkspaceBrowser({
           if (contextMenu === null) return
           const sessionIds = contextMenu.sessionIds
           setContextMenu(null)
+          if (id === 'pin') pinSelectedSessions(sessionIds)
           if (id === 'todo') addTodos(sessionIds)
           if (id === 'archive') archiveSelectedSessions(sessionIds)
           if (id === 'remove' && contextPlacement.sourceWorkspaceId !== undefined) {
@@ -1910,6 +1971,15 @@ function DesktopWorkspaceBrowser({
           : new DOMRect(contextMenu.x, contextMenu.y, 0, 0)}
         anchor={<span className={css.contextMenuAnchor} aria-hidden="true" />}
       />
+      {wide && pins.enabled && pins.sidebarArea && (
+        <PinnedArea
+          rows={pinnedRows}
+          row={pinnedRowContext}
+          count={pins.sidebarRows}
+          emptyLabel={t('pinned.empty')}
+          ariaLabel={t('pinned.aria')}
+        />
+      )}
       <div className={css.sectionHeader}>
         {wide && (
           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
@@ -2102,6 +2172,8 @@ function DesktopWorkspaceBrowser({
                   clearSelection={clearSessionSelection}
                   revealSessionId={revealSessionId}
                   onSessionRevealed={acknowledgeSessionReveal}
+                  isPinned={isPinned}
+                  onPin={pins.enabled ? onPin : undefined}
                   t={t}
                 />
               )
@@ -2140,6 +2212,8 @@ function DesktopWorkspaceBrowser({
                   clearSelection={clearSessionSelection}
                   revealSessionId={revealSessionId}
                   onSessionRevealed={acknowledgeSessionReveal}
+                  isPinned={isPinned}
+                  onPin={pins.enabled ? onPin : undefined}
                   home={home}
                   t={t}
                   onRenameRequest={(workspaceId, currentTitle) => {
