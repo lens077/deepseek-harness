@@ -81,11 +81,11 @@ describe('web e2e: plugin configuration section', () => {
     expect(await dialog.getByRole('button', { name: '展开设置: Subagent' }).count()).toBe(1)
     await dialog.getByText('终端', { exact: true }).waitFor({ timeout: 10_000 })
     expect(await dialog.getByText('Agent 循环', { exact: true }).count()).toBe(1)
-    expect(await dialog.getByText('共用文件', { exact: true }).count()).toBe(1)
+    expect(await dialog.getByText('文件共享锁', { exact: true }).count()).toBe(1)
     expect(await dialog.getByText('网页搜索', { exact: true }).count()).toBe(1)
     // Collapsed: a card's fields appear only once it is expanded.
     expect(await dialog.getByLabel('命令超时（毫秒）').count()).toBe(0)
-    expect(await dialog.getByLabel('先等多久再问你（秒）').count()).toBe(0)
+    expect(await dialog.getByLabel('读锁（秒）').count()).toBe(0)
 
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(SECTION_EXPECTED, snapshot, MODE)
@@ -224,13 +224,13 @@ describe('web e2e: plugin configuration section', () => {
   it('stores a file-lock wait in the unit the Host keeps, not the one shown', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-file-lock'))
     const dialog = await openPlugins()
-    await dialog.getByText('共用文件', { exact: true }).click()
+    await dialog.getByText('文件共享锁', { exact: true }).click()
 
-    const readWait = dialog.getByLabel('先等多久再问你（秒）')
+    const readWait = dialog.getByLabel('读锁（秒）')
     await readWait.waitFor({ timeout: 10_000 })
     // The shipped 30,000 ms default, shown in the seconds the field is edited in.
     expect(await readWait.inputValue()).toBe('30')
-    expect(await dialog.getByLabel('等多久就放弃修改（分钟）').inputValue()).toBe('10')
+    expect(await dialog.getByLabel('写锁（分钟）').inputValue()).toBe('10')
 
     await readWait.fill('5')
     await dialog.getByRole('radio', { name: '照现在的样子读' }).click()

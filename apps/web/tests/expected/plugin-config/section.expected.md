@@ -42,8 +42,8 @@
           - text: Agent 循环 Agent 如何派发工具调用。
           - img
       - listitem:
-        - 'button "展开设置: 共用文件"':
-          - text: 共用文件 两个会话同时用到同一个文件时怎么办。
+        - 'button "展开设置: 文件共享锁"':
+          - text: 文件共享锁 多 Agent 同时竞争同一文件时的解决方案。
           - img
       - listitem:
         - 'button "展开设置: Subagent"':

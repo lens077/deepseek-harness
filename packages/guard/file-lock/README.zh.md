@@ -47,7 +47,7 @@ kind: "package-reference"
       - { tool: write, pathArgument: file_path, access: write }
 ```
 
-`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层——`$DSH_HOME` 下的 `settings.yaml` 文档，或 Web 插件设置页上以秒和分钟、用日常用语编辑这些等待时长的**共用文件**卡片——会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
+`readWaitMs`、`writeWaitMs`、`leaseTtlMs` 与 `delegatedReadTimeout` 构成 `file-lock` 设置节：组合值是基础层，设置提供方写入的用户层——`$DSH_HOME` 下的 `settings.yaml` 文档，或 Web 插件设置页上以秒和分钟编辑这些等待时长的**文件共享锁**卡片——会实时覆盖它们。`tools` 仅限组合层。带 `readWhenArgument` 与 `readWhenValues` 的规则会把写规则在单次调用中转为读取，自带的 `str_replace_editor` 规则对 `command: view` 就是如此。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-call-file-lock)列出了全部字段。
 
 ### 你会得到什么
 

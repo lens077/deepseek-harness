@@ -47,7 +47,7 @@ Mount the plugin; every field has a default:
       - { tool: write, pathArgument: file_path, access: write }
 ```
 
-`readWaitMs`, `writeWaitMs`, `leaseTtlMs`, and `delegatedReadTimeout` form the `file-lock` settings section: the composition values are the base layer, and a user layer written by a settings provider — the `settings.yaml` document under `$DSH_HOME`, or the **Shared files** card on the Web Plugins settings page, which edits the waits in seconds and minutes in plain-language terms — overrides them live. `tools` is composition-only. A rule with `readWhenArgument` and `readWhenValues` turns a write rule into a read for one call, as the shipped `str_replace_editor` rule does for `command: view`. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-call-file-lock) lists every field.
+`readWaitMs`, `writeWaitMs`, `leaseTtlMs`, and `delegatedReadTimeout` form the `file-lock` settings section: the composition values are the base layer, and a user layer written by a settings provider — the `settings.yaml` document under `$DSH_HOME`, or the **File sharing lock** card on the Web Plugins settings page, which edits the waits in seconds and minutes — overrides them live. `tools` is composition-only. A rule with `readWhenArgument` and `readWhenValues` turns a write rule into a read for one call, as the shipped `str_replace_editor` rule does for `command: view`. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-call-file-lock) lists every field.
 
 ### What you get
 

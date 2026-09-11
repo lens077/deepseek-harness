@@ -25,9 +25,9 @@ Use the **Plugins** settings section to configure the plugins exposed by the cur
 <a id="use-this-package"></a>
 ## Use this package
 
-Open the Plugins section in Settings and select the **Plugin configuration** tab to edit the host-plane plugins this deployment composes. The cards appear in this order: the shell executor (`bash`), the agent loop's tool-call parallelism (`agent-loop`), shared files across conversations (`file-lock`), subagent model selection (`subagent-model-selection`), and the DeepSeek search provider (`web-search-deepseek`).
+Open the Plugins section in Settings and select the **Plugin configuration** tab to edit the host-plane plugins this deployment composes. The cards appear in this order: the shell executor (`bash`), the agent loop's tool-call parallelism (`agent-loop`), the file sharing lock (`file-lock`), subagent model selection (`subagent-model-selection`), and the DeepSeek search provider (`web-search-deepseek`).
 
-A field may be edited in a coarser unit than the document keeps. The shared-file waits are stored in milliseconds and edited in seconds or minutes, so the control shows `30` where the document holds `30000`; the save multiplies the draft back and rounds it to whole milliseconds. A field whose value is one of fixed tokens renders as a row of choices instead of a text box, and a stored token this build does not offer leaves every choice unselected and blocks the save rather than being replaced.
+A field may be edited in a coarser unit than the document keeps. The file sharing lock's waits are stored in milliseconds and edited in seconds or minutes, so the control shows `30` where the document holds `30000`; the save multiplies the draft back and rounds it to whole milliseconds. A field whose value is one of fixed tokens renders as a row of choices instead of a text box, and a stored token this build does not offer leaves every choice unselected and blocks the save rather than being replaced.
 
 ### What appears here
 
