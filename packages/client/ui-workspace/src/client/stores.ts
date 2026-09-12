@@ -10,21 +10,45 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-sto
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 
-/** Session-list grouping mode: workspace sections or one flat recency list. */
-export type SessionGroupBy = 'workspace' | 'flat'
+/** Session-list presentation: workspace sections, one flat list, or the archive set. */
+export type SessionGroupBy = 'workspace' | 'flat' | 'archived'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
+/** Collapsed rows per Workspace, or automatic sizing from available height. */
+export type CollapsedSessionCount = number | 'auto'
+/**
+ * Session-row status perimeter: `animated` rotates the running highlight,
+ * `static` keeps the state-colored track without motion, and `hidden` omits
+ * the perimeter while status dots and accessible labels remain.
+ */
+export type SessionStatusIndicatorMode = 'animated' | 'static' | 'hidden'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
-  /** Explicit zero-or-five-session state keyed by Workspace group identity. */
+  collapsedSessionCount: CollapsedSessionCount
+  /** Explicit collapsed-or-expanded state keyed by Workspace group identity. */
   groupExpansion: Record<string, boolean>
   /** Shared editable order per Workspace group plus the browser-local flat-list account. */
   sessionOrderByAccount: Record<string, string[]>
   /** Last observed update timestamps per order account for one-time promotion events. */
   sessionUpdatedAtByAccount: Record<string, Record<string, number>>
+  /**
+   * Browser-local nested placement for the Ungrouped bucket (child Session id
+   * → parent Session id). A real Workspace records nesting on its Host
+   * record; Sessions outside every Workspace have no such record, so a
+   * nested fork of an Ungrouped source is remembered here instead.
+   */
+  ungroupedNestedUnder: Record<string, string>
+  /**
+   * Whether Shift/Ctrl range and toggle selection is active on session rows.
+   * Disabled restores plain single-click-opens behavior and ignores the
+   * modifier keys entirely.
+   */
+  multiSelect: boolean
+  /** Presentation of the running/completed/error perimeter on Session rows. */
+  sessionStatusIndicatorMode: SessionStatusIndicatorMode
 }
 
 /**
@@ -34,6 +58,9 @@ type WorkspaceViewState = {
 type WorkspaceViewActions = {
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
+  setCollapsedSessionCount: (draft: WorkspaceViewState, count: CollapsedSessionCount) => void
+  setMultiSelect: (draft: WorkspaceViewState, enabled: boolean) => void
+  setSessionStatusIndicatorMode: (draft: WorkspaceViewState, mode: SessionStatusIndicatorMode) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
   retainAccountKeys: (draft: WorkspaceViewState, workspaceKeys: readonly string[]) => void
   syncSessionOrderAccount: (
@@ -43,6 +70,7 @@ type WorkspaceViewActions = {
     updatedAt: Record<string, number>,
   ) => void
   setSessionOrder: (draft: WorkspaceViewState, accountKey: string, order: string[]) => void
+  setUngroupedNesting: (draft: WorkspaceViewState, childId: string, parentId: string) => void
 }
 
 /**
@@ -54,14 +82,25 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
     init: (): WorkspaceViewState => ({
       groupBy: 'workspace',
       orderBy: 'updated',
+      collapsedSessionCount: 5,
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
+      ungroupedNestedUnder: {},
+      multiSelect: true,
+      sessionStatusIndicatorMode: 'animated',
     }),
-    persist: 'dsh.workspace.view.v5',
+    // Persistence restores the whole value, so a state field addition bumps
+    // the key: an older value could not supply the required field.
+    persist: 'dsh.workspace.view.v9',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
+      setCollapsedSessionCount: (d, count: CollapsedSessionCount) => { d.collapsedSessionCount = count },
+      setMultiSelect: (d, enabled: boolean) => { d.multiSelect = enabled },
+      setSessionStatusIndicatorMode: (d, mode: SessionStatusIndicatorMode) => {
+        d.sessionStatusIndicatorMode = mode
+      },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
       retainAccountKeys: (d, workspaceKeys: readonly string[]) => {
         const retained = new Set(workspaceKeys)
@@ -81,6 +120,9 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setSessionOrder: (d, accountKey: string, order: string[]) => {
         d.sessionOrderByAccount[accountKey] = order
+      },
+      setUngroupedNesting: (d, childId: string, parentId: string) => {
+        d.ungroupedNestedUnder[childId] = parentId
       },
     },
   })

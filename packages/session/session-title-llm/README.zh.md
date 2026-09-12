@@ -49,6 +49,10 @@ kind: "package-library"
 | `maxOutputTokens` | 必填 | 辅助生成的 token 上限 |
 | `timeoutMs` | 必填 | 运行时定时器限制内的端到端时限 |
 | `provider`, `model` | 可选 | 显式路由；二者同时提供或同时省略 |
+| `instructions` | 可选 | 逐字追加到系统提示词末尾的部署文本，例如要求的标题格式 |
+| `titlePattern` | 可选 | 规范化后标题必须整体匹配的 Unicode 正则；不匹配的输出使该次修订失败，沿用原标题 |
+| `latestMessages` | 可选 | 只框入并归因最新的若干条已选消息的上限 |
+| `includeCurrentTitle` | 可选 | 把最新已接受标题与消息一并框入，让修订可以在原标题上细化而不是重来 |
 
 -----
 

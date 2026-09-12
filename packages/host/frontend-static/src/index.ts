@@ -12,7 +12,8 @@
  * @module @deepseek-ai/dsh-host-frontend-static
  */
 
-import type { ServerResponse } from 'node:http'
+import { createHash } from 'node:crypto'
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -59,8 +60,49 @@ const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
 ])
 
 /**
- * Serve one GET/HEAD static request from the dist root.
+ * Vite's `[name]-[hash][extname]` output naming: an eight-character base64url
+ * content hash before the extension. A file named this way changes URL
+ * whenever its bytes change, so the browser may keep it for a year without
+ * asking again.
+ */
+const HASHED_BASENAME = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9.]+$/
+
+const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable'
+/** Unhashed files and the rendered index: always revalidate, never reuse blindly. */
+const REVALIDATE_CACHE = 'no-cache'
+/** The index is per-visitor (authenticated, injection-rendered): a shared cache must not keep it. */
+const INDEX_CACHE = 'private, no-cache'
+
+/**
+ * Strong validator over the response bytes. The rendered index and the
+ * unhashed files are small, so hashing the body per request costs less than
+ * the round trip it saves.
+ * @param body - the bytes the 200 response would carry.
+ * @returns a quoted entity tag.
+ */
+function entityTag(body: string | Buffer): string {
+  return `"${createHash('sha1').update(body).digest('base64url')}"`
+}
+
+/**
+ * Whether the request's `If-None-Match` names the current entity.
+ * @param headers - request headers.
+ * @param etag - the quoted tag the 200 response would carry.
+ * @returns true when a 304 is the correct answer.
+ */
+function matchesEntity(headers: IncomingHttpHeaders, etag: string): boolean {
+  const header = headers['if-none-match']
+  if (header === undefined) return false
+  return header.split(',').some(candidate => candidate.trim().replace(/^W\//, '') === etag)
+}
+
+/**
+ * Serve one GET/HEAD static request from the dist root. Hashed build outputs
+ * are immutable for a year; the rendered index and unhashed files carry a
+ * strong ETag and answer a matching `If-None-Match` with an empty 304, so a
+ * refresh re-downloads only files whose bytes changed.
  * @param pathname - decoded URL pathname of the request.
+ * @param requestHeaders - request headers (conditional-request validators).
  * @param res - the node:http response to write.
  * @param distRoot - absolute dist root directory (resolved by the caller).
  * @param distIndex - absolute path of index.html inside distRoot.
@@ -69,7 +111,7 @@ const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
  * rendering) for the dist root and configured index path.
  */
 export async function serveStatic(
-  pathname: string, res: ServerResponse, distRoot: string, distIndex: string,
+  pathname: string, requestHeaders: IncomingHttpHeaders, res: ServerResponse, distRoot: string, distIndex: string,
   authorizeIndex: () => boolean,
   renderIndex: () => Promise<string>,
 ): Promise<void> {
@@ -84,14 +126,17 @@ export async function serveStatic(
   }
   let body: string | Buffer
   let type: string
+  let cache: string
   try {
     if (target === distRoot || target === distIndex) {
       if (!authorizeIndex()) return
       body = await renderIndex()
       type = HTML_MIME
+      cache = INDEX_CACHE
     } else {
       body = await readFile(target)
       type = MIME[extname(target)] ?? 'application/octet-stream'
+      cache = HASHED_BASENAME.test(target) ? IMMUTABLE_CACHE : REVALIDATE_CACHE
     }
   } catch (error) {
     // Only absent or non-file targets are 404; other filesystem failures reach
@@ -101,7 +146,20 @@ export async function serveStatic(
     res.end()
     return
   }
-  res.writeHead(200, { 'content-type': type })
+  if (cache === IMMUTABLE_CACHE) {
+    // A hashed URL never needs revalidation: the tag would only be compared
+    // by a client that ignored `immutable`, and the year-long max-age covers it.
+    res.writeHead(200, { 'content-type': type, 'cache-control': cache })
+    res.end(body)
+    return
+  }
+  const etag = entityTag(body)
+  if (matchesEntity(requestHeaders, etag)) {
+    res.writeHead(304, { etag, 'cache-control': cache })
+    res.end()
+    return
+  }
+  res.writeHead(200, { 'content-type': type, 'cache-control': cache, etag })
   res.end(body)
 }
 
@@ -133,6 +191,7 @@ export function apply(ctx: Context, config: Config): void {
     const rawPath = new URL(req.url ?? '/', 'http://x').pathname
     await serveStatic(
       decodeURIComponent(rawPath),
+      req.headers,
       res,
       distRoot,
       distIndex,

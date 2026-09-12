@@ -36,6 +36,8 @@
     { "path": "../../jobs/jobs" },
     { "path": "../../fs/fs" },
     { "path": "../../llm/llm" },
+    { "path": "../../llm/model-router" },
+    { "path": "../../llm/token-meter" },
     { "path": "../../util/deque" },
     { "path": "../../util/native-command" },
     { "path": "../../preset/agent-presets" },

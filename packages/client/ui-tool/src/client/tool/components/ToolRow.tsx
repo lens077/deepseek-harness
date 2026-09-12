@@ -1,13 +1,13 @@
 import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  CodeBlock, DiffBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, StateDot, TerminalBlock, WebBlock,
+  CodeBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, SideBySideDiff, StateDot, TerminalBlock, WebBlock,
   diffTotals,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRenderSlots, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { OpenFileOptions } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { MessageImageLoader } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { CHAT_DIFF_MAX_LINES, type DiffCardModel } from '../models/diff-card-model.ts'
+import type { DiffCardModel } from '../models/diff-card-model.ts'
 import { CHAT_READ_MAX_LINES, type ReadCardModel } from '../models/read-card-model.ts'
 import type { ImageCardModel } from '../models/image-card-model.ts'
 import { CHAT_SEARCH_MAX_LINES, type SearchCardModel } from '../models/search-card-model.ts'
@@ -15,7 +15,7 @@ import {
   localizeTerminalCardModel, terminalBlockLabels, type TerminalCardModel,
 } from '../models/terminal-card-model.ts'
 import {
-  diffBlockLabels, readBlockLabels, searchBlockLabels, webBlockLabels,
+  readBlockLabels, searchBlockLabels, webBlockLabels,
 } from '../models/primitive-labels.ts'
 import type { AskQuestionCardModel } from '../models/ask-question-card-model.ts'
 import {
@@ -52,6 +52,8 @@ export interface ToolRowProps {
   /** Terminal card; card fields are mutually exclusive and replace text sections. */
   terminal?: TerminalCardModel | null | undefined
   diff?: DiffCardModel | null | undefined
+  /** Seed the row open when its owner knows the reader requested its body up front. */
+  initiallyExpanded?: boolean | undefined
   read?: ReadCardModel | null | undefined
   /**
    * Image-card material for a call whose result is an image (derived by
@@ -85,6 +87,11 @@ export interface ToolRowProps {
    * over the expanded body. Absent = no affordance.
    */
   inspect?: (() => void) | undefined
+}
+
+/** Path shared by one mutation card's applied hunks. */
+function diffPath(diff: DiffCardModel): string {
+  return diff.card.diffs[0]?.path ?? ''
 }
 
 function leadingFor(state: ToolRowState, icon: ReactNode): ReactNode {
@@ -133,10 +140,10 @@ export function ToolRow({
   filePathLine,
   onOpenFile,
   inspect,
+  initiallyExpanded,
 }: ToolRowProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initiallyExpanded === true)
   const terminalLabels = useMemo(() => terminalBlockLabels(t), [t])
-  const diffLabels = useMemo(() => diffBlockLabels(t), [t])
   const readLabels = useMemo(() => readBlockLabels(t), [t])
   const searchLabels = useMemo(() => searchBlockLabels(t), [t])
   const webLabels = useMemo(() => webBlockLabels(t), [t])
@@ -193,7 +200,7 @@ export function ToolRow({
   // output joins the IN/OUT card; every other variant's input does too.
   const cardBody = variant === 'code' ? null : bodyText
   return (
-    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state}>
+    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state} data-file={filePath}>
       {status !== null && <span className={css.visuallyHidden}>{status}</span>}
       <DisclosureRow
         rowClassName={css.row}
@@ -247,7 +254,13 @@ export function ToolRow({
                 />
               )
               : diffBody !== null
-                ? <DiffBlock {...diffBody.card} labels={diffLabels} maxLines={CHAT_DIFF_MAX_LINES} className={css.diffBody} />
+                ? (
+                  <SideBySideDiff
+                    path={diffPath(diffBody)}
+                    segments={diffBody.card.diffs}
+                    className={css.diffBody}
+                  />
+                )
                 : readBody !== null
                   ? <ReadBlock {...readBody} labels={readLabels} maxLines={CHAT_READ_MAX_LINES} className={css.readBody} />
                   : imageBody !== null

@@ -1,0 +1,19 @@
+- region "Pending":
+  - heading "Pending" [level=2]
+  - button "Close digest":
+    - img
+  - group "Pending":
+    - button "Waiting for you"
+    - button "Finished unread"
+    - button "My todos"
+  - heading "Waiting for you 0" [level=3]
+  - heading "Finished 1" [level=3]
+  - article:
+    - 'button "NavScenario: first run bash to Unread"':
+      - text: "NavScenario: first run bash to"
+      - img "Unread"
+  - heading "My todos" [level=3]
+  - textbox "Add todo" [disabled]:
+    - /placeholder: Open a session first to add a todo about it.
+  - button "Add todo" [disabled]
+  - paragraph: No todos yet. Right-click a session or use "Add todo" on an inbox card.

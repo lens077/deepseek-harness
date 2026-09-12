@@ -16,22 +16,28 @@
      content + 32px at every width. Declared on the root because the
      transcript and the composer seat are sibling subtrees.
 
-     W adapts to the column, not the viewport (a collapsed sidebar widens the
-     column without resizing the window): the component publishes the column's
-     live width as --dsh-conversation-column-width (px, via ResizeObserver —
-     container-type would re-anchor the subtree's portal-free position:fixed
-     descendants) and the clamp keeps a 680px floor (a step under the figma
-     748px — the full-width reading felt wide on every screen), takes 64% of
-     wider columns, and caps at 920px for line-length
-     readability. A dragged user preference (--dsh-chat-user-width, published
-     by the width handles) replaces the adaptive term wholesale. */
+     Default (fill mode): the conversation fills the whole content area — no
+     adaptive clamp and no draggable width handles. */
+  --dsh-chat-content-width: 100%;
+  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
+  --dsh-composer-side-clearance: 16px;
+  --dsh-composer-dock-inset: 8px;
+}
+
+/* Adaptive mode (Settings-owned opt-in): W adapts to the column, not the
+   viewport (a collapsed sidebar widens the column without resizing the
+   window): the component publishes the column's live width as
+   --dsh-conversation-column-width (px, via ResizeObserver — container-type
+   would re-anchor the subtree's portal-free position:fixed descendants) and
+   the clamp keeps a 680px floor, takes 64% of wider columns, and caps at
+   920px for line-length readability. A dragged user preference
+   (--dsh-chat-user-width, published by the width handles) replaces the
+   adaptive term wholesale. */
+.root[data-width-mode='adaptive'] {
   --dsh-chat-content-width: var(
     --dsh-chat-user-width,
     clamp(680px, calc(var(--dsh-conversation-column-width, 0px) * 0.64), 920px)
   );
-  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
-  --dsh-composer-side-clearance: 16px;
-  --dsh-composer-dock-inset: 8px;
 }
 
 /* 76px with its rule: the height of the Sidebar's tab strip and header row
@@ -91,8 +97,10 @@
   line-height: 20px;
 }
 
+/* Ancestors cap at 220px; the current title takes the remaining header width. */
 .crumb {
   max-width: 220px;
+  min-width: 0;
   overflow: hidden;
   padding: 4px 8px;
   border: none;
@@ -116,9 +124,25 @@
 }
 
 .crumbCurrent {
+  max-width: none;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
   cursor: default;
+}
+
+.crumbSeg:not(:last-child) {
+  flex: none;
+}
+
+.headerLeading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerLeading:empty {
+  display: none;
 }
 
 .headerActions {
@@ -211,10 +235,10 @@
   min-height: 0;
 }
 
-/* Width handles: 40px col-resize strips beside the transcript, absolute in
-   .body (NOT the scrollport: an absolute strip there would extend the
-   scrollable range; NOT .root: a strip from the column top would paint its
-   glow through the header's transparent background). Inner edge sits 24px
+/* Width handles: 40px col-resize strips in the scroller's grid area, excluding
+   the optional rail. They stay outside the scrollport so absolute strips do
+   not extend its scrollable range, and below the header so their glow cannot
+   paint through it. Inner edge sits 24px
    outside the content column — the
    same offset the glow line paints at — and the strip extends 40px outward
    from there; the outer edge is clamped to keep a 24px safe zone against the
@@ -225,6 +249,8 @@
    gutter-reserved content box is accepted: it stays well inside the strip. */
 .widthHandle {
   position: absolute;
+  grid-column: 2;
+  grid-row: 1;
   top: 0;
   bottom: 0;
   z-index: 8;
@@ -332,16 +358,19 @@
    bottom edge at every header height. */
 .body {
   position: relative;
-  display: flex;
+  display: grid;
   flex: 1;
-  flex-direction: column;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
 
 .scrollBody {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
-  flex: 1;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   /* The product-wide 2px scrollbar offset (ui-workspace WorkspaceBrowser
      `.list`, ui-sidebar-files FilesBody `.body`): the bar sits 2px clear of
@@ -359,6 +388,11 @@
    offset. WebKit-only: the Firefox path has no track to inset. */
 .scrollBody::-webkit-scrollbar-track {
   margin: 2px;
+}
+
+/* Keep the resident rail and scroller in the body's shared grid without changing their React ancestry. */
+.bodyRow {
+  display: contents;
 }
 
 .root[data-phase='active'] .viewArea {
@@ -473,4 +507,118 @@
    mounted but invisible so no wrong layout flashes before the phase lands. */
 .root[data-phase='settling'] .composerSeat {
   visibility: hidden;
+}
+
+.railPanel {
+  display: contents;
+}
+
+.mobileRailToggle {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  /* Both width modes fill on mobile: the attribute form outranks the adaptive
+     clamp rule above. */
+  .root,
+  .root[data-width-mode='adaptive'] {
+    --dsh-chat-content-width: 100%;
+    --dsh-composer-side-clearance: 8px;
+  }
+
+  .railPanel {
+    display: none;
+  }
+
+  .mobileRailToggle {
+    display: block;
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    z-index: 12;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 0.5px solid var(--dsw-alias-border-l3);
+    border-radius: 8px;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .body[data-mobile-rail-open] .railPanel {
+    display: block;
+    position: absolute;
+    inset: 52px 0 0;
+    z-index: 11;
+    overflow: auto;
+    background: var(--dsw-alias-bg-base);
+  }
+
+  .widthHandle {
+    display: none;
+  }
+
+  .header {
+    padding-inline: 8px;
+  }
+
+  .headerUtilities {
+    margin-left: 4px;
+  }
+
+  .headerActions, .headerUtilities {
+    gap: 4px;
+  }
+
+  .tabs {
+    gap: 20px;
+    overflow-x: auto;
+  }
+
+  .heroWorkspaceRow {
+    flex-wrap: wrap;
+    padding-inline: 12px;
+  }
+}
+
+:global([data-mobile]) .root {
+  --dsh-composer-side-clearance: var(--dsh-mobile-page-padding);
+}
+
+:global([data-mobile]) .header {
+  padding: var(--dsh-mobile-row-gap) var(--dsh-mobile-page-padding) 0;
+}
+
+:global([data-mobile]) .crumb {
+  min-height: var(--dsh-mobile-control-size);
+  font-size: var(--dsh-mobile-font-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .crumbCurrent {
+  font-size: var(--dsh-mobile-title-size);
+}
+
+:global([data-mobile]) .tab,
+:global([data-mobile]) .mobileRailToggle {
+  min-height: var(--dsh-mobile-control-size);
+  font-size: var(--dsh-mobile-meta-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .headerActions button,
+:global([data-mobile]) .headerUtilities button {
+  min-width: var(--dsh-mobile-control-size);
+  min-height: var(--dsh-mobile-control-size);
+}
+
+:global([data-mobile-layout='small']) .tabs {
+  gap: 12px;
+  margin-top: 0;
+}
+
+:global([data-mobile-layout='small']) .composerStack {
+  --dsh-composer-stack-gap: 3px;
 }

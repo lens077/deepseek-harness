@@ -83,7 +83,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:434`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:465`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:420`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:442`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:473`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -449,6 +449,85 @@ Source: [`packages/feedback/message-feedback/src/types.ts:56`](../packages/feedb
 
 Source: [`packages/feedback/command-feedback/src/types.ts:40`](../packages/feedback/command-feedback/src/types.ts)
 
+### `file-lock/*`
+
+<a id="file-lockacquired--log-only"></a>
+
+#### `file-lock/acquired` — log-only
+
+```ts persistence-catalog
+/** This session leased `path` for modification until the current turn ends. */
+'file-lock/acquired': { path: string }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:54`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockanswered--log-only"></a>
+
+#### `file-lock/answered` — log-only
+
+```ts persistence-catalog
+/** A read against a live foreign lease was decided: by the user's answer or by the delegated-read policy. */
+'file-lock/answered': { path: string; choice: 'read-now' | 'keep-waiting'; by: FileLockReadNowDecider }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:60`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockasked--log-only"></a>
+
+#### `file-lock/asked` — log-only
+
+```ts persistence-catalog
+/** The silent read wait expired; the user was asked whether to read now or keep waiting. */
+'file-lock/asked': { path: string; holder: FileLockHolder; waitedMs: number }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:58`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockreleased--log-only"></a>
+
+#### `file-lock/released` — log-only
+
+```ts persistence-catalog
+/** Leases this session held were released before its turn ended. */
+'file-lock/released': { paths: string[]; reason: 'ttl' }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:66`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-locksettled--log-only"></a>
+
+#### `file-lock/settled` — log-only
+
+```ts persistence-catalog
+/** The wait for `path` ended; the read or write then proceeded, was refused, or was cancelled. */
+'file-lock/settled': { path: string; access: FileAccess; outcome: FileLockWaitOutcome; waitedMs: number }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:64`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-locksubscribed--log-only"></a>
+
+#### `file-lock/subscribed` — log-only
+
+```ts persistence-catalog
+/** A read subscribed for the release of `path` with no time bound. */
+'file-lock/subscribed': { path: string; holder: FileLockHolder }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:62`](../packages/guard/file-lock/src/types.ts)
+
+<a id="file-lockwaiting--log-only"></a>
+
+#### `file-lock/waiting` — log-only
+
+```ts persistence-catalog
+/** A call of this session started waiting for another session's lease on `path`. */
+'file-lock/waiting': { path: string; access: FileAccess; holder: FileLockHolder }
+```
+
+Source: [`packages/guard/file-lock/src/types.ts:56`](../packages/guard/file-lock/src/types.ts)
+
 ### `goal/*`
 
 <a id="goalchange--log-only"></a>
@@ -540,6 +619,23 @@ Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src
 
 ### `model/*`
 
+<a id="modelroute--log-only"></a>
+
+#### `model/route` — log-only
+
+```ts persistence-catalog
+/**
+ * One routing decision taken for a human prompt before that prompt was
+ * queued. `selection` is the route the consumer applied to the next
+ * request after enforcing its own constraints; when it differs from the
+ * provider's answer, `reason` names the refused constraint. Log-only: the
+ * applied route reaches the model only through the later `request/header`.
+ */
+'model/route': ModelRouteRecord
+```
+
+Source: [`packages/llm/model-router/src/types.ts:20`](../packages/llm/model-router/src/types.ts)
+
 <a id="modelselection--log-only"></a>
 
 #### `model/selection` — log-only
@@ -605,7 +701,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:47`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:377`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:385`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -624,7 +720,7 @@ Source: [`packages/core/session/src/types.ts:377`](../packages/core/session/src/
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:365`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:373`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -669,6 +765,23 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 
 ### `session/*`
 
+<a id="sessiondirectories--log-only"></a>
+
+#### `session/directories` — log-only
+
+```ts persistence-catalog
+/**
+ * Complete canonical additional-directory list for this session. The primary
+ * working directory remains {@link SessionHeader.cwd}; the latest snapshot
+ * only extends the session's writable-root set. Absence means no additional
+ * directories. This event is log-only but required for reconstruction because
+ * sandbox policy projects the effective roots into model-visible context.
+ */
+'session/directories': { additionalDirectories: string[] }
+```
+
+Source: [`packages/core/session/src/types.ts:368`](../packages/core/session/src/types.ts)
+
 <a id="sessionend-seed--log-only"></a>
 
 #### `session/end-seed` — log-only
@@ -699,7 +812,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/end-seed': { inherited?: true }
 ```
 
-Source: [`packages/core/session/src/types.ts:400`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -715,7 +828,7 @@ Source: [`packages/core/session/src/types.ts:400`](../packages/core/session/src/
 
 Types: [SessionTitleEventData](subsystems/session-title.md)
 
-Source: [`packages/session/session-title/src/index.ts:77`](../packages/session/session-title/src/index.ts)
+Source: [`packages/session/session-title/src/index.ts:84`](../packages/session/session-title/src/index.ts)
 
 <a id="sessiontitle-llm-request--log-only"></a>
 
@@ -728,7 +841,7 @@ Source: [`packages/session/session-title/src/index.ts:77`](../packages/session/s
 
 Types: [SessionTitleLlmRequestEventData](subsystems/session-title.md)
 
-Source: [`packages/session/session-title-llm/src/index.ts:45`](../packages/session/session-title-llm/src/index.ts)
+Source: [`packages/session/session-title-llm/src/index.ts:46`](../packages/session/session-title-llm/src/index.ts)
 
 ### `session-log-deepseek/*`
 

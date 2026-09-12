@@ -29,7 +29,7 @@ Mount the service to give sessions titles that clients can display and that neve
 
 ### Choosing a title source
 
-Titles come from three sources, newest wins. The built-in fallback derives from the first eligible human message's leading words within the configured caps; a registered provider generates a title over eligible messages; an explicit `rename()` accepts a user-supplied title. Only text blocks from human `user/message` events are eligible, and empty or non-text prompts wait for later eligible input. A user-sourced latest title pins the session — later user messages schedule no automatic revision, and an explicit `refresh()` remains the deliberate unpin.
+Titles come from three sources, newest wins. The built-in fallback derives from the first eligible human message's leading words within the configured caps; a registered provider generates a title over eligible messages; an explicit `rename()` accepts a user-supplied title. Only text blocks from human `user/message` events are eligible, and empty or non-text prompts wait for later eligible input. A user-sourced latest title pins the session — later user messages schedule no automatic revision, and an explicit `refresh()` remains the deliberate unpin — unless `automaticOverridesUserRename` is `true`, in which case the registered provider's cadence supersedes the user title on the next eligible message.
 
 ### Minimal configuration
 
@@ -49,6 +49,7 @@ All limits are required; the library supplies no defaults. Mount the service wit
 | `fallbackMaxWords` | required | Maximum whitespace-delimited words in the deterministic fallback |
 | `fallbackMaxBytes` | required | Maximum UTF-8 bytes in the fallback; must not exceed `maxTitleBytes` |
 | `maxTitleBytes` | required | Maximum UTF-8 bytes accepted from any source |
+| `automaticOverridesUserRename` | `false` | Whether later human messages still schedule automatic generation after an explicit user rename |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-session-title) is the exhaustive source for every accepted field and its JSDoc.
 

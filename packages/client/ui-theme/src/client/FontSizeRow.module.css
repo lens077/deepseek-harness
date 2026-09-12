@@ -10,6 +10,10 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+:global([data-mobile]) .row {
+  display: none;
+}
+
 .rowText {
   flex: 1;
   min-width: 0;

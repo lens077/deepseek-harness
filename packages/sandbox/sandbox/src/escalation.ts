@@ -144,12 +144,15 @@ export interface EscalationRequest {
  * Resolve a sandbox-escalation request BEFORE anything executes: check strict
  * widening against the call's effective mode, then resolve the approval
  * channel, then map every outcome — the ordered fail-closed sequence both
- * enforcing families share. Returns the granted mode to stamp onto exactly
- * this call; throws the distinct verbatim text for every other path (a
- * non-widening request, a missing approval service, an agent-less execution,
- * a rejection, a cancellation, an unanswerable ask) — the tool registry turns
- * the throw into the call's isError result, and nothing has run. A
- * non-widening request never prompts a human.
+ * enforcing families share. A request the effective mode already covers (the
+ * same mode, or a narrower one) widens nothing: it is granted as the effective
+ * mode without prompting, so a full-access session tolerates a redundant
+ * `sandbox_permissions` ask instead of failing the call. Returns the granted
+ * mode to stamp onto exactly this call; throws the distinct verbatim text for
+ * every other path (an unrecognized mode pairing, a missing approval service,
+ * an agent-less execution, a rejection, a cancellation, an unanswerable ask) —
+ * the tool registry turns the throw into the call's isError result, and
+ * nothing has run. A non-widening request never prompts a human.
  * @param request - the escalation to judge (see {@link EscalationRequest}).
  * @param approval - the approval ingredients the tool holds (see {@link EscalationApproval}).
  * @returns the granted mode, consumed by the one call that asked.
@@ -159,6 +162,12 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
   // Strict widening is an EXECUTION check against the call's effective mode —
   // deliberately not a schema constraint (the enum is the closed target
   // vocabulary; the effective mode is per-call truth).
+  // A covered request (the same mode, or one the effective mode is wider
+  // than) widens nothing and asks no human: the call runs under what it
+  // already has.
+  if (mode === effectiveMode || (WIDER_MODES[mode] ?? []).includes(effectiveMode)) {
+    return effectiveMode
+  }
   if (!(WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) {
     throw new Error(`sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode`)
   }

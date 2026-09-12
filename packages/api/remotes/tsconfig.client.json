@@ -82,6 +82,12 @@
     },
     {
       "path": "../../feedback/command-feedback"
+    },
+    {
+      "path": "../../session/session-inbox"
+    },
+    {
+      "path": "../../todo/project-todos"
     }
   ]
 }

@@ -42,6 +42,7 @@ export const zh = {
   'produced.moreOne': '+ 1 个文件',
   'produced.more': '+ {count} 个文件',
   'produced.open': '打开 {name}',
+  'produced.openInSidebar': '在侧栏中打开 {name}',
 }
 
 /** English dictionary (same key set). */
@@ -83,6 +84,7 @@ export const en: Record<DeliverablesKey, string> = {
   'produced.moreOne': '+ 1 file',
   'produced.more': '+ {count} files',
   'produced.open': 'Open {name}',
+  'produced.openInSidebar': 'Open {name} in the Sidebar',
 }
 
 /** Union of this namespace's dictionary keys. */

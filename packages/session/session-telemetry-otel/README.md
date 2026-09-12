@@ -31,8 +31,8 @@ Mount this plugin when a deployment should export session records through OpenTe
 
 | `mode` | Behavior |
 |---|---|
-| `FEEDBACK_ONLY` | Default. Text feedback, rating creation/edit, note edit, and withdrawal release the unhanded prefix through that canonical feedback event; later records wait |
-| `DISABLED` | No coordinator, provider, processor, or exporter is constructed; no telemetry record leaves the process. Live feedback warns locally; cold mutations stay silent |
+| `FEEDBACK_ONLY` | Text feedback, rating creation/edit, note edit, and withdrawal release the unhanded prefix through that canonical feedback event; later records wait |
+| `DISABLED` | Default. No coordinator, provider, processor, or exporter is constructed; no telemetry record leaves the process. Live feedback warns locally; cold mutations stay silent |
 
 Programmatic TypeScript configuration uses the exported `SessionTelemetryMode` enum; raw string literals are not assignable. `FULL` is rejected, not an alias. The [`sharing` property](../session-telemetry/README.md#the-sharing-disclosure) reports `feedback-only` or `disabled`, not a delivery receipt. The `/feedback` acknowledgement confirms recording only.
 
@@ -44,7 +44,9 @@ Uploading modes require an exporter URL and accept the SDK option blocks verbati
 - id: sessionTelemetry-otel
   name: '@deepseek-ai/dsh-session-telemetry-otel'
   config:
-    mode: FEEDBACK_ONLY       # optional; defaults to FEEDBACK_ONLY
+    mode: FEEDBACK_ONLY       # optional; defaults to DISABLED
+    captureContent: false     # optional; false exports metadata only
+    includeAnonymousUserId: false # optional; false omits the stable user id
     shutdownTimeoutMillis: 3000 # optional; defaults to 3000
     exporter:                # passed verbatim to the SDK's OTLP/HTTP log exporter
       url: https://collector.example.com/v1/logs
@@ -55,7 +57,9 @@ Uploading modes require an exporter URL and accept the SDK option blocks verbati
 
 | Field | Default | Meaning |
 |---|---|---|
-| `mode` | `FEEDBACK_ONLY` | Sharing policy: `FEEDBACK_ONLY` or `DISABLED` |
+| `mode` | `DISABLED` | Sharing policy: `FEEDBACK_ONLY` or `DISABLED` |
+| `captureContent` | `false` | `true` exports raw `event.data`; `false` exports a metadata-only projection of every record |
+| `includeAnonymousUserId` | `false` | `true` adds the persistent Harness-home anonymous `user.id` to the OTel Resource |
 | `exporter.url` | required in uploading modes | Full OTLP logs endpoint; must parse as `http(s)` |
 | `exporter`, `processor` | — | Passed verbatim to the SDK exporter and batch processor |
 | `shutdownTimeoutMillis` | `3,000` | Outer deadline for the SDK's complete shutdown sequence |
@@ -66,7 +70,7 @@ Model requests, request headers, Session creation or adoption, restoration, and 
 
 ### What leaves the machine
 
-In uploading modes, records carry the complete `event.data` as the seam's `sessionTelemetry/record` waterfall returns it — message content, tool arguments and results, the system prompt and tool schemas, todo text, compaction summaries, feedback text, and the session `cwd`. Provider credentials never appear: adapter API keys are constructor parameters, not session events, so they are structurally absent from the log and therefore from telemetry. `DISABLED` constructs no SDK pipeline and hands no capture to a backend.
+By default (`captureContent: false`) every uploaded record is reduced to a metadata-only projection after the seam's `sessionTelemetry/record` waterfall: a closed allowlist of identifier attributes (`session.id`, `session.parent_id`, `event.type`, `telemetry.op`, `agent.id`, `error.name`), numeric positions (`event.seq`, `turn`, `step`, `session.seed_length`), the event type's structural counts and sizes, and `dsh.telemetry.content_mode: metadata-only` with the original body byte length. Message text, tool arguments and results, feedback text, paths, and the session `cwd` do not leave the machine. With `captureContent: true` records carry the complete `event.data` as the waterfall returns it — message content, tool arguments and results, the system prompt and tool schemas, todo text, compaction summaries, feedback text, and the session `cwd` — and are marked `dsh.telemetry.content_mode: full`. The OTel Resource carries `user.id` only with `includeAnonymousUserId: true`; content capture does not imply a stable identity. Provider credentials never appear: adapter API keys are constructor parameters, not session events, so they are structurally absent from the log and therefore from telemetry. `DISABLED` constructs no SDK pipeline and hands no capture to a backend.
 
 ### Failures and shutdown
 

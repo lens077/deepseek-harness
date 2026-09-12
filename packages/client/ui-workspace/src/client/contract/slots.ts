@@ -8,30 +8,29 @@
  * - WorkspacePicker fills the conversation empty-state hole (menu + error
  *   dialog shared with the browser).
  *
- * Each registration also declares one **directory-flow hole** (`single`
- * kind): the slot a composed picker package's client half fills with its
- * picking interaction — a renderless native-chooser driver or an in-app
- * browsing dialog. ui-workspace owns the trigger (the "Add workspace…"
- * entry, present only while the hole is occupied) and the adoption
- * semantics (`createWorkspace({ path })`, the retryable error dialog,
- * Choose again); the occupant owns everything between `open` and the picked path,
- * including creating a new directory to hand back. That occupant-owned
- * creation is why adding a workspace has a single route: an unoccupied hole
- * leaves the surface with no add affordance at all.
- * Two holes exist because the two menu surfaces are independent slot entries
- * and a hole has exactly one declaring entry — they carry the same owner
- * contract and the same occupant.
+ * Each registration declares a **directory-flow hole** (`single` kind), and
+ * the browser also declares a Session-directory flow. A composed picker fills
+ * each with either a renderless native chooser or an in-app browsing dialog.
+ * ui-workspace owns the triggers and adoption: Workspace flows call
+ * `createWorkspace({ path })`, while the Session flow replaces only that
+ * Session's additional-root list. The occupant owns everything between `open`
+ * and the picked path, including creating a new directory to hand back.
+ * Three holes exist because the two Workspace surfaces and the Session dialog
+ * are independent slot entries; they share one owner contract and occupant.
  */
 import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { SessionSearchResultItem } from '@deepseek-ai/dsh-api-session-controller/client'
+import type {
+  SessionDirectories, SessionSearchResultItem,
+} from '@deepseek-ai/dsh-api-session-controller/client'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { createWorkspaceViewStore } from '../stores.ts'
+import type { SelectionState } from '../selection.ts'
 
 /**
  * Owner share of the directory-flow holes: the complete conversation between
@@ -41,8 +40,10 @@ import type { createWorkspaceViewStore } from '../stores.ts'
 export interface DirectoryFlowOwnerProps {
   /** True while a picking interaction is requested; flipping back to false withdraws the request. */
   open: boolean
-  /** True while the owner adopts a picked path (`createWorkspace` in flight); occupants disable their commit affordances. */
+  /** True while the owner adopts a picked path; occupants disable their commit affordances. */
   busy: boolean
+  /** Optional flow-specific picker title; browse occupants use their default when absent. */
+  title?: string
   /** The operator picked a directory (absolute host path); the owner adopts it. */
   onPicked: (path: string) => void
   /** The operator dismissed the interaction; the owner just closes the flow. */
@@ -55,18 +56,21 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
-    /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
+    /** Directory-flow hole for adding a real Workspace from the sidebar. */
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+    /** Directory-flow hole for adding a writable root to one existing Session. */
+    'sidebar.workspaces.sessionDirectoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
   }
 }
 
-/** The two directory-flow holes; a flow package's client half registers its one component into both. */
+/** The three directory-flow holes; one picker component may occupy all of them. */
 export type DirectoryFlowSlotName =
   | 'conversation.hero.workspace.directoryFlow'
   | 'sidebar.workspaces.directoryFlow'
+  | 'sidebar.workspaces.sessionDirectoryFlow'
 
 /**
- * Directory-picking share both trigger surfaces consume. Occupancy rides the
+ * Directory-picking share the Workspace trigger surfaces consume. Occupancy rides the
  * inject face's reserved `hooks` compartment: the renderer binds the source
  * into the `useDirectoryFlow` selector hook, so an empty hole hides the
  * "Add workspace…" entry reactively and the surface withdraws an open
@@ -89,20 +93,36 @@ export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']
  */
 export type WorkspaceBrowserInjected = {
   hooks: DirectoryPickingInjected['hooks'] & {
-    /**
-     * Fixed Host facts, reached through a hook rather than injected as values:
-     * the renderer memoizes an entry's inject result for the registration's
-     * lifetime, so facts read there would freeze at whatever the first render
-     * saw. Select the field the surface needs (`info => info.home`).
-     */
+    /** Whether this surface can pick an additional directory for a Session. */
+    sessionDirectoryFlow: HostObservable<boolean>
+    /** Current generation's Host description, bound by the slot renderer. */
     hostInfo: HostObservable<RemoteHostFacts>
+    /**
+     * Live session-row multi-selection. It rides the reserved `hooks`
+     * compartment rather than the register's store seat because that seat is
+     * taken by the persisted viewing store, and whole-value persistence would
+     * restore a stale selection on every reload.
+     */
+    sessionSelection: HostObservable<SelectionState>
+    /**
+     * The pin provider's live view mirrored by `apply`: the pinned Session
+     * ids and the pin policy. Stands on {@link DEFAULT_SESSION_PINS_VIEW}
+     * (pinning disabled) while no {@link SessionPins} provider is composed in.
+     */
+    sessionPins: HostObservable<SessionPinsView>
   }
+  /** Commit a new session-row multi-selection. */
+  setSessionSelection: (next: SelectionState) => void
+  /** Drop the session-row multi-selection entirely. */
+  clearSessionSelection: () => void
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
    * open it; without an explicit workspace, inherit the current Session
    * Workspace, then the recent Workspace, or clear into the New Session view.
    */
   startSession: (workspaceId?: WorkspaceId) => void
+  /** Start a New Session in the Ungrouped bucket: reuse-or-create the loose blank session and open it. */
+  startScratchSession: () => void
   /** Open a real Session. */
   open: (sessionId: SessionId) => void
   /**
@@ -117,8 +137,21 @@ export type WorkspaceBrowserInjected = {
   searchResultLimit: number
   /** Rename a Session (explicit user title; resolves on host acceptance). */
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
-  /** Fork a Session at its last completed turn and open the child. */
-  forkSession: (sessionId: SessionId) => void
+  /** Read one Session's immutable primary cwd and latest additional roots. */
+  sessionDirectories: (sessionId: SessionId) => Promise<SessionDirectories>
+  /** Replace one Session's complete additional-root list. */
+  replaceSessionDirectories: (
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ) => Promise<SessionDirectories>
+  /**
+   * Fork a Session at its last completed turn and open the child. `sibling`
+   * duplicates into a top-level row of the same Workspace; `nested` accounts
+   * the child under the source, which becomes an expandable parent row.
+   * Resolves the child id, or `undefined` when the fork failed (the current
+   * selection is kept); the browser records Ungrouped nesting locally.
+   */
+  forkSession: (sessionId: SessionId, placement?: 'sibling' | 'nested') => Promise<SessionId | undefined>
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
@@ -134,6 +167,36 @@ export type WorkspaceBrowserInjected = {
    * session clears the selection into the New Session view state.
    */
   archiveSession: (sessionId: SessionId) => Promise<void>
+  /** Archive several Sessions in one durable mutation. */
+  archiveSessions: (sessionIds: readonly SessionId[]) => Promise<void>
+  /** Permanently delete a Session lineage subtree and its persisted bytes. */
+  deleteSession: (sessionId: SessionId) => Promise<readonly SessionId[]>
+  /**
+   * Add each Session to the user's todo list through the optional
+   * {@link SessionTodos} seat, resolved lazily per call so composing the
+   * provider in or out takes effect live. Rows offer the action only while
+   * {@link WorkspaceBrowserInjected.todosAvailable} reports a provider.
+   */
+  addTodos: (sessionIds: readonly SessionId[]) => void
+  /** Whether a todo provider is composed in. */
+  todosAvailable: () => boolean
+  /**
+   * Pin or unpin Sessions through the optional {@link SessionPins} seat.
+   * Rows offer the action only while the mirrored {@link SessionPinsView}
+   * reports `enabled`; without a provider the promise rejects.
+   */
+  setPinned: (sessionIds: readonly SessionId[], pinned: boolean) => Promise<void>
+  /** Add or remove several Sessions from one Workspace account atomically. */
+  setSessionMembership: (
+    workspaceId: WorkspaceId,
+    sessionIds: readonly SessionId[],
+    member: boolean,
+  ) => Promise<WorkspaceView>
+  /**
+   * Remove a Session from the registry-global archive set. Its retained
+   * Workspace accounting position becomes visible again.
+   */
+  unarchiveSession: (sessionId: SessionId) => Promise<void>
   /**
    * Reorder a session inside its Workspace account (DOM-insertBefore
    * semantics: omitted anchor appends to the end). The view refreshes from
@@ -147,7 +210,7 @@ export type WorkspaceBrowserInjected = {
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
 export type WorkspaceBrowserProps =
   PropsRuntime<'sidebar.workspaces'>
-  & PropsRenderSlots<'sidebar.workspaces.directoryFlow'>
+  & PropsRenderSlots<'sidebar.workspaces.directoryFlow' | 'sidebar.workspaces.sessionDirectoryFlow'>
   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
   & PropsHooks<WorkspaceBrowserInjected['hooks']>
@@ -174,3 +237,70 @@ export type WorkspacePickerProps =
   & Omit<WorkspacePickerInjected, 'hooks'>
   & DirectoryPickingHooks
   & PropsLocale<'workspace'>
+
+/**
+ * Optional todo seat, provided by a plugin that owns a durable todo list and
+ * consumed via `ctx.get('sessionTodos')`: the session browser's row and
+ * selection menus add the chosen Sessions to that list without knowing where
+ * it lives. An absent provider hides the action.
+ */
+export interface SessionTodos {
+  /**
+   * Add one todo about each Session, worded by the provider from what it
+   * knows of the Session (its newest question), and show the list.
+   * @param sessionIds - the chosen Sessions.
+   */
+  add(sessionIds: readonly SessionId[]): void
+}
+
+/**
+ * What the session browser reads from the pin provider: which Sessions are
+ * pinned and how the sidebar presents them. Plain data so the browser can
+ * mirror it into its hooks compartment without knowing the provider.
+ */
+export interface SessionPinsView {
+  /** Master switch: `false` hides every pin affordance (row menu item, pinned area). */
+  enabled: boolean
+  /** Whether the sidebar renders the pinned area above the browsing section; meaningful only while `enabled`. */
+  sidebarArea: boolean
+  /** Number of session rows the pinned area is sized to hold; more rows scroll inside it. */
+  sidebarRows: number
+  /** Every pinned Session id; the browser orders rows by Session recency and drops archived or unknown ids. */
+  pinnedSessionIds: readonly SessionId[]
+}
+
+/** The view the browser stands on while no pin provider is composed in. */
+export const DEFAULT_SESSION_PINS_VIEW: SessionPinsView = Object.freeze({
+  enabled: false,
+  sidebarArea: false,
+  sidebarRows: 5,
+  pinnedSessionIds: Object.freeze([]),
+})
+
+/**
+ * Optional pin seat, provided by a plugin that owns durable per-Session pin
+ * marks and consumed via `ctx.inject(['sessionPins'], …)`: the session
+ * browser's row menu pins or unpins Sessions and the sidebar lists the pinned
+ * ones in a fixed-height area above the browsing section. An absent provider
+ * hides both.
+ */
+export interface SessionPins {
+  /** Live pinned ids and pin policy; snapshot identity is stable between changes. */
+  readonly view: HostObservable<SessionPinsView>
+  /**
+   * Pin or unpin every listed Session; resolves once the durable marks are
+   * written and `view` has published them.
+   * @param sessionIds - the chosen Sessions.
+   * @param pinned - the desired state for all of them.
+   */
+  setPinned(sessionIds: readonly SessionId[], pinned: boolean): Promise<void>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Todo provider (a plugin owning a todo list); reach via ctx.get — optional. */
+    sessionTodos: SessionTodos
+    /** Pin provider (a plugin owning durable pin marks); reach via ctx.inject — optional. */
+    sessionPins: SessionPins
+  }
+}

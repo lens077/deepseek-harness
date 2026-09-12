@@ -168,56 +168,389 @@
   opacity: 0.6;
 }
 
-/* Back-to-bottom: zero-height sticky slot so the control does not extend
-   scrollHeight; the button translates up into the viewport. Under the
-   conversation host, clearance sits above the sticky composer stack. */
-.toBottomSlot {
+/* Back-to-bottom is the last entry of the question rail (.questionToBottom
+   below): one containing block for every floating control, so nothing can
+   drift out of the column on narrow viewports. */
+
+/* Host open-path refusal: same dialog family as the workspace folder error. */
+.modalAction {
+  min-width: 72px;
+}
+.questionBarDock {
   position: sticky;
-  bottom: 16px;
-  /* Above the sticky composer (z-index 7) so the control stays clickable and
-     visible over the input card. Exception: while an @/slash menu is open the
-     seat lifts to 9 (ui-conversation ConversationRoot) so the menu is never
-     covered by this control. */
-  z-index: 8;
+  top: 0;
+  z-index: 7;
   height: 0;
-  display: flex;
-  justify-content: flex-end;
-  padding-right: max(0px, calc((100% - var(--dsh-chat-content-width)) / 2));
-  pointer-events: none;
 }
 
-:global([data-conversation-scroll]) .toBottomSlot {
-  /* Clears the sticky composer stack (docks + input card + stats): the live
-     height rides --dsh-composer-height (ConversationRoot's seat observer) so
-     the control follows a growing textarea; the fallback covers the first
-     paint before the observer fires. */
-  bottom: calc(var(--dsh-composer-height, 152px) + 16px);
-}
-
-.toBottom {
+.questionBar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  margin-top: -34px;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--dsh-chat-content-width);
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-elevation-panel);
+  transform: translateX(-50%);
+}
+
+.questionBarMain {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
   padding: 0;
   border: 0;
-  --dsw-elevation-stroke-color: var(--dsw-alias-border-l3);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xs-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.questionBarNumber {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.questionBarText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.questionBarMain:hover .questionBarText {
+  text-decoration: underline;
+}
+
+.questionBarMeta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xs-13);
+}
+
+.questionBarFiles {
+  padding: 1px 7px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  white-space: nowrap;
+}
+
+.questionBarOutcome,
+.questionBarClock {
+  white-space: nowrap;
+}
+
+.questionBarOutcome[data-outcome='completed'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.questionBarOutcome[data-outcome='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.questionBarClock {
+  font-variant-numeric: tabular-nums;
+}
+
+.questionBar[data-expand-side='left'] {
+  padding-left: 4px;
+}
+
+.questionBar[data-expand-side='right'] {
+  padding-right: 4px;
+}
+
+.questionBarExpand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  corner-shape: round;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+.questionBar[data-expand-side='right'] .questionBarMeta {
+  padding-right: 0;
+}
+
+.questionBarExpand:hover,
+.questionBar[data-expanded] .questionBarExpand {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.questionBarPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
+  max-height: min(50vh, 420px);
+  overflow: auto;
+  padding: 10px 14px;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-elevation-panel);
+}
+
+.questionBarPanelText {
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xs-13);
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A completed long Turn restates its opening question immediately before the tail. */
+.turnRecap {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: -8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xs-13);
+  text-align: left;
+  cursor: pointer;
+}
+
+.turnRecapIcon,
+.turnRecapLabel {
+  flex: none;
+}
+
+.turnRecapText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turnRecap:hover .turnRecapText {
+  text-decoration: underline;
+}
+
+.questionNavigator {
+  position: fixed;
+  top: 112px;
+  right: 8px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.questionArrow,
+.questionLoadAll,
+.questionSearchEntry {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
   border-radius: 100px;
   corner-shape: round;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-button-floating-fill);
   box-shadow: var(--dsw-elevation-panel);
   cursor: pointer;
-  pointer-events: auto;
 }
 
-.toBottom:hover {
+.questionArrow:disabled,
+.questionSearchEntry:disabled,
+.questionLoadAll:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.questionPanel {
+  position: absolute;
+  top: 0;
+  right: 42px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 56px));
+  max-height: calc(100vh - var(--dsh-composer-height, 152px) - 128px);
+  padding: 12px;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+.questionSearch {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.questionSearch input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+}
+
+.questionList {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.questionRow {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.questionRow:hover,
+.questionRow[data-current] {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.questionNumber {
+  flex: 0 0 auto;
+  min-width: 28px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.questionCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.questionCopy > span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.questionCopy time,
+.questionSearchNotice {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+.questionSearchNotice {
+  flex: none;
+  margin: 0;
+  padding: 0 8px;
+  line-height: 18px;
+}
+
+.questionSearchEntry[data-panel-open] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.questionLoadAllSpinner {
+  animation: dsh-question-load-all-spin 700ms linear infinite;
+}
+
+@keyframes dsh-question-load-all-spin {
+  to { transform: rotate(360deg); }
+}
+
+.questionSearchEntry:not(:disabled):hover,
+.questionLoadAll:not(:disabled):hover,
+.questionArrow:not(:disabled):hover {
   background: var(--dsw-alias-button-floating-hover);
 }
 
-/* Host open-path refusal: same dialog family as the workspace folder error. */
-.modalAction {
-  min-width: 72px;
+/* Back-to-bottom shares the arrow shell but must not read as a second "next":
+   the chevron lifts a little and gains a floor bar (⤓). It stays mounted at
+   the bottom and only greys out through the shared :disabled rule above. */
+.questionToBottom {
+  position: relative;
+}
+
+.questionToBottom > svg {
+  transform: translateY(-1.5px);
+}
+
+.questionToBottom::after {
+  content: '';
+  position: absolute;
+  bottom: 9px;
+  left: 50%;
+  width: 10px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 760px) {
+  .questionNavigator {
+    top: auto;
+    /* The rail is fixed to the viewport, but --dsh-composer-height measures
+       only the composer seat inside the scroller; the mobile frame parks a
+       tab bar (--mobile-nav-height, AppFrame) below that seat, so it has to
+       be added back or the column's last entries sink into the input card. */
+    bottom: calc(var(--dsh-composer-height, 152px) + var(--mobile-nav-height, 0px) + 16px);
+  }
+
+  .questionPanel {
+    top: auto;
+    bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .questionLoadAllSpinner {
+    animation: none;
+  }
 }

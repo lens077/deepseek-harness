@@ -7,6 +7,7 @@ import { DirectoryPickerController } from './directory-picker.ts'
 import { WorkspaceFeed } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
+  WorkspaceArchiveSessionsRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
@@ -17,6 +18,8 @@ import type {
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceSetSessionMembershipRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -107,6 +110,36 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('archiveSession')
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue> {
     return this.commands.archiveSession(request)
+  }
+
+  /**
+   * Archive several known Sessions in one durable mutation.
+   * @param request - distinct Session identities to archive.
+   * @returns the complete resulting archive set.
+   */
+  @Remote('archiveSessions')
+  archiveSessions(request: WorkspaceArchiveSessionsRequest): Promise<WorkspaceArchiveValue> {
+    return this.commands.archiveSessions(request)
+  }
+
+  /**
+   * Remove one Session from the durable archive set.
+   * @param request - Session identity to unarchive.
+   * @returns the complete resulting archive set.
+   */
+  @Remote('unarchiveSession')
+  unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue> {
+    return this.commands.unarchiveSession(request)
+  }
+
+  /**
+   * Add or remove several Sessions from one Workspace account.
+   * @param request - Workspace, Session identities, and desired membership.
+   * @returns the updated Workspace projection.
+   */
+  @Remote('setSessionMembership')
+  setSessionMembership(request: WorkspaceSetSessionMembershipRequest): Promise<WorkspaceValue> {
+    return this.commands.setSessionMembership(request)
   }
 
   /**

@@ -58,8 +58,9 @@ function equalBreadcrumbs(left: readonly Breadcrumb[], right: readonly Breadcrum
  */
 export function ConversationSessionHeader({
   sessionId, useSession, useSessions, useConversation, useConversationViews, useStore,
-  renderSlot, open, selectView, t,
+  renderSlot, open, selectView, useTabsLeading, t,
 }: ConversationSessionHeaderProps) {
+  const leadingOccupied = useTabsLeading(entries => entries.length > 0)
   const tabs = useConversationViews(value => value)
   const selectedId = useStore(s => s.view)
   const active = resolveActiveView(tabs, selectedId)
@@ -77,6 +78,9 @@ export function ConversationSessionHeader({
         <>
           <div className={css.titleRow}>
             <div className={css.titleCluster}>
+              <div className={css.headerLeading}>
+                {renderSlot('conversation.session.header.leading', {})}
+              </div>
               <nav className={css.crumbs} aria-label={t('session.hierarchy')}>
                 {ancestry.map((summary, index) => {
                   const last = index === ancestry.length - 1
@@ -137,8 +141,9 @@ export function ConversationSessionHeader({
               {renderSlot('conversation.session.header.corner', {})}
             </div>
           </div>
-          {tabs.length > 1 && (
+          {(tabs.length > 1 || leadingOccupied) && (
             <div className={css.tabs} role="tablist">
+              {renderSlot('conversation.session.tabs.leading', {})}
               {tabs.map(viewTab => (
                 <button
                   key={viewTab.id}

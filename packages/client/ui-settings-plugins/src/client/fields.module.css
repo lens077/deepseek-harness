@@ -91,3 +91,48 @@
   line-height: 1.5;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* Segmented control: one bordered track, equal options, the chosen one filled. */
+.choices {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.choice {
+  min-width: 120px;
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 28px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.choice:hover:not(:disabled):not(.choiceActive) {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.choiceActive {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-button-ghost-active-border);
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.choice:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}

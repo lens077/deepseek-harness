@@ -1,0 +1,13 @@
+- navigation "Mobile navigation":
+  - button "Overview":
+    - img
+    - text: Overview
+  - button "Pending · 1 to handle":
+    - img
+    - text: 1 Pending
+  - button "Workspaces":
+    - img
+    - text: Workspaces
+  - button "New Session":
+    - img
+    - text: New Session

@@ -6,11 +6,21 @@
   - button "Open right sidebar":
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -22,6 +32,9 @@
   - text: 2 tool calls
   - img
 - paragraph: DONE
+- 'button "Answering: Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop."
 - button "Copy":
   - img
 - button "Good response":

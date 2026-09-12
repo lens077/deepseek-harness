@@ -1,6 +1,8 @@
 /** Existing changed-file chips and explicitly declared files for a closing turn. */
 import { useEffect, useState } from 'react'
-import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {
+  ChatFileDiffExpansion, ChatFileDiffSegment, TurnTailOwnerProps,
+} from '@deepseek-ai/dsh-client-ui-chat/client'
 import { Button, IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GlobalStandardProps, InjectFace, PropsLocale, SessionStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -18,9 +20,12 @@ const COLLAPSED_PRESENTED_COUNT = 4
 
 /** Native-open callbacks and shared gesture status supplied by the plugin. */
 export interface DeliverablesInjected {
+  /** Return recorded diff segments for one exact produced-file path. */
+  fileDiffs(path: string): readonly ChatFileDiffSegment[]
   hooks: {
     presentedOpen: ObservableSnapshot<ReturnType<PresentedOpenController['state']['getSnapshot']>>
     presentedHost: ObservableSnapshot<ReturnType<PresentedOpenController['host']['getSnapshot']>>
+    diffExpansion: ObservableSnapshot<ChatFileDiffExpansion>
   }
   reloadPresentedHost: PresentedOpenController['loadHost']
   openPresented: PresentedOpenController['open']
@@ -42,7 +47,7 @@ export function selectDeliverables(owner: TurnTailOwnerProps): DeliverablesMatch
  * @param props - matched files, workspace opener, and localized copy.
  * @returns the closing turn's file rows.
  */
-export function Deliverables({ matched, openFile, t, sessionId, useSessions, openPresented, usePresentedOpen, usePresentedHost, reloadPresentedHost }: Pick<TurnTailOwnerProps, 'openFile'> & {
+export function Deliverables({ matched, openFile, t, sessionId, useSessions, openPresented, usePresentedOpen, usePresentedHost, reloadPresentedHost, fileDiffs, useDiffExpansion }: Pick<TurnTailOwnerProps, 'openFile'> & {
   matched: DeliverablesMatch
 } & PropsLocale<typeof NS> & Pick<SessionStandardProps, 'sessionId'> & Pick<GlobalStandardProps, 'useSessions'> & InjectFace<DeliverablesInjected>) {
   const [expanded, setExpanded] = useState(false)
@@ -57,7 +62,15 @@ export function Deliverables({ matched, openFile, t, sessionId, useSessions, ope
     if (matched.presented.length > 0 && host === null) void reloadPresentedHost()
   }, [matched.presented.length, host, reloadPresentedHost])
   return <>
-    {matched.produced.length > 0 && <ProducedFiles matched={matched.produced} openFile={openFile} t={t} />}
+    {matched.produced.length > 0 && (
+      <ProducedFiles
+        matched={matched.produced}
+        openFile={openFile}
+        fileDiffs={fileDiffs}
+        useDiffExpansion={useDiffExpansion}
+        t={t}
+      />
+    )}
     {matched.presented.length > 0 && <div
       className={css.root}
       data-after-produced-files={matched.produced.length > 0 || undefined}

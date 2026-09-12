@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides the native directory-picking surface for the Web GUI: when a workspace flow asks for a directory, a renderless browser occupant opens the operating system's own chooser on the machine running the Host and reports the single outcome — a picked path, a cancellation, or a failure. It fills the two directory-flow slots declared by `ui-workspace`, composing the client side of the native picking interaction in one `cordis.yml` row. Choose it when the browser runs on the same machine as the Host; in-process and remote-browser deployments need the [`-browse`](../ui-directory-picker-browse/README.md) surface instead.
+This package provides the native directory-picking surface for the Web GUI: when a workspace flow asks for a directory, a renderless browser occupant opens the operating system's own chooser on the machine running the Host and reports the single outcome — a picked path, a cancellation, or a failure. It fills the three directory-flow slots declared by `ui-workspace`, composing the client side of the native picking interaction in one cordis.yml row. Choose it when the browser runs on the same machine as the Host; in-process and remote-browser deployments need the [`-browse`](../ui-directory-picker-browse/README.md) surface instead.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This package provides the native directory-picking surface for the Web GUI: when
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin alongside `ui-workspace` and the host backend [`dsh-host-directory-picker-native`](../../host/directory-picker-native/README.md); one `cordis.yml` row then composes the whole native picking interaction. When a workspace add or picker flow opens a directory request, the user sees the operating system's folder dialog; the picked path is adopted by the workspace flow, and cancelling closes the dialog.
+Mount this plugin alongside `ui-workspace` and the host backend [`dsh-host-directory-picker-native`](../../host/directory-picker-native/README.md); one cordis.yml row then composes the whole native picking interaction. When a workspace add or picker flow opens a directory request, the user sees the operating system's folder dialog; the picked path is adopted by the workspace flow, and cancelling closes the dialog.
 
 ### When to choose it
 
@@ -39,7 +39,7 @@ Choose this surface when the browser runs on the same machine as the Host, so an
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-Both slot registrations install as one transactional effect through nested `ctx.slots.inject()` calls, because either declaring entry may activate later or replace its declaration. The occupant arms once per rising `open` edge, so re-renders never launch a second chooser; settlements ride a ref so the answer reaches the owner's latest handlers. An unmount (HMR replacing the occupant) discards the settlement wholesale: the wire carries no per-request abort, so the host-side chooser survives until answered and its answer lands nowhere. The node half is an empty `apply` that keeps the plugin on the host roster.
+The hero Workspace picker, sidebar Workspace picker, and Session directory picker registrations install as one transactional effect through nested `ctx.slots.inject()` calls. All three declarations must be live before the group installs; each declaring entry may activate later or replace its declaration. The occupant arms once per rising `open` edge, so re-renders never launch a second chooser; settlements ride a ref so the answer reaches the owner's latest handlers. An unmount (HMR replacing the occupant) discards the settlement wholesale: the wire carries no per-request abort, so the host-side chooser survives until answered and its answer lands nowhere. The node half is an empty `apply` that keeps the plugin on the host roster.
 
 </details>
 
@@ -86,4 +86,4 @@ None.
 
 </details>
 
-**Runtime invariant:** No companion is published. The plugin registers a renderless flow occupant into two workspace holes as one transactional effect, whose disposal the HMR-safety spec proves, and it retains no state between picks.
+**Runtime invariant:** No companion is published. The plugin registers a renderless flow occupant into three workspace holes as one transactional effect, whose disposal the HMR-safety spec proves, and it retains no state between picks.

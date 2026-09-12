@@ -14,6 +14,9 @@ import {
   ReasoningEffortId, assistantStreamChunks, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ModelRouteDecision, ModelRouter } from '@deepseek-ai/dsh-model-router'
+// Type-only: makes the optional token meter available to `ctx.get()`.
+import type {} from '@deepseek-ai/dsh-token-meter'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -21,6 +24,7 @@ import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { realpathNormalize } from '@deepseek-ai/dsh-workspace'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   ApiSessionAgentController,
@@ -245,8 +249,17 @@ export class SessionCommandController {
       cut = SessionLogOffset(cut + 1)
     }
     let workspace: Workspace | undefined
+    // An Ungrouped top-level source cannot carry a nested child (placement
+    // lives on the Workspace record). When a registered Workspace owns its
+    // directory, the fork adopts the source there so the requested nesting
+    // holds; without one the child takes the Ungrouped sibling slot.
+    let adoptSource = false
     try {
       workspace = await this.forkWorkspace(source.header)
+      if (workspace === undefined && request.placement === 'nested' && source.header.origin !== 'subagent') {
+        workspace = await this.workspaceOwningCwd(source.header.cwd)
+        adoptSource = workspace !== undefined
+      }
     } catch (error) {
       throw new RemoteError(
         'gateway/internal',
@@ -258,7 +271,9 @@ export class SessionCommandController {
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
       const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
-      await this.ctx.agents.create({
+      // Controller-owned like every other Web-published Agent: permanent
+      // deletion retires live targets only through the owning handle.
+      await this.agents.createSeeded({
         sessionId: childId,
         seed: source.events.slice(0, cut),
         inheritedEventCount: cut,
@@ -281,8 +296,20 @@ export class SessionCommandController {
       )
     }
     if (workspace !== undefined) {
+      // Nested placement needs the source accounted in the attached
+      // Workspace; a subagent source reached through an ancestor takes the
+      // sibling slot (documented on SessionForkRequest.placement).
+      const nestUnder = request.placement === 'nested'
+        && (adoptSource || workspace.sessionIds.includes(source.header.id))
+        ? source.header.id
+        : undefined
       try {
-        await workspace.attachSession(childId)
+        // The source joins first so the child's nested placement names an
+        // accounted parent on the Workspace write chain.
+        if (adoptSource) await workspace.attachSession(source.header.id)
+        await (nestUnder === undefined
+          ? workspace.attachSession(childId)
+          : workspace.attachSession(childId, { nestUnder }))
       } catch (error) {
         throw new RemoteError(
           'session/workspace-attach-failed',
@@ -333,6 +360,7 @@ export class SessionCommandController {
       ...(clientTimeZone === undefined ? {} : { clientTimeZone }),
     }
     const hasImage = request.content.some(part => part.type === 'image')
+    const router = this.ctx.get('modelRouter')
     const admit = async (): Promise<SessionPromptValue> => {
       try {
         if (hasImage) {
@@ -359,6 +387,7 @@ export class SessionCommandController {
             { sessionId: agent.id },
           )
         }
+        if (router !== undefined) await this.routePrompt(router, agent, request.content)
         using binding = this.ctx.fileUploads.bindPrompt(agent, admission.receiptIds, request.requestId)
         if (request.mode === 'steer') agent.steer(message)
         else agent.followup(message)
@@ -372,7 +401,155 @@ export class SessionCommandController {
       }
       return { accepted: true }
     }
-    return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
+    return hasImage || router !== undefined ? this.agents.serializeImageAdmission(agent, admit) : admit()
+  }
+
+  /**
+   * Ask the mounted router for this prompt's route and apply the answer to the
+   * next prompt assembly. A route change is applied only when the deployment
+   * configures at least two routes, the proposal names one of them, the
+   * prompt's image fits its input modalities, the Session's measured tokens
+   * fit its context window, and its effort resolves; otherwise the proposal
+   * degrades to its effort on the baseline route, and an effort the baseline
+   * model rejects, or a router failure, keeps the baseline. Every outcome is
+   * recorded as one `model/route` event; nothing here can reject the prompt.
+   * While the person switched routing off, the router is not consulted and a
+   * Session still on a routed selection returns to its baseline.
+   * @param router - mounted route selection service.
+   * @param agent - live Agent receiving the prompt.
+   * @param content - prompt parts about to be queued.
+   */
+  private async routePrompt(
+    router: ModelRouter,
+    agent: Agent,
+    content: SessionPromptRequest['content'],
+  ): Promise<void> {
+    const baseline = this.agents.baselineFor(agent)
+    if (!router.enabled()) {
+      const current = this.agents.selectionFor(agent).current
+      if (current.provider !== baseline.provider || current.model !== baseline.model
+        || current.reasoningEffort !== baseline.reasoningEffort) {
+        this.recordRoute(agent, baseline, baseline, 'routing switched off: baseline restored')
+      }
+      return
+    }
+    const prompt = {
+      text: content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'),
+      hasImage: content.some(part => part.type === 'image'),
+    }
+    const candidates = await this.configuredRoutes()
+    let decision: ModelRouteDecision
+    try {
+      decision = await router.route({ baseline, candidates, prompt })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.ctx.logger.warn(`session-controller: model routing failed for "${agent.id}": ${message}; keeping the baseline`)
+      this.recordRoute(agent, baseline, baseline, `router failed: ${message}`)
+      return
+    }
+    const proposed = decision.selection
+    const reasons: string[] = []
+    if (proposed.provider !== baseline.provider || proposed.model !== baseline.model) {
+      const refusal = await this.refuseRouteChange(agent, proposed, candidates, prompt.hasImage)
+      if (refusal === undefined) {
+        this.recordRoute(agent, baseline, { ...proposed }, decision.reason, decision.rule)
+        return
+      }
+      reasons.push(refusal)
+    }
+    // A proposal without an effort asked for the proposed model's default; on
+    // the baseline model that means the baseline's own effort, not none.
+    const effort = reasons.length > 0 && proposed.reasoningEffort === undefined
+      ? baseline.reasoningEffort
+      : proposed.reasoningEffort
+    if (effort !== undefined && effort !== baseline.reasoningEffort) {
+      try {
+        await this.ctx.llm.resolveCallConfig({ provider: baseline.provider, model: baseline.model, reasoningEffort: effort })
+      } catch (error: unknown) {
+        reasons.push(error instanceof Error ? error.message : String(error))
+        this.recordRoute(agent, baseline, baseline, `refused: ${reasons.join('; ')}`, decision.rule)
+        return
+      }
+    }
+    const applied: AgentModelSelection = {
+      provider: baseline.provider,
+      model: baseline.model,
+      ...(effort === undefined ? {} : { reasoningEffort: effort }),
+    }
+    const reason = reasons.length === 0
+      ? decision.reason
+      : `${decision.reason}; effort only: ${reasons.join('; ')}`
+    this.recordRoute(agent, baseline, applied, reason, decision.rule)
+  }
+
+  /** Every provider/model route the live registry advertises; a provider whose catalog fails contributes none. */
+  private async configuredRoutes(): Promise<AgentModelSelection[]> {
+    const routes: AgentModelSelection[] = []
+    for (const provider of this.ctx.llm.listProviders()) {
+      let models: readonly { readonly id: string }[]
+      try {
+        models = await this.ctx.llm.listModels(provider.id)
+      } catch {
+        // A provider whose advisory catalog cannot be read offers no candidate; the prompt still queues.
+        continue
+      }
+      for (const model of models) routes.push({ provider: provider.id, model: model.id })
+    }
+    return routes
+  }
+
+  /**
+   * Name the constraint that forbids switching to the proposed route, or
+   * return undefined when the switch may be applied.
+   */
+  private async refuseRouteChange(
+    agent: Agent,
+    proposed: AgentModelSelection,
+    candidates: readonly AgentModelSelection[],
+    hasImage: boolean,
+  ): Promise<string | undefined> {
+    const target = `${proposed.provider}/${proposed.model}`
+    if (candidates.length < 2) {
+      return `model switching needs at least two configured routes (found ${candidates.length})`
+    }
+    if (!candidates.some(route => route.provider === proposed.provider && route.model === proposed.model)) {
+      return `${target} is not a configured route`
+    }
+    let info: Awaited<ReturnType<typeof this.ctx.llm.resolveModelInfo>>
+    try {
+      info = await this.ctx.llm.resolveModelInfo(proposed.provider, proposed.model)
+      if (proposed.reasoningEffort !== undefined) await this.ctx.llm.resolveCallConfig({ ...proposed })
+    } catch (error: unknown) {
+      return error instanceof Error ? error.message : String(error)
+    }
+    if (hasImage && info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+      return `${target} does not declare image input`
+    }
+    const meter = this.ctx.get('tokenMeter')
+    const contextWindow = info.context?.contextWindow
+    if (meter !== undefined && contextWindow !== undefined) {
+      const measured = meter.measure(agent.session).totalTokens
+      if (measured > contextWindow) {
+        return `${target} context window (${contextWindow}) is below the Session's ${measured} measured tokens`
+      }
+    }
+    return undefined
+  }
+
+  private recordRoute(
+    agent: Agent,
+    baseline: AgentModelSelection,
+    selection: AgentModelSelection,
+    reason: string,
+    rule?: string,
+  ): void {
+    this.agents.routeForNextRequest(agent, selection)
+    agent.session.append('model/route', {
+      baseline,
+      selection,
+      reason,
+      ...(rule === undefined ? {} : { rule }),
+    })
   }
 
   /**
@@ -558,6 +735,22 @@ export class SessionCommandController {
       if (workspace !== undefined) return workspace
     }
     return undefined
+  }
+
+  /**
+   * The registered Workspace whose canonical path is the given session
+   * directory, or `undefined` when the directory is absent, does not resolve,
+   * or has no registration.
+   */
+  private async workspaceOwningCwd(cwd: string | undefined): Promise<Workspace | undefined> {
+    if (cwd === undefined) return undefined
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(cwd)
+    } catch {
+      return undefined
+    }
+    return this.ctx.workspaceRegistry.list().find(workspace => workspace.path === canonical)
   }
 }
 

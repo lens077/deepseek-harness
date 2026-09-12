@@ -158,6 +158,11 @@ export class TerminalSessionService extends Service {
     const backend = this.backends.get(request.type)
     if (backend === undefined) throw new TerminalError(`no PTY backend registered for "${request.type}"`, 'NO_BACKEND')
     if (request.name !== undefined && request.name.length === 0) throw new Error('PTY session name must be non-empty')
+    // A blank or multi-line prompt cannot be matched against terminal output, so the
+    // session would silently fall back to silence-based readiness.
+    if (request.promptText !== undefined && !/^[^\n\r]+$/.test(request.promptText)) {
+      throw new Error('PTY session promptText must be non-empty and single-line')
+    }
     const releaseName = this.reserveName(owner, request.name)
     const spawnReservation = this.reserveSpawn(owner)
     const backendSignal = signal === undefined
@@ -173,6 +178,7 @@ export class TerminalSessionService extends Service {
         type: request.type,
         ...request.name !== undefined ? { name: request.name } : {},
         ...request.cwd !== undefined ? { cwd: request.cwd } : {},
+        ...request.promptText !== undefined ? { promptText: request.promptText } : {},
         signal: backendSignal,
       })
       signal?.throwIfAborted()

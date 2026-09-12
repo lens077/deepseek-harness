@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-06-session-files-chat-declaration-lifetime.md
+2026-09-06-session-files-chat-declaration-lifetime.md: a20c3e154b1922796fc59c8ff72f6847c51ebbd1
+2026-09-06-session-files-chat-declaration-lifetime.zh.md: 5f7a52042b61055777d613bec41b0e5d3a63e152

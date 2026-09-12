@@ -28,6 +28,12 @@ import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
+import { ContentWidthRow } from './settings/ContentWidthRow.tsx'
+import type { ContentWidthRowInjected } from './settings/ContentWidthRow.tsx'
+import { ContentWidthPolicy } from './settings/content-width-policy.ts'
+import { QuestionShortcutRow } from './settings/QuestionShortcutRow.tsx'
+import type { QuestionShortcutRowInjected } from './settings/QuestionShortcutRow.tsx'
+import { QuestionNavigationPolicy } from './input/question-navigation-policy.ts'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationPanel } from './skeleton/ConversationPanel.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
@@ -35,7 +41,7 @@ import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { resolveActiveView } from './view-selection.ts'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
-import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
+import { CONVERSATION_SETTINGS_NAMESPACE, ConversationSettingsSchema, type ConversationSettings } from '../submission-settings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -91,6 +97,7 @@ interface WorkspaceNavigation {
     workspaceId: Parameters<ConversationInjected['selectWorkspace']>[0],
     beforeOpen: (sessionId: SessionId) => void,
   ): Promise<void>
+  startScratchSession(): Promise<SessionId>
 }
 
 /** Action registration used by the composer without importing its command-UI consumer. */
@@ -129,6 +136,12 @@ function concreteConversation(ctx: Context): ConversationController {
 export function apply(ctx: Context, config: Config = Config({})): void {
   const sessions = ctx.sessions
   const slots = ctx.slots
+  const slotEntries = (name: 'conversation.session.rail' | 'conversation.session.tabs.leading') => ({
+    getSnapshot: () => slots.entries(name),
+    subscribe: (listener: () => void) => slots.subscribe(name, listener),
+  })
+  const railSeat = slotEntries('conversation.session.rail')
+  const tabsLeading = slotEntries('conversation.session.tabs.leading')
   // Schemastery's field default is materialized before Cordis calls apply.
   const maxConcurrentFileUploads = config.maxConcurrentFileUploads as number
   const workspaceNavigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation
@@ -137,9 +150,14 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-conversation: dictionaries')
   const t = ctx.locale.bind(NS)
   const conversationStore = createConversationStore()
-  const submissionPolicy = new ComposerSubmissionPolicy(
-    ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
-  )
+  const conversationSettings = ctx.settingsScope.bind<ConversationSettings>({
+    namespace: CONVERSATION_SETTINGS_NAMESPACE,
+    decode: section => ConversationSettingsSchema(section as ConversationSettings),
+  })
+  const submissionPolicy = new ComposerSubmissionPolicy(conversationSettings)
+  const contentWidthPolicy = new ContentWidthPolicy(conversationSettings)
+  const questionNavigation = new QuestionNavigationPolicy(conversationSettings)
+  ctx.provide('questionNavigation', questionNavigation)
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -147,10 +165,34 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     order: 20,
     locale: NS,
     inject: (): EnterBehaviorRowInjected => ({
-      hooks: { busyEnter: submissionPolicy.busyEnter },
+      hooks: { busyEnter: submissionPolicy.busyEnter, sendShortcut: submissionPolicy.sendShortcut },
       setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
+      setSendShortcut: (shortcut) => { submissionPolicy.setSendShortcut(shortcut) },
     }),
   }, EnterBehaviorRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'content-width',
+    order: 25,
+    locale: NS,
+    inject: (): ContentWidthRowInjected => ({
+      hooks: { contentWidthMode: contentWidthPolicy.mode },
+      setContentWidthMode: (mode) => { contentWidthPolicy.setMode(mode) },
+    }),
+  }, ContentWidthRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'question-shortcuts',
+    order: 30,
+    locale: NS,
+    inject: (): QuestionShortcutRowInjected => ({
+      hooks: { questionNavigation: questionNavigation.settings },
+      setQuestionNavigation: (settings) => { questionNavigation.set(settings) },
+      resetQuestionNavigation: () => { questionNavigation.reset() },
+    }),
+  }, QuestionShortcutRow))
 
   const viewTabs = (): ViewTab[] => {
     const tabs: ViewTab[] = []
@@ -244,6 +286,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     locale: NS,
     children: {
       'conversation.session': { kind: 'single', scope: 'session' },
+      'conversation.session.rail': { kind: 'single', scope: 'session' },
       'conversation.session.header': { kind: 'single', scope: 'session' },
       'conversation.composer': { kind: 'chain', scope: 'session' },
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
@@ -255,6 +298,8 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
+        railSeat,
+        contentWidthMode: contentWidthPolicy.mode,
       },
       selectWorkspace: workspaceId => workspaceNavigation.openWorkspace(workspaceId, (nextId) => {
         if (sessionId !== undefined && nextId !== sessionId) {
@@ -277,6 +322,9 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           }
         }
       }),
+      startScratchSession: async () => {
+        await workspaceNavigation.startScratchSession()
+      },
     }),
   }, ConversationRoot)
 
@@ -286,28 +334,41 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.view': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,
-    inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => ({
-      hooks: { conversationViews },
-      bindDraftMirror: write => inputHub.shell(sessionId).bindMirror(write),
-      openView: (view, focus) => {
+    inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => {
+      const openView = (view: string, focus: string): void => {
         activateView(sessionId, view)
         actions.openView(view, focus)
-      },
-    }),
+      }
+      uiConversation.bindViewOpener(sessionId, (view, focus) => {
+        if (focus === undefined) {
+          activateView(sessionId, view)
+          actions.setView(view)
+        } else {
+          openView(view, focus)
+        }
+      })
+      return {
+        hooks: { conversationViews },
+        bindDraftMirror: write => inputHub.shell(sessionId).bindMirror(write),
+        openView,
+      }
+    },
   }, ConversationSession)
 
   const registerConversationHeader = () => slots.register({
     name: 'conversation.session.header',
     locale: NS,
     children: {
+      'conversation.session.header.leading': { kind: 'list', scope: 'session' },
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
       'conversation.session.header.corner': { kind: 'single', scope: 'session' },
+      'conversation.session.tabs.leading': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionHeaderInjected => ({
-      hooks: { conversationViews },
+      hooks: { conversationViews, tabsLeading },
       open: (id) => { workspaceNavigation.openSession(id) },
       selectView: (view) => {
         activateView(sessionId, view)
@@ -341,6 +402,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           command: undefined,
           hooks: {
             busyEnter: submissionPolicy.busyEnter,
+            sendShortcut: submissionPolicy.sendShortcut,
             fileUploads: ABSENT_FILE_UPLOADS,
             notices: ABSENT_NOTICES,
             lexicon: ABSENT_LEXICON,
@@ -399,6 +461,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         },
         hooks: {
           busyEnter: submissionPolicy.busyEnter,
+          sendShortcut: submissionPolicy.sendShortcut,
           fileUploads: conversation.fileUploads,
           notices: shell.notices,
           lexicon: shell.lexicon,

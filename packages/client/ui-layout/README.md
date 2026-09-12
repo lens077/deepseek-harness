@@ -29,6 +29,8 @@ The root slot composes the sidebar, main content, and right column. The sidebar 
 
 Global panels occupy the root-scoped `main` keyed slot; `conversation` is the reserved key for the Conversation. `ctx.layout.selectPanel(id)` selects a registered panel, and `null` selects the Conversation without changing the current Session. No global panel is registered by the shipped composition.
 
+Below 768px, the frame presents one full-width phone surface between the header and fixed bottom navigation, and hides both drag handles. It uses `100dvh`; standalone and fullscreen display modes add the bottom safe-area inset, while ordinary browser mode adds no extra inset. The frame owns transient phone navigation and passes it to the sidebar and the `center.overlay` entries; desktop panel geometry remains separate. The right column keeps no phone track: the right Sidebar derives its own fullscreen presentation below the same breakpoint and positions itself against the viewport.
+
 ### Theme presentation
 
 The presenter consumes resolved theme snapshots and projects them onto the document: `html { color-scheme }` for native UA chrome, `body[data-ds-dark-theme]` from the active color scheme, the theme's alias tokens and `--dsh-content-font-size` as inline variables on body, and one owned `<meta name="theme-color">` whose content follows the computed body background. Disposing the presenter removes its metadata node with its other global writes.

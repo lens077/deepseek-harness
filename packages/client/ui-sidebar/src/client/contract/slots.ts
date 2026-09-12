@@ -10,7 +10,7 @@
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { MainPanelId, MobileNavigationOwnerProps } from '@deepseek-ai/dsh-client-ui-layout/client'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -37,6 +37,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * registers the browser.
      */
     'sidebar.workspaces': { kind: 'single'; scope: 'root'; owner: SidebarSectionOwnerProps }
+    /**
+     * Navigation entries between New Session and the browsing region: whole
+     * surfaces the center column switches to, rather than actions on one
+     * session. Declared by this package's 'sidebar' entry; each entry renders
+     * one row that reduces to a single icon on the rail, matching the New
+     * Session control directly above it.
+     */
+    'sidebar.nav.entry': { kind: 'list'; scope: 'root'; owner: SidebarNavEntryOwnerProps }
     /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
@@ -90,6 +98,10 @@ export interface SidebarSectionOwnerProps {
   wide: boolean
   /** Rail icons request expansion; the browser rides the wide flip for focus. */
   expandSidebar: () => void
+  /** Render the phone Workspace drill-down instead of the desktop tree. */
+  mobile?: boolean
+  /** Return to the conversation after opening a Session, including the current one. */
+  onSessionOpened?: () => void
 }
 
 /**
@@ -107,6 +119,12 @@ export interface SidebarFooterActionOwnerProps {
   wide: boolean
 }
 
+/** Owner share of a navigation entry between New Session and the browsing region. */
+export interface SidebarNavEntryOwnerProps extends MobileNavigationOwnerProps {
+  /** Whether the sidebar renders wide content (false = 56px rail). */
+  wide: boolean
+}
+
 /**
  * Registrant-private injected share (arrives via the register inject
  * factory). The renderer binds the panel metadata source to usePanels.
@@ -118,6 +136,8 @@ export type SidebarRootInjected = {
    * recent Workspace, or clear into the New Session pure view when none exist.
    */
   startSession: (workspaceId?: WorkspaceId) => void
+  /** Create and open a scratch Session without Workspace membership. */
+  startUngrouped: () => Promise<void>
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
   /** Select the global panel addressed by a sidebar row. */
@@ -137,6 +157,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
     | 'sidebar.panellist'
+    | 'sidebar.nav.entry'
     | 'sidebar.workspaces'
     | 'sidebar.settings'
     | 'sidebar.footer.action'

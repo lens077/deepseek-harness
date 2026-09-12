@@ -332,6 +332,13 @@ export const IconEditOutline16 = ({ size = 16, className }: IconProps) => (
   </svg>
 )
 
+/** ic_ds_pin_outline_16 */
+export const IconPinOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5.5 1.5h5v2l1.5 2v1.25H9v3.5l-1 1-1-1v-3.5H4V5.5l1.5-2v-2ZM8 11.75V15" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
 /** ic_ds_think_outline_14 */
 export const IconThinkOutline14 = ({ size = 14, className }: IconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -935,6 +942,18 @@ export const IconArchiveOutline20 = ({ size = 20, className }: IconProps) => (
       fill="currentColor"
     />
     <path d="M12.7962 12.5661V11.0832H7.20548V12.5661L12.7962 12.5661Z" fill="currentColor" />
+  </svg>
+)
+
+/** ic_ds_eye_outline_16 (harness-drawn): almond eye outline with a ring pupil. */
+export const IconEyeOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M0.5 8C3 3 13 3 15.5 8C13 13 3 13 0.5 8ZM2.1 8C4.3 4.8 11.7 4.8 13.9 8C11.7 11.2 4.3 11.2 2.1 8ZM8 5.5C6.6193 5.5 5.5 6.6193 5.5 8C5.5 9.3807 6.6193 10.5 8 10.5C9.3807 10.5 10.5 9.3807 10.5 8C10.5 6.6193 9.3807 5.5 8 5.5ZM8 6.85C7.3649 6.85 6.85 7.3649 6.85 8C6.85 8.6351 7.3649 9.15 8 9.15C8.6351 9.15 9.15 8.6351 9.15 8C9.15 7.3649 8.6351 6.85 8 6.85Z"
+      fill="currentColor"
+    />
   </svg>
 )
 

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-08-static-shell-caching-and-phone-digest-density.md
+2026-09-08-static-shell-caching-and-phone-digest-density.md: 7cf6c47a3aa4f3b61a784ebd25a6aaa7495b3626
+2026-09-08-static-shell-caching-and-phone-digest-density.zh.md: 0901dd20fe8447ca8363fd21b034bb5ecc72f1a6

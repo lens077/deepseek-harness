@@ -12,6 +12,7 @@ import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
+  WorkspaceArchiveSessionsRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
@@ -21,6 +22,8 @@ import type {
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceSetSessionMembershipRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -151,13 +154,44 @@ export class WorkspaceCommands {
    * @returns the complete resulting archive set.
    */
   async archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue> {
+    return this.archiveSessions({ sessionIds: [request.sessionId] })
+  }
+
+  /**
+   * Archive several Sessions and return the complete archive set.
+   * @param request - Session identities to archive as one mutation.
+   * @returns the complete resulting archive set.
+   */
+  async archiveSessions(request: WorkspaceArchiveSessionsRequest): Promise<WorkspaceArchiveValue> {
     try {
-      await this.ctx.workspaceRegistry.archiveSession(request.sessionId)
+      await this.ctx.workspaceRegistry.archiveSessions(request.sessionIds)
     } catch (error) {
       if (!(error instanceof WorkspaceUnknownSessionError)) throw error
-      throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId }, { cause: error })
+      throw new RemoteError('session/not-found', error.message, { sessionId: error.sessionId }, { cause: error })
     }
     return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
+  }
+
+  /**
+   * Remove one Session from the archive set.
+   * @param request - Session identity to restore from the archive.
+   * @returns the complete resulting archive set.
+   */
+  async unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue> {
+    await this.ctx.workspaceRegistry.unarchiveSession(request.sessionId)
+    return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
+  }
+
+  /**
+   * Add or remove several Sessions from one Workspace account.
+   * @param request - Workspace, Session identities, and target membership.
+   * @returns the updated Workspace projection.
+   */
+  async setSessionMembership(request: WorkspaceSetSessionMembershipRequest): Promise<WorkspaceValue> {
+    const workspace = this.requireWorkspace(request.workspaceId)
+    if (request.member) await workspace.attachSessions(request.sessionIds)
+    else await workspace.detachSessions(request.sessionIds)
+    return { workspace: workspaceView(workspace) }
   }
 
   private requireWorkspace(workspaceId: WorkspaceId): Workspace {

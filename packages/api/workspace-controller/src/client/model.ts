@@ -6,6 +6,7 @@ import { isRemoteFailure } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteFailure, RemoteResult, TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   WorkspaceArchiveSessionRequest,
+  WorkspaceArchiveSessionsRequest,
   WorkspaceArchiveValue,
   WorkspaceBaseline,
   WorkspaceCreateRequest,
@@ -13,6 +14,8 @@ import type {
   WorkspaceDeleteValue,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspaceSetSessionMembershipRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
   WorkspaceId,
   WorkspaceView,
@@ -167,6 +170,53 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   ): Promise<RemoteResult<WorkspaceArchiveValue>> {
     const result = await this.remote.archiveSession({ sessionId })
     if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * Archive several Sessions and install the returned complete archive set.
+   * @param sessionIds - Sessions to archive as one mutation.
+   * @returns generated Remote result.
+   */
+  async archiveSessions(
+    sessionIds: WorkspaceArchiveSessionsRequest['sessionIds'],
+  ): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    const result = await this.remote.archiveSessions({ sessionIds: [...sessionIds] })
+    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * Remove one Session from the archive set.
+   * @param sessionId - Session to restore from the archive.
+   * @returns generated Remote result.
+   */
+  async unarchiveSession(
+    sessionId: WorkspaceUnarchiveSessionRequest['sessionId'],
+  ): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    const result = await this.remote.unarchiveSession({ sessionId })
+    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * Add or remove several Sessions from a Workspace account.
+   * @param workspaceId - Workspace whose account changes.
+   * @param sessionIds - Sessions to attach or detach.
+   * @param member - Whether the Sessions belong to the Workspace.
+   * @returns generated Remote result.
+   */
+  async setSessionMembership(
+    workspaceId: WorkspaceSetSessionMembershipRequest['workspaceId'],
+    sessionIds: WorkspaceSetSessionMembershipRequest['sessionIds'],
+    member: boolean,
+  ): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.setSessionMembership({
+      workspaceId,
+      sessionIds: [...sessionIds],
+      member,
+    })
+    if (result.ok) this.upsert(result.value.workspace)
     return result
   }
 

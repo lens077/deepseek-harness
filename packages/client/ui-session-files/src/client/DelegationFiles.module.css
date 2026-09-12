@@ -1,0 +1,35 @@
+/* Sits under one delegation call's row, indented to read as belonging to it
+   rather than to the turn. Chip geometry follows the produced-file row so a
+   file reads the same wherever the transcript offers one. */
+
+.root {
+  margin: 4px 0 12px 24px;
+}
+
+.label {
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.file {
+  max-width: 320px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.file:hover {
+  color: var(--dsw-alias-label-primary);
+}

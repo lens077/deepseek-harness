@@ -1,9 +1,10 @@
 /**
  * OpenTelemetry Service Provider for the DeepSeek Harness telemetry capability.
  *
- * Composes the OTel JS SDK as-is — a `LoggerProvider` with a
- * `BatchLogRecordProcessor` and an OTLP/HTTP log exporter — and maps each
- * record handed over by the capture coordinator onto `logger.emit()`. After that call,
+ * Applies a metadata-only structural allowlist by default, then composes the
+ * OTel JS SDK as-is — a `LoggerProvider` with a `BatchLogRecordProcessor` and
+ * an OTLP/HTTP log exporter — and maps each prepared record onto
+ * `logger.emit()`. After that call,
  * batching, retry, queueing, and loss policy use the SDK's documented behavior, configured
  * verbatim through the `exporter`/`processor` passthroughs. This package owns
  * capture mode and an outer shutdown deadline: the SDK's export timeout does
@@ -37,6 +38,7 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
 import type { OTLPExporterNodeConfigBase } from '@opentelemetry/otlp-exporter-base'
 import { SeverityNumber, type AnyValue } from '@opentelemetry/api-logs'
 import { resourceFromAttributes } from '@opentelemetry/resources'
+import { prepareTelemetryRecord } from './privacy.ts'
 
 // The package's own manifest is the single source of the instrumentation-scope
 // version (same pattern as dsh-llm's attribution identity).
@@ -49,7 +51,7 @@ export enum SessionTelemetryMode {
 }
 
 /** Default session-sharing policy for schema and direct construction. */
-export const DEFAULT_TELEMETRY_MODE = SessionTelemetryMode.FEEDBACK_ONLY
+export const DEFAULT_TELEMETRY_MODE = SessionTelemetryMode.DISABLED
 
 const DISABLED_FEEDBACK_WARNING = 'OpenTelemetry session upload is DISABLED; this feedback is not uploaded through OpenTelemetry'
 const NON_CANONICAL_EVENT_WARNING = 'session telemetry ignored an event absent from the canonical session log'
@@ -93,13 +95,18 @@ function sharingStatusFor(mode: SessionTelemetryMode): SessionTelemetrySharingSt
 }
 
 /**
- * Plugin configuration: one sharing policy, two verbatim SDK option objects,
- * and one DSH-owned shutdown bound. Uploading modes validate their endpoint
- * and shutdown deadline at plugin load; `DISABLED` reads neither.
+ * Plugin configuration: one sharing policy, two privacy opt-ins, two verbatim
+ * SDK option objects, and one DSH-owned shutdown bound. Uploading modes validate
+ * their endpoint and shutdown deadline at plugin load; `DISABLED` reads none of
+ * the transport settings.
  */
 export interface Config {
-  /** Defaults to `FEEDBACK_ONLY`: capture session history only when feedback is explicitly submitted. */
+  /** Defaults to `DISABLED`. `FEEDBACK_ONLY` captures session history only when feedback is explicitly submitted. */
   mode?: SessionTelemetryMode
+  /** Export raw event bodies. Defaults to false; metadata-only export uses a closed allowlist. */
+  captureContent?: boolean
+  /** Add the persistent Harness-home anonymous user id to the OTel Resource. Defaults to false. */
+  includeAnonymousUserId?: boolean
   /**
    * Passed verbatim to the SDK's OTLP/HTTP log exporter — the complete
    * `OTLPExporterNodeConfigBase` shape (`headers`, `timeoutMillis`,
@@ -128,6 +135,8 @@ export interface Config {
  */
 export const Config: z<Config> = z.object({
   mode: z.union(Object.values(SessionTelemetryMode)).default(DEFAULT_TELEMETRY_MODE),
+  captureContent: z.boolean().default(false),
+  includeAnonymousUserId: z.boolean().default(false),
   exporter: z.any(),
   processor: z.any(),
   shutdownTimeoutMillis: z.number(),
@@ -201,15 +210,17 @@ export class OpenTelemetrySessionBackend extends SessionTelemetryBackend {
       throw new Error(`session-telemetry-otel: shutdownTimeoutMillis must be a positive finite number no greater than ${MAX_TIMER_DELAY_MILLIS}, got ${String(shutdownTimeoutMillis)}`)
     }
     this.shutdownTimeoutMillis = shutdownTimeoutMillis
+    const resourceAttributes: Record<string, string> = {
+      'service.name': APP_IDENTITY.product,
+      'service.version': APP_IDENTITY.version,
+    }
+    if (config.includeAnonymousUserId === true) {
+      // Persistent cross-process correlation is an explicit opt-in; metadata-only
+      // content capture does not imply a stable user identity.
+      resourceAttributes['user.id'] = getOrCreateAnonymousUserId()
+    }
     this.provider = new LoggerProvider({
-      resource: resourceFromAttributes({
-        'service.name': APP_IDENTITY.product,
-        'service.version': APP_IDENTITY.version,
-        // OTel semconv's standard user attribute, carried once per export
-        // batch on the Resource rather than per record: the collector
-        // aggregates by Resource, and the id is process-stable anyway.
-        'user.id': getOrCreateAnonymousUserId(),
-      }),
+      resource: resourceFromAttributes(resourceAttributes),
       processors: [
         new BatchLogRecordProcessor({
           ...config.processor,
@@ -225,14 +236,15 @@ export class OpenTelemetrySessionBackend extends SessionTelemetryBackend {
     })
     const ledger = this.provider.getLogger('@deepseek-ai/dsh-session-telemetry-otel', version)
     const enqueue: SessionTelemetrySink['emit'] = (record) => {
+      const prepared = prepareTelemetryRecord(record, config.captureContent === true)
       ledger.emit({
-        timestamp: record.time,
-        observedTimestamp: record.time,
-        ...SEVERITY[record.severity],
+        timestamp: prepared.time,
+        observedTimestamp: prepared.time,
+        ...SEVERITY[prepared.severity],
         // JSON-serializable by the seam's contract (validated at Session.append),
         // which is exactly the AnyValue subset.
-        body: record.body as AnyValue,
-        attributes: record.attributes,
+        body: prepared.body as AnyValue,
+        attributes: prepared.attributes,
       })
     }
     const backend: SessionTelemetrySink = {

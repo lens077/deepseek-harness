@@ -49,6 +49,10 @@ Every field is required except the paired route override; there are no library d
 | `maxOutputTokens` | required | Auxiliary generation token cap |
 | `timeoutMs` | required | End-to-end deadline within the runtime timer limit |
 | `provider`, `model` | optional | Explicit route; both or neither |
+| `instructions` | optional | Deployment text appended verbatim to the system prompt, such as a required title format |
+| `titlePattern` | optional | Unicode regular expression the normalized title must match in full; a non-matching output fails the revision and the previous title stays |
+| `latestMessages` | optional | Cap on how many of the newest selected messages are framed and attributed |
+| `includeCurrentTitle` | optional | Frame the latest accepted title alongside the messages so a revision can refine instead of restart |
 
 -----
 

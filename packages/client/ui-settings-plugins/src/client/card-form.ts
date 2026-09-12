@@ -129,6 +129,49 @@ export function numberField(field: string): CardFieldSpec {
 }
 
 /**
+ * A whole-number field the user edits in a coarser unit than the one stored.
+ * A duration kept in milliseconds reads as seconds or minutes, so the control
+ * shows the number the user thinks in while the document keeps its own unit.
+ * The draft is multiplied back and rounded to a whole stored unit, so a
+ * fractional draft is accepted rather than refused.
+ * @param field - field name inside the namespace section.
+ * @param unit - stored units per displayed unit (1000 for seconds over milliseconds).
+ * @returns the field's conversion spec.
+ */
+export function scaledNumberField(field: string, unit: number): CardFieldSpec {
+  return {
+    field,
+    format: value => typeof value === 'number' ? String(value / unit) : '',
+    parse: (text) => {
+      const trimmed = text.trim()
+      if (trimmed === '') return { kind: 'clear' }
+      const parsed = Number(trimmed)
+      return Number.isFinite(parsed) ? { kind: 'set', value: Math.round(parsed * unit) } : undefined
+    },
+  }
+}
+
+/**
+ * A field whose value is one of a fixed set of tokens. An empty draft clears
+ * the field; a draft outside the set blocks the save, so a token this build
+ * does not know renders as stored instead of being silently replaced.
+ * @param field - field name inside the namespace section.
+ * @param allowed - the tokens this field accepts.
+ * @returns the field's conversion spec.
+ */
+export function choiceField(field: string, allowed: readonly string[]): CardFieldSpec {
+  return {
+    field,
+    format: value => typeof value === 'string' ? value : '',
+    parse: (text) => {
+      const trimmed = text.trim()
+      if (trimmed === '') return { kind: 'clear' }
+      return allowed.includes(trimmed) ? { kind: 'set', value: trimmed } : undefined
+    },
+  }
+}
+
+/**
  * A free-text field. An empty draft clears the field, so emptying the control
  * and saving is the same gesture as resetting it.
  * @param field - field name inside the namespace section.

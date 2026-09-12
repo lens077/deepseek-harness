@@ -1,0 +1,108 @@
+- dialog "Question history":
+  - img
+  - textbox "Search questions"
+  - button "1 question 1 07-25 {{clock}}":
+    - text: 1 question 1
+    - time: 07-25 {{clock}}
+  - button "2 question 2 07-25 {{clock}}":
+    - text: 2 question 2
+    - time: 07-25 {{clock}}
+  - button "3 question 3 07-25 {{clock}}":
+    - text: 3 question 3
+    - time: 07-25 {{clock}}
+  - button "4 question 4 07-25 {{clock}}":
+    - text: 4 question 4
+    - time: 07-25 {{clock}}
+  - button "5 question 5 07-25 {{clock}}":
+    - text: 5 question 5
+    - time: 07-25 {{clock}}
+  - button "6 question 6 07-25 {{clock}}":
+    - text: 6 question 6
+    - time: 07-25 {{clock}}
+  - button "7 question 7 07-25 {{clock}}":
+    - text: 7 question 7
+    - time: 07-25 {{clock}}
+  - button "8 question 8 07-25 {{clock}}":
+    - text: 8 question 8
+    - time: 07-25 {{clock}}
+  - button "9 question 9 07-25 {{clock}}":
+    - text: 9 question 9
+    - time: 07-25 {{clock}}
+  - button "10 question 10 07-25 {{clock}}":
+    - text: 10 question 10
+    - time: 07-25 {{clock}}
+  - button "11 question 11 07-25 {{clock}}":
+    - text: 11 question 11
+    - time: 07-25 {{clock}}
+  - button "12 question 12 07-25 {{clock}}":
+    - text: 12 question 12
+    - time: 07-25 {{clock}}
+  - button "13 question 13 07-25 {{clock}}":
+    - text: 13 question 13
+    - time: 07-25 {{clock}}
+  - button "14 question 14 07-25 {{clock}}":
+    - text: 14 question 14
+    - time: 07-25 {{clock}}
+  - button "15 question 15 07-25 {{clock}}":
+    - text: 15 question 15
+    - time: 07-25 {{clock}}
+  - button "16 question 16 07-25 {{clock}}":
+    - text: 16 question 16
+    - time: 07-25 {{clock}}
+  - button "17 question 17 07-25 {{clock}}":
+    - text: 17 question 17
+    - time: 07-25 {{clock}}
+  - button "18 question 18 07-25 {{clock}}":
+    - text: 18 question 18
+    - time: 07-25 {{clock}}
+  - button "19 question 19 07-25 {{clock}}":
+    - text: 19 question 19
+    - time: 07-25 {{clock}}
+  - button "20 question 20 07-25 {{clock}}":
+    - text: 20 question 20
+    - time: 07-25 {{clock}}
+  - button "21 question 21 07-25 {{clock}}":
+    - text: 21 question 21
+    - time: 07-25 {{clock}}
+  - button "22 question 22 07-25 {{clock}}":
+    - text: 22 question 22
+    - time: 07-25 {{clock}}
+  - button "23 question 23 07-25 {{clock}}":
+    - text: 23 question 23
+    - time: 07-25 {{clock}}
+  - button "24 question 24 07-25 {{clock}}":
+    - text: 24 question 24
+    - time: 07-25 {{clock}}
+  - button "25 question 25 07-25 {{clock}}":
+    - text: 25 question 25
+    - time: 07-25 {{clock}}
+  - button "26 question 26 07-25 {{clock}}":
+    - text: 26 question 26
+    - time: 07-25 {{clock}}
+  - button "27 question 27 07-25 {{clock}}":
+    - text: 27 question 27
+    - time: 07-25 {{clock}}
+  - button "28 question 28 07-25 {{clock}}":
+    - text: 28 question 28
+    - time: 07-25 {{clock}}
+  - button "29 question 29 07-25 {{clock}}":
+    - text: 29 question 29
+    - time: 07-25 {{clock}}
+  - button "30 question 30 07-25 {{clock}}":
+    - text: 30 question 30
+    - time: 07-25 {{clock}}
+  - button "31 question 31 07-25 {{clock}}":
+    - text: 31 question 31
+    - time: 07-25 {{clock}}
+  - button "32 question 32 07-25 {{clock}}":
+    - text: 32 question 32
+    - time: 07-25 {{clock}}
+  - button "33 question 33 07-25 {{clock}}":
+    - text: 33 question 33
+    - time: 07-25 {{clock}}
+  - button "34 question 34 07-25 {{clock}}":
+    - text: 34 question 34
+    - time: 07-25 {{clock}}
+  - button "35 question 35 07-25 {{clock}}":
+    - text: 35 question 35
+    - time: 07-25 {{clock}}

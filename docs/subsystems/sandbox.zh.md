@@ -8,14 +8,15 @@
 
 ## 模式与强制执行
 
-`SandboxMode` 仅管控文件系统效果。`read-only` 要求后端拒绝写入——POSIX runner 还会授予其 shell 所需的 `/dev/null` 接收器，而 Windows ACL runner 不授予任何显式可写根目录，并因环境 ACL 缺口报告部分强制执行；`workspace-write` 允许在工作区根目录及后端承诺的临时区域下写入；`danger-full-access` 绕过隔离。网络与进程可见性不在此处的定义范围内。
+`SandboxMode` 仅管控文件系统效果。`read-only` 要求后端拒绝写入——POSIX runner 还会授予其 shell 所需的 `/dev/null` 接收器，而 Windows ACL runner 不授予任何显式可写根目录，并因环境 ACL 缺口报告部分强制执行；`workspace-write` 允许在每个显式会话根目录及后端承诺的临时区域下写入；`danger-full-access` 绕过隔离。网络与进程可见性不在此处的定义范围内。
 
 ```ts type-equiv
 /**
  * File-effect policy for confined processes. `read-only` permits only required
- * sinks such as `/dev/null`; `workspace-write` also permits the workspace and a
- * backend-defined temp area; `danger-full-access` bypasses confinement. Network
- * and process visibility are outside this vocabulary.
+ * sinks such as `/dev/null`; `workspace-write` also permits the session's
+ * ordered workspace roots and a backend-defined temp area;
+ * `danger-full-access` bypasses confinement. Network and process visibility are
+ * outside this vocabulary.
  */
 type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 ```
@@ -40,25 +41,35 @@ type SandboxEnforcement = 'full' | 'partial'
 
 ## 逐调用策略
 
-完整执行策略会按每次能力调用解析并携带。它包括 `danger-full-access`，因此消费方可以只解析一次策略，再决定是否绕过约束。普通工具调用从调用会话的不可变 cwd 派生 `workspaceRoot`；部署配置是没有 agent（智能体）时的回退值。root 会先按文件系统语义规范化，再做词法规范化，因此包含 `symlink/..` 的 cwd 会标识 spawn 出的进程实际运行的目录。
+完整执行策略会按每次能力调用解析并携带。它包括 `danger-full-access`，因此消费方可以只解析一次策略，再决定是否绕过约束。普通工具调用把调用会话不可变且规范化的 cwd 放在首位，再追加最新的持久附加目录快照；部署配置提供没有 agent（智能体）时的主要回退值。`workspaceRoots[0]` 仍是相对路径与默认 cwd 的解析基准，后续根目录只扩展写入权限。根目录会先按文件系统语义规范化，再做词法规范化，因此包含 `symlink/..` 的 cwd 会标识 spawn 出的进程实际运行目录。
 
 ```ts type-equiv
 /**
- * The complete file-effect policy resolved for one capability call. The root
- * is carried even under modes that do not consume it so callers can resolve
+ * One or more canonical session workspace roots. The first member is always the
+ * primary cwd identity used for relative paths; later members only extend the
+ * writable allowlist. The non-empty tuple prevents an executor from receiving a
+ * workspace-write policy with no anchor.
+ */
+type SandboxWorkspaceRoots = readonly [primary: string, ...additional: string[]]
+```
+
+```ts type-equiv
+/**
+ * The complete file-effect policy resolved for one capability call. The roots
+ * are carried even under modes that do not consume them so callers can resolve
  * policy once before choosing the enforcement path.
  */
 interface SandboxExecutionPolicy {
   /** The file-effect mode this execution runs under. */
   mode: SandboxMode
-  /** Absolute root directory `workspace-write` may write under. */
-  workspaceRoot: string
+  /** Canonical primary cwd followed by canonical additional writable roots. */
+  workspaceRoots: SandboxWorkspaceRoots
   /**
    * Opaque identity of the calling session (the branded `dsh-session`
    * SessionId). Backends key per-session state off it (e.g. windows-acl gives
-   * each live session/workspace pair a random private temp directory and SID,
-   * while the workspace SID and standing grant remain per-workspace); absent
-   * for agentless calls, which fall back to per-call backend state.
+   * each live session/root-set pair a random private temp directory and SID,
+   * while the root-set SID and standing grants remain shared); absent for
+   * agentless calls, which fall back to per-call backend state.
    */
   sessionId?: SessionId
 }
@@ -69,14 +80,14 @@ interface SandboxExecutionPolicy {
 ```ts type-equiv
 /** Inputs that select the sandbox policy for one capability call. */
 interface SandboxPolicyRequest {
-  /** Calling session; its immutable cwd becomes the workspace boundary. */
+  /** Calling session; its cwd and directory snapshot become the workspace roots. */
   session?: Session
   /** Explicit approved mode override, which outranks session policy. */
   mode?: SandboxMode
 }
 ```
 
-只有受约束的执行会到达 `ctx.sandbox`；传给提供方的策略在保留同一 root 的同时收窄模式。这使并发会话、消费方与一次性提权重试可以向同一提供方请求不同边界，而无需改变提供方状态。
+只有受约束的执行会到达 `ctx.sandbox`；传给提供方的策略在保留同一根目录集合的同时收窄模式。这使并发会话、消费方与一次性提权重试可以向同一提供方请求不同边界，而无需改变提供方状态。
 
 ```ts type-equiv
 /**
@@ -192,19 +203,37 @@ Source: [`packages/sandbox/sandbox/src/index.ts`](../../packages/sandbox/sandbox
 
 ### `ctx.sandboxPolicy` — `SandboxPolicyService`
 
-The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session's mode log and immutable cwd travel together to every enforcing capability.
+The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback primary root, and current request-time policy section. Tool layers call resolve for each execution so a session's mode log, immutable cwd, and directory snapshot travel together to every enforcing capability.
 
 ```ts cordis-catalog
 /**
  * Resolve the complete policy for one capability call. An approved explicit
  * mode outranks the session's last `sandbox/mode` event, which outranks the
- * deployment default. A session cwd is its workspace-write boundary; the
- * configured root is the fallback for agentless calls and sessions without a
- * cwd.
+ * deployment default. A session cwd remains the primary workspace root; the
+ * latest `session/directories` snapshot extends only the writable allowlist.
+ * The configured root is the fallback for agentless calls and sessions
+ * without a cwd.
  * @param request - optional session and approved mode override.
- * @returns the fully resolved per-call mode and absolute workspace root.
+ * @returns the fully resolved per-call mode and ordered canonical roots.
  */
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
+
+/**
+ * Read the session's durable additional-directory list.
+ * @param session - session whose log supplies the latest snapshot.
+ * @returns the immutable canonical list, empty without a snapshot.
+ */
+additionalDirectoriesOf(session: Session): readonly string[]
+
+/**
+ * Replace one session's additional writable directories. Paths must be
+ * absolute existing directories; aliases of the primary root or an earlier
+ * entry are removed before the whole-list event commits.
+ * @param session - owning session.
+ * @param directories - complete requested additional-directory list.
+ * @returns the committed canonical list.
+ */
+setAdditionalDirectories(session: Session, directories: readonly string[]): readonly string[]
 
 /**
  * Read the session override without applying the deployment default.

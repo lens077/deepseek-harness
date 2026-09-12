@@ -60,6 +60,13 @@ export interface Config {
   readonly fallbackMaxBytes: number
   /** Maximum UTF-8 bytes in any accepted title. */
   readonly maxTitleBytes: number
+  /**
+   * Whether later human messages still schedule automatic provider generation
+   * after an explicit user rename. `false` (the default) keeps a user rename
+   * pinned until an explicit `refresh()`; `true` lets the registered
+   * provider's cadence supersede the user title on the next eligible message.
+   */
+  readonly automaticOverridesUserRename?: boolean
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -158,6 +165,7 @@ interface ResolvedConfig {
   readonly fallbackMaxWords: number
   readonly fallbackMaxBytes: number
   readonly maxTitleBytes: number
+  readonly automaticOverridesUserRename: boolean
 }
 
 /** One exact provider registration generation. */
@@ -298,6 +306,7 @@ export class SessionTitleService extends Service {
     fallbackMaxWords: z.number().step(1).min(1).required(),
     fallbackMaxBytes: z.number().step(1).min(1).required(),
     maxTitleBytes: z.number().step(1).min(1).required(),
+    automaticOverridesUserRename: z.boolean().default(false),
   })
 
   private readonly config: ResolvedConfig
@@ -321,7 +330,15 @@ export class SessionTitleService extends Service {
     if (value.fallbackMaxBytes > value.maxTitleBytes) {
       throw new Error('session-title: fallbackMaxBytes must not exceed maxTitleBytes')
     }
-    this.config = deepFreeze({ ...value })
+    if (value.automaticOverridesUserRename !== undefined && typeof value.automaticOverridesUserRename !== 'boolean') {
+      throw new Error('session-title: automaticOverridesUserRename must be a boolean')
+    }
+    this.config = deepFreeze({
+      fallbackMaxWords: value.fallbackMaxWords,
+      fallbackMaxBytes: value.fallbackMaxBytes,
+      maxTitleBytes: value.maxTitleBytes,
+      automaticOverridesUserRename: value.automaticOverridesUserRename ?? false,
+    })
 
     ctx.effect(() => async () => {
       this.lifetime.abort(new Error('session-title service disposed'))
@@ -499,8 +516,9 @@ export class SessionTitleService extends Service {
   private onUserMessage(session: Session, event: Extract<SessionEvent, { type: 'user/message' }>): void {
     if (!this.serviceActive()) return
     if (event.data.source.kind !== 'user' || sessionTitleUserMessageOf(event) === undefined) return
-    // A user rename pins the title: no automatic revision may override it.
-    if (this.get(session)?.source.kind === 'user') return
+    // A user rename pins the title unless the deployment lets automatic
+    // generation supersede it.
+    if (!this.config.automaticOverridesUserRename && this.get(session)?.source.kind === 'user') return
     const registration = this.registration
     if (registration !== undefined && !registration.closing) {
       const count = this.titleInputOf(session).count
@@ -535,7 +553,12 @@ export class SessionTitleService extends Service {
     this.startPending(session, state, pending, route)
   }
 
-  /** Start unchanged-route work from the marked loop request after its header fold is current. */
+  /**
+   * Start unchanged-route work from the marked loop request after its header
+   * fold is current. The request must be dispatched inside an open step whose
+   * logged route equals the request route; the loop splices a queued prompt
+   * after `step/start`, so the pending message may sit inside that same step.
+   */
   private onMainRequest(options: GenerateOptions): void {
     if (!this.serviceActive() || options.sessionId === undefined || !isAgentLoopRequest(options)) return
     const session = this.ctx.sessions.get(options.sessionId)
@@ -545,7 +568,6 @@ export class SessionTitleService extends Service {
     const boundary = this.ctx.sessionProjections.stateOf(session, 'turnBoundary')?.lastStepBoundary
     const route = session.requestHeader()?.config
     if (boundary?.kind !== 'start'
-      || boundary.seq <= pending.throughSeq
       || route?.provider !== options.provider
       || route.model !== options.model) return
     this.startPending(session, state, pending, { provider: options.provider, model: options.model })

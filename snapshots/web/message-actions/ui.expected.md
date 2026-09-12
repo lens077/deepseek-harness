@@ -6,11 +6,27 @@
   - button "Open right sidebar":
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
+- button "Search questions":
+  - img
+- button "Previous question":
+  - img
+- button "Next question" [disabled]:
+  - img
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img

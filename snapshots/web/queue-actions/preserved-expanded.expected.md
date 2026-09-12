@@ -1,15 +1,24 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reply with a one-sentence description" [disabled]
-  - img
-  - text: Standard mode
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -26,6 +35,9 @@
   - text: Context injection @deepseek-ai/dsh-system-prompt
 - paragraph: partial
 - text: Stopped
+- 'button "Answering: Reply with a one-sentence description of event sourcing, then stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Reply with a one-sentence description of event sourcing, then stop."
 - button "Copy":
   - img
 - button "Good response":
@@ -38,6 +50,16 @@
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
+- button "Collapse flow graph" [expanded]:
+  - img
+- text: Task flow 1 stopped · Elapsed {{duration}}
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph": "#1 Reply with a one-sentence description of event sourcing, then stop. Stopped {{duration}} · 1 steps"
 - button "2 queued messages" [expanded]
 - list:
   - listitem:
@@ -57,9 +79,13 @@
     - button "Steer queued message" [disabled]:
       - img
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- img
+- text: Standard mode
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

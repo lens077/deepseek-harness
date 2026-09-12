@@ -2,7 +2,7 @@
 export { apply, Config, inject } from './apply.ts'
 export type { Config as ConversationConfig } from './apply.ts'
 export { UiConversation } from './conversation/assembly.ts'
-export type { ConversationBinding } from './conversation/assembly.ts'
+export type { ConversationBinding, ConversationViewOpener } from './conversation/assembly.ts'
 export { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 export type { IConversation } from './service.ts'
 export type {
@@ -59,7 +59,7 @@ export type {
   ConversationStore, ConvViewOwnerProps, ConvViewProps, EmptyWorkspaceOwnerProps,
   HeroAgentPresetOwnerProps, HeroBrandMarkOwnerProps, InputControlOwnerProps, InputZone,
   MessageImageLoader, MessageImageSource, MessageImagesOwnerProps, RenderMessageImages, UseConversation,
-  UseConversationViews,
+  UseConversationViews, QuestionNavigationService,
 } from './contract/slots.ts'
 export type {
   ArbitrateKey, ArbitrateOutcome, BeginCommandRequest, CommandClaim, ConsumeTokenRequest,
@@ -68,6 +68,12 @@ export type {
   SubmitOutcome, TokenSpan,
 } from './contract/input.ts'
 export type { ComposerBlock, ComposerBlocks } from './contract/composer-blocks.ts'
+export type {
+  QuestionBarExpandSide, QuestionNavigationSettings, QuestionShortcutFocusPolicy,
+} from '../submission-settings.ts'
+export type {
+  QuestionSearchHit, QuestionSearchPage, SearchQuestions,
+} from './contract/question-search.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

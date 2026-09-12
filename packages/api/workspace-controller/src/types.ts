@@ -20,6 +20,8 @@ export interface WorkspaceView {
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
   readonly sessionIds: readonly SessionId[]
+  /** Nested display placement keyed by child Session id. */
+  readonly nestedUnder?: Readonly<Record<string, SessionId>>
   /** ISO-8601 creation instant. */
   readonly createdAt: string
   /** ISO-8601 last-mutation instant. */
@@ -102,6 +104,23 @@ export interface WorkspaceInsertSessionBeforeRequest {
 /** Session requested for archival from Workspace grouping surfaces. */
 export interface WorkspaceArchiveSessionRequest {
   readonly sessionId: SessionId
+}
+
+/** Several Sessions requested for one archive mutation. */
+export interface WorkspaceArchiveSessionsRequest {
+  readonly sessionIds: readonly SessionId[]
+}
+
+/** One Session requested for removal from the archive set. */
+export interface WorkspaceUnarchiveSessionRequest {
+  readonly sessionId: SessionId
+}
+
+/** Batch Workspace membership mutation. */
+export interface WorkspaceSetSessionMembershipRequest {
+  readonly workspaceId: WorkspaceId
+  readonly sessionIds: readonly SessionId[]
+  readonly member: boolean
 }
 
 /** Complete archived Session set after a mutation. */

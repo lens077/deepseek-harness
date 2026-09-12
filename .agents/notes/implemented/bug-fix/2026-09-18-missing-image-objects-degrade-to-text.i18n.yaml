@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-18-missing-image-objects-degrade-to-text.md
+2026-09-18-missing-image-objects-degrade-to-text.md: 2c1df3535ac9651f1d82ad26d8db8f53f8af696f
+2026-09-18-missing-image-objects-degrade-to-text.zh.md: aa3a3304180136c21f6e480fc6809e2223a4864d

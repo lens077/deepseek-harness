@@ -3,13 +3,14 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type {
   CommandNode, CompactionSummaryNode, ConversationLocationDataStore, ConversationTurnDataMap,
-  MessageImageLoader, MessageImagesOwnerProps, RenderMessageImages, TurnLocation,
+  MessageImageLoader, MessageImagesOwnerProps, RenderMessageImages, SearchQuestions,
+  QuestionNavigationSettings, TurnLocation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   InjectFace, KeyedSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
   SlotHookFactory, SnapshotSelectorHook,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { createChatStore } from '../stores.ts'
@@ -59,10 +60,67 @@ export interface ChatFileMentions {
   forClosing(owner: TurnTailOwnerProps, sessionId: SessionId): MarkdownFileMentions | undefined
 }
 
+/** Cross-surface request to reveal one Session question in its Chat transcript. */
+export interface ChatReveal {
+  /**
+   * Load and scroll to the `user/message` at `seq` when this Session's Chat is ready.
+   * @param sessionId - Session whose transcript should move.
+   * @param seq - durable question event sequence.
+   */
+  reveal(sessionId: SessionId, seq: number): void
+}
+
+/** One recorded change rendered by a side-by-side diff surface. */
+export interface ChatFileDiffSegment {
+  /** Localized provenance label for the change. */
+  readonly label: string
+  /** Content before the change, or null for a create. */
+  readonly oldText: string | null
+  /** Content after the change. */
+  readonly newText: string
+}
+
+/** One file changed during a Turn. */
+export interface ChatTurnFileChange {
+  /** File path recorded by the mutation tool. */
+  readonly path: string
+  /** Added lines across the Turn's recorded hunks. */
+  readonly additions: number
+  /** Removed lines across the Turn's recorded hunks. */
+  readonly deletions: number
+}
+
+/** How much of a Turn's changed-file detail opens automatically. */
+export type ChatFileDiffExpansion = 'all' | 'single' | 'none'
+
+/** Optional Session file-change provider used by Chat presentation. */
+export interface ChatFileDiffs {
+  /**
+   * Read chronological changes for one file.
+   * @param sessionId - Session whose changes are read.
+   * @param path - exact recorded file path.
+   * @returns chronological diff segments for the file.
+   */
+  forPath(sessionId: SessionId, path: string): readonly ChatFileDiffSegment[]
+  /**
+   * Read the changed-file summary for one Turn.
+   * @param sessionId - Session whose changes are read.
+   * @param turn - Turn whose changed files are requested.
+   * @returns changed files in first-touch order.
+   */
+  forTurn(sessionId: SessionId, turn: number): readonly ChatTurnFileChange[]
+  /** Reactive expansion preference shared by Chat file summaries. */
+  readonly expansion: ObservableSnapshot<ChatFileDiffExpansion>
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Optional prose file-mention provider. */
     chatFileMentions: ChatFileMentions
+    /** Optional Session file-change provider; consumers resolve it with ctx.get. */
+    chatFileDiffs: ChatFileDiffs
+    /** Optional question-reveal provider owned by ui-chat. */
+    chatReveal: ChatReveal
   }
 }
 
@@ -133,6 +191,8 @@ export interface ChatViewInjected {
   hooks: {
     /** Persisted completed-Turn transcript presentation. */
     transcriptView: SnapshotStore<TranscriptViewMode>
+    /** Live question-navigation shortcuts and question-bar placement. */
+    questionNavigation: ObservableSnapshot<QuestionNavigationSettings>
   }
   keyedHooks: {
     /** Resolve the stable source for one Chat Node key. */
@@ -146,6 +206,10 @@ export interface ChatViewInjected {
   loadOlder: () => void
   /** Jump loader: page history back through seq; resolves when the window covers it. */
   loadThrough: (seq: SessionSeq) => Promise<void>
+  /** Page the complete Session history into the current window. */
+  loadAll: () => Promise<void>
+  /** Search the complete current-question index for this Session. */
+  searchQuestions: SearchQuestions
   loadImage: MessageImageLoader
   chatScroll: {
     save: (position: ChatScrollPosition | null) => void
@@ -153,6 +217,10 @@ export interface ChatViewInjected {
   }
   forkAt: (seq: number) => void
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /** Changed files for one Turn, empty when no provider is composed. */
+  turnFiles: (turn: number) => readonly ChatTurnFileChange[]
+  /** Whether the optional file-change provider is currently composed. */
+  turnFilesAvailable: () => boolean
 }
 
 /** Full Chat view props. */

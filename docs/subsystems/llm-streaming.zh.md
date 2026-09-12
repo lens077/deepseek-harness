@@ -616,7 +616,7 @@ interface GenerateOptions {
    * map the purpose to model-hidden transport metadata or purpose-specific
    * generation policy. Ordinary conversation requests leave it unset.
    */
-  purpose?: 'compaction' | 'session-title'
+  purpose?: 'compaction' | 'session-title' | 'model-routing'
 }
 ```
 
@@ -1044,6 +1044,35 @@ stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 Types: [FileAttachmentRef](attachment.zh.md)
 
 Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
+
+<a id="ctxmodelrouter--modelrouter-abstract-seam"></a>
+
+### `ctx.modelRouter` — `ModelRouter` (abstract seam)
+
+Abstract prompt-driven route selection. Load one implementation per context as `ctx.modelRouter`. Implementations are pure decision functions: they never validate a route against the live LLM registry, never mutate the session, and answer with the baseline when nothing applies.
+
+Mounting any implementation serves the `model-routing` settings section while a settings provider is present; its `enabled` switch lets a person stop routing without unmounting the provider, and consumers read it through ModelRouter.enabled before every prompt.
+
+```ts cordis-catalog
+/**
+ * Whether the person left routing on. Without a settings provider the
+ * answer is always true.
+ * @returns the current `model-routing.enabled` value.
+ */
+enabled(): boolean
+
+/**
+ * Propose the route for the prompt about to be queued. The call sits in the
+ * prompt's admission path, so an implementation that performs I/O must bound
+ * its own latency.
+ * @param input - the owner's baseline route and the prompt to classify.
+ * @returns the proposed route with its justification; the baseline when no rule applies.
+ * @throws when classification fails; the consumer keeps the baseline and records the failure.
+ */
+abstract route(input: ModelRouteInput): Promise<ModelRouteDecision>
+```
+
+Source: [`packages/llm/model-router/src/index.ts`](../../packages/llm/model-router/src/index.ts)
 
 <a id="llm-events"></a>
 

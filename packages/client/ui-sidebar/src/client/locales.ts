@@ -2,11 +2,16 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'brand.localBuild': 'Sumery DSH Pro',
   'session.new': '新会话',
   'session.new.label': '新建会话',
   'toggle.open': '打开侧边栏',
   'toggle.collapse': '收起侧边栏',
   'panels.label': '全局面板',
+  'brand.tagline': '基于官方DSH分叉，改进更多个性化功能',
+  'mobile.navigation': '移动端主导航',
+  'mobile.workspaces': '工作区',
+  'mobile.newFailed': '无法创建未分组会话：{message}',
 } satisfies Record<string, string>
 
 /** The sidebar namespace key union. */
@@ -14,9 +19,14 @@ export type SidebarKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'brand.localBuild': 'Sumery DSH Pro',
   'session.new': 'New Session',
   'session.new.label': 'New session',
   'toggle.open': 'Open sidebar',
   'toggle.collapse': 'Collapse sidebar',
   'panels.label': 'Global panels',
+  'brand.tagline': 'Forked from official DSH with more personalized features',
+  'mobile.navigation': 'Mobile navigation',
+  'mobile.workspaces': 'Workspaces',
+  'mobile.newFailed': 'Could not create an Ungrouped session: {message}',
 } satisfies Record<SidebarKey, string>

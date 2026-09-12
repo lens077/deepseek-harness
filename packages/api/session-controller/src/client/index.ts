@@ -73,6 +73,7 @@ export type {
   QueuedMessage,
   SessionSnapshot,
 } from './contract/snapshot.ts'
+export type { SessionDirectories } from '../types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

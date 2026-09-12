@@ -61,7 +61,7 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 ### 将会话归入项目
 
-会话加入它运行目录所在的项目：在项目目录中创建会话，它就会出现在该项目下，新到旧排列。一个会话只能属于一个项目。目录无法校验的会话——没有记录目录，或目录被移动、删除——无法加入，保持 Ungrouped。
+Session 初始加入其运行目录所在的项目：在项目目录中创建 Session，它就会出现在该项目下，新到旧排列。一个 Session 只能属于一个项目，显式 membership 操作可以在现有 Workspace 与 Ungrouped 之间移动所选 Session。`nestedUnder` 可以把已记账子级放到另一成员下，而不改变 Session header lineage。目录无法校验的 Session——没有记录目录，或目录被移动、删除——无法自动加入，保持 Ungrouped。
 
 ### 隐藏会话与移除项目
 
@@ -102,7 +102,7 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 ### 持久形态
 
-注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds` 与可选 `pendingMutation` 标记的全局状态。在 `archivedSessionIds` 存在之前写入的记录会通过 schema 默认值解析为空集合。
+注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds` 与可选 `pendingMutation` 标记的全局状态。每条 Workspace 记录拥有有序 `sessionIds` 和带默认值的 `nestedUnder` 子级到父级映射。在归档或嵌套字段存在前写入的记录会通过 schema 默认值解析为空值。
 
 ### 生命周期
 
@@ -157,10 +157,10 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 这些限制说明项目列表何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是任务积压。
 
-- **移除绝不删除数据**——移除项目会保留其文件夹、文件与会话历史；这些会话变成 Ungrouped，而会话删除与文件夹移除是彼此独立且尚未提供的功能（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
+- **移除 Workspace 绝不删除数据**——移除项目会保留其文件夹、文件与 Session 历史；这些 Session 变成 Ungrouped。永久删除 Session lineage 是与 Session persistence 协调的独立注册表操作（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
 - **只有带记录目录的会话才能加入**——只有记录中带有可解析为项目路径的目录的会话才属于项目；没有目录的会话保持 Ungrouped，来自其他目录的会话无法移入。
 - **外部变更延迟可见**——如果另一进程删除或损坏目录，项目只能在下次刷新或重启后反映出来。
-- **归档是单向的**——被隐藏的会话保留其历史与位置，但目前没有取消归档操作；归档集合是持久的显示过滤器。
+- **归档只改变可见性**——归档 Session 保留历史、Workspace membership、位置和嵌套放置；取消归档会把它从持久显示过滤器中移除。
 - **重新添加目录从空开始**——移除后再次添加同一目录会创建空会话列表的新项目；旧会话不会自动回来。
 
 <a id="dev-note"></a>

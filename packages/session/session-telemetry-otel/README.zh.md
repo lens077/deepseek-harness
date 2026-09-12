@@ -31,8 +31,8 @@ kind: "package-reference"
 
 | `mode` | 行为 |
 |---|---|
-| `FEEDBACK_ONLY` | 默认值。文本反馈、评分创建或修改、备注修改和撤回释放尚未交接的前缀，截止该权威反馈事件；后续记录等待 |
-| `DISABLED` | 不构造协调器、提供方、处理器或导出器；没有遥测记录离开进程。活跃会话反馈在本地告警；冷会话修改保持静默 |
+| `FEEDBACK_ONLY` | 文本反馈、评分创建或修改、备注修改和撤回释放尚未交接的前缀，截止该权威反馈事件；后续记录等待 |
+| `DISABLED` | 默认值。不构造协调器、提供方、处理器或导出器；没有遥测记录离开进程。活跃会话反馈在本地告警；冷会话修改保持静默 |
 
 程序化 TypeScript 配置使用导出的 `SessionTelemetryMode` 枚举；原始字符串字面量不可赋值。`FULL` 会被拒绝，不是别名。[`sharing` 属性](../session-telemetry/README.zh.md#the-sharing-disclosure)报告 `feedback-only` 或 `disabled`，不代表投递回执。`/feedback` 确认文本只确认记录。
 
@@ -44,7 +44,9 @@ kind: "package-reference"
 - id: sessionTelemetry-otel
   name: '@deepseek-ai/dsh-session-telemetry-otel'
   config:
-    mode: FEEDBACK_ONLY       # optional; defaults to FEEDBACK_ONLY
+    mode: FEEDBACK_ONLY       # optional; defaults to DISABLED
+    captureContent: false     # optional; false exports metadata only
+    includeAnonymousUserId: false # optional; false omits the stable user id
     shutdownTimeoutMillis: 3000 # optional; defaults to 3000
     exporter:                # passed verbatim to the SDK's OTLP/HTTP log exporter
       url: https://collector.example.com/v1/logs
@@ -55,18 +57,20 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `mode` | `FEEDBACK_ONLY` | 共享策略：`FEEDBACK_ONLY` 或 `DISABLED` |
+| `mode` | `DISABLED` | 共享策略：`FEEDBACK_ONLY` 或 `DISABLED` |
+| `captureContent` | `false` | `true` 导出原始 `event.data`；`false` 只导出每条记录的元数据投影 |
+| `includeAnonymousUserId` | `false` | `true` 把 Harness 家目录中持久的匿名 `user.id` 加入 OTel Resource |
 | `exporter.url` | 上传模式必填 | 完整 OTLP 日志端点；必须能解析为 `http(s)` |
 | `exporter`、`processor` | — | 原样传给 SDK 导出器与批处理器 |
 | `shutdownTimeoutMillis` | `3,000` | SDK 完整关闭序列的外层截止时间 |
 
 直接调用 `ctx.sessionTelemetry.emit()` 在任何模式下都是空操作，不能绕过反馈授权。继承的父会话反馈不授权子会话导出：子会话需要新的自身反馈。授权后的前缀包含继承的上下文。
 
-模型请求、请求头、Session 创建或接纳、恢复，以及插件挂载或 HMR（热模块替换）均不授权捕获。仅凭已存储的反馈不会触发任何操作。SDK 定时刷新和关闭可以完成先前已授权的批次，但绝不捕获新记录。
+模型请求、请求头、Session 创建或接纳、恢复，以及插件挂载或 HMR（热模块替换） 均不授权捕获。仅有存储的反馈不会触发任何上传。SDK 定时刷新和关闭可以完成先前已授权的批次，但绝不捕获新记录。
 
 ### 哪些数据会离开本机
 
-在上传模式中，记录携带 seam 的 `sessionTelemetry/record` waterfall（瀑布式事件）返回的完整 `event.data`——消息内容、工具参数与结果、系统提示词与工具 schema、todo 文本、压缩（compaction）摘要、反馈文本，以及会话 `cwd`。提供方凭据绝不会出现：适配器的 API key 是构造函数参数而非会话事件，因此它们在结构上就不存在于日志中，也就不存在于遥测中。`DISABLED` 不构造 SDK 流水线，也不把任何捕获内容交给后端。
+默认（`captureContent: false`）下，每条上传记录在 seam 的 `sessionTelemetry/record` waterfall 之后都会被压缩成只含元数据的投影：一个封闭的标识符属性白名单（`session.id`、`session.parent_id`、`event.type`、`telemetry.op`、`agent.id`、`error.name`）、数值位置（`event.seq`、`turn`、`step`、`session.seed_length`）、该事件类型的结构计数与大小，以及带原始 body 字节数的 `dsh.telemetry.content_mode: metadata-only`。消息文本、工具参数与结果、反馈文本、路径和会话 `cwd` 不会离开本机。`captureContent: true` 时记录携带 waterfall 返回的完整 `event.data`——消息内容、工具参数与结果、系统提示词与工具 schema、todo 文本、压缩（compaction）摘要、反馈文本，以及会话 `cwd`——并标记为 `dsh.telemetry.content_mode: full`。只有 `includeAnonymousUserId: true` 时 OTel Resource 才携带 `user.id`；开启内容捕获并不意味着稳定身份。提供方凭据绝不会出现：适配器的 API key 是构造函数参数而非会话事件，因此它们在结构上就不存在于日志中，也就不存在于遥测中。`DISABLED` 不构造 SDK 流水线，也不把任何捕获内容交给后端。
 
 ### 失败与关闭
 
@@ -148,4 +152,4 @@ kind: "package-reference"
 
 </details>
 
-**运行时不变式：** 不发布伴生入口。模式选择只改变 capture handoff、SDK setup 与本地 diagnostics，不改变可由独立 companion 对照的会话或服务状态。导出在越过后端边界后仍由 SDK 内部处理。
+**运行时不变式：** 不发布伴生入口。mode 只改变 capture handoff、SDK setup 与本地 diagnostics，不改变可由独立 companion 对照的 Session 或 service 状态。

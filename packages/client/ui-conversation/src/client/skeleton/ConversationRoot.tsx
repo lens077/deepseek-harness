@@ -131,8 +131,14 @@ function WidthHandle(props: {
 export function ConversationRoot({
   sessionId, useSession, useSessions, useSessionPendingInteraction,
   useWorkspaces, useConversation, useInput, useComposerBlock,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  renderSlot, renderSlotChain, selectWorkspace, startScratchSession, useRailSeat,
+  useContentWidthMode, t,
 }: ConversationRootProps) {
+  const railOccupied = useRailSeat(entries => entries.length > 0)
+  // Settings-owned width mode: 'fill' (default) keeps the transcript at 100%
+  // of the content area; 'adaptive' enables the clamp and the drag handles.
+  const widthMode = useContentWidthMode(mode => mode)
+  const adaptive = widthMode === 'adaptive'
   const session = useSession(s => s)
   const pendingInteraction = useSessionPendingInteraction(snapshot =>
     sessionId === undefined ? undefined : snapshot.get(sessionId))
@@ -149,6 +155,7 @@ export function ConversationRoot({
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
 
+  const [mobileRailOpen, setMobileRailOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
@@ -177,11 +184,12 @@ export function ConversationRoot({
     seatObserver.current.observe(scroller)
   }, [])
 
-  // Publishes the column's live width as --dsh-conversation-column-width so
-  // the shared width axis can adapt (see the .root CSS), and re-clamps a
-  // dragged preference against the shrunken column WITHOUT rewriting the
-  // stored preference — widening the window restores it (the AppFrame
-  // sidebar-drag rule). Same callback-ref pattern as the seat observer.
+  // Adaptive mode only: publishes the column's live width as
+  // --dsh-conversation-column-width so the shared width axis can adapt (see
+  // the .root CSS), and re-clamps a dragged preference against the shrunken
+  // column WITHOUT rewriting the stored preference — widening the window
+  // restores it. In fill mode the callback ref detaches the observer and
+  // clears both variables so the 100% axis applies untouched.
   const rootEl = useRef<HTMLDivElement | null>(null)
   const rootObserver = useRef<ResizeObserver | null>(null)
   const publishWidths = useCallback((root: HTMLDivElement): void => {
@@ -199,10 +207,15 @@ export function ConversationRoot({
     rootObserver.current = null
     rootEl.current = root
     if (root === null) return
+    if (!adaptive) {
+      root.style.removeProperty('--dsh-conversation-column-width')
+      root.style.removeProperty('--dsh-chat-user-width')
+      return
+    }
     rootObserver.current = new ResizeObserver(() => { publishWidths(root) })
     rootObserver.current.observe(root)
     publishWidths(root)
-  }, [publishWidths])
+  }, [adaptive, publishWidths])
 
   // Drag plumbing for the two width handles: onStart snapshots the resolved
   // width (grabbing a clamped column must not jump back to the raw stored
@@ -294,7 +307,7 @@ export function ConversationRoot({
     <div className={css.heroWorkspaceRow}>
       <WorkspaceChip
         buttonRef={pickerAnchor}
-        label={chipTitle}
+        label={chipTitle ?? (sessionId !== undefined && cwd !== undefined && cwd !== '' ? t('workspace.ungrouped') : undefined)}
         menuOpen={pickerOpen}
         onClick={() => { setPickerOpen(open => !open) }}
         t={t}
@@ -310,18 +323,16 @@ export function ConversationRoot({
             setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
           })
         },
+        onStartScratch: startScratchSession,
         onClose: () => { setPickerOpen(false) },
       })}
       {renderSlot('conversation.hero.agentPreset', {})}
     </div>
   )
 
-  // The placeholder chip ("Choose workspace") and the Workspace-trigger input travel
-  // together: no workspace picked yet (cold start, no session at all), or a
-  // blank session whose workspace vanished (deleted from the sidebar). The
-  // bar is ONE session-maybe slot rendered unconditionally — inert is a prop,
-  // not a different tree, so the textarea DOM survives the transition.
-  const inert = sessionId === undefined || (hero && chipTitle === undefined)
+  // A materialized scratch Session has a cwd without Workspace membership.
+  // Only an unresolved directory keeps the composer in its workspace-picking state.
+  const inert = sessionId === undefined || (hero && (cwd === undefined || cwd === ''))
   // A raised block is the same inert posture with the blocker's own reason:
   // one disabled textarea, never a second tree. The no-workspace state wins
   // when both hold — picking a workspace is the earlier prerequisite.
@@ -368,18 +379,33 @@ export function ConversationRoot({
       {composer}
     </div>
   )
+  const scrollBody = (
+    <div className={css.scrollBody} data-conversation-scroll="">
+      {sessionId === undefined ? null : renderSlot('conversation.session', {})}
+      {composerSeat}
+    </div>
+  )
 
   return (
-    <div ref={rootResizeRef} className={css.root} data-phase={phase}>
+    <div ref={rootResizeRef} className={css.root} data-phase={phase} data-width-mode={widthMode}>
       {sessionId === undefined ? null : renderSlot('conversation.session.header', {})}
-      <div className={css.body}>
-        <div className={css.scrollBody} data-conversation-scroll="">
-          {sessionId === undefined ? null : renderSlot('conversation.session', {})}
-          {composerSeat}
-        </div>
-        {/* Width handles only while a transcript is on screen; the hero has no
-            content column to size. */}
-        {phase === 'active' && (['left', 'right'] as const).map(side => (
+      <div className={css.body} data-mobile-rail-open={mobileRailOpen || undefined}>
+        {railOccupied && sessionId !== undefined && <button type="button" className={css.mobileRailToggle}
+          aria-expanded={mobileRailOpen} onClick={() => { setMobileRailOpen(open => !open) }}>
+          {t(mobileRailOpen ? 'mobile.railClose' : 'mobile.rail')}
+        </button>}
+        {railOccupied
+          ? (
+            <div className={css.bodyRow} data-rail="">
+              {sessionId !== undefined && <div className={css.railPanel}>{renderSlot('conversation.session.rail', {})}</div>}
+              {scrollBody}
+            </div>
+          )
+          : scrollBody}
+        {/* Width handles only in the adaptive Settings mode and only while a
+            transcript is on screen; the fill mode and the hero have no
+            draggable content column. */}
+        {adaptive && phase === 'active' && (['left', 'right'] as const).map(side => (
           <WidthHandle
             key={side}
             side={side}

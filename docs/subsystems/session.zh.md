@@ -117,6 +117,14 @@ interface SessionEventMap {
     meta?: JsonValue
   }
   /**
+   * Complete canonical additional-directory list for this session. The primary
+   * working directory remains {@link SessionHeader.cwd}; the latest snapshot
+   * only extends the session's writable-root set. Absence means no additional
+   * directories. This event is log-only but required for reconstruction because
+   * sandbox policy projects the effective roots into model-visible context.
+   */
+  'session/directories': { additionalDirectories: string[] }
+  /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.
    */
@@ -737,6 +745,35 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
  * @returns authorized bounded Session search results.
  */
 @Remote('search') search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue>
+
+/**
+ * Read one Session's canonical writable-root list.
+ * @param request - target Session.
+ * @returns immutable primary directory and additional roots.
+ */
+@Remote('directories') async directories(request: SessionDirectoriesRequest): Promise<SessionDirectories>
+
+/**
+ * Replace one Session's complete additional writable-root list.
+ * @param request - target Session and complete requested list.
+ * @returns the canonical accepted list.
+ */
+@Remote('replaceDirectories') async replaceDirectories(request: SessionReplaceDirectoriesRequest): Promise<SessionDirectories>
+
+/**
+ * Permanently remove one Session and its complete lineage.
+ * @param request - root Session to delete.
+ * @returns child-first removed identities.
+ */
+@Remote('delete') async delete(request: SessionDeleteRequest): Promise<SessionDeleteValue>
+
+/**
+ * Search all current user questions in one readable Session.
+ * @param request - Session identity and literal question text query.
+ * @param signal - cancellation for authorization and provider work.
+ * @returns bounded hits plus whether the page is complete.
+ */
+@Remote('searchQuestions') async searchQuestions( request: SessionQuestionSearchRequest, signal: AbortSignal, ): Promise<SessionQuestionSearchValue>
 
 /**
  * Create or idempotently adopt one ordinary Session.

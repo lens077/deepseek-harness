@@ -178,6 +178,17 @@ interface ScopeRecord {
   session: Session
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * A caller navigates to a Session or clears the current selection, including repeated selections.
+     * @mode emit
+     * @param sessionId - requested Session, or undefined for the empty view.
+     */
+    'sessions/navigated'(sessionId: SessionId | undefined): void
+  }
+}
+
 /** Root sessions service: list store, current selection, object-layer manager, scope tree, bindings, and breadcrumb routes. */
 export class ClientSessions implements ISessions {
   /**
@@ -220,14 +231,14 @@ export class ClientSessions implements ISessions {
    */
   constructor(
     private readonly rootCtx: Context,
-    remote: SessionRemotes,
+    private readonly remote: SessionRemotes,
   ) {
     this.selection = createSnapshotStore<SessionSelection>(
       {},
       { persist: { name: 'dsh.sessions.current' } })
     const restored = this.selection.getSnapshot()
     this.manager = new SessionManager(
-      remote,
+      this.remote,
       restored.sessionId,
       restored.subagentAddress,
     )
@@ -269,6 +280,7 @@ export class ClientSessions implements ISessions {
    */
   open(id: SessionId): void {
     this.manager.select(id)
+    this.rootCtx.emit('sessions/navigated', id)
   }
 
   /**
@@ -277,6 +289,7 @@ export class ClientSessions implements ISessions {
    */
   openSubagent(address: SubagentAddress): void {
     this.manager.selectSubagent(address)
+    this.rootCtx.emit('sessions/navigated', address.childSessionId)
   }
 
   /**
@@ -315,6 +328,7 @@ export class ClientSessions implements ISessions {
    */
   clear(): void {
     this.manager.clearSelection()
+    this.rootCtx.emit('sessions/navigated', undefined)
   }
 
   /**
@@ -337,6 +351,32 @@ export class ClientSessions implements ISessions {
     signal: AbortSignal,
   ): Promise<RemoteResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>> {
     return this.manager.search(query, signal)
+  }
+
+  async directories(sessionId: SessionId): Promise<import('../../types.ts').SessionDirectories> {
+    const result = await this.remote.session.directories({ sessionId })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+
+  async replaceDirectories(
+    sessionId: SessionId,
+    additionalDirectories: readonly string[],
+  ): Promise<import('../../types.ts').SessionDirectories> {
+    const result = await this.remote.session.replaceDirectories({
+      sessionId,
+      additionalDirectories: [...additionalDirectories],
+    })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+
+  async delete(sessionId: SessionId): Promise<readonly SessionId[]> {
+    const result = await this.remote.session.delete({ sessionId })
+    if (!result.ok) throw new Error(result.error.message)
+    for (const deleted of result.value.sessionIds) this.manager.handleSessionRemoved(deleted)
+    this.projectList()
+    return result.value.sessionIds
   }
 
   /**
@@ -429,6 +469,7 @@ export class ClientSessions implements ISessions {
     sessionId: SessionId
     atSeq?: number
     increaseTitle?: boolean
+    placement?: 'sibling' | 'nested'
   }): Promise<SessionId> {
     const sourceTitle = opts.increaseTitle
       ? this.list.getSnapshot().byId[opts.sessionId]?.title
@@ -439,6 +480,7 @@ export class ClientSessions implements ISessions {
       // turn/start), so the host's first-turn/end-at-or-after cut still ends
       // on that turn — never clipped back to the previous one.
       ...(opts.atSeq === undefined ? {} : { atSeq: SessionSeq(Math.floor(opts.atSeq)) }),
+      ...(opts.placement === undefined ? {} : { placement: opts.placement }),
     })
     if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
     this.projectList()

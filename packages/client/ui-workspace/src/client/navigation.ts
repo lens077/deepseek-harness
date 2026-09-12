@@ -29,9 +29,10 @@ export interface UiWorkspace {
   /**
    * Fork a Session and open the child unless a later navigation supersedes it.
    * @param sessionId - source Session.
-   * @returns completion; a superseded request leaves its child available without selecting it.
+   * @param placement - sibling or nested Workspace placement.
+   * @returns the opened child id, or undefined when the fork failed or was superseded.
    */
-  forkSession(sessionId: SessionId): Promise<void>
+  forkSession(sessionId: SessionId, placement?: 'sibling' | 'nested'): Promise<SessionId | undefined>
   /**
    * Resolve the reusable or newly created blank Session for a Workspace.
    * @param workspaceId - target Workspace.
@@ -43,6 +44,11 @@ export interface UiWorkspace {
    * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
    */
   startSession(workspaceId?: WorkspaceId): void
+  /**
+   * Open the reusable or newly created blank Session outside every Workspace.
+   * @returns the opened Session; rejects when the Host refuses creation.
+   */
+  startScratchSession(): Promise<SessionId>
   /**
    * Archive a Session and clear it when it is the current selection.
    * @param sessionId - Session to archive.
@@ -90,6 +96,7 @@ export class DirectoryBrowseError extends Error {
 class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
   private readonly lifetime = new AbortController()
+  private connectingScratch: Promise<SessionId> | undefined
 
   /**
    * @param ctx - Client root Context.
@@ -145,10 +152,20 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     if (isCurrent()) this.openSession(sessionId)
   }
 
-  async forkSession(sessionId: SessionId): Promise<void> {
+  async forkSession(sessionId: SessionId, placement?: 'sibling' | 'nested'): Promise<SessionId | undefined> {
     const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
-    const childId = await this.sessions.fork({ sessionId, increaseTitle: true })
-    if (!navigation.aborted) this.openSession(childId)
+    try {
+      const childId = await this.sessions.fork({
+        sessionId,
+        increaseTitle: true,
+        ...(placement === undefined ? {} : { placement }),
+      })
+      if (navigation.aborted) return undefined
+      this.openSession(childId)
+      return childId
+    } catch {
+      return undefined
+    }
   }
 
   startSession(workspaceId?: WorkspaceId): void {
@@ -172,6 +189,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     )
   }
 
+  async startScratchSession(): Promise<SessionId> {
+    const sessionId = await this.connectScratch()
+    this.sessions.open(sessionId)
+    return sessionId
+  }
+
   async archiveSession(sessionId: SessionId): Promise<void> {
     await this.workspaces.archiveSession(sessionId)
   }
@@ -192,6 +215,26 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const result = await this.directoryPicker.createDirectory(path, name)
     if (!result.ok) throw new DirectoryBrowseError(result.error)
     return result.value
+  }
+
+  /**
+   * Resolve the reusable or newly created blank Session that no Workspace
+   * accounts for; concurrent calls share one creation.
+   */
+  private connectScratch(): Promise<SessionId> {
+    if (this.connectingScratch !== undefined) return this.connectingScratch
+    const { items, archivedSessionIds } = this.workspaces.list.getSnapshot()
+    const sessions = this.sessions.list.getSnapshot()
+    for (const id of sessions.ids) {
+      const summary = sessions.byId[id]
+      if (summary !== undefined && summary.blank
+        && !archivedSessionIds.includes(summary.id)
+        && !items.some(workspace => workspace.sessionIds.includes(summary.id))) return Promise.resolve(summary.id)
+    }
+    const attempt = this.sessions.create()
+      .finally(() => { this.connectingScratch = undefined })
+    this.connectingScratch = attempt
+    return attempt
   }
 
   private watchNavigation(): () => void {

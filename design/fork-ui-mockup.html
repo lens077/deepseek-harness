@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>DSH 分叉双模式 · 产物模拟截图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #eef0f3; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #1c1c1f;
+    padding: 28px 32px;
+  }
+  .stage { display: flex; gap: 28px; align-items: flex-start; }
+  .caption {
+    font-size: 13px; color: #7a7a82; margin: 0 0 10px 4px; letter-spacing: .2px;
+  }
+  .caption b { color: #3d3d44; font-weight: 600; }
+  .shot {
+    background: #fff; border: 1px solid #e3e4e8; border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(20,22,30,.07);
+    overflow: hidden; position: relative;
+  }
+  .panelA { width: 800px; height: 560px; }
+  .panelB { width: 560px; height: 560px; }
+
+  /* ---------- sidebar ---------- */
+  .sidebar { width: 332px; height: 100%; background: #fff; padding: 14px 10px; border-right: 1px solid #ececef; }
+  .row {
+    display: flex; align-items: center; gap: 9px;
+    height: 42px; padding: 0 10px; border-radius: 10px;
+    font-size: 15px; color: #26262b; position: relative;
+  }
+  .row .time { margin-left: auto; font-size: 12.5px; color: #a5a5ac; flex: none; }
+  .row.selected { background: #ececf0; }
+  .row.child-selected { background: #ececf0; }
+  .folder { font-weight: 500; color: #1f1f24; }
+  .icon { flex: none; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
+  .icon svg { display: block; }
+  .grip { flex: none; width: 14px; height: 16px; display: grid; grid-template-columns: 4px 4px; grid-template-rows: 4px 4px 4px; gap: 2px 3px; align-content: center; }
+  .grip i { width: 3px; height: 3px; border-radius: 50%; background: #9fb2d8; }
+  .dots { margin-left: auto; flex: none; color: #6f6f76; font-size: 16px; letter-spacing: 1.5px; padding: 0 2px; }
+  .title-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* nested tree */
+  .parent-row .chev { flex: none; width: 14px; height: 14px; color: #8a8a91; }
+  .count {
+    flex: none; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px;
+    background: #ececf0; color: #6f6f76; font-size: 11.5px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .children { position: relative; margin-left: 24px; }
+  .children::before {
+    content: ""; position: absolute; left: -6px; top: 4px; bottom: 4px; width: 1.5px; background: #e4e4e9; border-radius: 1px;
+  }
+  .children .row { height: 38px; font-size: 14.5px; padding-left: 8px; }
+
+  /* ---------- context menu ---------- */
+  .menu {
+    position: absolute; width: 196px; background: #fff; border-radius: 14px;
+    border: 1px solid #ebebee;
+    box-shadow: 0 12px 36px rgba(18,20,28,.16), 0 2px 8px rgba(18,20,28,.06);
+    padding: 7px; z-index: 5;
+  }
+  .menu .item {
+    display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 11px;
+    border-radius: 9px; font-size: 15px; color: #222227;
+  }
+  .menu .item .icon { color: #5c5c64; }
+  .menu .item.active { background: #f1f2f4; }
+  .menu .item .sub-arrow { margin-left: auto; color: #a8a8af; }
+
+  .submenu {
+    position: absolute; width: 288px; background: #fff; border-radius: 14px;
+    border: 1px solid #ebebee;
+    box-shadow: 0 12px 36px rgba(18,20,28,.16), 0 2px 8px rgba(18,20,28,.06);
+    padding: 7px; z-index: 6;
+  }
+  .submenu .opt { display: flex; gap: 11px; padding: 10px 11px 9px; border-radius: 10px; align-items: flex-start; }
+  .submenu .opt .icon { color: #5c5c64; margin-top: 2px; }
+  .submenu .opt.hover { background: #eef4ff; }
+  .opt .txt { flex: 1; min-width: 0; }
+  .opt .t1 { font-size: 14.5px; color: #1f1f24; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .opt .t2 { font-size: 12px; color: #93939b; margin-top: 3px; line-height: 1.45; }
+  .tag { flex: none; font-size: 10.5px; font-weight: 600; padding: 1.5px 6px; border-radius: 6px; }
+  .tag.gray { background: #f0f0f3; color: #85858d; }
+  .tag.blue { background: #e3edff; color: #2f6fed; }
+
+  /* main-content hint (right of sidebar) */
+  .content-hint { position: absolute; left: 332px; top: 0; right: 0; bottom: 0; background: #fbfbfc; }
+  .content-hint .bar { height: 13px; border-radius: 7px; background: #f0f0f3; margin: 0 26px; }
+
+  /* ---------- annotations ---------- */
+  .ann {
+    position: absolute; font-size: 12px; font-weight: 600; letter-spacing: .2px;
+    padding: 4px 9px; border-radius: 8px; z-index: 4; white-space: nowrap;
+  }
+  .ann.a2 { background: #e3edff; color: #2f6fed; }
+  .ann.a1 { background: #f0f0f3; color: #6f6f76; }
+  .ann-line { position: absolute; z-index: 3; }
+  .ann-line.h { height: 1.5px; }
+  .ann-line.v { width: 1.5px; }
+  .ann-line.blue { background: #b9d1ff; }
+  .ann-line.gray { background: #d9d9df; }
+</style>
+</head>
+<body>
+  <div class="stage">
+
+    <!-- ================= PANEL A ================= -->
+    <div>
+      <p class="caption"><b>第 1 步</b> · 点击「分叉会话」出现两个选项</p>
+      <div class="shot panelA">
+        <div class="sidebar">
+          <div class="row folder">
+            <span class="icon"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M2.5 5.8c0-1 .8-1.8 1.8-1.8h3l1.6 1.7h6.8c1 0 1.8.8 1.8 1.8v6.7c0 1-.8 1.8-1.8 1.8H4.3c-1 0-1.8-.8-1.8-1.8V5.8z" stroke="#3f3f46" stroke-width="1.5"/></svg></span>
+            <span>ToDo</span>
+          </div>
+          <div class="row selected">
+            <span class="grip"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="title-ellipsis">AI时代Todo工具调研与设计 (1)</span>
+            <span class="dots">···</span>
+          </div>
+          <div class="row folder">
+            <span class="icon"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M2.5 5.8c0-1 .8-1.8 1.8-1.8h3l1.6 1.7h6.8c1 0 1.8.8 1.8 1.8v6.7c0 1-.8 1.8-1.8 1.8H4.3c-1 0-1.8-.8-1.8-1.8V5.8z" stroke="#3f3f46" stroke-width="1.5"/></svg></span>
+            <span>control-tower</span>
+          </div>
+          <div class="row" style="padding-left:40px;">
+            <span class="title-ellipsis">收尾并核查部署遗留项</span>
+            <span class="time">1小时</span>
+          </div>
+          <div class="row folder">
+            <span class="icon"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M2.5 5.8c0-1 .8-1.8 1.8-1.8h3l1.6 1.7h6.8c1 0 1.8.8 1.8 1.8v6.7c0 1-.8 1.8-1.8 1.8H4.3c-1 0-1.8-.8-1.8-1.8V5.8z" stroke="#3f3f46" stroke-width="1.5"/></svg></span>
+            <span>cat</span>
+          </div>
+          <div class="row">
+            <span class="grip" style="visibility:hidden"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="title-ellipsis">DSH 对话钩子与 ntfy 通知 …</span>
+            <span class="time">2小时</span>
+          </div>
+        </div>
+        <div class="content-hint"></div>
+
+        <!-- context menu -->
+        <div class="menu" style="left: 300px; top: 92px;">
+          <div class="item">
+            <span class="icon"><svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M13.6 3.6a1.9 1.9 0 0 1 2.7 2.7l-8.8 8.8-3.6.9.9-3.6 8.8-8.8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+            <span>重命名</span>
+          </div>
+          <div class="item active">
+            <span class="icon"><svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M4 4v7.2c0 1.5 1.2 2.8 2.8 2.8H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 11l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="4" r="1.7" fill="currentColor"/></svg></span>
+            <span>分叉会话</span>
+            <span class="sub-arrow"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </div>
+          <div class="item">
+            <span class="icon"><svg width="17" height="17" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="4" rx="1.2" stroke="currentColor" stroke-width="1.5"/><path d="M4.5 8v6.3c0 1 .8 1.7 1.7 1.7h7.6c1 0 1.7-.8 1.7-1.7V8" stroke="currentColor" stroke-width="1.5"/><path d="M8.2 11h3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            <span>归档会话</span>
+          </div>
+        </div>
+
+        <!-- submenu -->
+        <div class="submenu" style="left: 486px; top: 134px;">
+          <div class="opt">
+            <span class="icon"><svg width="17" height="17" viewBox="0 0 20 20" fill="none"><rect x="7" y="7" width="9.5" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M13 3.5H5.5a2 2 0 0 0-2 2V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            <div class="txt">
+              <div class="t1">复制为平级会话 <span class="tag gray">当前默认</span></div>
+              <div class="t2">复制整段对话，在同一工作区新开标签</div>
+            </div>
+          </div>
+          <div class="opt hover">
+            <span class="icon" style="color:#2f6fed"><svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M5 3.5v9c0 1.2.9 2 2 2h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5 8.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="11.5" y="6.3" width="5.5" height="4.4" rx="1.3" stroke="currentColor" stroke-width="1.5"/><rect x="11.5" y="12.3" width="5.5" height="4.4" rx="1.3" stroke="currentColor" stroke-width="1.5"/></svg></span>
+            <div class="txt">
+              <div class="t1" style="color:#2456c8">新建嵌套子会话 <span class="tag blue">新</span></div>
+              <div class="t2">挂在当前会话之下，继承全部对话内容</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PANEL B ================= -->
+    <div>
+      <p class="caption"><b>第 2 步</b> · 选「新建嵌套子会话」后的会话树</p>
+      <div class="shot panelB">
+        <div class="sidebar">
+          <div class="row folder">
+            <span class="icon"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M2.5 5.8c0-1 .8-1.8 1.8-1.8h3l1.6 1.7h6.8c1 0 1.8.8 1.8 1.8v6.7c0 1-.8 1.8-1.8 1.8H4.3c-1 0-1.8-.8-1.8-1.8V5.8z" stroke="#3f3f46" stroke-width="1.5"/></svg></span>
+            <span>ToDo</span>
+          </div>
+
+          <!-- parent session, now expandable -->
+          <div class="row parent-row">
+            <span class="chev"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 5.2L7 8.7l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="title-ellipsis">AI时代Todo工具调研与设计</span>
+            <span class="count">3</span>
+          </div>
+          <div class="children">
+            <div class="row child-selected">
+              <span class="title-ellipsis">方案A · 本地优先</span>
+              <span class="time">刚刚</span>
+            </div>
+            <div class="row">
+              <span class="title-ellipsis">方案B · AI 整理</span>
+              <span class="time">2分钟</span>
+            </div>
+            <div class="row">
+              <span class="title-ellipsis">方案C · 语音速记</span>
+              <span class="time">8分钟</span>
+            </div>
+          </div>
+
+          <!-- sibling copy from mode 1 -->
+          <div class="row">
+            <span class="grip" style="visibility:hidden"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="title-ellipsis">AI时代Todo工具调研与设计 (1)</span>
+            <span class="time">5分钟</span>
+          </div>
+
+          <div class="row folder">
+            <span class="icon"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M2.5 5.8c0-1 .8-1.8 1.8-1.8h3l1.6 1.7h6.8c1 0 1.8.8 1.8 1.8v6.7c0 1-.8 1.8-1.8 1.8H4.3c-1 0-1.8-.8-1.8-1.8V5.8z" stroke="#3f3f46" stroke-width="1.5"/></svg></span>
+            <span>control-tower</span>
+          </div>
+          <div class="row" style="padding-left:40px;">
+            <span class="title-ellipsis">收尾并核查部署遗留项</span>
+            <span class="time">1小时</span>
+          </div>
+        </div>
+        <div class="content-hint"></div>
+
+        <!-- annotations -->
+        <div class="ann a2" style="left: 384px; top: 142px;">模式② 嵌套子会话</div>
+        <div class="ann-line blue h" style="left: 334px; top: 102px; width: 6px;"></div>
+        <div class="ann-line blue v" style="left: 340px; top: 102px; height: 106px;"></div>
+        <div class="ann-line blue h" style="left: 334px; top: 206px; width: 6px;"></div>
+        <div class="ann-line blue h" style="left: 340px; top: 154px; width: 40px;"></div>
+
+        <div class="ann a1" style="left: 384px; top: 222px;">模式① 平级副本</div>
+        <div class="ann-line gray h" style="left: 334px; top: 232px; width: 46px;"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

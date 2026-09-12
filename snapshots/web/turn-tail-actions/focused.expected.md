@@ -1,15 +1,24 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Begin your reply with the" [disabled]
-  - img
-  - text: Standard mode
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
+- button "Back to bottom" [disabled]:
+  - img
 - button "System prompt":
   - img
   - img
@@ -34,6 +43,9 @@
   - img
   - text: Bash Print alpha to stdout
 - paragraph: DONE
+- 'button "Answering: Begin your reply with the plain sentence \"Reading the workspace now.\" as text, and in that same message call the bash tool with the command \"echo alpha\". After the tool result, reply with the single word DONE and stop. — Jump to this question"':
+  - img
+  - text: "Answering #1 Begin your reply with the plain sentence \"Reading the workspace now.\" as text, and in that same message call the bash tool with the command \"echo alpha\". After the tool result, reply with the single word DONE and stop."
 - button "Copy":
   - img
 - button "Good response":
@@ -50,9 +62,13 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- img
+- text: Standard mode
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

@@ -22,6 +22,8 @@ tmp/
 .claude/commands/
 .claude/launch.json
 .claude/settings.json
+.claude/settings.local.json
+.claude/handoffs/
 .vscode/
 .DS_Store
 .idea
@@ -38,6 +40,7 @@ apps/web/dist/
 .artifacts/
 .dsh-build/
 .playwright-mcp/
+.playwright-cli/
 .orig
 .worktrees/
 worktrees/

@@ -17,27 +17,52 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
+  InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { MobileAppearance } from '@deepseek-ai/dsh-client-ui-theme/client'
+import { computeColumns, MOBILE_BREAKPOINT, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
+import type { MobileView } from './index.ts'
 import css from './AppFrame.module.css'
+
+/** Frame-private observable for the browser-title attention count. */
+export interface AppFrameInjected {
+  hooks: {
+    badge: ObservableSnapshot<number>
+    mobileAppearance: ObservableSnapshot<MobileAppearance>
+  }
+}
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay' | 'center.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
+  & InjectFace<AppFrameInjected>
 
-/** Center column grid item (session-body building block). */
-function CenterColumn(props: { children?: ReactNode }) {
-  return <div className={css.centerCol}>{props.children}</div>
+/**
+ * Center column grid item (session-body building block). `overlay` renders
+ * above the conversation inside the same grid cell; entries that render
+ * nothing leave the conversation untouched.
+ */
+function CenterColumn(props: { children?: ReactNode; overlay?: ReactNode; inactive?: boolean }) {
+  return (
+    <div className={css.centerCol}>
+      <div className={css.conversationLayer} {...(props.inactive ? { inert: '' } : {})} aria-hidden={props.inactive || undefined}>{props.children}</div>
+      <div className={css.centerOverlay}>{props.overlay}</div>
+    </div>
+  )
 }
 
 /** Subscribe to the main key without subscribing the column frame to each panel id. */
-function MainPanel({ usePanelInfo, renderSlot }: Pick<PropsRuntime<'root'>, 'usePanelInfo'> & PropsRenderSlots<'main'>) {
+type PanelInfoHook = NonNullable<PropsRuntime<'root'>['usePanelInfo']>
+
+const defaultPanelInfo: PanelInfoHook = selector => selector({ activePanelId: null })
+
+function MainPanel({ usePanelInfo, renderSlot }: { usePanelInfo: PanelInfoHook } & PropsRenderSlots<'main'>) {
   const panelId = usePanelInfo(info => info.activePanelId)
   return renderSlot('main', {}, { entryKey: panelId ?? 'conversation' })
 }
@@ -122,13 +147,37 @@ export function AppFrame({
   useStore,
   useSessions,
   usePanelInfo,
+  useBadge,
+  useMobileAppearance,
   actions,
   renderSlot,
   t,
 }: AppFrameProps) {
+  const panelInfo = usePanelInfo
   const layoutInfo = useStore(state => state.layoutInfo)
+  const appearance = useMobileAppearance(value => value)
+  const badge = useBadge(value => value)
+  const running = useSessions(s => s.ids.filter(id => s.byId[id]?.running === true).length)
+  const documentTitle = useSessions((s) => {
+    const current = s.current
+    return current === undefined ? undefined : s.byId[current]?.title
+  })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const viewport = layoutInfo.viewportWidth
+  // Phone presentation: one full-width surface between the header and the
+  // bottom navigation. The right Sidebar derives its own fullscreen below the
+  // same breakpoint, so the right track needs no phone geometry here.
+  const [mobileView, navigateMobile] = useState<MobileView>('overview')
+  const mobile = viewport < MOBILE_BREAKPOINT
+  const mobileNavigation = mobile ? { mobileView, navigateMobile } : {}
+  const currentSession = useSessions(s => s.current)
+  const previousSession = useRef(currentSession)
+  useEffect(() => {
+    if (previousSession.current === currentSession) return
+    const hadSelection = previousSession.current !== undefined
+    previousSession.current = currentSession
+    if (hadSelection) navigateMobile(view => view === 'new' ? 'new' : 'conversation')
+  }, [currentSession])
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useLayoutEffect(() => {
@@ -192,11 +241,12 @@ export function AppFrame({
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
   const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
-    width: cols.sidebar,
-  }), [renderSlot, sidebarCollapsed, cols.sidebar])
+    width: mobile ? viewport : cols.sidebar,
+    ...mobileNavigation,
+  }), [renderSlot, sidebarCollapsed, mobile, viewport, cols.sidebar, mobileView])
   const main = useMemo(() => (
-    <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
-  ), [usePanelInfo, renderSlot])
+    <MainPanel usePanelInfo={panelInfo} renderSlot={renderSlot} />
+  ), [panelInfo, renderSlot])
   const overlays = useMemo(() => renderSlot('shell.overlay', {}), [renderSlot])
 
   return (
@@ -206,7 +256,11 @@ export function AppFrame({
       style={{
         gridTemplateColumns:
           `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,
+        ...(mobile ? { '--dsh-mobile-font-size': `${appearance.mobileFontSize}px` } : {}),
       }}
+      data-mobile={mobile || undefined}
+      data-mobile-layout={mobile ? appearance.mobileLayout : undefined}
+      data-mobile-view={mobile ? mobileView : undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}
       data-rightbar-fullscreen={layoutInfo.rightbarFullscreen || undefined}
@@ -216,13 +270,21 @@ export function AppFrame({
       <DocumentTitle
         productTitle={productTitle}
         useSessions={useSessions}
-        usePanelInfo={usePanelInfo}
+        usePanelInfo={panelInfo}
+        badge={badge}
+        running={running}
+        {...documentTitle === undefined ? {} : { title: documentTitle }}
       />
       <div className={css.sidebarCol}>
         {sidebar}
       </div>
       <>
-        <CenterColumn>{main}</CenterColumn>
+        <CenterColumn
+          inactive={mobile && mobileView !== 'conversation' && mobileView !== 'new'}
+          overlay={renderSlot('center.overlay', mobileNavigation)}
+        >
+          {main}
+        </CenterColumn>
         <RightbarColumn>
           {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
         </RightbarColumn>
@@ -231,8 +293,8 @@ export function AppFrame({
         {overlays}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
-      {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
+      {!mobile && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!mobile && layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
         <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
       )}
     </div>

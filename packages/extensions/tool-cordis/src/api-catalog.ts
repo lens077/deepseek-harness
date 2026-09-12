@@ -516,6 +516,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['the signal reason when aborted, or a storage error when verification fails.'],
       },
       {
+        signature: 'async imageAvailable(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<boolean>',
+        description: 'Report whether the stored object behind one durable image reference still exists. A session log outlives its attachment objects when the harness home is deleted, so request assembly asks this before it reads image bytes and degrades an absent object to model-visible text instead of failing the request. Backends without a cheaper existence probe keep this default, which reads and verifies the object.',
+        parameters: [{ name: 'ref', description: 'durable reference from the session log.' }, { name: 'signal', description: 'optional cancellation for the backend probe.' }],
+        returns: 'false only when the object is absent; verification and storage failures are thrown.',
+      },
+      {
         signature: 'imageHostPath(ref: ImageAttachmentRef): string | undefined',
         description: 'Locate the provider-owned normalized object in the harness host filesystem.',
         parameters: [{ name: 'ref', description: 'durable normalized attachment reference.' }],
@@ -1342,6 +1348,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'modelRouter',
+    summary: 'Abstract prompt-driven route selection.',
+    description: 'Abstract prompt-driven route selection. Load one implementation per context as `ctx.modelRouter`. Implementations are pure decision functions: they never validate a route against the live LLM registry, never mutate the session, and answer with the baseline when nothing applies.\n\nMounting any implementation serves the `model-routing` settings section while a settings provider is present; its `enabled` switch lets a person stop routing without unmounting the provider, and consumers read it through ModelRouter.enabled before every prompt.',
+    methods: [
+      {
+        signature: 'enabled(): boolean',
+        description: 'Whether the person left routing on. Without a settings provider the answer is always true.',
+        parameters: [],
+        returns: 'the current `model-routing.enabled` value.',
+      },
+      {
+        signature: 'abstract route(input: ModelRouteInput): Promise<ModelRouteDecision>',
+        description: 'Propose the route for the prompt about to be queued. The call sits in the prompt\'s admission path, so an implementation that performs I/O must bound its own latency.',
+        parameters: [{ name: 'input', description: 'the owner\'s baseline route and the prompt to classify.' }],
+        returns: 'the proposed route with its justification; the baseline when no rule applies.',
+        throws: ['when classification fails; the consumer keeps the baseline and records the failure.'],
+      },
+    ],
+  },
+  {
     key: 'permissionPresets',
     summary: 'Owns the deployment\'s permission presets and their write path.',
     description: 'Owns the deployment\'s permission presets and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
@@ -1399,6 +1425,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'projectTodos',
+    summary: 'Scanner service.',
+    description: 'Scanner service. Scans are serialized; a request landing during a scan queues exactly one more, so a burst of file events yields one rescan.',
+    methods: [
+      {
+        signature: '@Remote(\'get\') get(): ProjectTodosSnapshot',
+        description: 'Read the last scan result.',
+        parameters: [],
+        returns: 'the complete snapshot; empty before the first scan finishes.',
+      },
+      {
+        signature: '@Remote(\'rescan\') rescan(): Promise<ProjectTodosSnapshot>',
+        description: 'Scan again now, ahead of any pending file-event rescan.',
+        parameters: [],
+        returns: 'the fresh snapshot.',
+      },
+      {
+        signature: '@Remote(\'readDocument\') async readDocument(request: ProjectTodoReadRequest): Promise<ProjectTodoReadResult>',
+        description: 'Read the text of one document the current snapshot lists. Any other path is refused: the snapshot is the whole set of files a browser may read through this service.',
+        parameters: [{ name: 'request', description: 'the listed document path.' }],
+        returns: 'the document, or an explicit refusal or read failure.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -1414,7 +1465,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'sandboxPolicy',
     summary: 'The sandbox-policy service (`ctx.sandboxPolicy`).',
-    description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log and immutable cwd travel together to every enforcing capability.',
+    description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback primary root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log, immutable cwd, and directory snapshot travel together to every enforcing capability.',
     methods: [
       {
         signature: 'readonly defaultMode: SandboxMode',
@@ -1428,9 +1479,21 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd remains the primary workspace root; the latest `session/directories` snapshot extends only the writable allowlist. The configured root is the fallback for agentless calls and sessions without a cwd.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
-        returns: 'the fully resolved per-call mode and absolute workspace root.',
+        returns: 'the fully resolved per-call mode and ordered canonical roots.',
+      },
+      {
+        signature: 'additionalDirectoriesOf(session: Session): readonly string[]',
+        description: 'Read the session\'s durable additional-directory list.',
+        parameters: [{ name: 'session', description: 'session whose log supplies the latest snapshot.' }],
+        returns: 'the immutable canonical list, empty without a snapshot.',
+      },
+      {
+        signature: 'setAdditionalDirectories(session: Session, directories: readonly string[]): readonly string[]',
+        description: 'Replace one session\'s additional writable directories. Paths must be absolute existing directories; aliases of the primary root or an earlier entry are removed before the whole-list event commits.',
+        parameters: [{ name: 'session', description: 'owning session.' }, { name: 'directories', description: 'complete requested additional-directory list.' }],
+        returns: 'the committed canonical list.',
       },
       {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
@@ -1468,6 +1531,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Search visible Session content without resuming an Agent.',
         parameters: [{ name: 'request', description: 'literal message-content query.' }, { name: 'signal', description: 'cancellation for list and search reads.' }],
         returns: 'authorized bounded Session search results.',
+      },
+      {
+        signature: '@Remote(\'directories\') async directories(request: SessionDirectoriesRequest): Promise<SessionDirectories>',
+        description: 'Read one Session\'s canonical writable-root list.',
+        parameters: [{ name: 'request', description: 'target Session.' }],
+        returns: 'immutable primary directory and additional roots.',
+      },
+      {
+        signature: '@Remote(\'replaceDirectories\') async replaceDirectories(request: SessionReplaceDirectoriesRequest): Promise<SessionDirectories>',
+        description: 'Replace one Session\'s complete additional writable-root list.',
+        parameters: [{ name: 'request', description: 'target Session and complete requested list.' }],
+        returns: 'the canonical accepted list.',
+      },
+      {
+        signature: '@Remote(\'delete\') async delete(request: SessionDeleteRequest): Promise<SessionDeleteValue>',
+        description: 'Permanently remove one Session and its complete lineage.',
+        parameters: [{ name: 'request', description: 'root Session to delete.' }],
+        returns: 'child-first removed identities.',
+      },
+      {
+        signature: '@Remote(\'searchQuestions\') async searchQuestions( request: SessionQuestionSearchRequest, signal: AbortSignal, ): Promise<SessionQuestionSearchValue>',
+        description: 'Search all current user questions in one readable Session.',
+        parameters: [{ name: 'request', description: 'Session identity and literal question text query.' }, { name: 'signal', description: 'cancellation for authorization and provider work.' }],
+        returns: 'bounded hits plus whether the page is complete.',
       },
       {
         signature: '@Remote(\'create\') create(request: SessionCreateRequest): Promise<SessionCreateValue>',
@@ -1589,6 +1676,67 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'sessionInbox',
+    summary: 'Storage-domain sidecar service.',
+    description: 'Storage-domain sidecar service. It never reads a Session log: a mark on a Session that no longer exists is harmless and is filtered by the consumer that joins marks with the live Session list.',
+    methods: [
+      {
+        signature: '@Remote(\'get\') get(): InboxSnapshot',
+        description: 'Read the complete inbox state.',
+        parameters: [],
+        returns: 'every Session mark and todo plus the review boundary.',
+      },
+      {
+        signature: '@Remote(\'markSeen\') markSeen(request: InboxMarkSeenRequest): Promise<InboxSnapshot>',
+        description: 'Raise a Session\'s seen mark to `seq`. A lower or equal seq changes nothing and emits nothing.',
+        parameters: [{ name: 'request', description: 'Session and the highest seq the user had on screen.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'setHandled\') setHandled(request: InboxSetHandledRequest): Promise<InboxSnapshot>',
+        description: 'Mark or clear a Session as dealt with.',
+        parameters: [{ name: 'request', description: 'Session and the desired handled state.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'snooze\') snooze(request: InboxSnoozeRequest): Promise<InboxSnoozeResult>',
+        description: 'Hide a Session until a future time, or clear its snooze.',
+        parameters: [{ name: 'request', description: 'Session and the epoch-ms time to resurface it, or `null`.' }],
+        returns: 'the complete state, or `snooze-in-past` for a time not after now.',
+      },
+      {
+        signature: '@Remote(\'setPinned\') setPinned(request: InboxSetPinnedRequest): Promise<InboxSnapshot>',
+        description: 'Pin or unpin a Session.',
+        parameters: [{ name: 'request', description: 'Session and the desired pinned state.' }],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'markReviewed\') markReviewed(): Promise<InboxSnapshot>',
+        description: 'Record that the user reviewed the inbox now. The next "since you left" window starts here.',
+        parameters: [],
+        returns: 'the complete state after the change.',
+      },
+      {
+        signature: '@Remote(\'addTodo\') addTodo(request: InboxAddTodoRequest): Promise<InboxTodoResult>',
+        description: 'Create one todo.',
+        parameters: [{ name: 'request', description: 'target Session, optional question seq, and text.' }],
+        returns: 'the complete state, or an explicit text failure.',
+      },
+      {
+        signature: '@Remote(\'updateTodo\') updateTodo(request: InboxUpdateTodoRequest): Promise<InboxTodoResult>',
+        description: 'Change a todo\'s text or status. A request that changes nothing is a successful no-op.',
+        parameters: [{ name: 'request', description: 'todo id and the fields to replace.' }],
+        returns: 'the complete state, or an explicit failure.',
+      },
+      {
+        signature: '@Remote(\'removeTodo\') removeTodo(request: InboxRemoveTodoRequest): Promise<InboxSnapshot>',
+        description: 'Delete one todo. An absent id is a successful no-op.',
+        parameters: [{ name: 'request', description: 'todo id.' }],
+        returns: 'the complete state after the change.',
+      },
+    ],
+  },
+  {
     key: 'sessionPersistence',
     summary: 'Durable append-only session storage addressed through per-session handles.',
     description: 'Durable append-only session storage addressed through per-session handles.\n\nStorage semantics shared by every backend: events are contiguous from seq 0 and never rewritten; a torn physical tail is never returned to a reader and is truncated by the write path before its first append; reads validate current-format records only and refuse unknown vocabulary fail-closed. `append` persists best-effort; `flush` — per handle or service-wide — is the durability barrier.\n\nVisibility: a created session is observable through `stat`/`list`/`open` in this process from the moment `create` resolves, even while a backend defers physical materialization (a pure optimization); other processes see the session only once it materializes, and a session that never materialized before a crash never existed. `SessionHandle.flush` forces materialization.\n\nFreshness: once an `append` or `flush` resolves, reads started afterwards on this backend instance observe at least that prefix.',
@@ -1606,6 +1754,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'id', description: 'the stored session to open.' }, { name: 'access', description: '`read` or `write`.' }, { name: 'options', description: 'optional cancellation.' }],
         returns: 'the open handle.',
         throws: ['{SessionPersistenceNotFoundError} when the session does not exist.', '{SessionAlreadyOwnedError} for `write` when ownership is taken.'],
+      },
+      {
+        signature: 'abstract delete(id: SessionId): Promise<boolean>',
+        description: 'Permanently delete one Session\'s stored data while holding write ownership. Active writers reject deletion. The operation is not cancellable after admission.',
+        parameters: [{ name: 'id', description: 'Session whose data is removed.' }],
+        returns: 'whether stored data existed and was removed.',
+        throws: ['{SessionAlreadyOwnedError} while a write handle owns the Session.'],
       },
       {
         signature: 'abstract flush(): Promise<void>',
@@ -2909,6 +3064,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete resulting archive set.',
       },
       {
+        signature: '@Remote(\'archiveSessions\') archiveSessions(request: WorkspaceArchiveSessionsRequest): Promise<WorkspaceArchiveValue>',
+        description: 'Archive several known Sessions in one durable mutation.',
+        parameters: [{ name: 'request', description: 'distinct Session identities to archive.' }],
+        returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'unarchiveSession\') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>',
+        description: 'Remove one Session from the durable archive set.',
+        parameters: [{ name: 'request', description: 'Session identity to unarchive.' }],
+        returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'setSessionMembership\') setSessionMembership(request: WorkspaceSetSessionMembershipRequest): Promise<WorkspaceValue>',
+        description: 'Add or remove several Sessions from one Workspace account.',
+        parameters: [{ name: 'request', description: 'Workspace, Session identities, and desired membership.' }],
+        returns: 'the updated Workspace projection.',
+      },
+      {
         signature: '@Remote({ mode: \'stream\' }) follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>',
         description: 'Stream a complete Workspace baseline followed by ordered increments.',
         parameters: [{ name: 'signal', description: 'generation cancellation.' }],
@@ -3001,10 +3174,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete committed workspace order.',
       },
       {
+        signature: 'deleteSession( sessionId: SessionId, retire?: RetireSessionsForDelete, ): Promise<readonly SessionId[]>',
+        description: 'Permanently delete a stored Session and every transitive fork/subagent descendant, child first. Live targets reject unless the caller supplies an exact disposer capability; the registry reserves the full subtree before invoking it, then requires every target to leave the live store. The durable marker makes physical deletion, Workspace account pruning, archive cleanup, and index cleanup restartable.',
+        parameters: [{ name: 'sessionId', description: 'Root identity whose complete lineage subtree is removed.' }, { name: 'retire', description: 'Optional exact capability that may retire the reported live subset.' }],
+        returns: 'the deterministic child-first deleted ids.',
+      },
+      {
         signature: 'archiveSession(sessionId: SessionId): Promise<void>',
         description: 'Archive one session durably. The session must exist (live or in session persistence); its workspace accounting — or lack of one — is irrelevant. An already archived id resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to archive.' }],
         returns: 'resolution after durability.',
+      },
+      {
+        signature: 'archiveSessions(sessionIds: readonly SessionId[]): Promise<void>',
+        description: 'Archive several sessions in one registry-state write. Every id is validated before mutation, so an unknown Session rejects the complete selection.',
+        parameters: [{ name: 'sessionIds', description: 'Sessions to add to the archive set.' }],
+        returns: 'resolution after durability.',
+      },
+      {
+        signature: 'unarchiveSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one session from the archive set durably. An id outside the set resolves without writing, including an unknown id: archive membership is the operation\'s authority, so stale entries always remain clearable.',
+        parameters: [{ name: 'sessionId', description: 'The session to unarchive.' }],
+        returns: 'resolution after durability, or immediately for an absent id.',
       },
       {
         signature: 'async resolveByPath(path: string): Promise<Workspace | undefined>',
@@ -3339,11 +3530,27 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; their messages already obey the immutable creation contract.' }],
   },
   {
+    name: 'project-todos/changed',
+    mode: 'emit',
+    signature: '\'project-todos/changed\'(snapshot: ProjectTodosSnapshot): void',
+    summary: 'A scan finished with a result that differs from the previous one: a document changed, appeared, or disappeared, or the settings moved.',
+    description: 'A scan finished with a result that differs from the previous one: a document changed, appeared, or disappeared, or the settings moved. The payload is the complete snapshot, the same value `get` serves.',
+    parameters: [{ name: 'snapshot', description: 'the complete scan result.' }],
+  },
+  {
+    name: 'session-inbox/changed',
+    mode: 'emit',
+    signature: '\'session-inbox/changed\'(snapshot: InboxSnapshot): void',
+    summary: 'The durable inbox state changed through any mutation.',
+    description: 'The durable inbox state changed through any mutation. Carries the complete snapshot so a consumer replaces its copy instead of merging.',
+    parameters: [{ name: 'snapshot', description: 'the complete inbox state after the change.' }],
+  },
+  {
     name: 'session-telemetry/record',
     mode: 'waterfall',
     signature: '\'session-telemetry/record\'(record: SessionTelemetryRecord, next: () => SessionTelemetryRecord): SessionTelemetryRecord',
     summary: 'Transform one outbound record before it reaches the backend.',
-    description: 'Transform one outbound record before it reaches the backend. This waterfall is the Service Definition\'s redaction extension point. It ships NO rules of its own: the innermost `next()` passes the record through unchanged, and with no listener mounted records reach the backend as captured, so exported data is exactly as clean as the rules a deployment mounts. Listeners stack by transforming `next()`\'s return value; returning without `next()` replaces everything beneath. Dispatched synchronously on the capture hot path inside the coordinator\'s containment: a throwing listener withholds that one record (fail-closed) and never reaches the agent loop. Live capture dispatches at append time; on-demand capture dispatches while reading the canonical log. Redaction applies to the exported copy only; the canonical session log is never rewritten.',
+    description: 'Transform one outbound record before it reaches the backend. This waterfall is the Service Definition\'s redaction extension point. It ships NO rules of its own: the innermost `next()` passes the record through unchanged, and with no listener mounted records reach the backend as captured. A backend may impose an additional output floor after this seam. Listeners stack by transforming `next()`\'s return value; returning without `next()` replaces everything beneath. Dispatched synchronously on the capture hot path inside the coordinator\'s containment: a throwing listener withholds that one record (fail-closed) and never reaches the agent loop. Live capture dispatches at append time; on-demand capture dispatches while reading the canonical log. Redaction applies to the outbound copy only; the canonical session log is never rewritten.',
     parameters: [{ name: 'record', description: 'the candidate record, already the coordinator\'s own deep copy; listeners return a (possibly new) record and must not mutate it.' }],
   },
   {
@@ -4072,7 +4279,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'DeepSeekLlmApiExtensionRequest',
-    declaration: 'export interface DeepSeekLlmApiExtensionRequest {\n    readonly body: Readonly<Record<string, DeepSeekLlmApiJson>>;\n    readonly sessionId?: string;\n    readonly purpose?: \'compaction\' | \'session-title\';\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface DeepSeekLlmApiExtensionRequest {\n    readonly body: Readonly<Record<string, DeepSeekLlmApiJson>>;\n    readonly sessionId?: string;\n    readonly purpose?: \'compaction\' | \'session-title\' | \'model-routing\';\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'DeepSeekLlmApiJson',
@@ -4292,7 +4499,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\' | \'model-routing\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -4369,6 +4576,90 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageVariantId',
     declaration: 'export type ImageVariantId = Branded<\'ImageVariantId\'>;',
+  },
+  {
+    name: 'InboxAddTodoRequest',
+    declaration: 'export interface InboxAddTodoRequest {\n    readonly sessionId: SessionId;\n    readonly questionSeq: number | null;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'InboxFailure',
+    declaration: 'export type InboxFailure = InboxTextBlank | InboxTextTooLarge | InboxTodoNotFound | InboxSnoozeInPast;',
+  },
+  {
+    name: 'InboxMarkSeenRequest',
+    declaration: 'export interface InboxMarkSeenRequest {\n    readonly sessionId: SessionId;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'InboxRejected',
+    declaration: 'export interface InboxRejected<E extends InboxFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'InboxRemoveTodoRequest',
+    declaration: 'export interface InboxRemoveTodoRequest {\n    readonly id: InboxTodoId;\n}',
+  },
+  {
+    name: 'InboxSessionState',
+    declaration: 'export interface InboxSessionState {\n    readonly sessionId: SessionId;\n    readonly lastSeenSeq: number | null;\n    readonly handledAt: number | null;\n    readonly snoozedUntil: number | null;\n    readonly pinned: boolean;\n    readonly updatedAt: number;\n}',
+  },
+  {
+    name: 'InboxSetHandledRequest',
+    declaration: 'export interface InboxSetHandledRequest {\n    readonly sessionId: SessionId;\n    readonly handled: boolean;\n}',
+  },
+  {
+    name: 'InboxSetPinnedRequest',
+    declaration: 'export interface InboxSetPinnedRequest {\n    readonly sessionId: SessionId;\n    readonly pinned: boolean;\n}',
+  },
+  {
+    name: 'InboxSnapshot',
+    declaration: 'export interface InboxSnapshot {\n    readonly reviewedAt: number | null;\n    readonly sessions: readonly InboxSessionState[];\n    readonly todos: readonly InboxTodo[];\n}',
+  },
+  {
+    name: 'InboxSnoozeInPast',
+    declaration: 'export interface InboxSnoozeInPast {\n    readonly code: \'snooze-in-past\';\n    readonly until: number;\n}',
+  },
+  {
+    name: 'InboxSnoozeRequest',
+    declaration: 'export interface InboxSnoozeRequest {\n    readonly sessionId: SessionId;\n    readonly until: number | null;\n}',
+  },
+  {
+    name: 'InboxSnoozeResult',
+    declaration: 'export type InboxSnoozeResult = InboxSuccess<InboxSnapshot> | InboxRejected<InboxSnoozeInPast>;',
+  },
+  {
+    name: 'InboxSuccess',
+    declaration: 'export interface InboxSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
+    name: 'InboxTextBlank',
+    declaration: 'export interface InboxTextBlank {\n    readonly code: \'text-blank\';\n}',
+  },
+  {
+    name: 'InboxTextTooLarge',
+    declaration: 'export interface InboxTextTooLarge {\n    readonly code: \'text-too-large\';\n    readonly maxBytes: number;\n    readonly actualBytes: number;\n}',
+  },
+  {
+    name: 'InboxTodo',
+    declaration: 'export interface InboxTodo {\n    readonly id: InboxTodoId;\n    readonly sessionId: SessionId;\n    readonly questionSeq: number | null;\n    readonly text: string;\n    readonly status: InboxTodoStatus;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly doneAt: number | null;\n}',
+  },
+  {
+    name: 'InboxTodoId',
+    declaration: 'export type InboxTodoId = Branded<\'InboxTodoId\'>;',
+  },
+  {
+    name: 'InboxTodoNotFound',
+    declaration: 'export interface InboxTodoNotFound {\n    readonly code: \'todo-not-found\';\n    readonly id: InboxTodoId;\n}',
+  },
+  {
+    name: 'InboxTodoResult',
+    declaration: 'export type InboxTodoResult = InboxSuccess<InboxSnapshot> | InboxRejected<InboxTextBlank | InboxTextTooLarge | InboxTodoNotFound>;',
+  },
+  {
+    name: 'InboxTodoStatus',
+    declaration: 'export type InboxTodoStatus = \'open\' | \'done\';',
+  },
+  {
+    name: 'InboxUpdateTodoRequest',
+    declaration: 'export interface InboxUpdateTodoRequest {\n    readonly id: InboxTodoId;\n    readonly text?: string;\n    readonly status?: InboxTodoStatus;\n}',
   },
   {
     name: 'IndexInjection',
@@ -4739,6 +5030,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelReasoningEffort {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
   },
   {
+    name: 'ModelRoute',
+    declaration: 'export interface ModelRoute {\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: ReasoningEffortId;\n}',
+  },
+  {
+    name: 'ModelRouteDecision',
+    declaration: 'export interface ModelRouteDecision {\n    readonly selection: ModelRoute;\n    readonly reason: string;\n    readonly rule?: string;\n}',
+  },
+  {
+    name: 'ModelRouteInput',
+    declaration: 'export interface ModelRouteInput {\n    readonly baseline: ModelRoute;\n    readonly candidates: readonly ModelRoute[];\n    readonly prompt: ModelRoutePrompt;\n}',
+  },
+  {
+    name: 'ModelRoutePrompt',
+    declaration: 'export interface ModelRoutePrompt {\n    readonly text: string;\n    readonly hasImage: boolean;\n}',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -4821,6 +5128,70 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionSnapshot',
     declaration: 'export interface ProjectionSnapshot {\n    asOfSeq: SessionSeqCursor;\n    values: Partial<SessionProjectionMap>;\n}',
+  },
+  {
+    name: 'ProjectTodoDocument',
+    declaration: 'export interface ProjectTodoDocument {\n    readonly path: string;\n    readonly text: string;\n    readonly mtime: number;\n}',
+  },
+  {
+    name: 'ProjectTodoFile',
+    declaration: 'export interface ProjectTodoFile {\n    readonly path: string;\n    readonly relativePath: string;\n    readonly mtime: number;\n    readonly size: number;\n    readonly items: readonly ProjectTodoItem[];\n    readonly open: number;\n    readonly done: number;\n    readonly truncated: boolean;\n}',
+  },
+  {
+    name: 'ProjectTodoItem',
+    declaration: 'export interface ProjectTodoItem {\n    readonly line: number;\n    readonly text: string;\n    readonly status: ProjectTodoStatus;\n    readonly checkbox: boolean;\n    readonly depth: number;\n    readonly section: string | null;\n}',
+  },
+  {
+    name: 'ProjectTodoNotListed',
+    declaration: 'export interface ProjectTodoNotListed {\n    readonly code: \'not-listed\';\n    readonly path: string;\n}',
+  },
+  {
+    name: 'ProjectTodoProject',
+    declaration: 'export interface ProjectTodoProject {\n    readonly path: string;\n    readonly name: string;\n    readonly sources: readonly ProjectTodoSource[];\n    readonly files: readonly ProjectTodoFile[];\n    readonly open: number;\n    readonly done: number;\n}',
+  },
+  {
+    name: 'ProjectTodoReadFailed',
+    declaration: 'export interface ProjectTodoReadFailed {\n    readonly code: \'read-failed\';\n    readonly path: string;\n    readonly message: string;\n}',
+  },
+  {
+    name: 'ProjectTodoReadFailure',
+    declaration: 'export type ProjectTodoReadFailure = ProjectTodoNotListed | ProjectTodoReadFailed;',
+  },
+  {
+    name: 'ProjectTodoReadRequest',
+    declaration: 'export interface ProjectTodoReadRequest {\n    readonly path: string;\n}',
+  },
+  {
+    name: 'ProjectTodoReadResult',
+    declaration: 'export type ProjectTodoReadResult = ProjectTodoSuccess<ProjectTodoDocument> | ProjectTodoRejected<ProjectTodoReadFailure>;',
+  },
+  {
+    name: 'ProjectTodoRejected',
+    declaration: 'export interface ProjectTodoRejected<E extends ProjectTodoReadFailure> {\n    readonly ok: false;\n    readonly error: E;\n}',
+  },
+  {
+    name: 'ProjectTodoSource',
+    declaration: 'export type ProjectTodoSource = \'root\' | \'workspace\';',
+  },
+  {
+    name: 'ProjectTodosSettings',
+    declaration: 'export interface ProjectTodosSettings {\n    readonly roots: string[];\n    readonly files: string[];\n    readonly includeWorkspaces: boolean;\n}',
+  },
+  {
+    name: 'ProjectTodosSnapshot',
+    declaration: 'export interface ProjectTodosSnapshot {\n    readonly scannedAt: number | null;\n    readonly settings: ProjectTodosSettings;\n    readonly candidates: number;\n    readonly projects: readonly ProjectTodoProject[];\n    readonly warnings: readonly ProjectTodoWarning[];\n}',
+  },
+  {
+    name: 'ProjectTodoStatus',
+    declaration: 'export type ProjectTodoStatus = \'open\' | \'done\';',
+  },
+  {
+    name: 'ProjectTodoSuccess',
+    declaration: 'export interface ProjectTodoSuccess<T> {\n    readonly ok: true;\n    readonly value: T;\n}',
+  },
+  {
+    name: 'ProjectTodoWarning',
+    declaration: 'export interface ProjectTodoWarning {\n    readonly path: string;\n    readonly message: string;\n}',
   },
   {
     name: 'PromptAssembly',
@@ -4964,7 +5335,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoots: SandboxWorkspaceRoots;\n    sessionId?: SessionId;\n}',
   },
   {
     name: 'SandboxMode',
@@ -4977,6 +5348,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SandboxWorkspaceRoots',
+    declaration: 'export type SandboxWorkspaceRoots = readonly [\n    primary: string,\n    ...additional: string[]\n];',
   },
   {
     name: 'SaveFileAttachment',
@@ -5099,6 +5474,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteRequest',
+    declaration: 'export interface SessionDeleteRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionDeleteValue',
+    declaration: 'export interface SessionDeleteValue {\n    readonly sessionIds: readonly SessionId[];\n}',
+  },
+  {
+    name: 'SessionDirectories',
+    declaration: 'export interface SessionDirectories {\n    readonly primaryDirectory: string;\n    readonly additionalDirectories: readonly string[];\n}',
+  },
+  {
+    name: 'SessionDirectoriesRequest',
+    declaration: 'export interface SessionDirectoriesRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'SessionEvent',
     declaration: 'export type SessionEvent<T extends SessionEventType = SessionEventType> = {\n    [K in SessionEventType]: {\n        type: K;\n        seq: SessionSeq;\n        time: number;\n        data: SessionEventMap[K];\n        ignorable?: true;\n    } & (K extends SurfaceEventType ? SurfaceIntent<K> : {\n        surfaceOp?: never;\n        sourceEventSeqs?: never;\n    });\n}[T];',
   },
@@ -5108,7 +5499,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'session/directories\': {\n        additionalDirectories: string[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n        inherited?: true;\n    };\n}',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -5192,7 +5583,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionForkRequest',
-    declaration: 'export interface SessionForkRequest {\n    readonly sessionId: SessionId;\n    readonly atSeq?: number;\n}',
+    declaration: 'export interface SessionForkRequest {\n    readonly sessionId: SessionId;\n    readonly atSeq?: number;\n    readonly placement?: \'sibling\' | \'nested\';\n}',
   },
   {
     name: 'SessionForkSource',
@@ -5351,6 +5742,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
   },
   {
+    name: 'SessionQuestionSearchItem',
+    declaration: 'export interface SessionQuestionSearchItem {\n    readonly seq: number;\n    readonly time: number;\n    readonly snippet: string;\n}',
+  },
+  {
+    name: 'SessionQuestionSearchRequest',
+    declaration: 'export interface SessionQuestionSearchRequest {\n    readonly sessionId: SessionId;\n    readonly query: string;\n}',
+  },
+  {
+    name: 'SessionQuestionSearchValue',
+    declaration: 'export interface SessionQuestionSearchValue {\n    readonly items: readonly SessionQuestionSearchItem[];\n    readonly complete: boolean;\n}',
+  },
+  {
     name: 'SessionQueuedItem',
     declaration: 'export interface SessionQueuedItem {\n    readonly id: MessageId;\n    readonly placement: \'queued\' | \'steering\' | \'context\';\n    readonly rpcId?: SessionRequestId;\n    readonly message: {\n        readonly id: MessageId;\n        readonly content: readonly JsonValue[];\n    };\n}',
   },
@@ -5377,6 +5780,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionRenameValue',
     declaration: 'export interface SessionRenameValue {\n    readonly title: string;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'SessionReplaceDirectoriesRequest',
+    declaration: 'export interface SessionReplaceDirectoriesRequest extends SessionDirectoriesRequest {\n    readonly additionalDirectories: readonly string[];\n}',
   },
   {
     name: 'SessionRequestId',
@@ -6000,7 +6407,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TerminalSpawnRequest',
-    declaration: 'export interface TerminalSpawnRequest {\n    type: string;\n    name?: string;\n    cwd?: string;\n}',
+    declaration: 'export interface TerminalSpawnRequest {\n    type: string;\n    name?: string;\n    cwd?: string;\n    promptText?: string;\n}',
   },
   {
     name: 'TerminalSpawnResult',
@@ -6412,11 +6819,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly nestedUnder: Readonly<Record<string, SessionId>>;\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId, options?: {\n        nestUnder?: SessionId;\n    }): Promise<void>;\n    attachSessions(sessionIds: readonly SessionId[]): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    detachSessions(sessionIds: readonly SessionId[]): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',
     declaration: 'export interface WorkspaceArchiveSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'WorkspaceArchiveSessionsRequest',
+    declaration: 'export interface WorkspaceArchiveSessionsRequest {\n    readonly sessionIds: readonly SessionId[];\n}',
   },
   {
     name: 'WorkspaceArchiveValue',
@@ -6507,12 +6918,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n}',
   },
   {
+    name: 'WorkspaceSetSessionMembershipRequest',
+    declaration: 'export interface WorkspaceSetSessionMembershipRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly sessionIds: readonly SessionId[];\n    readonly member: boolean;\n}',
+  },
+  {
+    name: 'WorkspaceUnarchiveSessionRequest',
+    declaration: 'export interface WorkspaceUnarchiveSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'WorkspaceValue',
     declaration: 'export interface WorkspaceValue {\n    readonly workspace: WorkspaceView;\n}',
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly nestedUnder?: Readonly<Record<string, SessionId>>;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
 ]
 

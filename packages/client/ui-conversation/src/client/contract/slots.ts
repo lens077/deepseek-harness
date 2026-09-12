@@ -20,6 +20,7 @@ import type {
 } from './input.ts'
 import type { createConversationStore } from '../stores.ts'
 import type { BusyEnterBehavior } from './composer-submission.ts'
+import type { ContentWidthMode, QuestionNavigationSettings, SendShortcut } from '../../submission-settings.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
 
@@ -121,8 +122,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'main.conversation': { kind: 'single'; scope: 'session-maybe' }
     /** Strict per-Session Conversation body. */
     'conversation.session': { kind: 'single'; scope: 'session' }
+    /** Optional resident rail beside the Session scrollport. */
+    'conversation.session.rail': { kind: 'single'; scope: 'session' }
     /** Strict per-Session title, actions, and View navigation. */
     'conversation.session.header': { kind: 'single'; scope: 'session' }
+    /** Controls before the Session breadcrumb title, in ascending order. */
+    'conversation.session.header.leading': { kind: 'list'; scope: 'session' }
     /** Optional replacement for one Session breadcrumb title. */
     'conversation.session.header.lineage': {
       kind: 'single'
@@ -141,6 +146,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ConversationHeaderActionOwnerProps
     }
+    /** Additive controls before the registered View tabs. */
+    'conversation.session.tabs.leading': { kind: 'list'; scope: 'session' }
     /**
      * The header's far-right corner, past the utilities' edge and into the
      * header's own padding, for one control. The corner is laid out only while
@@ -210,6 +217,26 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+/** Client service owning question-navigation settings and mutations. */
+export interface QuestionNavigationService {
+  /** Live keyboard and question-bar settings. */
+  readonly settings: ObservableSnapshot<QuestionNavigationSettings>
+  /**
+   * Replace the complete question-navigation preference.
+   * @param settings - complete replacement preference.
+   */
+  set(settings: QuestionNavigationSettings): void
+  /** Restore platform defaults. */
+  reset(): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Question-navigation settings shared with the Chat presentation plugin. */
+    questionNavigation: QuestionNavigationService
+  }
+}
+
 /** Owner share of the Hero agent-preset control. */
 export interface HeroAgentPresetOwnerProps {
   /** Marker field: the occupant owns its roster and staged selection. */
@@ -261,8 +288,16 @@ export type ConvViewProps = PropsRuntime<'conversation.view'>
 export interface ConversationInjected {
   /** Connect and open a blank Session in the selected Workspace. */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
+  /** Create and open a Session without a Workspace account. */
+  startScratchSession: () => Promise<void>
   /** Session-addressed composer block source, or the stable absent source. */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  hooks: {
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    /** Live occupancy of the optional Session rail. */
+    railSeat: ObservableSnapshot<readonly unknown[]>
+    /** Live content-width mode preference (fill by default). */
+    contentWidthMode: ObservableSnapshot<ContentWidthMode>
+  }
 }
 
 /** Business callbacks injected into the strict Session body. */
@@ -278,7 +313,11 @@ export interface ConversationSessionInjected {
 /** Business callbacks injected into the strict Session header. */
 export interface ConversationSessionHeaderInjected {
   /** Package-owned View roster source bound only for the Conversation header. */
-  readonly hooks: { readonly conversationViews: ObservableSnapshot<readonly ViewTab[]> }
+  readonly hooks: {
+    readonly conversationViews: ObservableSnapshot<readonly ViewTab[]>
+    /** Live occupancy of controls before the View tabs. */
+    readonly tabsLeading: ObservableSnapshot<readonly unknown[]>
+  }
   /** Select a Session through the Session Controller. */
   open: (sessionId: SessionId) => void
   /** Select and activate one registered Conversation View. */
@@ -319,6 +358,8 @@ export interface ComposerBarInjected {
      * and the primary Send button use while the addressed agent is busy.
      */
     busyEnter: ObservableSnapshot<BusyEnterBehavior>
+    /** Live keyboard shortcut used to recognize a send gesture. */
+    sendShortcut: ObservableSnapshot<SendShortcut>
     /** Live per-draft upload states for file-kind drafts. */
     fileUploads: ObservableSnapshot<DraftFileUploads>
     notices: ObservableSnapshot<InputNotice | null>
@@ -369,6 +410,7 @@ export type ConversationSlotProps =
   & PropsRenderSlots<
     | 'conversation.session' | 'conversation.session.header'
     | 'conversation.composer' | 'conversation.composer.bar'
+    | 'conversation.session.rail'
     | 'conversation.input.dock'
     | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
@@ -391,9 +433,11 @@ export type ConversationSessionSlotProps =
 export type ConversationSessionHeaderSlotProps =
   PropsRuntime<'conversation.session.header'>
   & PropsRenderSlots<
-    'conversation.session.header.lineage'
+    'conversation.session.header.leading'
+    | 'conversation.session.header.lineage'
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
+    | 'conversation.session.tabs.leading'
     | 'conversation.session.header.corner'
   >
   & PropsStore<ConversationStore>
@@ -411,5 +455,7 @@ export interface EmptyWorkspaceOwnerProps {
   /** Currently selected Workspace, when available. */
   selectedId?: WorkspaceId | undefined
   onPick: (workspaceId: WorkspaceId) => void
+  /** Materialize a Session without selecting a Workspace. */
+  onStartScratch?: (() => Promise<void>) | undefined
   onClose: () => void
 }

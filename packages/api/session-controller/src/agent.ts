@@ -4,17 +4,19 @@ import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {
-  Agent, AgentOptions, AgentSetup, ModelSelection as AgentModelSelection, ModelSelectionRef,
+  Agent, AgentHandle, AgentOptions, AgentSetup, CreateAgentOptions,
+  ModelSelection as AgentModelSelection, ModelSelectionRef,
 } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { LlmFailure } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
-import type { ModelSelection } from './types.ts'
+import type { ModelSelection, ModelSelectionProjectionState } from './types.ts'
 
 /** Cold Session identity absent from persistence. */
 export class ApiSessionNotFound extends Error {}
@@ -140,11 +142,13 @@ export async function inspectApiSession(
 export class ApiSessionAgentController {
   private readonly resumes = new Map<SessionId, Promise<Agent>>()
   private readonly creations = new Map<SessionId, Promise<Agent>>()
+  private readonly handles = new Map<SessionId, AgentHandle>()
   private readonly selections = new WeakMap<Agent, InstalledSelection>()
   private readonly imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
   /** @param ctx - Host context carrying Agent, model, persistence, and Typert services. */
   constructor(private readonly ctx: Context) {
+    ctx.on('session/disposed', (session) => { this.handles.delete(session.id) })
     ctx.typert.lookups.configure('agent', async (sessionId: SessionId) => {
       const found = await this.resolveAgent(sessionId)
       if ('error' in found) throw found.error
@@ -160,6 +164,39 @@ export class ApiSessionAgentController {
       if ('error' in found) throw found.error
       return found.agent.ctx
     })
+  }
+
+  /**
+   * Retire API-owned live Agents before permanent Session deletion.
+   * @param sessionIds - exact child-first live subset reserved by Workspace deletion.
+   */
+  async retire(sessionIds: readonly SessionId[]): Promise<void> {
+    for (const sessionId of sessionIds) {
+      if (this.ctx.agents.get(sessionId) === undefined) continue
+      const handle = this.handles.get(sessionId)
+      if (handle === undefined) {
+        throw new Error(`session "${sessionId}" is live but not owned by the Session Controller`)
+      }
+      await handle.dispose()
+      this.handles.delete(sessionId)
+    }
+  }
+
+  /**
+   * Publish one seeded ordinary Session (a fork child) under this controller's
+   * ownership so {@link retire} can later dispose it for permanent deletion.
+   * @param options - complete creation options; the caller resolves the seed,
+   *   lineage metadata, model route, and composition.
+   * @returns the live Agent.
+   */
+  async createSeeded(options: CreateAgentOptions): Promise<Agent> {
+    return this.own(await this.ctx.agents.create(options))
+  }
+
+  /** Retain the teardown capability for an Agent this controller published. */
+  private own(handle: AgentHandle): Agent {
+    this.handles.set(handle.agent.id, handle)
+    return handle.agent
   }
 
   /**
@@ -276,10 +313,7 @@ export class ApiSessionAgentController {
   selectionFor(agent: Agent): InstalledSelection {
     const installed = this.selections.get(agent)
     if (installed !== undefined) return installed
-    const projectionState = this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection')
-    if (projectionState === undefined) {
-      throw new Error('api-session: required modelSelection projection is not registered')
-    }
+    const projectionState = this.modelSelectionState(agent)
     let picked = projectionState.pending === null
       ? undefined
       : agentModelSelection(projectionState.pending)
@@ -326,6 +360,67 @@ export class ApiSessionAgentController {
   selectForNextRequest(agent: Agent, selection: AgentModelSelection): void {
     agent.session.append('model/selection', selection)
     this.selectionFor(agent).current = selection
+  }
+
+  /**
+   * Read the route the human or caller owns for this Session, independent of
+   * anything a router applied to an earlier request: the projection's
+   * baseline — the latest user selection, else the baseline the latest routing
+   * decision carried forward — or, on a Session neither touched, the current
+   * selection.
+   * @param agent - live Agent whose Session projection is read.
+   * @returns a detached baseline selection.
+   */
+  baselineFor(agent: Agent): AgentModelSelection {
+    const state = this.modelSelectionState(agent)
+    return state.baseline === null
+      ? { ...this.selectionFor(agent).current }
+      : agentModelSelection(state.baseline)
+  }
+
+  /**
+   * Apply one routed selection to the next prompt assembly without recording a
+   * user selection or touching the saved default.
+   * @param agent - live Agent that owns the selection.
+   * @param selection - route already validated by the caller.
+   */
+  routeForNextRequest(agent: Agent, selection: AgentModelSelection): void {
+    this.selectionFor(agent).current = selection
+  }
+
+  /**
+   * After a routed model failed, move the next attempt back to the route the
+   * person owns. Applies only to an Agent whose selection this controller
+   * installed, whose latest logged request used a route a router applied, and
+   * whose baseline names another provider or model; the switch takes effect on
+   * the current step's retry and is recorded as one `model/route` event.
+   * @param agent - live Agent whose request failed.
+   * @param failure - terminal failure of the routed request.
+   * @returns whether the selection moved, so the caller should retry the step.
+   */
+  fallbackToBaseline(agent: Agent, failure: LlmFailure): boolean {
+    const installed = this.selections.get(agent)
+    const routed = agent.session.requestHeader()?.config
+    if (installed === undefined || routed === undefined) return false
+    if (this.modelSelectionState(agent).routed === null) return false
+    const baseline = this.baselineFor(agent)
+    if (routed.provider === baseline.provider && routed.model === baseline.model) return false
+    installed.current = baseline
+    installed.assembled = baseline
+    agent.session.append('model/route', {
+      baseline,
+      selection: baseline,
+      reason: `fallback: ${failure.code} on ${routed.provider}/${routed.model}: ${failure.message}`,
+    })
+    return true
+  }
+
+  private modelSelectionState(agent: Agent): ModelSelectionProjectionState {
+    const state = this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection')
+    if (state === undefined) {
+      throw new Error('api-session: required modelSelection projection is not registered')
+    }
+    return state
   }
 
   /**
@@ -427,11 +522,11 @@ export class ApiSessionAgentController {
     if (published !== undefined && hasApiSessionSubagentOwner(this.ctx, published, live)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
-    return (await this.ctx.agents.resume({
+    return this.own(await this.ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: this.agentOptions(),
       setup: composition.setup,
-    })).agent
+    }))
   }
 
   private async createOrAdopt(
@@ -459,11 +554,11 @@ export class ApiSessionAgentController {
         const storedPreset = this.presetForObservation(observation)
         this.assertPresetUnchanged(sessionId, presetId, storedPreset)
         const composition = await this.composeAgent(storedPreset)
-        return (await this.ctx.agents.resume({
+        return this.own(await this.ctx.agents.resume({
           resumeSessionId: sessionId,
           agentOptions: this.agentOptions(),
           setup: composition.setup,
-        })).agent
+        }))
       } catch (error: unknown) {
         if (!(error instanceof SessionQueryError)
           || error.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') throw error
@@ -476,7 +571,7 @@ export class ApiSessionAgentController {
       throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
     }
     const composition = await this.composeAgent(presetId)
-    return (await this.ctx.agents.create({
+    return this.own(await this.ctx.agents.create({
       sessionId,
       agentOptions: this.agentOptions(),
       meta: {
@@ -484,7 +579,7 @@ export class ApiSessionAgentController {
         ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }),
       },
       setup: composition.setup,
-    })).agent
+    }))
   }
 
   private agentOptions(): AgentOptions {

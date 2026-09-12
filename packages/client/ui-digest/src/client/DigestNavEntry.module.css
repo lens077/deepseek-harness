@@ -1,0 +1,175 @@
+/* Mirrors the sidebar's New Session control so the two read as one group:
+   a labelled row while wide, a 36px rail icon once collapsed. The sidebar
+   owns the collapse animation; this entry only follows the wide flag. */
+.entry {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.entry:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.active {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Rail: the sidebar collapses to a 56px column and every control becomes one
+   centred 36px square. Driven by the owner's `wide` flag rather than the
+   sidebar's own class, which belongs to that package's stylesheet. */
+.rail {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+}
+
+/* State counts at the row's end, in the order the digest settings page
+   sets: waiting for the user (warn), finished unread (success), running
+   (ongoing blue), failed (error), then the optional grey finished count in
+   the neutral pill tone. Each pill appears only
+   while its count is non-zero; on the rail one pill carries the sum and
+   floats over the icon's corner so the count survives the collapse. */
+.badges {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.badge {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.badgeWaiting {
+  background: var(--dsw-alias-state-warn-secondary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+/* Ongoing blue has no alias token (see ui-primitives StateDot): the
+   component var pins the static 450 step; the fill is a tint of the text. */
+.badgeRunning {
+  --dsh-state-ongoing: var(--dsw-static-deepseek-450);
+  background: color-mix(in srgb, var(--dsh-state-ongoing) 18%, transparent);
+  color: var(--dsh-state-ongoing);
+}
+
+.badgeFailed {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 18%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.badgeUnread {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 18%, transparent);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+/* The finished-and-seen count keeps the neutral pill fill with a quieter label. */
+.badgeFinished {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.badgeRail {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  margin-left: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.rail {
+  position: relative;
+}
+
+.mobileEntry {
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: var(--dsh-mobile-control-size, 44px);
+  font: inherit;
+  font-size: var(--dsh-mobile-meta-size, 12px);
+  cursor: pointer;
+}
+
+.mobileEntry[aria-current] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-floating-hover);
+  font-weight: 600;
+}
+
+.mobileEntry:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: -3px;
+}
+
+@media (max-width: 767px) {
+  :global([data-mobile-layout="small"]) .mobileLabel {
+    display: none;
+  }
+}
+
+.mobileIcon {
+  position: relative;
+  display: flex;
+}
+
+.mobileBadge {
+  position: absolute;
+  bottom: 10px;
+  left: 14px;
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-secondary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}

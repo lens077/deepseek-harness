@@ -18,6 +18,10 @@ const SHELL_RESET_MESSAGE = 'The persistent bash shell was reset; the next bash 
 // Status trailer for a command that never reported an exit code; settled
 // commands append `[Command finished with exit code N]` instead (see renderCaptured).
 const TIMEOUT_STATUS_MARKER = '[Command timed out or OOM]'
+// Collision-resistant session prompt: declared at spawn so the backend's
+// readiness detection matches it; ordinary command output never contains it,
+// unlike the backend's short default prompt.
+const SHELL_PROMPT = '__DSH_PERSISTENT_BASH_PROMPT__ '
 const TIMEOUT_CODE = 'PERSISTENT_BASH_TIMEOUT'
 // One page is enough to find a just-emitted completion marker; the full
 // scrollback is assembled only when a command settles or needs partial output.
@@ -255,6 +259,7 @@ function persistentShells(ctx: Context, config: ResolvedConfig): PersistentShell
         const cwd = owner.session.header.cwd
         const spawned = await ctx.terminals.spawn(owner, {
           type: config.backendType,
+          promptText: SHELL_PROMPT,
           ...cwd === undefined ? {} : { cwd },
         }, combinedSignal)
         live.set(owner, spawned.sessionId)
@@ -265,8 +270,10 @@ function persistentShells(ctx: Context, config: ResolvedConfig): PersistentShell
             live.delete(owner)
           }, 'tool-bash-persistent owner cache cleanup')
         }
-        // Echo suppression only: the prompt stays the backend's own, so the
-        // backend's prompt-based readiness detection keeps working.
+        // Echo suppression only. `PS1` is declared at spawn (promptText) and the
+        // backend matches that same prompt to detect readiness, so a post-hoc
+        // reassignment here would make every command fall back to silence-based
+        // settling.
         const setup = ctx.terminals.startSend(owner, spawned.sessionId, {
           text: 'stty -echo',
           submit: true,

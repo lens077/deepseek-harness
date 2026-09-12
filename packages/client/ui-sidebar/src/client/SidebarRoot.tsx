@@ -26,6 +26,7 @@ import type {
   SidebarPanelMetadata, SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps,
 } from './contract/slots.ts'
 import css from './SidebarRoot.module.css'
+import { MobileSidebar } from './MobileSidebar.tsx'
 
 /** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
 const COLLAPSE_SETTLE_MS = 150
@@ -85,7 +86,12 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: Pa
  * @param props - composed slot props (runtime share + injected callbacks, contract/slots.ts).
  * @returns the sidebar element tree.
  */
-export function SidebarRoot({
+export function SidebarRoot(props: SidebarRootComponentProps) {
+  return props.mobileView === undefined ? <DesktopSidebarRoot {...props} /> : <MobileSidebar {...props} />
+}
+
+/** Desktop shell retains its independent collapse and scrollbar behavior. */
+function DesktopSidebarRoot({
   collapsed,
   width,
   startSession,
@@ -203,6 +209,7 @@ export function SidebarRoot({
                     ),
                 })}
               </span>
+              <span className={css.brandTagline}>{t('brand.tagline')}</span>
             </span>
           </button>
         )}
@@ -239,6 +246,11 @@ export function SidebarRoot({
         </button>
       </Tooltip>
 
+      {/* Whole-surface navigation entries sit directly under New Session, so
+          the column reads as: start work, go to a surface, then browse. */}
+      <div className={css.navArea}>
+        {renderSlot('sidebar.nav.entry', { wide })}
+      </div>
       {panels.length > 0 && (
         <nav className={css.panelList} aria-label={t('panels.label')}>
           {panels.map(({ id, label }) => (

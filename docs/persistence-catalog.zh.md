@@ -85,7 +85,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:434`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:465`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:420`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:442`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:473`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -542,6 +542,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ### `model/*`
 
+<a id="modelroute--log-only"></a>
+
+#### `model/route` — log-only
+
+```ts persistence-catalog
+/**
+ * One routing decision taken for a human prompt before that prompt was
+ * queued. `selection` is the route the consumer applied to the next
+ * request after enforcing its own constraints; when it differs from the
+ * provider's answer, `reason` names the refused constraint. Log-only: the
+ * applied route reaches the model only through the later `request/header`.
+ */
+'model/route': ModelRouteRecord
+```
+
+来源：[`packages/llm/model-router/src/types.ts:20`](../packages/llm/model-router/src/types.ts)
+
 <a id="modelselection--log-only"></a>
 
 #### `model/selection` — log-only
@@ -607,7 +624,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/context': RequestContext
 ```
 
-来源：[`packages/core/session/src/types.ts:377`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:385`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -626,7 +643,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:365`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:373`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -671,6 +688,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ### `session/*`
 
+<a id="sessiondirectories--log-only"></a>
+
+#### `session/directories` — log-only
+
+```ts persistence-catalog
+/**
+ * Complete canonical additional-directory list for this session. The primary
+ * working directory remains {@link SessionHeader.cwd}; the latest snapshot
+ * only extends the session's writable-root set. Absence means no additional
+ * directories. This event is log-only but required for reconstruction because
+ * sandbox policy projects the effective roots into model-visible context.
+ */
+'session/directories': { additionalDirectories: string[] }
+```
+
+来源：[`packages/core/session/src/types.ts:368`](../packages/core/session/src/types.ts)
+
 <a id="sessionend-seed--log-only"></a>
 
 #### `session/end-seed` — log-only
@@ -701,7 +735,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/end-seed': { inherited?: true }
 ```
 
-来源：[`packages/core/session/src/types.ts:400`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 

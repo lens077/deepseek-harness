@@ -10,7 +10,9 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
-import type { ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { ChatFileDiffExpansion, ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -43,6 +45,12 @@ export function apply(ctx: ClientContext): void {
   const opener = new PresentedOpenController()
   ctx.effect(() => () => opener.dispose())
   ctx.on('connection/reset', () => { opener.resetHost() })
+  // The inline diff preference and recorded hunks come from ui-session-files
+  // when it is composed in; without it every chip simply opens the file.
+  const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
+    getSnapshot: () => ctx.get('chatFileDiffs')?.expansion.getSnapshot() ?? 'none',
+    subscribe: listener => ctx.get('chatFileDiffs')?.expansion.subscribe(listener) ?? (() => {}),
+  }
   ctx.uiConversation.events.register(deliverablesDefinition)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-deliverables: dictionaries')
   ctx.slots.inject(
@@ -51,8 +59,9 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.chat.turnTail',
       select: selectDeliverables,
       locale: NS,
-      inject: (): DeliverablesInjected => ({
-        hooks: { presentedOpen: opener.state, presentedHost: opener.host },
+      inject: (sessionId: SessionId): DeliverablesInjected => ({
+        fileDiffs: (path: string) => ctx.get('chatFileDiffs')?.forPath(sessionId, path) ?? [],
+        hooks: { presentedOpen: opener.state, presentedHost: opener.host, diffExpansion },
         reloadPresentedHost: () => opener.loadHost(),
         openPresented: (sessionId, seq, index, action) => opener.open(sessionId, seq, index, action),
       }),

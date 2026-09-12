@@ -8,13 +8,14 @@
  * presenter, which projects ctx.theme snapshots onto document.body.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PanelInfo } from './service.ts'
-import { AppFrame } from './AppFrame.tsx'
+import { AppFrame, type AppFrameInjected } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
@@ -30,10 +31,21 @@ export type { ILayout, MainPanelId, PanelInfo } from './service.ts'
 /** Selector hook over root-scoped panel selection. */
 export type UsePanelInfo = SnapshotSelectorHook<PanelInfo>
 
+/** Observable browser-title attention count supplied by the inbox. */
+export interface DocumentBadge extends ObservableSnapshot<number> {
+  /**
+   * Replace the browser-title attention count.
+   * @param count - current number of entries requiring attention.
+   */
+  set(count: number): void
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The outward face only; the concrete service stays inside this plugin. */
     layout: import('./service.ts').ILayout
+    /** Attention count rendered in the browser tab title. */
+    documentBadge: DocumentBadge
   }
 }
 
@@ -89,6 +101,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * `id` is added beside the shipped entries instead of replacing them.
      */
     'shell.overlay': { kind: 'list'; scope: 'root' }
+    /**
+     * Full-bleed layer over the center column only, inside the frame's grid so
+     * the sidebar and the details column stay reachable beside it. Unlike
+     * `shell.overlay` this layer is opaque to pointer events and replaces what
+     * the center column shows while an entry renders content, which is what a
+     * whole-surface view (a cross-session digest, a settings page) needs
+     * without taking the `conversation` seat away from its occupant.
+     *
+     * Entries decide their own visibility: an entry rendering `null` leaves the
+     * conversation visible, so the layer costs nothing while every entry is
+     * closed.
+     */
+    'center.overlay': { kind: 'list'; scope: 'root'; owner: MobileNavigationOwnerProps }
   }
 }
 
@@ -98,8 +123,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 // PropsStore & I). Conversation business state and actions arrive through
 // framework-standard hooks and each registrant's inject face, not owner props.
 
+/** Phone navigation destinations; conversation has no separate bottom entry. */
+export type MobileView = 'overview' | 'pending' | 'workspaces' | 'conversation' | 'new'
+
+/** Optional phone presentation shared by the navigation and center occupants. */
+export interface MobileNavigationOwnerProps {
+  /** Present only while the frame uses its phone layout. */
+  mobileView?: MobileView
+  /** Switch the phone surface without mutating Session or Workspace business state. */
+  navigateMobile?: (view: MobileView) => void
+}
+
 /** Sidebar owner share: live column state from the frame's concession solve. */
-export interface SidebarOwnerProps {
+export interface SidebarOwnerProps extends MobileNavigationOwnerProps {
   /** True when the sidebar is closed (the column renders the compact control rail). */
   collapsed: boolean
   /** Rendered column width in px (SIDEBAR_COLLAPSED when collapsed). */
@@ -129,6 +165,8 @@ export const inject = ['slots', 'theme', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const badge = createSnapshotStore(0)
+  ctx.provide('documentBadge', badge)
   ctx.effect(() => {
     const handle = createLayoutStore()
     const instance = handle.create()
@@ -153,8 +191,14 @@ export function apply(ctx: ClientContext): void {
         'main': { kind: 'keyed', scope: 'root' },
         'rightbar': { kind: 'single', scope: 'root' },
         'shell.overlay': { kind: 'list', scope: 'root' },
+        'center.overlay': { kind: 'list', scope: 'root' },
       },
+      // Exclusive store: the root owns one layout instance so ctx.layout and
+      // the AppFrame read and write the same panel state.
       store,
+      inject: (): AppFrameInjected => ({
+        hooks: { badge, mobileAppearance: ctx.theme.mobile.appearance },
+      }),
     }, AppFrame)
     const disposePanels = ctx.slots.subscribe('main', retainMainPanels)
     retainMainPanels()

@@ -3,7 +3,7 @@
  * panel (figma 501:29947, 1080x700) with the section nav rail. The shell is
  * a pure composition face — slot-owned text (trigger label, panel title,
  * close label, sections) arrives from registrants through slots; accessible
- * names resolve from localized content (trigger: shell locale; dialog:
+ * names resolve from localized content (wide trigger: shell locale; rail trigger: header; dialog:
  * aria-labelledby the title node; close: visually-hidden slot text). Modal
  * open state and the active section id are component-local viewing state;
  * the onboarding coordinator mounts exactly one ordered registrant while the
@@ -114,6 +114,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
   const [showRecovery, setShowRecovery] = useState(false)
   const triggerButton = useRef<HTMLButtonElement | null>(null)
+  const triggerLabelId = useId()
   const wasOpen = useRef(open)
   const close = useCallback(() => {
     setOpen(false)
@@ -186,10 +187,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           className={clsx(css.trigger, !wide && css.rail)}
           aria-label={t('trigger')}
           aria-haspopup="dialog"
+          aria-labelledby={wide ? undefined : triggerLabelId}
           aria-expanded={open}
           onClick={() => { setOpen(true) }}
         >
           {renderSlot('settings.trigger', { wide })}
+          {!wide && <span id={triggerLabelId} className={css.hiddenLabel}>{renderSlot('settings.header', {})}</span>}
         </button>
         <ConnectionIndicator
           state={wide ? connectionIndicator : undefined}

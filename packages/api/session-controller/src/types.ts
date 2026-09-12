@@ -95,6 +95,10 @@ export interface ModelSelectionProjectionState {
   readonly lastUsed: ModelSelection | null
   /** Later user selection not yet consumed by a matching model request. */
   readonly pending: ModelSelection | null
+  /** Route the person owns: the latest user selection, else the baseline the latest routing decision recorded, else null. */
+  readonly baseline: ModelSelection | null
+  /** Latest route a `model/route` decision applied, or null while the Session was never routed. */
+  readonly routed: ModelSelection | null
 }
 
 /** Client view of the durable model-selection fold. */
@@ -183,8 +187,16 @@ export const SESSION_SEARCH_RESULT_LIMIT = 20
 /** Maximum search snippet length in Unicode code points. */
 export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 
+/** Maximum question hits returned by one within-Session search. */
+export const SESSION_QUESTION_RESULT_LIMIT = 50
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** An additional Session directory failed canonical filesystem validation. */
+    'session/directory-invalid': {
+      readonly path: string
+      readonly reason: 'not-absolute' | 'unavailable' | 'not-directory'
+    }
     'session/model-unavailable': { readonly provider: string; readonly model: string }
     'session/conflict': {
       readonly sessionId: SessionId
@@ -261,6 +273,52 @@ export interface SessionSearchValue {
   readonly hasMore: boolean
 }
 
+/** Search one Session's complete current user-question index. */
+export interface SessionQuestionSearchRequest {
+  readonly sessionId: SessionId
+  readonly query: string
+}
+
+/** One matching user question addressed by its durable event sequence. */
+export interface SessionQuestionSearchItem {
+  readonly seq: number
+  readonly time: number
+  readonly snippet: string
+}
+
+/** Bounded within-Session question search result. */
+export interface SessionQuestionSearchValue {
+  readonly items: readonly SessionQuestionSearchItem[]
+  /** False when the provider has additional matches beyond this page. */
+  readonly complete: boolean
+}
+
+/** Read or replace one Session's canonical writable-root extension. */
+export interface SessionDirectoriesRequest {
+  readonly sessionId: SessionId
+}
+
+/** Canonical primary directory and ordered additional writable roots. */
+export interface SessionDirectories {
+  readonly primaryDirectory: string
+  readonly additionalDirectories: readonly string[]
+}
+
+/** Whole-list replacement for one Session's additional writable roots. */
+export interface SessionReplaceDirectoriesRequest extends SessionDirectoriesRequest {
+  readonly additionalDirectories: readonly string[]
+}
+
+/** Permanent lineage deletion request. */
+export interface SessionDeleteRequest {
+  readonly sessionId: SessionId
+}
+
+/** Identities removed by one deterministic child-first deletion. */
+export interface SessionDeleteValue {
+  readonly sessionIds: readonly SessionId[]
+}
+
 /** Session creation or explicit-id adoption request. */
 export interface SessionCreateRequest {
   readonly workspaceId?: WorkspaceId
@@ -301,6 +359,16 @@ export interface SessionRenameValue {
 export interface SessionForkRequest {
   readonly sessionId: SessionId
   readonly atSeq?: number
+  /**
+   * Place the child beside (`sibling`, the default) or beneath (`nested`) its
+   * source in Workspace presentation. `nested` requires the source itself to
+   * be accounted in the attached Workspace; a subagent source attached
+   * through an ancestor takes the sibling slot instead of failing the fork.
+   * An Ungrouped top-level source is adopted into the registered Workspace
+   * that owns its directory (when one exists) so the child can nest beneath
+   * it; without such a Workspace the child stays an Ungrouped sibling.
+   */
+  readonly placement?: 'sibling' | 'nested'
 }
 
 /** Identity of a newly forked Session. */

@@ -11,9 +11,22 @@ import type {
   BusyEnterBehavior, ComposerSubmitGesture, InputSubmitMode,
 } from '../contract/composer-submission.ts'
 import { BUSY_ENTER_FIELD, DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
-import type { ConversationSettings } from '../../submission-settings.ts'
+import type { ConversationSettings, SendShortcut } from '../../submission-settings.ts'
+import { matchesSendShortcut, type ShortcutKeyEvent } from '../../send-shortcut.ts'
 
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
+
+/**
+ * Classify one keydown against the selected send shortcut.
+ * @param shortcut - the configured send shortcut.
+ * @param event - keyboard facts after editor composition guarding.
+ * @returns the matched delivery gesture, or null for ordinary editor behavior.
+ */
+export function resolveGesture(shortcut: SendShortcut, event: ShortcutKeyEvent): ComposerSubmitGesture | null {
+  if (!matchesSendShortcut(shortcut, event)) return null
+  if (shortcut !== 'enter' && shortcut !== 'mod-enter') return 'custom'
+  return event.ctrlKey === true || event.metaKey === true ? 'accelerated' : 'enter'
+}
 
 /**
  * Resolve one submission gesture against the busy-Enter preference. Plain
@@ -25,6 +38,7 @@ export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
  * @param running - whether the addressed agent currently reports busy.
  * @param gesture - plain Enter (or the Send button) or the Cmd/Ctrl-accelerated chord.
  * @param steeringAvailable - whether this session transport supports steering.
+ * @param shortcut - the configured send shortcut; only `enter` gives the accelerated chord alternate delivery.
  * @returns Queue outside steer-capable busy state; otherwise the preferred mode or its opposite.
  */
 export function resolveSubmitMode(
@@ -32,9 +46,10 @@ export function resolveSubmitMode(
   running: boolean,
   gesture: ComposerSubmitGesture,
   steeringAvailable: boolean,
+  shortcut: SendShortcut = 'enter',
 ): InputSubmitMode {
   if (!running || !steeringAvailable) return 'queue'
-  if (gesture === 'enter') return preferred
+  if (gesture !== 'accelerated' || shortcut !== 'enter') return preferred
   return preferred === 'queue' ? 'steer' : 'queue'
 }
 
@@ -46,13 +61,13 @@ export function resolveSubmitMode(
 export class ComposerSubmissionPolicy {
   /** Reactive preference source for the composer bar and the Settings row. */
   readonly busyEnter: SnapshotStore<BusyEnterBehavior> = createSnapshotStore(DEFAULT_BUSY_ENTER_BEHAVIOR)
+  /** Reactive send shortcut preference. */
+  readonly sendShortcut: SnapshotStore<SendShortcut> = createSnapshotStore('enter')
   private readonly host: SettingsScope<ConversationSettings> | undefined
 
   /**
-   * @param host - durable preference scope owned by the providing plugin;
-   * absent compositions stay process-local. The adoption subscription shares
-   * the scope's plugin lifetime — a disposed scope never publishes again, so
-   * the policy needs no release hook.
+   * @param host - durable preference scope; absent compositions stay process-local.
+   * The adoption subscription shares the scope's plugin lifetime.
    */
   constructor(host?: SettingsScope<ConversationSettings>) {
     this.host = host
@@ -74,12 +89,23 @@ export class ComposerSubmissionPolicy {
   }
 
   /**
-   * Adopt the scope's accepted durable behavior without writing it back.
-   * @param host - the constructor-narrowed scope driving this adoption.
+   * Publish and persist the send shortcut preference.
+   * @param shortcut - validated legacy preset or canonical custom chord.
+   */
+  setSendShortcut(shortcut: SendShortcut): void {
+    if (this.sendShortcut.getSnapshot() === shortcut) return
+    this.sendShortcut.set(shortcut)
+    void this.host?.set('sendShortcut', shortcut)
+  }
+
+  /**
+   * Adopt accepted durable preferences without writing them back.
+   * @param host - the scope driving adoption.
    */
   private adopt(host: SettingsScope<ConversationSettings>): void {
     const section = host.getSnapshot().value
-    if (section === undefined || this.busyEnter.getSnapshot() === section.busyEnter) return
+    if (section === undefined) return
     this.busyEnter.set(section.busyEnter)
+    this.sendShortcut.set(section.sendShortcut)
   }
 }

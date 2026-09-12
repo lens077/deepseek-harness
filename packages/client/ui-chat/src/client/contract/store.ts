@@ -12,4 +12,6 @@ export interface TurnProcessViewEntry {
 /** Per-Session state shared only by the Chat view and details surface. */
 export interface ChatStoreState {
   turnProcesses: TurnProcessViewEntry[]
+  /** Cross-surface question reveal request held until the Chat view consumes it. */
+  reveal: { seq: number; nonce: number } | null
 }
