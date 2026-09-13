@@ -1,6 +1,5 @@
-// Session stats under the composer, split into two icon pills: a gauge pill
-// (turn/step counts + output speed) opening the time-and-speed dialog, and a
-// database pill (total tokens + cache hit) opening the token-usage dialog.
+// Composer diagnostics: timing and a cost-first own-request ledger. Assemblies
+// without the ledger retain their token-usage dialog and durable stats fallback.
 // Settled-node identity prevents stream-delta updates from rerendering the row.
 // Mounted on 'conversation.composer.dock' so it sticks with the composer in the
 // active conversation scrollport (see ConversationRoot data-conversation-scroll).
@@ -8,8 +7,7 @@
 import { memo, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { IconDatabaseOutline16, IconGaugeOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: merges the sessionStats key into SessionProjectionMap for useProjection.
 import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
@@ -19,6 +17,7 @@ import { formatTokensPerSecond } from './message-chrome.ts'
 import { assistantStepReading } from '../contract/turn-metrics.ts'
 import { formatCacheHitPercent, formatExactTokens, formatTokens } from './token-format.ts'
 import { MEASURE_STYLE, useStatDialog } from './stat-dialog.ts'
+import { UsageLedgerPill } from './UsageLedgerPanel.tsx'
 import css from './StatsPills.module.css'
 import dialogCss from './stat-dialog.module.css'
 
@@ -43,11 +42,10 @@ interface WindowStats {
  * Fold assistant and tool-result nodes into window-scoped display totals —
  * the FALLBACK for assemblies without the `sessionStats` projection.
  *
- * Every displayed figure rides that durable whole-log projection (and token
- * accounting rides `tokenUsage`) because the window is paged and compaction
- * rewrites it; this fold answers "what is on screen" only when no projection
- * value is served. Its field names deliberately mirror the projection's so
- * the two swap wholesale.
+ * Lifecycle figures prefer the durable `sessionStats` projection and own-request
+ * figures prefer `usageLedger`; the token-only pill is a `tokenUsage` fallback.
+ * The window is paged and compaction rewrites it, so this fold answers "what is
+ * on screen" only when its corresponding projection is absent.
  * @param nodes - snapshot nodes.
  * @returns fallback counts and summed wall times.
  */
@@ -120,13 +118,11 @@ export function billedInputTokens(usage: TokenUsageProjection): number {
   return usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
 }
 
-/** Props: the conversation-snapshot selector plus the projection read seat. */
-export interface StatsPillsProps {
-  useChat: SnapshotSelectorHook<ChatSnapshot>
-  useProjection: UseProjection
-  /** The owning dock's locale seat. */
-  t: ChatViewSlotProps['t']
-}
+/** Framework seats supplied by the Session-scoped composer dock. */
+export type StatsPillsProps = Pick<
+  PropsRuntime<'conversation.composer.dock'>,
+  'useChat' | 'useProjection' | 'useSessions' | 'sessionId'
+> & Pick<ChatViewSlotProps, 't'>
 
 function exactCount(value: number, t: ChatViewSlotProps['t']): string {
   return t('message.turnUsage.count', { count: formatExactTokens(value, t) })
@@ -282,10 +278,8 @@ function UsagePill({ usage, t, dialog }: {
           </div>
           <div className={dialogCss.titleRule} aria-hidden />
           {/* jscpd:ignore-start -- the session-total bucket rows deliberately mirror
-              TurnUsagePanel's per-turn dl: same skin, different data contract (the
-              buckets are always present here; per-turn fields are optional). A
-              session that never wrote cache drops the row, as the per-turn panel
-              drops its absent fields. */}
+              TurnUsagePanel's per-turn dl: same skin, different data contract (all
+              buckets always present here; per-turn fields are optional). */}
           <dl className={dialogCss.details} data-session-stats-usage>
             {cacheHit !== null && (
               <>
@@ -297,12 +291,8 @@ function UsagePill({ usage, t, dialog }: {
             <dd>{exactCount(usage.uncachedInputTokens, t)}</dd>
             <dt>{t('message.turnUsage.cacheRead')}</dt>
             <dd>{exactCount(usage.cacheReadTokens, t)}</dd>
-            {usage.cacheWriteTokens !== 0 && (
-              <>
-                <dt>{t('message.turnUsage.cacheWrite')}</dt>
-                <dd>{exactCount(usage.cacheWriteTokens, t)}</dd>
-              </>
-            )}
+            <dt>{t('message.turnUsage.cacheWrite')}</dt>
+            <dd>{exactCount(usage.cacheWriteTokens, t)}</dd>
             <dt>{t('message.turnUsage.output')}</dt>
             <dd>{exactCount(usage.outputTokens, t)}</dd>
           </dl>
@@ -314,22 +304,25 @@ function UsagePill({ usage, t, dialog }: {
   )
 }
 
-export const StatsPills = memo(function StatsPills({ useChat, useProjection, t }: StatsPillsProps) {
+export const StatsPills = memo(function StatsPills({ useChat, useProjection, useSessions, sessionId, t }: StatsPillsProps) {
   const settledNodes = useChat(s => s.legacy.nodes)
   const usage = useProjection('tokenUsage')
+  const ledger = useProjection('usageLedger')
   // One exclusive slot for both dialogs: opening either pill closes the other.
   const [openPill, setOpenPill] = useState<'time' | 'usage' | null>(null)
-  // Every figure rides the durable sessionStats projection, so paging and
-  // compaction cannot change any of them; an assembly without the unit falls
-  // back to the window-scoped fold wholesale (same field names), paid only
-  // while no projection value is served.
+  // The ledger excludes inherited fork activity; legacy assemblies retain the
+  // whole-log lifecycle projection, or the loaded-window fallback when absent.
   const projected = useProjection('sessionStats')
-  const stats = useMemo(() => projected ?? deriveStats(settledNodes), [projected, settledNodes])
-  // Gated on actual token activity: a session whose steps all settled without
-  // billing (e.g. every request failed) shows its counts without a usage pill.
+  const stats = useMemo(() => ledger === undefined ? projected ?? deriveStats(settledNodes) : {
+    ...ledger.activity,
+    ttftSteps: ledger.activity.ttftRequests,
+    toolMs: ledger.tools.reduce((sum, tool) => sum + tool.toolMs, 0),
+  }, [ledger, projected, settledNodes])
   const hasTokens = usage !== undefined
     && (billedInputTokens(usage) > 0 || usage.outputTokens > 0)
-  if (stats.steps === 0 && !hasTokens) return null
+  const hasLedger = ledger !== undefined && (ledger.activity.steps > 0
+    || ledger.models.length > 0 || ledger.tools.length > 0 || ledger.unreportedAttempts > 0)
+  if (stats.steps === 0 && !(ledger === undefined ? hasTokens : hasLedger)) return null
   // data-composer-stats: InputBar's `.root:has([data-composer-stats])` rule
   // tightens the composer's bottom clearance only while this row renders.
   return (
@@ -344,7 +337,17 @@ export const StatsPills = memo(function StatsPills({ useChat, useProjection, t }
           }}
         />
       )}
-      {hasTokens && (
+      {hasLedger && (
+        <UsageLedgerPill
+          ledger={ledger}
+          sessionId={sessionId}
+          useSessions={useSessions}
+          t={t}
+          open={openPill === 'usage'}
+          setOpen={(open) => { setOpenPill(open ? 'usage' : null) }}
+        />
+      )}
+      {ledger === undefined && hasTokens && (
         <UsagePill
           usage={usage}
           t={t}

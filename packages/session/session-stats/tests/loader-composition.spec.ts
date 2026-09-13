@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
+import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as SessionStatsPlugin from '@deepseek-ai/dsh-session-stats'
@@ -76,6 +77,42 @@ describe('real Loader composition', () => {
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(loaded.sessionProjections.snapshot(session).values.sessionStats)
       .toMatchObject({ turns: 1, steps: 1 })
+  })
+
+  it('loads explicit price and budget configuration and serves priced own-request usage', async () => {
+    const loaded = await loadYaml([
+      "- name: '@deepseek-ai/dsh-session'",
+      "- name: '@deepseek-ai/dsh-session-projection'",
+      "- name: '@deepseek-ai/dsh-session-stats'",
+      '  config:',
+      '    pricing:',
+      '      currency: USD',
+      '      routes:',
+      '        test/m: { input: 1, cacheRead: 0.1, cacheWrite: 2, output: 3 }',
+      '    governance:',
+      '      budgets: { session: 5, tree: 20, all: 100, warningRatio: 0.8 }',
+    ])
+    const session = loaded.sessions.create(SessionId('priced'))
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('assistant/message', { turn: 1, step: 1, stream: [],
+      message: createAssistantMessage({ content: [], source: { provider: 'test', model: 'm' } }),
+      usage: { inputTokens: 1_000_000, outputTokens: 1_000_000, totalTokens: 2_000_000 },
+    }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    expect(loaded.sessionProjections.snapshot(session).values.usageLedger).toMatchObject({
+      estimatedCost: 4, currency: 'USD', models: [{ requests: 1, steps: 1 }],
+      governance: { budgets: { session: 5, warningRatio: 0.8 } },
+    })
+  })
+
+  it('rejects invalid config before registering either unit', () => {
+    expect(() => {
+      SessionStatsPlugin.apply(new Context(), { governance: {
+        budgets: { session: 5, warningRatio: 0.8 },
+      } })
+    }).toThrow('Budgets require')
   })
 
   it('keeps the function-plugin namespace free of a default export', () => {

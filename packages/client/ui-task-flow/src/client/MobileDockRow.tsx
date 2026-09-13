@@ -29,7 +29,7 @@ export function MobileDockRow({ useMobileDock, setMobileDock, t }: MobileDockRow
       </span>
       <span className={css.control}>
         <input type="checkbox" checked={enabled} aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`}
-          onChange={(event) => { setMobileDock(event.currentTarget.checked) }} />
+          onChange={event => { setMobileDock(event.currentTarget.checked) }} />
       </span>
     </label>
   )

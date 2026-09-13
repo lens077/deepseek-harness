@@ -14,6 +14,7 @@ kind: "package-reference"
 
 - [系统提示词行](#system-prompt-row)
 - [轮次 token 用量](#turn-token-usage)
+- [会话用量与成本](#session-usage-and-cost)
 - [提问导航](#question-navigation)
 - [轮次过程折叠](#turn-process-folding)
 - [滚动归属](#scroll-ownership)
@@ -34,6 +35,17 @@ kind: "package-reference"
 ## 轮次 token 用量
 
 只有当已加载窗口包含 `turn/start`，且每次已启动的模型尝试都报告安全、精确的用量时，已完成 Turn 才显示可展开的用量行。该行会省略不可用的可选用量桶。记账不完整或相互矛盾时，整个详情都不显示，避免把部分总量冒充完整结果。
+
+-----
+
+<a id="session-usage-and-cost"></a>
+## 会话用量与成本
+
+输入框用量 pill 优先使用 Host 的 `usageLedger` 投影，先显示估算成本，再显示缓存命中和每个上报步骤的输入。点击后打开右侧抽屉，可选择「本会话」「会话树」「全部会话」。会话树仅沿子代理父子边展开，不包含普通 fork。聚合按持久 Session id 去重，只统计各会话自身请求，不包含继承历史。既有时间 pill 和逐轮用量弹层保持独立。
+
+抽屉展示已上报的提示词／输出分桶、作为输出子集的推理用量、路由与工具明细、耗时、计划重试和前缀变化。缺少账本、报告不完整、路由未定价或币种混合时，隐藏完整成本与预算判断；冷快照明确用于诊断，不代表提供方账单。当前会话配置的软预算与满足样本门槛后的浪费检测阈值适用于每个范围。这些提醒不会中止、降级或改路由。[session-stats README](../../session/session-stats/README.zh.md)负责说明配置和记账限制。
+
+打开抽屉会聚焦关闭按钮，并使应用背景 inert。Tab 焦点保留在抽屉内，关闭后回到触发按钮。窄屏下抽屉铺满屏幕并避开安全区。缺少 `usageLedger` 时，pill 回退到既有 `tokenUsage` 弹层，不推断金额成本。
 
 -----
 

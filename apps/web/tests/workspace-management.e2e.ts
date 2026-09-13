@@ -10,7 +10,8 @@
 // across reload). Zero model calls: workspace.create/rename/archiveSession
 // are host RPCs with no model involvement, and the one session row the
 // flat/hover/menu/archive scenarios need comes from a seeded fixture (the
-// seeded-history seed reused verbatim — no new recording).
+// seeded-history seed reused verbatim — no new recording). The scratch flow
+// creates a real Ungrouped Session without sending a model request.
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join, sep } from 'node:path'
@@ -31,6 +32,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/workspace-man
 const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const MODE = webSnapshotMode()
 const BROWSER_EXPECTED = join(SNAPSHOT_DIR, 'directory-browser.expected.md')
+const SCRATCH_EXPECTED = join(SNAPSHOT_DIR, 'scratch-session-entry.expected.md')
 const SEED_ID = 'workspace-management-web-e2e'
 // Both waits exceed ui-primitives' 200ms POINTER_GRACE_MS. Keep them above
 // that value if the shared setting changes.
@@ -167,6 +169,27 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await scaffold?.close()
   })
 
+  it('starts an Ungrouped Session without selecting a directory', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-scratch'))
+    const before = new Set(scaffold.ctx.sessions.list().map(session => session.id))
+    const entry = page.getByRole('button', { name: 'Start without a folder' })
+    await entry.waitFor({ timeout: 10_000 })
+    const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(SCRATCH_EXPECTED, snapshot, MODE)
+
+    await entry.click()
+    await expect.poll(() => page.locator('[data-composer-input]').first().isEditable(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(
+      () => scaffold.ctx.sessions.list().find(session => !before.has(session.id)),
+      { timeout: 10_000 },
+    ).not.toBeUndefined()
+    const scratch = scaffold.ctx.sessions.list().find(session => !before.has(session.id))
+    if (scratch === undefined) throw new Error('scratch session was not materialized')
+    expect(scratch.header.cwd).toBe(scaffold.workspaceCwd)
+    expect(scaffold.ctx.workspaceRegistry.list().some(workspace => workspace.sessionIds.includes(scratch.id))).toBe(false)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
   it('adds two workspaces through the dialog, each on a folder it created', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-create'))
     const add = async (name: string): Promise<void> => {
@@ -210,10 +233,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
-    // Session restoration focuses the composer; the Workspace list can arrive
-    // first. Do not let that focus cancel the next directory dialog's path draft.
-    const composer = page.locator('[data-composer-input][contenteditable="true"]')
-    await expect.poll(() => composer.evaluate(element => document.activeElement === element), { timeout: 10_000 }).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -422,7 +441,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(() => page.getByText('Sessions', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toContain('flat')
+    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v9'))).toContain('flat')
     // Persisted across reload; then restore grouped for inter-spec hygiene.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
@@ -593,28 +612,21 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   it('archives the seeded session from its row menu, hiding it durably across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-archive'))
-    const initialRow = await seededSessionRow()
+    const sessionRow = await seededSessionRow()
     // Selecting the seed hides any blank stray left by Workspace deletion,
     // so archiving this last visible Ungrouped Session must remove the bucket.
-    await initialRow.click()
-    const { title } = await scaffold.ctx.sessionController.rename({
-      sessionId: SessionId(SEED_ID), title: `Archive target ${SEED_ID}`,
-    })
-    // A user-owned title binds the locator to this seed across restoration.
-    const sessionRow = page.getByRole('treeitem').filter({
-      has: page.getByText(title, { exact: true }),
-    })
-    await expect.poll(() => sessionRow.count(), { timeout: 10_000 }).toBe(1)
+    await sessionRow.click()
     await expect.poll(() => sessionRow.getAttribute('aria-selected'), { timeout: 10_000 }).toBe('true')
     const ungroupedSection = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..').locator('..')
     await expect.poll(() => ungroupedSection.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBe(2)
+    const rowTitle = await sessionRow.locator('[class*="title"]').innerText()
     // Row menu: hover reveals the actions button; Archive session commits
     // without a confirmation dialog (non-destructive: log + accounting stay).
-    await clickHoverAction(sessionRow, `Session actions for ${title}`)
+    await clickHoverAction(sessionRow, `Session actions for ${rowTitle}`)
     await page.getByRole('menuitem', { name: 'Archive session' }).click()
     // The row disappears on the archive-set echo; with no other visible
     // stray, the whole Ungrouped bucket withdraws.
-    await expect.poll(() => sessionRow.count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.getByText(rowTitle, { exact: true }).count(), { timeout: 10_000 }).toBe(0)
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
     // Durable on the host: the registry-global set carries the id while the
     // session log itself stays in persistence untouched.
@@ -626,18 +638,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    // Initial Workspace reconnection can focus the composer after the tree renders.
-    // Finish that navigation before the next test opens a path editor.
-    await page.locator('[role="treeitem"][aria-selected="true"]').waitFor({ timeout: 15_000 })
-    await expect.poll(
-      () => page.locator('[data-composer-input][contenteditable="true"]')
-        .evaluate(element => element === document.activeElement),
-      { timeout: 15_000 },
-    ).toBe(true)
     // The archived row must not resurface (the Ungrouped bucket itself may
     // reappear if selection restore lands on another stray — not this test's
     // concern).
-    expect(await sessionRow.count()).toBe(0)
+    expect(await page.getByText(rowTitle, { exact: true }).count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -666,6 +670,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.warnings).toEqual([])
     // The directory-browser aria golden is this spec's one owned artifact;
     // the seed it reuses is owned (and inventory-guarded) by seeded-history.
-    await assertFixtureInventory(SNAPSHOT_DIR, ['.gitkeep', 'directory-browser.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      '.gitkeep', 'directory-browser.expected.md', 'scratch-session-entry.expected.md',
+    ])
   })
 })

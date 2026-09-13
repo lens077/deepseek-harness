@@ -278,18 +278,19 @@ export function apply(ctx: Context, config: Config): void {
         return
       }
       if (parsed.path === '' || !isAbsolute(parsed.path)) {
-        sendJson(res, 400, { code: 'bad-request', message: 'path must be an absolute directory path' })
+        sendJson(res, 400, { code: 'bad-request', message: 'path must be an absolute file or directory path' })
         return
       }
-      let directory: boolean
+      let exists = false
       try {
-        directory = (await stat(parsed.path)).isDirectory()
+        const target = await stat(parsed.path)
+        exists = target.isFile() || target.isDirectory()
       } catch {
-        // Swallows ENOENT/EACCES: both mean there is no directory to open.
-        directory = false
+        // Swallows ENOENT/EACCES: both mean there is no launch target.
+        exists = false
       }
-      if (!directory) {
-        sendJson(res, 404, { code: 'not-found', message: `directory does not exist: ${parsed.path}` })
+      if (!exists) {
+        sendJson(res, 404, { code: 'not-found', message: `file or directory does not exist: ${parsed.path}` })
         return
       }
       let outcome = await launchResolved(resolved, parsed.path, config.launchWatchMs, catalogInternals())

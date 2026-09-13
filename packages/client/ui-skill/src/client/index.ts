@@ -30,13 +30,11 @@
  * accent row derived only from each logged call/result slice.
  */
 // Type-only: the carrier types, the forwarded Host-event face and the ctx.remote merge.
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SkillEntry } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import { rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -61,7 +59,7 @@ interface CatalogFetch {
 }
 
 /** Required services: reference source faces plus the tool-row and locale registries. */
-export const inject = ['inputTriggers', 'sessions', 'slots', 'locale', 'remote', 'remote.skills', 'sidebarRight']
+export const inject = ['inputTriggers', 'sessions', 'slots', 'locale', 'remote', 'remote.skills']
 
 /**
  * Client plugin body: register the '/' source, dictionaries, and keyed tool row.
@@ -95,13 +93,13 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
-  const fetchCatalog = (sessionId: SessionId): CatalogFetch => {
+  const fetchCatalog = (sessionId: SessionId): Promise<readonly SkillEntry[]> => {
+    if (sessions.subagentAddress(sessionId) !== undefined) return Promise.resolve([])
     const existing = fetches.get(sessionId)
-    if (existing !== undefined) return existing
+    if (existing !== undefined) return existing.promise
     const abort = new AbortController()
     const promise = (async () => {
       const result = await skills.list({ sessionId }, abort.signal)
-      abort.signal.throwIfAborted()
       if (!result.ok) throw new Error(`skills/list failed: ${result.error.code}: ${result.error.message}`)
       return result.value.skills
     })()
@@ -118,7 +116,7 @@ export function apply(ctx: ClientContext): void {
         if (fetches.get(sessionId) === entry) fetches.delete(sessionId)
       },
     )
-    return entry
+    return promise
   }
 
   const invalidate = (key: SessionId): void => {
@@ -142,8 +140,7 @@ export function apply(ctx: ClientContext): void {
     name: 'skill',
     order: 2,
     async candidates(session, { query, signal }) {
-      if (sessions.subagentAddress(session.sessionId) !== undefined) return []
-      const skills = await fetchCatalog(session.sessionId).promise
+      const skills = await fetchCatalog(session.sessionId)
       // Superseded keystroke: the shared fetch stays warm, this caller yields.
       if (signal.aborted) return []
       // The same ranking as the command group of this menu: case-insensitive
@@ -159,8 +156,7 @@ export function apply(ctx: ClientContext): void {
     warm(session) {
       // Fire-and-forget scope-birth prewarm; the shared fetch reports
       // through candidates.
-      if (sessions.subagentAddress(session.sessionId) !== undefined) return
-      fetchCatalog(session.sessionId).promise.catch(() => {})
+      fetchCatalog(session.sessionId).catch(() => {})
     },
     lexicon(session) {
       return fetches.get(session.sessionId)?.settled?.map(skill => skill.name)
@@ -174,25 +170,6 @@ export function apply(ctx: ClientContext): void {
         listeners.delete(listener)
         if (listeners.size === 0) lexiconListeners.delete(key)
       }
-    },
-    openReference(session, { ref }) {
-      if (sessions.subagentAddress(session.sessionId) !== undefined) return false
-      const cwd = sessions.list.getSnapshot().byId[session.sessionId]?.cwd
-      const open = (catalog: readonly SkillEntry[]): boolean => {
-        const path = catalog.find(skill => `/${skill.name}` === ref)?.path
-        if (path === undefined) return false
-        ctx.sidebarRight.openResource(fileAddressFor(session.sessionId, cwd, path))
-        return true
-      }
-      const settled = fetches.get(session.sessionId)?.settled
-      if (settled !== undefined) return open(settled)
-      const entry = fetchCatalog(session.sessionId)
-      void entry.promise.then((catalog) => {
-        if (!entry.abort.signal.aborted) open(catalog)
-      }).catch((error: unknown) => {
-        if (!entry.abort.signal.aborted) console.error('[ui-skill] reference preview failed:', error)
-      })
-      return true
     },
     onPick({ candidate }) {
       // Plain-text-reference decision (web-input-machine note): the pick

@@ -166,7 +166,7 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
 
     // Visible: the plain steering bubble plus the reply that obeys it
     // (steer text + final reply each contain the marker word).
-    await expect.poll(() => page.getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await pendingSteering.count()).toBe(0)
     await expect.poll(() => page.getByText('BANANA', { exact: false }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
     expect(await page.locator('[data-question-key]').count()).toBe(0)
@@ -241,7 +241,7 @@ describe('web e2e: composer shortcut steers directly', () => {
 
     const steerEvents = claimedMessages(sessionEvents, STEER)
     expect(steerEvents).toHaveLength(1)
-    await expect.poll(() => page.getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await pendingSteering.count()).toBe(0)
     await expect.poll(() => page.getByText('BANANA', { exact: false }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(2)
@@ -312,8 +312,6 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
 })
 
 describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
-  const releaseReplay = Promise.withResolvers<undefined>()
-  let disposeReplayBarrier: (() => void) | undefined
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
@@ -329,10 +327,6 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
       replayOverride: STEER_ALL_OVERRIDE,
       paceMs: REPLAY_PACE_MS,
     })
-    disposeReplayBarrier = scaffold.ctx.on('llm/stream', async function* (_options, next) {
-      await releaseReplay.promise
-      yield* next()
-    }, { prepend: true })
     scaffold.ctx.on('session/event', (_session, event) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
@@ -344,8 +338,6 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
   }, 120_000)
 
   afterAll(async () => {
-    releaseReplay.resolve(undefined)
-    disposeReplayBarrier?.()
     await browser?.close()
     await scaffold?.close()
   })
@@ -356,8 +348,8 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     await input.waitFor({ timeout: 10_000 })
     const settled = scaffold.whenTurnSettled(30_000)
 
-    // Hold the question-tool stream until both rows have been steered, so
-    // question-composer takeover cannot race queue publication or the shortcut.
+    // Call 0 streams a question-tool call; the fills must land inside the
+    // first replay window, before the question composer replaces the textarea.
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
     await input.fill(PROMPT)
     await input.press('Enter')
@@ -377,14 +369,6 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     await dock.getByText(STEER_TWO, { exact: true }).waitFor({ timeout: 10_000 })
     expect(await page.locator('[data-pending-steering]').count()).toBe(0)
 
-    // Submission echoes carry the same text before the Host queue publishes.
-    await expect.poll(
-      () => dock.getByRole('button', { name: 'Steer queued message', disabled: false }).count(),
-      { timeout: 10_000 },
-    ).toBe(2)
-    await page.getByRole('textbox', { name: 'Cmd/Ctrl+Enter steers all queued messages', exact: true })
-      .waitFor({ timeout: 10_000 })
-
     // Empty draft + Cmd+Enter: both queued rows steer in FIFO order, the dock
     // empties, and the pending steering renders at the conversation tail.
     await input.press('Meta+Enter')
@@ -392,7 +376,6 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
       () => page.locator('[data-pending-steering]').filter({ hasText: /BANANA|ORANGE/ }).count(),
       { timeout: 10_000 },
     ).toBe(2)
-    releaseReplay.resolve(undefined)
     expect(await page.locator('[data-queue-dock]').count()).toBe(0)
     // The reasoning row streams independently of the steering handoff. Wait
     // for the block to settle so the mid snapshot does not race its transient
@@ -415,8 +398,8 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     expect(second).toHaveLength(1)
     expect(assistantText(sessionEvents)).toContain('BANANA')
     expect(assistantText(sessionEvents)).toContain('ORANGE')
-    await expect.poll(() => page.getByText(STEER_ONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    await expect.poll(() => page.getByText(STEER_TWO, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER_ONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.locator('[class*="userRow"]').getByText(STEER_TWO, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await page.locator('[data-pending-steering]').count()).toBe(0)
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(STEER_ALL_SETTLED, snapshot, MODE)

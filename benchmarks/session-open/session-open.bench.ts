@@ -54,6 +54,7 @@ const EXPECTED_MS = {
   projection: 14,
   firstOpenFirstHistory: 220,
   reopenFirstHistory: 48,
+  firstOpenAgentResume: 180,
   reopenAgentResume: 40,
 } as const
 
@@ -66,8 +67,7 @@ const SESSION_RESTORE_BUDGET_MS = ciTimeBudget(EXPECTED_MS.sessionRestore)
 const PROJECTION_BUDGET_MS = ciTimeBudget(EXPECTED_MS.projection)
 const FIRST_OPEN_FIRST_HISTORY_BUDGET_MS = ciTimeBudget(EXPECTED_MS.firstOpenFirstHistory)
 const REOPEN_FIRST_HISTORY_BUDGET_MS = ciTimeBudget(EXPECTED_MS.reopenFirstHistory)
-/** Reviewed hosted limit: floor(450 × 1.25); calibration records the original reference. */
-const FIRST_OPEN_AGENT_RESUME_BUDGET_MS = 562
+const FIRST_OPEN_AGENT_RESUME_BUDGET_MS = ciTimeBudget(EXPECTED_MS.firstOpenAgentResume)
 const REOPEN_AGENT_RESUME_BUDGET_MS = ciTimeBudget(EXPECTED_MS.reopenAgentResume)
 /** Historical-reference retained heap before variance headroom. */
 const EXPECTED_AGENT_RETAINED_HEAP_MB = 26.1
@@ -297,17 +297,6 @@ describe('standard hosted reopen calibration', () => {
     expect(() => expectOpenWithinBudget(regressionMedian, REOPEN_OPEN_BUDGET_MS)).toThrow()
     expect(MIGRATION_OPEN_BUDGET_MS).toBe(550)
     expect(() => expectOpenWithinBudget(4_000, MIGRATION_OPEN_BUDGET_MS)).toThrow()
-  })
-})
-
-describe('standard hosted first-open Agent-resume calibration', () => {
-  it('accepts recorded hosted samples while rejecting a material regression', () => {
-    const recordedMedian = median([454.2, 454.8, 455.4, 457.8, 459.8])
-
-    expect(recordedMedian).toBe(455.4)
-    expect(() => expectOpenWithinBudget(recordedMedian, 450)).toThrow()
-    expectOpenWithinBudget(recordedMedian, FIRST_OPEN_AGENT_RESUME_BUDGET_MS)
-    expect(() => expectOpenWithinBudget(600, FIRST_OPEN_AGENT_RESUME_BUDGET_MS)).toThrow()
   })
 })
 

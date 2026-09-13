@@ -21,8 +21,6 @@ async function bench() {
   const insertSessionBefore = vi.fn(async () => ({}))
   const open = vi.fn()
   const clear = vi.fn()
-  const selectPanel = vi.fn()
-  ctx.provide('layout', { selectPanel, beginNavigation: () => new AbortController().signal })
   const search = vi.fn(async () => ({
     ok: true as const,
     value: { items: [{ sessionId: 'session' as never, snippet: 'match' }], hasMore: false },
@@ -73,15 +71,17 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename,
-    insertSessionBefore, open, clear, selectPanel, search, renameSession, binding, fork, pickDirectory,
+    insertSessionBefore, open, clear, search, renameSession, binding, fork, pickDirectory,
   }
 }
 
-type HoleName = 'sidebar.workspaces' | 'conversation.hero.workspace' | 'conversation.empty.workspace'
+type HoleName = 'sidebar.workspaces' | 'conversation.hero.workspace' | 'conversation.empty.workspace' | 'settings.general.item'
 
 /** Declare any subset of the holes with a single root registration ('root' is a single slot). */
 function declare(slots: SlotRegistry, ...names: HoleName[]): () => void {
-  const children = Object.fromEntries(names.map(name => [name, { kind: 'single', scope: 'root' }]))
+  const children = Object.fromEntries(names.map(name => [
+    name, { kind: name === 'settings.general.item' ? 'list' : 'single', scope: 'root' },
+  ]))
   return slots.register({ name: 'root', children } as never, () => null)
 }
 
@@ -92,7 +92,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker',
     ])
   })
 
@@ -126,6 +126,13 @@ describe('ui-workspace apply', () => {
     expect(startSession).toHaveBeenCalledWith('ws')
     browser.startSession()
     expect(startSession).toHaveBeenLastCalledWith(undefined)
+    // The Ungrouped ＋ shares the sidebar's fire-and-forget failure reporting.
+    const startScratchSession = vi.spyOn(b.ctx.uiWorkspace, 'startScratchSession')
+      .mockRejectedValueOnce(new Error('refused'))
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    browser.startScratchSession()
+    expect(startScratchSession).toHaveBeenCalledOnce()
+    await vi.waitFor(() => { expect(warning).toHaveBeenCalledWith('new session failed:', expect.any(Error)) })
     browser.open('session' as never)
     expect(b.open).toHaveBeenCalledWith('session')
     const signal = new AbortController().signal
@@ -138,11 +145,16 @@ describe('ui-workspace apply', () => {
     await browser.renameSession('session' as never, 'renamed session')
     expect(b.binding).toHaveBeenCalledWith('session')
     expect(b.renameSession).toHaveBeenCalledWith('renamed session')
-    browser.forkSession('session' as never)
-    await vi.waitFor(() => {
-      expect(b.open).toHaveBeenCalledWith('forked')
-    })
+    await expect(browser.forkSession('session' as never)).resolves.toBe('forked')
+    expect(b.open).toHaveBeenCalledWith('forked')
     expect(b.fork).toHaveBeenCalledWith({ sessionId: 'session', increaseTitle: true })
+    await expect(browser.forkSession('session' as never, 'nested')).resolves.toBe('forked')
+    expect(b.fork).toHaveBeenLastCalledWith({ sessionId: 'session', increaseTitle: true, placement: 'nested' })
+    // A failed fork resolves undefined and keeps the current selection.
+    b.fork.mockRejectedValueOnce(new Error('fork failed'))
+    b.open.mockClear()
+    await expect(browser.forkSession('session' as never)).resolves.toBeUndefined()
+    expect(b.open).not.toHaveBeenCalled()
     await browser.renameWorkspace('ws' as never, 'renamed')
     expect(b.rename).toHaveBeenCalledWith('ws', 'renamed')
     await browser.insertSessionBefore('ws' as never, 's1' as never, 's2' as never)
@@ -194,14 +206,72 @@ describe('ui-workspace apply', () => {
       .rejects.toThrow('index unavailable')
   })
 
+  it('mirrors the optional session-pins seat into the browser hooks and routes pins through it', async () => {
+    const b = await bench()
+    declare(b.slots, 'sidebar.workspaces')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    const disabled = { enabled: false, sidebarArea: false, sidebarRows: 5, pinnedSessionIds: [] }
+    expect(browser.hooks.sessionPins.getSnapshot()).toEqual(disabled)
+    await expect(browser.setPinned(['s1' as never], true)).rejects.toThrow('unavailable')
+
+    // A provider composed in later takes over the view; its changes reach subscribers.
+    let view = { enabled: true, sidebarArea: true, sidebarRows: 4, pinnedSessionIds: ['s1' as never] }
+    const listeners = new Set<() => void>()
+    const setPinned = vi.fn(async () => undefined)
+    const provider = b.ctx.plugin({
+      apply: (providerCtx: Context) => {
+        providerCtx.provide('sessionPins', {
+          view: {
+            getSnapshot: () => view,
+            subscribe: (listener: () => void) => {
+              listeners.add(listener)
+              return () => { listeners.delete(listener) }
+            },
+          },
+          setPinned,
+        } as never)
+      },
+    })
+    await provider.await()
+    const seen = vi.fn()
+    browser.hooks.sessionPins.subscribe(seen)
+    expect(browser.hooks.sessionPins.getSnapshot()).toBe(view)
+    view = { ...view, pinnedSessionIds: ['s1' as never, 's2' as never] }
+    for (const listener of listeners) listener()
+    expect(browser.hooks.sessionPins.getSnapshot()).toBe(view)
+    expect(seen).toHaveBeenCalledTimes(1)
+    await browser.setPinned(['s2' as never], false)
+    expect(setPinned).toHaveBeenCalledWith(['s2'], false)
+
+    // Removing the provider detaches the mirror and restores the disabled view.
+    await provider.dispose()
+    expect(listeners.size).toBe(0)
+    expect(browser.hooks.sessionPins.getSnapshot()).toEqual(disabled)
+  })
+
+  it('contributes the session-count, multi-select, and status-presentation General Settings rows', async () => {
+    const b = await bench()
+    declare(b.slots, 'settings.general.item')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    expect(b.slots.entries('settings.general.item').map(entry => [entry.options.id, entry.options.order])).toEqual([
+      ['workspace-session-count', 25],
+      ['workspace-multi-select', 26],
+      ['workspace-session-status', 27],
+    ])
+    expect(b.locale.bind('workspace')('sessionStatus.settings.title')).toBe('对话状态动画')
+  })
+
   it('unregisters every entry on teardown', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace')
+    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'settings.general.item')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
+    expect(b.slots.entries('settings.general.item')).toHaveLength(3)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)
+    expect(b.slots.entries('settings.general.item')).toHaveLength(0)
     // expect(b.slots.entries('conversation.empty.workspace')).toHaveLength(0)
   })
 })

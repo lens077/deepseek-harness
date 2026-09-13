@@ -11,9 +11,10 @@ import { EnterBehaviorRow } from '../src/client/settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowProps } from '../src/client/settings/EnterBehaviorRow.tsx'
 import { ComposerSubmissionPolicy } from '../src/client/input/submission-policy.ts'
 import { en } from '../src/client/locales.ts'
+import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
-const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined })) as GlobalStandardProps['useResource']
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(() => {
   cleanup()
@@ -39,18 +40,20 @@ function noPendingInteraction() {
 function mount() {
   const policy = new ComposerSubmissionPolicy()
   const setBusyEnter = vi.fn((behavior: 'queue' | 'steer') => { policy.setBusyEnter(behavior) })
+  const setSendShortcut = vi.fn((shortcut: string) => { policy.setSendShortcut(shortcut) })
   const props: EnterBehaviorRowProps = {
-    usePanelInfo: selector => selector({ activePanelId: null }),
     useSessions: emptySessions(),
     useSessionPendingInteraction: noPendingInteraction(),
     useResource,
     useWorkspaces: emptyWorkspaces(),
     useBusyEnter: bindSnapshotSelector(policy.busyEnter),
     setBusyEnter,
-    t: makeTranslate(en),
+    useSendShortcut: bindSnapshotSelector(policy.sendShortcut),
+    setSendShortcut,
+    t: makeTranslate(en, commonEn),
   }
   render(<EnterBehaviorRow {...props} />)
-  return { policy, setBusyEnter }
+  return { policy, setBusyEnter, setSendShortcut }
 }
 
 describe('EnterBehaviorRow', () => {
@@ -59,6 +62,27 @@ describe('EnterBehaviorRow', () => {
     expect(screen.getByText('Send behavior while busy')).toBeDefined()
     expect(screen.getByText('What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
     expect(screen.getByRole('button', { name: /Queue/ }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('selects the send shortcut independently and follows later preference changes', () => {
+    const b = mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Send message shortcut: Enter' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ctrl / Cmd + Enter' }))
+    expect(b.setSendShortcut).toHaveBeenCalledWith('mod-enter')
+    expect(b.setBusyEnter).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menuitem', { name: 'Ctrl / Cmd + Enter' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send message shortcut: Ctrl / Cmd + Enter' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Send behavior while busy: Queue' })).toBeDefined()
+    expect(screen.getByText('Enter inserts a newline; Ctrl + Enter or Cmd + Enter sends. Shift + Enter also inserts a newline.')).toBeDefined()
+    expect(screen.getByText('Busy only; Ctrl / Cmd + Enter uses the selected delivery mode.')).toBeDefined()
+    expect(screen.queryByText('Busy only; Cmd/Ctrl+Enter uses the other behavior')).toBeNull()
+
+    act(() => { b.policy.setSendShortcut('enter') })
+    expect(screen.getByRole('button', { name: 'Send message shortcut: Enter' })).toBeDefined()
+    expect(screen.getByText('What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Send message shortcut: Enter' }))
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menuitem', { name: 'Ctrl / Cmd + Enter' })).toBeNull()
   })
 
   it('selects Steer, follows later preference changes, and closes outside', () => {

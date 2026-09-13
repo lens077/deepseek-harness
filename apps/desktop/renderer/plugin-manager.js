@@ -14,10 +14,6 @@ async function main() {
   document.querySelector('#installed-heading').textContent = messages.installed
   document.querySelector('#empty').textContent = messages.noPlugins
 
-  document.querySelector('#recovery-description').textContent = messages.recoveryDescription
-  document.querySelector('#retry').textContent = messages.retry
-  document.querySelector('#disable-all').textContent = messages.disableAll
-
   const list = document.querySelector('#plugins')
   const empty = document.querySelector('#empty')
   const status = document.querySelector('#status')
@@ -31,16 +27,13 @@ async function main() {
   }
 
   async function render() {
-    const backend = await api.backend.status()
-    document.querySelector('#recovery').hidden = backend.phase !== 'error'
-    document.querySelector('#startup-error').textContent = backend.phase === 'error' ? backend.message : ''
     const plugins = await api.plugins.list()
     list.replaceChildren(...plugins.map(plugin => {
       const item = document.createElement('li')
       const identity = document.createElement('span')
       const version = document.createElement('span')
       version.className = 'package-version'
-      version.textContent = plugin.enabled ? plugin.version : `${plugin.version} · ${messages.disabled}`
+      version.textContent = plugin.version
       identity.append(document.createTextNode(plugin.name), version)
       const remove = document.createElement('button')
       remove.type = 'button'
@@ -59,13 +52,7 @@ async function main() {
       })
       const actions = document.createElement('span')
       actions.className = 'package-actions'
-      const toggle = document.createElement('button')
-      toggle.type = 'button'
-      toggle.textContent = plugin.enabled ? messages.disable : messages.enable
-      toggle.addEventListener('click', () => void run(
-        () => api.plugins.toggle(plugin.name, !plugin.enabled), messages.changingActivation,
-      ))
-      actions.append(toggle, update, remove)
+      actions.append(update, remove)
       item.append(identity, actions)
       return item
     }))
@@ -106,8 +93,6 @@ async function main() {
       input.value = ''
     }, message('installing', { spec }))
   })
-  document.querySelector('#retry').addEventListener('click', () => void run(() => api.backend.retry(), messages.retry))
-  document.querySelector('#disable-all').addEventListener('click', () => void run(() => api.plugins.disableAll(), messages.changingActivation))
   refresh.addEventListener('click', () => void load(messages.refreshing, messages.refreshed))
 
   await load(messages.loadingPlugins, '')

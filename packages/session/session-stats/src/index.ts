@@ -10,9 +10,19 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { sessionStatsProjectionDefinition } from './projection.ts'
+import { createUsageLedgerProjection } from './usage-ledger.ts'
+import { usageConfigSchema } from './usage-config.ts'
+import type { UsageStatsConfig } from './types.ts'
 
 export type * from './types.ts'
+
+/** Deployment prices and read-only budget/detector settings. Invalid configuration fails plugin load. */
+export type Config = UsageStatsConfig
+
+/** Loader configuration; detailed numeric and cross-field checks run before registration. */
+export const Config: z<Config> = z.object({ pricing: z.any(), governance: z.any() })
 
 /** Cordis plugin name. */
 export const name = 'session-stats'
@@ -20,10 +30,12 @@ export const name = 'session-stats'
 export const inject = ['sessionProjections']
 
 /**
- * Register the `sessionStats` unit; the registration is an effect on this
- * plugin's fiber, so unloading removes the key.
+ * Register lifecycle figures and own-request accounting as fiber-owned effects.
  * @param ctx - registrant context carrying the projection registry.
+ * @param config - deployment pricing and advisory policy; invalid values fail before either registration.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = {}): void {
+  usageConfigSchema.parse(config)
   ctx.sessionProjections.register(sessionStatsProjectionDefinition)
+  ctx.sessionProjections.register(createUsageLedgerProjection(config))
 }

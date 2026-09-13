@@ -15,6 +15,15 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../llm/llm-retry"
+    },
+    {
+      "path": "../../compaction/compaction"
+    },
+    {
       "path": "../../llm/llm"
     },
     {

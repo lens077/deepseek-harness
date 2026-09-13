@@ -67,7 +67,7 @@ describe('sessionStats projection unit (registry drive)', () => {
     const { ctx, session } = await harness(true)
     const changes: { key: string; value: unknown; seq: number }[] = []
     ctx.sessionProjections.onChanged((_session, key, value, seq) => {
-      changes.push({ key, value, seq })
+      if (key === 'sessionStats') changes.push({ key, value, seq })
     })
     session.append('turn/start', { turn: 1 })
     const firstSeq = closeStep(session, 1, 1)
@@ -139,13 +139,16 @@ describe('sessionStats projection unit (registry drive)', () => {
   it('has no sessionStats key without the plugin, and drops it when the plugin unloads (HMR safety)', async () => {
     const { ctx, session } = await harness(false)
     expect('sessionStats' in ctx.sessionProjections.snapshot(session).values).toBe(false)
+    expect('usageLedger' in ctx.sessionProjections.snapshot(session).values).toBe(false)
     const fiber = await ctx.plugin(SessionStatsPlugin)
     session.append('turn/start', { turn: 1 })
     closeStep(session, 1, 1)
     expect(ctx.sessionProjections.snapshot(session).values.sessionStats)
       .toMatchObject({ turns: 1, steps: 1 })
+    expect(ctx.sessionProjections.snapshot(session).values.usageLedger?.unreportedAttempts).toBe(1)
     await fiber.dispose()
     expect('sessionStats' in ctx.sessionProjections.snapshot(session).values).toBe(false)
+    expect('usageLedger' in ctx.sessionProjections.snapshot(session).values).toBe(false)
   })
 })
 

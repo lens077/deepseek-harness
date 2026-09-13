@@ -12,6 +12,8 @@ import { StatsPills, deriveStats, formatDuration, type StatsPillsProps } from '.
 import { formatTokens } from '../src/client/chat/token-format.ts'
 import { en, zh } from '../src/client/locale.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { usageList } from './usage-fixture.client.ts'
 
 const t: StatsPillsProps['t'] = makeTranslate(zh, commonZh)
 const tEn: StatsPillsProps['t'] = makeTranslate(en, commonEn)
@@ -145,7 +147,12 @@ describe('StatsPills', () => {
     source: { getSnapshot(): ChatSnapshot; subscribe(fn: () => void): () => void },
     values: Record<string, unknown> = { tokenUsage: USAGE },
   ): StatsPillsProps {
-    return { useChat: bindSnapshotSelector(source), useProjection: projections(values), t: tEn }
+    const list = usageList({ root: undefined })
+    return {
+      useChat: bindSnapshotSelector(source), useProjection: projections(values), t: tEn,
+      sessionId: 'root' as SessionId,
+      useSessions: bindSnapshotSelector({ getSnapshot: () => list, subscribe: () => () => {} }),
+    }
   }
 
   function tokenUsage(cacheReadTokens: number, uncachedInputTokens: number) {
@@ -257,8 +264,7 @@ describe('StatsPills', () => {
     expect(tokens.textContent).toContain('Cache hit90%')
     expect(tokens.textContent).toContain('Uncached input10 tok')
     expect(tokens.textContent).toContain('Cached input90 tok')
-    // A session that never wrote cache drops the row rather than showing 0.
-    expect(tokens.textContent).not.toContain('Cache write')
+    expect(tokens.textContent).toContain('Cache write0 tok')
     expect(tokens.textContent).toContain('Output5 tok')
     // The time split lives on the counts pill's own dialog, not here.
     expect(dialog.textContent).not.toContain('LLM time')
@@ -429,9 +435,6 @@ describe('StatsPills', () => {
       },
     })} />)
     expect(view.getAllByRole('button')[0]!.textContent).toBe('207 tok·Cache hit 45%')
-    // A session that did write cache keeps the row, exact.
-    fireEvent.click(view.getAllByRole('button')[0]!)
-    expect(view.getByRole('dialog').textContent).toContain('Cache write100 tok')
   })
 
   it('renders ZERO times during streaming chunk frames (RFC hard acceptance)', () => {

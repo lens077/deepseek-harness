@@ -263,7 +263,7 @@ Source: [`packages/core/session/src/types.ts:321`](../packages/core/session/src/
 }
 ```
 
-Source: [`packages/interaction/commands/src/types.ts:112`](../packages/interaction/commands/src/types.ts)
+Source: [`packages/interaction/commands/src/types.ts:110`](../packages/interaction/commands/src/types.ts)
 
 <a id="commandrun--log-only"></a>
 
@@ -283,7 +283,7 @@ Source: [`packages/interaction/commands/src/types.ts:112`](../packages/interacti
 'command/run': { commandId: CommandId; name: string; args?: string; source: CommandSource }
 ```
 
-Source: [`packages/interaction/commands/src/types.ts:105`](../packages/interaction/commands/src/types.ts)
+Source: [`packages/interaction/commands/src/types.ts:103`](../packages/interaction/commands/src/types.ts)
 
 ### `compaction/*`
 
@@ -396,21 +396,6 @@ Types: [ContentBlock](subsystems/core.md) · [TokenUsage](subsystems/llm-streami
 
 Source: [`packages/compaction/compaction/src/types.ts:34`](../packages/compaction/compaction/src/types.ts)
 
-### `deliverables/*`
-
-<a id="deliverablespresented--log-only"></a>
-
-#### `deliverables/presented` — log-only
-
-```ts persistence-catalog
-/** Declared filesystem files from a successful final present result, including nested calls. */
-'deliverables/presented': { turn: number; callId: ToolCallId; files: PresentedFile[] }
-```
-
-Types: [ToolCallId](subsystems/core.md)
-
-Source: [`packages/fs/tool-present/src/types.ts:15`](../packages/fs/tool-present/src/types.ts)
-
 ### `feedback/*`
 
 <a id="feedbackmessage-delete--log-only"></a>
@@ -422,7 +407,7 @@ Source: [`packages/fs/tool-present/src/types.ts:15`](../packages/fs/tool-present
 'feedback/message-delete': MessageFeedbackDelete
 ```
 
-Source: [`packages/feedback/message-feedback/src/types.ts:58`](../packages/feedback/message-feedback/src/types.ts)
+Source: [`packages/feedback/message-feedback/src/types.ts:55`](../packages/feedback/message-feedback/src/types.ts)
 
 <a id="feedbackmessage-put--log-only"></a>
 
@@ -433,7 +418,7 @@ Source: [`packages/feedback/message-feedback/src/types.ts:58`](../packages/feedb
 'feedback/message-put': MessageFeedbackPut
 ```
 
-Source: [`packages/feedback/message-feedback/src/types.ts:56`](../packages/feedback/message-feedback/src/types.ts)
+Source: [`packages/feedback/message-feedback/src/types.ts:53`](../packages/feedback/message-feedback/src/types.ts)
 
 <a id="feedbackrecord--log-only"></a>
 
@@ -444,10 +429,10 @@ Source: [`packages/feedback/message-feedback/src/types.ts:56`](../packages/feedb
  * One recorded human remark about this session. Log-only and independent
  * of its trigger; it never enters model context or derived history.
  */
-'feedback/record': FeedbackRecord
+'feedback/record': { text: string }
 ```
 
-Source: [`packages/feedback/command-feedback/src/types.ts:40`](../packages/feedback/command-feedback/src/types.ts)
+Source: [`packages/feedback/command-feedback/src/index.ts:25`](../packages/feedback/command-feedback/src/index.ts)
 
 ### `file-lock/*`
 
@@ -666,7 +651,7 @@ Source: [`packages/api/session-controller/src/types.ts:40`](../packages/api/sess
 'permission/preset': { preset: string }
 ```
 
-Source: [`packages/interaction/permission-presets/src/index.ts:54`](../packages/interaction/permission-presets/src/index.ts)
+Source: [`packages/interaction/permission-presets/src/index.ts:53`](../packages/interaction/permission-presets/src/index.ts)
 
 ### `plan/*`
 
@@ -683,7 +668,7 @@ Source: [`packages/interaction/permission-presets/src/index.ts:54`](../packages/
 'plan/mode': { active: boolean }
 ```
 
-Source: [`packages/plan/plan-mode/src/index.ts:47`](../packages/plan/plan-mode/src/index.ts)
+Source: [`packages/plan/plan-mode/src/index.ts:46`](../packages/plan/plan-mode/src/index.ts)
 
 ### `request/*`
 
@@ -888,20 +873,6 @@ Source: [`packages/core/session/src/types.ts:289`](../packages/core/session/src/
 Source: [`packages/core/session/src/types.ts:287`](../packages/core/session/src/types.ts)
 
 ### `subagent/*`
-
-<a id="subagentcatalog--log-only"></a>
-
-#### `subagent/catalog` — log-only
-
-```ts persistence-catalog
-/**
- * A direct child's complete discovery fact.
- * @param data - versioned parent-owned catalog entry.
- */
-'subagent/catalog': SubagentCatalogEvent
-```
-
-Source: [`packages/subagent/subagent/src/catalog.ts:40`](../packages/subagent/subagent/src/catalog.ts)
 
 <a id="subagentdescriptor--log-only"></a>
 

@@ -1,9 +1,10 @@
 - banner:
   - navigation "Session hierarchy":
     - 'button "Run two shell commands: wait" [disabled]'
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
     - button "Close the file panel" [pressed]:
@@ -38,7 +39,9 @@
   - img
   - text: "Failed Bash Error: tool call aborted before dispatch"
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Full access"': Full access
 - button "Select model, current DeepSeek-V4-Flash":

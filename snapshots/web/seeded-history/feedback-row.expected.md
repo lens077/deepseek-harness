@@ -1,9 +1,10 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the read tool twice" [disabled]
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
     - button "Close the file panel" [pressed]:
@@ -77,7 +78,9 @@
   - text: "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}."
 - text: "Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}."
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
 - button "Select model, current DeepSeek-V4-Flash":

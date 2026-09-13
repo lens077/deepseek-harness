@@ -23,6 +23,7 @@ import type {
 interface RuntimeProvider {
   readonly protocol: string
   open(address: string, ctx: ResourceOpenContext): AsyncIterable<RemoteResult<unknown>>
+  reload?(address: string): void
 }
 
 /** One address: its state, its holders, and the running stream. */
@@ -32,6 +33,7 @@ interface ResourceRecord {
   readonly protocol: string | undefined
   readonly store: SnapshotStore<ResourceSnapshot<unknown>>
   readonly source: ObservableSnapshot<ResourceSnapshot<unknown>>
+  readonly reload: () => void
   /** Subscribers plus pins; the stream runs while this is positive. */
   holders: number
   /** Present while the provider's stream runs; aborting it ends the stream. */
@@ -67,8 +69,8 @@ export function protocolOf(address: string): string | undefined {
   return parsed.hostname === '' ? undefined : parsed.hostname.toLowerCase()
 }
 
-function idle(status: 'none' | 'loading'): ResourceSnapshot<unknown> {
-  return { status, value: undefined, failure: undefined }
+function idle(status: 'none' | 'loading', reload: () => void): ResourceSnapshot<unknown> {
+  return { status, value: undefined, failure: undefined, reload }
 }
 
 /** The `ctx.resources` implementation. */
@@ -118,13 +120,17 @@ export class ResourceRegistry implements Resources {
 
   private create(address: string): ResourceRecord {
     const protocol = protocolOf(address)
+    const reload = (): void => {
+      this.providerOf(protocol)?.reload?.(address)
+    }
     const store = createSnapshotStore<ResourceSnapshot<unknown>>(
-      idle(this.providerOf(protocol) === undefined ? 'none' : 'loading'),
+      idle(this.providerOf(protocol) === undefined ? 'none' : 'loading', reload),
     )
     const record: ResourceRecord = {
       address,
       protocol,
       store,
+      reload,
       holders: 0,
       controller: undefined,
       source: {
@@ -164,7 +170,7 @@ export class ResourceRegistry implements Resources {
     record.holders -= 1
     if (record.holders > 0) return
     this.stop(record)
-    record.store.set(idle(this.providerOf(record.protocol) === undefined ? 'none' : 'loading'))
+    record.store.set(idle(this.providerOf(record.protocol) === undefined ? 'none' : 'loading', record.reload))
   }
 
   /** The provider arrived: a held record opens its stream, an idle one turns `loading`. */
@@ -173,13 +179,13 @@ export class ResourceRegistry implements Resources {
       this.start(record)
       return
     }
-    record.store.set(idle('loading'))
+    record.store.set(idle('loading', record.reload))
   }
 
   /** The provider left: the stream ends and the record reports `none`. */
   private detach(record: ResourceRecord): void {
     this.stop(record)
-    record.store.set(idle('none'))
+    record.store.set(idle('none', record.reload))
   }
 
   private start(record: ResourceRecord): void {
@@ -187,7 +193,7 @@ export class ResourceRegistry implements Resources {
     if (provider === undefined) return
     const controller = new AbortController()
     record.controller = controller
-    if (record.store.getSnapshot().status !== 'loading') record.store.set(idle('loading'))
+    if (record.store.getSnapshot().status !== 'loading') record.store.set(idle('loading', record.reload))
     void this.consume(record, provider, controller.signal)
   }
 
@@ -204,8 +210,8 @@ export class ResourceRegistry implements Resources {
       // to nobody; ending the loop also returns the iterator.
       if (signal.aborted) break
       record.store.set(frame.ok
-        ? { status: 'live', value: frame.value, failure: undefined }
-        : { status: 'failed', value: record.store.getSnapshot().value, failure: frame.error })
+        ? { status: 'live', value: frame.value, failure: undefined, reload: record.reload }
+        : { status: 'failed', value: record.store.getSnapshot().value, failure: frame.error, reload: record.reload })
     }
   }
 }

@@ -91,6 +91,7 @@ describe('session-telemetry-otel egress', () => {
         await ctx.plugin(SessionStore)
         const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
           mode: SessionTelemetryMode.FEEDBACK_ONLY,
+          captureContent: true,
           exporter: {
             url: `${collectorUrl}/v1/logs`,
             timeoutMillis: 1_000,
@@ -109,7 +110,7 @@ describe('session-telemetry-otel egress', () => {
           session.append('request/header', { header: { config: { provider, model: 'm' } }, reason: 'initial' })
         }
         session.append('turn/start', { turn: 1 })
-        recordFeedback(session, { text: 'explicit egress feedback' })
+        recordFeedback(session, 'explicit egress feedback')
         session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
         await fiber.dispose()
 

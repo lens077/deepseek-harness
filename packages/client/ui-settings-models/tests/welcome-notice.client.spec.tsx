@@ -10,7 +10,6 @@ import { SettingsScopeController } from '@deepseek-ai/dsh-client-ui-settings/src
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
-const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 /** Stateless schema service for scope construction in this jsdom fixture. */
 const schemaService = new SettingsSchemaService(new Context())
@@ -29,7 +28,10 @@ const WELCOME_NOTICE_COPY = {
   zh: { title: zh.welcomeTitle, body: zh.welcomeBody, continueLabel: zh.welcomeContinue },
 }
 
+const desktopWidth = window.innerWidth
+
 afterEach(() => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: desktopWidth })
   cleanup()
   document.getElementById('root')?.remove()
 })
@@ -94,7 +96,7 @@ function mount(
     openSection: vi.fn(),
     useSessions: unusedHook,
     useSessionPendingInteraction,
-    usePanelInfo, useResource,
+    useResource,
     useWorkspaces: unusedHook,
     controller,
     useWelcome: bindSnapshotSelector(controller.store),
@@ -112,6 +114,37 @@ describe('WelcomeNotice', () => {
     })
     expect(en.welcomeBody).toBe(WELCOME_NOTICE_COPY.en.body)
     expect(zh.welcomeBody).toBe(WELCOME_NOTICE_COPY.zh.body)
+  })
+
+  it('skips the phone notice without loading or writing acknowledgement', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    const h = mount()
+    await act(async () => { await h.mirror.load() })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(h.complete).toHaveBeenCalledOnce()
+    expect(h.mutate).not.toHaveBeenCalled()
+    expect(h.controller.store.getSnapshot().acknowledged).toBe(false)
+    expect(h.controller.store.getSnapshot().status).toBe('idle')
+    expect(h.appRoot.inert).not.toBe(true)
+  })
+
+  it('dismisses only the notice on entering phone width and never acknowledges it', async () => {
+    const h = mount()
+    await screen.findByRole('dialog')
+    act(() => {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 767 })
+      window.dispatchEvent(new Event('resize'))
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(h.complete).toHaveBeenCalledOnce()
+    expect(h.mutate).not.toHaveBeenCalled()
+    expect(h.controller.store.getSnapshot().acknowledged).toBe(false)
+    act(() => {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+      window.dispatchEvent(new Event('resize'))
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(h.complete).toHaveBeenCalledOnce()
   })
 
   it('renders one blocking modal action and focuses the title', async () => {

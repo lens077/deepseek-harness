@@ -5,9 +5,10 @@
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
     - text: /
     - 'button "Switch subagent: example editor"': example editor
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
     - button "Close the file panel" [pressed]:

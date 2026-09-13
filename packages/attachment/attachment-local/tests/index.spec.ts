@@ -75,6 +75,9 @@ describe('local attachment service', () => {
       ))
       const ref = await service.saveImage({ data, mediaType: 'image/png' })
       await expect(service.readImage(ref)).resolves.toEqual({ ref, data })
+      await expect(service.imageAvailable(ref)).resolves.toBe(true)
+      await expect(service.imageAvailable({ ...ref, attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`) }))
+        .resolves.toBe(false)
       const hostPath = service.imageHostPath(ref)
       expect(hostPath).toBe(join(
         dshHome,

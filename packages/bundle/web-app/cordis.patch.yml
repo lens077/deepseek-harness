@@ -81,10 +81,55 @@
     - id: file-reference-local
       name: '@deepseek-ai/dsh-file-reference-local'
 
-    # Whole-log turn/step counts for the chat stats strip (the sessionStats
-    # projection key); the projection registry itself is a base-layer row.
+    # Durable usage estimates; prices are deployment configuration, not invoices.
     - id: session-stats
       name: '@deepseek-ai/dsh-session-stats'
+      config:
+        pricing:
+          currency: USD
+          routes:
+            deepseek-official/deepseek-v4-flash:
+              input: 0.44
+              cacheRead: 0.014
+              cacheWrite: 0.44
+              output: 1.32
+              tiers:
+                - multiplier: 0.5
+                  windows:
+                    - weekdaysUtc: [1, 2, 3, 4, 5]
+                      hoursUtc: [0, 1]
+                    - weekdaysUtc: [1, 2, 3, 4, 5]
+                      hoursUtc: [4, 6]
+                    - weekdaysUtc: [1, 2, 3, 4, 5]
+                      hoursUtc: [10, 24]
+                    - weekdaysUtc: [0, 6]
+                      hoursUtc: [0, 24]
+            deepseek-official/deepseek-v4-pro:
+              input: 1.32
+              cacheRead: 0.044
+              cacheWrite: 1.32
+              output: 3.96
+              tiers:
+                - multiplier: 0.5
+                  windows:
+                    - weekdaysUtc: [1, 2, 3, 4, 5]
+                      hoursUtc: [0, 1]
+                    - weekdaysUtc: [1, 2, 3, 4, 5]
+                      hoursUtc: [4, 6]
+                    - weekdaysUtc: [1, 2, 3, 4, 5]
+                      hoursUtc: [10, 24]
+                    - weekdaysUtc: [0, 6]
+                      hoursUtc: [0, 24]
+        governance:
+          waste:
+            minUsageSteps: 5
+            minToolCalls: 5
+            averageInputTokens: 64000
+            cacheHitRatio: 0.5
+            ttftShare: 0.6
+            toolErrorRatio: 0.2
+            retryRatio: 0.2
+            cacheBreakRatio: 0.25
 
     # Newest question, closing answer, and Turn outcome for cold Session rows.
     - id: session-digest
@@ -256,10 +301,10 @@
       name: '@deepseek-ai/dsh-client-ui-sidebar-right'
 
 
-    # The right Sidebar's document tab: bounded file reads with selectable
-    # Markdown, code, HTML, PDF, and plain-text renderers.
-    - id: ui-sidebar-documentpreview
-      name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
+    # The right Sidebar's first outside tab type: workspace text files, read
+    # through the bounded workspaceFiles endpoint.
+    - id: ui-sidebar-textpreview
+      name: '@deepseek-ai/dsh-client-ui-sidebar-textpreview'
 
     # The right Sidebar's workspace file tree tab type.
     - id: ui-sidebar-files
@@ -353,9 +398,8 @@
     - id: ui-goal
       name: '@deepseek-ai/dsh-client-ui-goal'
 
-    # The feedback surface: Like/Dislike in the assistant-message action
-    # strip, the feedback dialog behind Dislike and /feedback with its
-    # acknowledgement toast, over the messageFeedback and sessionFeedback Remotes.
+    # Per-message feedback: Like/Dislike plus an optional note in the
+    # assistant-message action strip, over the messageFeedback Remote.
     - id: ui-message-feedback
       name: '@deepseek-ai/dsh-client-ui-message-feedback'
 

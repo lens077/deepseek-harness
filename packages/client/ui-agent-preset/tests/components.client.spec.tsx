@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The two conversation-adjacent surfaces: the new-session chip naming the
- * next session's preset, and the session header's read-only label. The split
+ * next session's preset, and the Session header's read-only label. The split
  * is the host's rule — a session's history is produced under its preset's
  * tools, so the choice is only ever offered before one starts.
  */
@@ -27,7 +27,6 @@ const ROSTER_READY: AgentPresetSettingsState = {
 }
 
 const SEAT_READY: AgentPresetSeatState = {
-  showPicker: true,
   current: 'standard',
   options: [
     { id: 'standard', trust: 'system', name: '标准模式', description: '完整的编码 agent。' },
@@ -81,12 +80,6 @@ function renderLabel(
 }
 
 describe('the new-session chip', () => {
-  it('renders nothing while the picker is disabled', () => {
-    renderSeat({ showPicker: false })
-
-    expect(screen.queryByRole('button')).toBeNull()
-  })
-
   it('reads the roster once and shows the staged preset by name', async () => {
     const actions = renderSeat()
 
@@ -290,7 +283,7 @@ describe('the chip introduce cue', () => {
   })
 })
 
-describe('the session-header label', () => {
+describe('the header label', () => {
   it('names the preset the session runs, and never offers a switch', async () => {
     const { load } = renderLabel({
       blank: false,
@@ -304,9 +297,16 @@ describe('the session-header label', () => {
   })
 
   it('falls back to the id, and to the generic hint, when metadata is absent', () => {
-    renderLabel({ blank: true, projectionValues: { agentPreset: 'mine' } })
+    renderLabel({ blank: false, projectionValues: { agentPreset: 'mine' } })
 
     expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
+  })
+
+  it('stays out of the composer while the session is blank', async () => {
+    const { load, view } = renderLabel({ blank: true, projectionValues: { agentPreset: 'standard' } })
+    expect(view.container.firstChild).toBeNull()
+    await act(async () => { await Promise.resolve() })
+    expect(load).not.toHaveBeenCalled()
   })
 
   it('shows the id until the roster resolves it', () => {

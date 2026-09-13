@@ -46,7 +46,6 @@ function validate(
       fail(`session/title event ${String(event.seq)} repeats message seq ${checked}`)
     }
     seen.add(checked)
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     const cited = checked < event.seq ? session.eventAt(checked) : undefined
     if (cited?.type !== 'user/message' || cited.data.source.kind !== 'user') {
       fail(`session/title event ${String(event.seq)} message seq ${checked} must name an earlier human user/message`)
@@ -56,7 +55,6 @@ function validate(
 
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   const validateExisting = (session: Session): void => {
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     for (const event of session.snapshotEvents()) {
       if (event.type === 'session/title') validate(session, event, fail)
     }

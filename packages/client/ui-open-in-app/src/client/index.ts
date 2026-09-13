@@ -15,6 +15,12 @@ import { OpenInAppController } from './controller.ts'
 import { OpenInAppAction, type OpenInAppActionInjected } from './OpenInAppAction.tsx'
 import { en, NS, zh, type OpenInAppKey } from './locales.ts'
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    openInAppController?: OpenInAppController
+  }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Session-header "open workspace in application" copy. */
@@ -33,6 +39,7 @@ export const inject = ['sessions', 'slots', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   const controller = new OpenInAppController()
+  ctx.provide('openInAppController', controller)
   void controller.load()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'open-in-app: dictionaries')
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({

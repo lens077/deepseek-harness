@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-02-question-rail-reduced-to-stepping.md
-2026-09-02-question-rail-reduced-to-stepping.md: 00f7e8932006a4d6cf47b717a5e64dae7cff65e4
-2026-09-02-question-rail-reduced-to-stepping.zh.md: a0264c46cef446e1206f298fd4dfa44ec116b540
+2026-09-02-question-rail-reduced-to-stepping.md: 3d8bb3c8f03caed6f54853fa9cd6b289eef83b0a
+2026-09-02-question-rail-reduced-to-stepping.zh.md: 6ff2885fbefc60319a57412b7f9e9869433ac6ca

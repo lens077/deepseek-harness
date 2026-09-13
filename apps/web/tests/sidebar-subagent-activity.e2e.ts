@@ -145,6 +145,8 @@ describe('web e2e: sidebar subagent activity', () => {
       MODE,
     )
     expect(await ownerRow.locator('[data-state="ongoing"]').count()).toBe(1)
+    // Descendant-only activity keeps the dot but never claims the owner's running perimeter.
+    expect(await ownerRow.locator('[data-session-status-perimeter]').count()).toBe(0)
     await ownerRow.click()
     const runningTrigger = page.getByRole('button', { name: '1 subagent running' })
     await runningTrigger.waitFor({ timeout: 10_000 })

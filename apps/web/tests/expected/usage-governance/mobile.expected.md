@@ -1,0 +1,61 @@
+- banner:
+  - heading "Usage and cost" [level=2]
+  - button "Close usage panel":
+    - img
+- group "Usage scope":
+  - button "This session"
+  - button "Session tree"
+  - button "All sessions" [pressed]
+- paragraph: 3/4 session snapshots · 3 reported requests
+- text: Total cost unavailable
+- status:
+  - paragraph: 1 sessions have no usage snapshot and are excluded from totals.
+  - paragraph: 1 requests have incomplete billing inputs.
+  - paragraph: 1 requests lack complete prices; cost and budgets are unavailable.
+- paragraph: Cross-session figures use loaded snapshots. Unopened sessions may be missing or out of date; open those sessions and revisit.
+- paragraph: Counts each session's own requests; inherited fork history is not charged twice. Session tree includes subagent descendants only.
+- heading "Observed tokens" [level=3]
+- term: Uncached input
+- definition: 320 tok
+- term: Cached input
+- definition: 150 tok
+- term: Cache write
+- definition: 10 tok
+- term: Output
+- definition: 65 tok
+- term: Cache hit
+- definition: 31%
+- term: Average input per reported step
+- definition: 160 tok
+- paragraph: Includes 15 tok reasoning, already counted in output
+- heading "Providers and models" [level=3]
+- list:
+  - listitem:
+    - strong: deepseek-official/deepseek-v4-flash
+    - paragraph: 3 requests · 3 reported steps
+    - paragraph: 545 tok
+- heading "Timing and retries" [level=3]
+- paragraph: 3 turns 3 steps
+- term: Total turn time (summed across sessions)
+- definition: {{duration}}
+- term: LLM time
+- definition: {{duration}}
+- term: Scheduled retries
+- definition: "0"
+- term: Retry wait
+- definition: {{duration}}
+- term: Failed turns / interruptions
+- definition: 0 / 0
+- heading "Request prefix changes" [level=3]
+- term: Requests with prefix changes
+- definition: "0"
+- term: System prompt changed
+- definition: "0"
+- term: Tool definitions changed
+- definition: "0"
+- term: Model route changed
+- definition: "0"
+- paragraph: Changes show correlation, not proof of a cache miss or monetary loss.
+- heading "Usage diagnostics" [level=3]
+- paragraph: Usage is incomplete; a complete diagnosis is unavailable.
+- paragraph: Estimated from configured prices for guidance, not a provider invoice.

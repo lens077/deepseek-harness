@@ -141,10 +141,10 @@ export type FinishReason = FinishReasonMap[keyof FinishReasonMap]
 /**
  * Token accounting for one model call (cache fields are optional).
  *
- * Counts are DISJOINT: `inputTokens` is uncached input only; cached input is
- * reported separately as `cacheReadTokens`/`cacheWriteTokens` (billed input =
- * sum of the three). Adapters whose providers fold cache hits into a total
- * prompt count (DeepSeek's `prompt_tokens`) subtract them out.
+ * Counts are DISJOINT across three input buckets: `inputTokens` is uncached
+ * input; `cacheReadTokens` and `cacheWriteTokens` are cached input buckets
+ * (billed input = sum of the three). Adapters whose providers fold cache hits
+ * into a total prompt count (DeepSeek's `prompt_tokens`) subtract them out.
  */
 export interface TokenUsage {
   inputTokens: number
@@ -159,6 +159,10 @@ export interface TokenUsage {
   totalTokens?: number
   cacheReadTokens?: number
   cacheWriteTokens?: number
+  /**
+   * Reasoning-token detail already included in `outputTokens`.
+   * Never add to totals or price separately.
+   */
   reasoningTokens?: number
 }
 
@@ -236,8 +240,6 @@ export interface LlmConfigurableProvider {
    * from outside.
    */
   declared?: boolean
-  /** Configuration diagnostic for repair; unaffected models may remain serviceable. */
-  error?: string
 }
 
 /**

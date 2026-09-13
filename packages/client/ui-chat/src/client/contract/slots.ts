@@ -54,10 +54,9 @@ export interface ChatFileMentions {
   /**
    * Resolve prose links for one closing Turn.
    * @param owner - closing-Turn identity and file opener.
-   * @param sessionId - viewed Session, including when history is inherited from a fork.
    * @returns link resolver when available.
    */
-  forClosing(owner: TurnTailOwnerProps, sessionId: SessionId): MarkdownFileMentions | undefined
+  forClosing(owner: TurnTailOwnerProps): MarkdownFileMentions | undefined
 }
 
 /** Cross-surface request to reveal one Session question in its Chat transcript. */
@@ -137,8 +136,6 @@ export interface ChatNodeTurnDataInjected {
 /** Stable owner currency delivered to a keyed Chat renderer. */
 export interface ChatNodeOwnerProps {
   cwd?: string | undefined
-  /** Open the current source file of a skill referenced by a sent message. */
-  openSkill: (name: string) => void
   openFile: (path: string, options?: OpenFileOptions) => void
   inspectCall: (callId: ToolCallId) => void
   forkAt: (seq: number) => void
@@ -200,8 +197,6 @@ export interface ChatViewInjected {
     /** Resolve the stable Turn-process source for one Chat Node key. */
     chatNodeProcess: (key: string) => ChatNodeProcessSource
   }
-  /** Open the current source file of a skill referenced by a sent message. */
-  openSkill: (name: string) => void
   openFile: (path: string, options?: OpenFileOptions) => Promise<void>
   loadOlder: () => void
   /** Jump loader: page history back through seq; resolves when the window covers it. */

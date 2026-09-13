@@ -498,12 +498,11 @@ async list(): Promise<AgentPreset[]>
 
 /**
  * The roster off the Host: {@link list} projected to path-free rows, with
- * the policy-effective default marked, this deployment's authoring
- * capability, and its mode-selection policy beside it.
+ * the default marked and this deployment's authoring capability beside it.
  *
  * Whether a client can open a preset's directory is the Host's own opener
  * capability, not a roster property — a caller needing both joins them.
- * @returns the rows, authoring capability, and effective selection policy.
+ * @returns the rows and the authoring capability.
  */
 @Remote('list') async remoteExportList(): Promise<AgentPresetRoster>
 

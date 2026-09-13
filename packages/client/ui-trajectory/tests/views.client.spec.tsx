@@ -55,7 +55,6 @@ import { t as tTrajectory, tZh } from './locale.client.ts'
 
 // Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
-const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 function TrajectoryTimeline(
   props: Omit<ComponentProps<typeof LocalizedTrajectoryTimeline>, 't'>,
@@ -225,11 +224,12 @@ function standaloneProps(
     sessionId: SID,
     useChat: bindSnapshotSelector(createSnapshotStore(EMPTY_CHAT_SNAPSHOT)),
     useSessions: emptySessions(),
-    usePanelInfo, useResource,
+    useResource,
     useSessionPendingInteraction: bindSnapshotSelector(
       createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),
     ),
     useWorkspaces: emptyWorkspaces(),
+    useTaskFlow: () => { throw new Error('unused') },
     useConversation: bindSnapshotSelector(createSnapshotStore(conversationSnapshot(trajectory))),
     useInput: bindSnapshotSelector(input),
     inputActions,
@@ -270,6 +270,7 @@ async function bench(snapshot = historySnapshot(NODES)) {
   const targetSources: ConversationTargetSources = {
     chat: createSnapshotStore<ChatSnapshot | undefined>(undefined),
     trajectory: trajectoryStore,
+    'task-flow': createSnapshotStore(undefined),
   }
   const binding: ConversationBinding = {
     snapshot: conversationStore,
@@ -348,11 +349,12 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
     sessionId: SID,
     useSession,
     useTrajectory,
+    useTaskFlow: () => { throw new Error('unused') },
     useChat,
     useConversation,
     useConversationViews,
     useSessions,
-    usePanelInfo, useResource,
+    useResource,
     useSessionPendingInteraction,
     useWorkspaces,
     useProjection,
@@ -398,6 +400,7 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
         SessionProvider={({ children }) => children}
         useStore={bindSnapshotSelector(conversation)}
         actions={conversation.actions}
+        useTabsLeading={selector => selector([])}
         renderSlot={() => null}
         open={vi.fn()}
         selectView={conversation.actions.setView}

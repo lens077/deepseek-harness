@@ -295,6 +295,71 @@ describe('ApiSession model selection', () => {
     const untouched = agent(ctx, header('uninstalled-model'))
     expect(agents.consumeSelection(untouched, 'fixture', 'fixture-model', undefined)).toBe(false)
   })
+
+  it('derives the routing baseline from the projection, else the current selection', async () => {
+    const { ctx, agents } = await harness()
+    const routedLow = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' as never }
+    const owned = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' as never }
+
+    // A Session neither routed nor selected keeps whatever its logged header carries.
+    const untouched = agent(ctx, header('untouched-baseline'))
+    untouched.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    expect(agents.baselineFor(untouched)).toEqual(owned)
+
+    // A routed request neither records a user selection nor moves the carried baseline.
+    const routed = agent(ctx, header('routed-baseline'))
+    routed.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    agents.routeForNextRequest(routed, routedLow)
+    routed.session.append('model/route', { baseline: owned, selection: routedLow, reason: 'test' })
+    expect(agents.selectionFor(routed).current).toEqual(routedLow)
+    expect(routed.session.snapshotEvents().filter(event => event.type === 'model/selection')).toEqual([])
+    routed.session.append('request/header', { header: { config: routedLow }, reason: 'initial' })
+    expect(agents.baselineFor(routed)).toEqual(owned)
+    const other = { provider: 'other', model: 'other-model' }
+    routed.session.append('model/route', { baseline: owned, selection: other, reason: 'test' })
+    routed.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    expect(agents.baselineFor(routed)).toEqual(owned)
+
+    // An explicit user selection replaces the carried baseline.
+    agents.selectForNextRequest(routed, other)
+    expect(agents.baselineFor(routed)).toEqual(other)
+  })
+
+  it('falls back to the baseline only for an installed, routed, off-baseline request', async () => {
+    const { ctx, agents } = await harness()
+    const owned = { provider: 'fixture', model: 'fixture-model', reasoningEffort: 'max' as never }
+    const other = { provider: 'other', model: 'other-model' }
+    const failure = { code: 'PROVIDER_UNAVAILABLE', message: 'upstream 503' }
+
+    const uninstalled = agent(ctx, header('fallback-uninstalled'))
+    uninstalled.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    expect(agents.fallbackToBaseline(uninstalled, failure)).toBe(false)
+
+    const unrouted = agent(ctx, header('fallback-unrouted'))
+    agents.selectionFor(unrouted)
+    expect(agents.fallbackToBaseline(unrouted, failure)).toBe(false)
+    unrouted.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    expect(agents.fallbackToBaseline(unrouted, failure)).toBe(false)
+
+    const routed = agent(ctx, header('fallback-routed'))
+    const selection = agents.selectionFor(routed)
+    routed.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    agents.routeForNextRequest(routed, other)
+    routed.session.append('model/route', { baseline: owned, selection: other, reason: 'rule "x" matched' })
+    routed.session.append('request/header', { header: { config: other }, reason: 'initial' })
+    selection.assembled = other
+    expect(agents.fallbackToBaseline(routed, failure)).toBe(true)
+    expect(selection.current).toEqual(owned)
+    expect(selection.assembled).toEqual(owned)
+    expect(routed.session.snapshotEvents().filter(event => event.type === 'model/route').at(-1)?.data).toEqual({
+      baseline: owned,
+      selection: owned,
+      reason: 'fallback: PROVIDER_UNAVAILABLE on other/other-model: upstream 503',
+    })
+    // Once the header is back on the baseline there is nothing further to fall back to.
+    routed.session.append('request/header', { header: { config: owned }, reason: 'initial' })
+    expect(agents.fallbackToBaseline(routed, failure)).toBe(false)
+  })
 })
 
 describe('ApiSession create or adoption', () => {
@@ -451,5 +516,30 @@ describe('ApiSession create or adoption', () => {
     writeFileSync(file, 'not a directory')
     await expect(agents.ensureSession(SessionId('mkdir-failure'), join(file, 'child'), false))
       .rejects.toThrow('failed to ensure project directory')
+  })
+})
+
+describe('ApiSession retirement before permanent deletion', () => {
+  it('disposes owned live Agents, skips cold identities, and refuses foreign live Agents', async () => {
+    const { ctx, agents } = await harness()
+    const ownedMeta = header('retire-owned')
+    const owned = agent(ctx, ownedMeta)
+    const dispose = vi.fn(() => {
+      unregister()
+      return Promise.resolve()
+    })
+    vi.spyOn(ctx.agents, 'create').mockResolvedValue({ agent: owned, dispose })
+    const unregister = ctx.agents.register(owned)
+    await expect(agents.createSeeded({ sessionId: ownedMeta.id })).resolves.toBe(owned)
+    const foreignMeta = header('retire-foreign')
+    ctx.agents.register(agent(ctx, foreignMeta))
+
+    await agents.retire([SessionId('retire-cold'), ownedMeta.id])
+
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(ctx.agents.get(ownedMeta.id)).toBeUndefined()
+    await expect(agents.retire([foreignMeta.id]))
+      .rejects.toThrow('is live but not owned by the Session Controller')
+    expect(ctx.agents.get(foreignMeta.id)).toBeDefined()
   })
 })

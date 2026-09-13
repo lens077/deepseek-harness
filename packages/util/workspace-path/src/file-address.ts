@@ -11,14 +11,15 @@
  * Every resource address is `dsh-resource://<type>/…`, the URI host naming the
  * resource protocol; for `file` the path opens with the scope:
  *
- * - `dsh-resource://file/session/<sessionId>/<path>` names a file by its path,
- *   relative to that Session's workspace root or absolute; the
+ * - `dsh-resource://file/session/<sessionId>/<path>` names a file by its path
+ *   relative to that Session's workspace root (`src/a.ts`, no leading `/`); the
  *   Host resolves it against the root it holds for the Session.
  * - `dsh-resource://file/absolute/<path>` names a file by its absolute path with
  *   the leading `/` dropped (`dsh-resource://file/absolute/home/ys/notes.txt`;
  *   Windows `dsh-resource://file/absolute/C:/x/y.txt`; a UNC path keeps an empty
  *   first segment, `dsh-resource://file/absolute//server/share/x.txt`). It carries
- *   no Session.
+ *   no Session: the reader's own Session resolves it, and the Host's workspace
+ *   confinement still applies.
  *
  * Every id and path segment is component-encoded, so a name carrying `#`, `?`,
  * or a space survives the round trip; `:` stays literal so a drive letter reads
@@ -27,9 +28,9 @@
 export type FileAddress =
   | {
     readonly scope: 'session'
-    /** The Session whose Host workspace resolves the path. */
+    /** The Session whose workspace root the path is relative to. */
     readonly sessionId: string
-    /** Absolute or workspace-relative `/`-separated path; empty for the workspace root itself. */
+    /** Workspace-relative `/`-separated path, no leading `/`; empty for the root itself. */
     readonly path: string
   }
   | {
@@ -57,14 +58,14 @@ function isDriveSegment(segment: string | undefined): boolean {
 }
 
 /**
- * Build the address of a file read through one Session.
- * @param sessionId - the Session whose Host workspace resolves the path.
- * @param path - absolute or workspace-relative path; backslashes are normalized to `/`, and leading `./` prefixes are dropped.
+ * Build the address of a file inside one Session's workspace.
+ * @param sessionId - the Session whose workspace root the path is relative to.
+ * @param path - workspace-relative path; backslashes are normalized to `/`, and a leading `./` or `/` is dropped.
  * @returns the `dsh-resource://file/session/<sessionId>/<path>` address.
  */
 export function sessionFileAddress(sessionId: string, path: string): string {
-  const normalized = path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '')
-  return `${FILE_ADDRESS_PREFIX}session/${encodeSegment(sessionId)}/${encodePath(normalized)}`
+  const relative = path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '').replace(/^\/+/, '')
+  return `${FILE_ADDRESS_PREFIX}session/${encodeSegment(sessionId)}/${encodePath(relative)}`
 }
 
 /**
@@ -81,16 +82,15 @@ export function absoluteFileAddress(path: string): string {
 }
 
 /**
- * Read a file address back into its parts without resolving `.` or `..`.
- * Query and fragment suffixes are ignored; encoded path segments are decoded.
+ * Read a file address back into its parts.
  * @param address - a candidate address.
  * @returns the parts, or `undefined` when the string is not a `dsh-resource://file/` URI in a known scope with a path, or a segment is not validly encoded.
  */
 export function parseFileAddress(address: string): FileAddress | undefined {
   try {
-    if (!address.startsWith(FILE_ADDRESS_PREFIX)) return undefined
-    const end = address.search(/[?#]/)
-    const [scope, ...rest] = address.slice(FILE_ADDRESS_PREFIX.length, end === -1 ? undefined : end).split('/')
+    const url = new URL(address)
+    if (url.protocol !== 'dsh-resource:' || url.host !== 'file') return undefined
+    const [, scope, ...rest] = url.pathname.split('/')
     if (scope === 'session') {
       const [id, ...segments] = rest
       if (id === undefined || id === '' || segments.length === 0) return undefined
@@ -106,7 +106,8 @@ export function parseFileAddress(address: string): FileAddress | undefined {
     }
     return undefined
   } catch {
-    // `decodeURIComponent` throws URIError on a malformed escape.
+    // `new URL` throws TypeError on a non-URL and `decodeURIComponent` throws
+    // URIError on a malformed escape; both mean "not a file address".
     return undefined
   }
 }

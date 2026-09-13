@@ -388,6 +388,50 @@ describe('SessionTitleService Provider lifecycle', () => {
     })
   })
 
+  it('runs an all-messages revision when the prompt is spliced after the step start that dispatches it', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
+    await ctx.plugin(SessionTitleService, CONFIG)
+    const requests: SessionTitleProviderRequest[] = []
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('spliced-prompt'),
+      automatic: 'all-prompts',
+      async generate(request) {
+        requests.push(request)
+        return { title: `Revision ${requests.length}`, messageSeqs: request.messages.map(message => message.seq) }
+      },
+    })
+    const session = ctx.sessions.create(SessionId('spliced-prompt'))
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    appendHumanPrompt(session, 'First routed prompt')
+    await settle()
+    appendRoute(session)
+    await settle()
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    // The loop logs the step start, then splices the queued prompt, then dispatches.
+    session.append('turn/start', { turn: 2 })
+    session.append('step/start', { turn: 2, step: 1 })
+    const second = appendHumanPrompt(session, 'Prompt spliced inside the step')
+    await settle()
+    void ctx.llm.stream(markAgentLoopRequest(deepFreeze({
+      provider: 'main-route',
+      model: 'chat-model',
+      messages: session.deriveMessages(),
+      sessionId: session.id,
+    })))
+    await settle()
+
+    expect(requests).toHaveLength(2)
+    expect(requests[1]?.messages.at(-1)).toEqual({ seq: second.seq, text: 'Prompt spliced inside the step' })
+    expect(ctx.sessionTitle.get(session)?.title).toBe('Revision 2')
+  })
+
   it('ignores model streams that are not a matching loop request', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

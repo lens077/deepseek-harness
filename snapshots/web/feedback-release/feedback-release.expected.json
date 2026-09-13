@@ -11,15 +11,12 @@
     },
     {
       "type": "feedback/message-put",
-      "rating": "positive",
-      "note": "Clear and complete.",
-      "category": "instruction-following"
+      "rating": "positive"
     },
     {
       "type": "feedback/message-put",
-      "rating": "negative",
-      "note": "Read both files before answering.",
-      "category": "task-result"
+      "rating": "positive",
+      "note": "Read both files before answering."
     },
     {
       "type": "feedback/message-delete"

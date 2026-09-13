@@ -23,7 +23,7 @@ export class OpenInAppController {
   /** Installed app ids in host menu order; null until the host answered. */
   readonly apps: SnapshotStore<readonly string[] | null> = createSnapshotStore<readonly string[] | null>(null)
   /** Last chosen app id, or empty before the first choice, shared across sessions and browser restarts. */
-  readonly choice: SnapshotStore<string> = createSnapshotStore<string>('', {
+  readonly choice: SnapshotStore<string> = createSnapshotStore<string>('finder', {
     persist: { name: 'dsh.open-in-app.choice' },
   })
 

@@ -141,6 +141,13 @@ describe('the shipped preset root', () => {
     }
   })
 
+  it.each(['standard', 'cordis', 'ptc'])('uses the Astra 90% pressure policy in %s', async (id) => {
+    const entry = findEntry(await shippedEntries(id), 'compaction-basic')
+    expect(entry?.config).toEqual({
+      modelPolicies: [{ provider: 'openai', model: 'gpt-6-astra', thresholdRatio: 0.9 }],
+    })
+  })
+
   it('omits the general workflow tool only from PTC while retaining Ralph infrastructure', async () => {
     const ptc = await shippedEntries('ptc')
     expect(findEntry(ptc, 'tool-workflow')?.disabled).toBe(true)

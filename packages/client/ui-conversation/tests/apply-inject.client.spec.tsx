@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, onTestFinished, vi } from 'vitest'
-import type { CommandContribution, CommandUiContract } from '@deepseek-ai/dsh-client-ui-commands/client'
+import { describe, expect, it, vi } from 'vitest'
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -50,14 +49,8 @@ async function bench() {
   }
   runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const connectWorkspace = vi.fn(async () => ROOT)
-  runtime.ctx.provide('uiWorkspace', {
-    openWorkspace: async (_workspaceId: WorkspaceId, beforeOpen: (id: SessionId) => void) => {
-      const id = await connectWorkspace()
-      beforeOpen(id)
-      runtime.sessions.open(id)
-    },
-    openSession: (id: SessionId) => { runtime.sessions.open(id) },
-  } as never)
+  const startScratchSession = vi.fn(async () => ROOT)
+  runtime.ctx.provide('uiWorkspace', { connectWorkspace, startScratchSession } as never)
   const sessionFake = sessionFakeFor()
   await runtime.sessions.add({
     id: ROOT,
@@ -68,12 +61,12 @@ async function bench() {
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
   await runtime.root.declare({
-    'main': { kind: 'keyed', scope: 'root' },
+    'conversation': { kind: 'single', scope: 'session-maybe' },
   }, (_props: { renderSlot?: unknown }) => null)
 
   const feature = await runtime.mount({ inject: [...inject], apply })
   runtime.renderRoot()
-  const entryOf = (key: 'main.conversation' | 'conversation.session' | 'conversation.session.header' | 'conversation.composer.bar') =>
+  const entryOf = (key: 'conversation' | 'conversation.session' | 'conversation.session.header' | 'conversation.composer.bar') =>
     runtime.slots.entries(key)[0]!
   const conversationApi = (id: SessionId) => {
     const entry = entryOf('conversation.session')
@@ -85,7 +78,7 @@ async function bench() {
     return { instance, injected }
   }
   const residentApi = (id: SessionId | undefined) => {
-    const entry = entryOf('main.conversation')
+    const entry = entryOf('conversation')
     return (entry.inject as unknown as (sessionId: SessionId | undefined) => ConversationInjected)(id)
   }
   const headerApi = (id: SessionId) => {
@@ -109,55 +102,11 @@ async function bench() {
     conversationApi(id).injected.hooks.conversationViews
   return {
     runtime, feature, slots: runtime.slots, entryOf, conversationApi, headerApi, residentApi, composerApi,
-    inputApi, viewSource, sessionFake, connectWorkspace, rootUpload, uploads,
+    inputApi, viewSource, sessionFake, connectWorkspace, startScratchSession, rootUpload, uploads,
   }
 }
 
 describe('Conversation inject API', () => {
-  it('owns the File action, reads its mounted composer availability, and unregisters on disposal', async () => {
-    const b = await bench()
-    onTestFinished(() => b.runtime.dispose())
-    const contributions = new Map<string, CommandContribution>()
-    const registry = {
-      register: (contribution: CommandContribution) => {
-        contributions.set(contribution.name, contribution)
-        return () => { contributions.delete(contribution.name) }
-      },
-    } satisfies Pick<CommandUiContract, 'register'>
-    b.runtime.ctx.provide('commandUi', registry)
-    await vi.waitFor(() => { expect(contributions.has('file')).toBe(true) })
-    const file = contributions.get('file')!
-    const target = { sessionId: ROOT }
-    expect(file.label!()).toBe('文件')
-    expect(file.available(target)).toBe(false)
-    expect(file.available({ sessionId: 'missing' as SessionId })).toBe(false)
-    if (file.ui.kind !== 'action') throw new Error('File must be an action')
-    file.ui.run({ sessionId: 'missing' as SessionId })
-    const keyboard = b.composerApi(ROOT).keyboard!
-    const open = vi.fn()
-    let available = true
-    const unbind = keyboard.bindFilePicker({ open, available: () => available })
-    expect(file.available(target)).toBe(true)
-    file.ui.run(target)
-    expect(open).toHaveBeenCalledOnce()
-    available = false
-    expect(file.available(target)).toBe(false)
-    file.ui.run(target)
-    expect(open).toHaveBeenCalledOnce()
-    const replacement = vi.fn()
-    const removeReplacement = keyboard.bindFilePicker({ open: replacement, available: () => true })
-    unbind()
-    expect(file.available(target)).toBe(true)
-    file.ui.run(target)
-    expect(replacement).toHaveBeenCalledOnce()
-    removeReplacement()
-    expect(file.available(target)).toBe(false)
-    file.ui.run(target)
-    expect(replacement).toHaveBeenCalledOnce()
-    await b.feature.dispose()
-    expect(contributions.size).toBe(0)
-  })
-
   it('assembles the target-neutral read face without Session side effects', async () => {
     const b = await bench()
     const { injected } = b.conversationApi(ROOT)
@@ -196,6 +145,43 @@ describe('Conversation inject API', () => {
     expect(header.instance.store.getSnapshot().view).toBe('chat')
 
     removeTrajectory()
+    removeChat()
+    await b.runtime.dispose()
+  })
+
+  it('opens a View from outside the shell through the Session-scoped opener', async () => {
+    const b = await bench()
+    const uiConversation = b.runtime.ctx.uiConversation
+    const binding = uiConversation.binding(ROOT)
+    const activate = vi.spyOn(binding, 'activate')
+    const removeChat = b.slots.register(
+      { name: 'conversation.view', id: 'chat', order: 0 },
+      (() => null) as never,
+    )
+    const removeFlow = b.slots.register(
+      { name: 'conversation.view', id: 'task-flow', order: 20 },
+      (() => null) as never,
+    )
+    await Promise.resolve()
+    expect(() => { uiConversation.openView(ROOT, 'task-flow') }).toThrow(/no mounted Conversation shell/)
+
+    const body = b.conversationApi(ROOT)
+    activate.mockClear()
+    uiConversation.openView(ROOT, 'task-flow')
+    expect(activate).toHaveBeenLastCalledWith('task-flow')
+    expect(body.instance.store.getSnapshot()).toMatchObject({ view: 'task-flow', viewRequest: null })
+
+    uiConversation.openView(ROOT, 'task-flow', 'node-1')
+    expect(body.instance.store.getSnapshot()).toMatchObject({
+      view: 'task-flow',
+      viewRequest: { view: 'task-flow', focus: 'node-1' },
+    })
+
+    expect(() => { uiConversation.bindViewOpener('missing' as SessionId, () => {}) }).toThrow(/unknown session/)
+    await b.runtime.sessions.remove(ROOT)
+    expect(() => { uiConversation.openView(ROOT, 'chat') }).toThrow(/no mounted Conversation shell/)
+
+    removeFlow()
     removeChat()
     await b.runtime.dispose()
   })
@@ -372,6 +358,12 @@ describe('Conversation inject API', () => {
     await expect(b.residentApi(ROOT).selectWorkspace('workspace-4' as WorkspaceId))
       .rejects.toThrow('offline')
     expect(b.runtime.sessions.calls.filter(call => call.method === 'open')).toHaveLength(opens)
+
+    // The scratch action delegates to the Workspace navigation service, which owns reuse-or-create and opening.
+    await b.residentApi(undefined).startScratchSession()
+    expect(b.startScratchSession).toHaveBeenCalledOnce()
+    b.startScratchSession.mockRejectedValueOnce(new Error('refused'))
+    await expect(b.residentApi(ROOT).startScratchSession()).rejects.toThrow('refused')
     await b.runtime.dispose()
   })
 

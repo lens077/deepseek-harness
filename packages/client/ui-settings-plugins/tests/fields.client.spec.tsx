@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SecretField, ValueField } from '../src/client/fields.tsx'
+import { ChoiceField, SecretField, ValueField } from '../src/client/fields.tsx'
 
 afterEach(cleanup)
 
@@ -79,6 +79,57 @@ describe('ValueField', () => {
 
     expect(screen.getByLabelText('Command timeout')).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Reset to default' })).toHaveProperty('disabled', true)
+  })
+})
+
+describe('ChoiceField', () => {
+  const choices = [{ value: 'wait', label: 'Keep waiting' }, { value: 'read-now', label: 'Read immediately' }]
+  const choiceFrame = {
+    ...frame,
+    id: 'delegated',
+    label: 'When nobody can be asked',
+    invalidLabel: 'Stored value is not one of these choices.',
+    choices,
+  }
+
+  it('marks the stored token as the checked choice', () => {
+    render(<ChoiceField {...choiceFrame} text="read-now" onEdit={vi.fn()} onReset={vi.fn()} />)
+
+    expect(screen.getByRole('radio', { name: 'Read immediately' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: 'Keep waiting' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('radiogroup').getAttribute('aria-labelledby')).toBe('delegated')
+  })
+
+  it('stages the selected token without writing', () => {
+    const onEdit = vi.fn()
+    render(<ChoiceField {...choiceFrame} text="wait" onEdit={onEdit} onReset={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Read immediately' }))
+
+    expect(onEdit).toHaveBeenCalledWith('read-now')
+  })
+
+  it('leaves every choice unselected and explains a token it does not offer', () => {
+    render(<ChoiceField {...choiceFrame} text="ask-later" invalid onEdit={vi.fn()} onReset={vi.fn()} />)
+
+    for (const choice of choices) {
+      expect(screen.getByRole('radio', { name: choice.label }).getAttribute('aria-checked')).toBe('false')
+    }
+    expect(screen.getByText('Stored value is not one of these choices.')).toBeTruthy()
+  })
+
+  it('offers the reset only while an override would stand, and disables it with the document', () => {
+    const onReset = vi.fn()
+    const { rerender } = render(<ChoiceField {...choiceFrame} text="wait" onEdit={vi.fn()} onReset={onReset} />)
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).toBeNull()
+
+    rerender(<ChoiceField {...choiceFrame} text="read-now" overridden onEdit={vi.fn()} onReset={onReset} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
+    expect(onReset).toHaveBeenCalled()
+
+    rerender(<ChoiceField {...choiceFrame} text="read-now" overridden disabled onEdit={vi.fn()} onReset={onReset} />)
+    expect(screen.getByRole('button', { name: 'Reset to default' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('radio', { name: 'Keep waiting' })).toHaveProperty('disabled', true)
   })
 })
 

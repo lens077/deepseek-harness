@@ -18,7 +18,6 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { ReferenceIcon } from './ReferenceIcon.tsx'
 import css from './user-text.module.css'
-import markdownCss from './markdown/MarkdownText.module.css'
 
 /** The wire form a session chip serializes to; label is the display text. */
 const SESSION_WIRE_RE = /@\[([^\]\n]+)\]\(dsh-session:[^)\s]+\)/gu
@@ -36,14 +35,6 @@ interface DecorationRange {
   readonly display?: string
 }
 
-/** Optional navigation supplied by consumers that can preview references. */
-export interface UserTextReferences {
-  /** Open a file path decoded from an `@` mention. */
-  openFile: (path: string) => void
-  /** Open the source of a skill loaded for this message. */
-  openSkill: (name: string) => void
-}
-
 /**
  * Split one sent text into inline plain runs and reference chips.
  * @param text - the logged model text of the message or queue row.
@@ -52,7 +43,6 @@ export interface UserTextReferences {
  * host loaded for this message, or the command a command bubble echoes
  * (unsent queue rows pass none).
  * @param slashKind - the chip kind those tokens render as.
- * @param references - optional file and skill preview actions; session and command tokens stay labels.
  * @returns inline nodes covering the whole text.
  */
 export function projectUserText(
@@ -60,7 +50,6 @@ export function projectUserText(
   sessionLabels: readonly string[],
   slashNames: readonly string[] = [],
   slashKind: 'skill' | 'command' = 'skill',
-  references?: UserTextReferences,
 ): ReactNode {
   const ranges: DecorationRange[] = []
   SESSION_WIRE_RE.lastIndex = 0
@@ -110,7 +99,7 @@ export function projectUserText(
     const referenceKind = kind === 'session'
       ? 'session'
       : label.startsWith('@')
-        ? label.replace(/^@"|"$/gu, '').endsWith('/') ? 'folder' : 'file'
+        ? label.endsWith('/') ? 'folder' : 'file'
         : undefined
     const displayLabel = range.display
       ?? (referenceKind === undefined
@@ -118,36 +107,19 @@ export function projectUserText(
         : referenceKind === 'session'
           ? label.slice(1)
           : label.slice(1).replace(/^"|"$/gu, '').split(/[\\/]/u).filter(Boolean).at(-1) ?? label.slice(1))
-    const contents = <>
-      {referenceKind !== undefined && (
-        <ReferenceIcon kind={referenceKind} size={16} className={css.refIcon} />
-      )}
-      {displayLabel}
-    </>
-    const open = references === undefined ? undefined
-      : referenceKind === 'file'
-        ? () => { references.openFile(label.slice(1).replace(/^"|"$/gu, '')) }
-        : referenceKind === undefined && slashKind === 'skill'
-          ? () => { references.openSkill(label.slice(1)) }
-          : undefined
-    const className = clsx(css.refChip, referenceKind === undefined && css.slashChip)
-    parts.push(open === undefined
-      ? <span key={tokenStart} className={className} data-ref-chip={referenceKind ?? slashKind} title={label}>
-        {contents}
-      </span>
-      : <button
+    parts.push(
+      <span
         key={tokenStart}
-        type="button"
-        className={clsx(className, markdownCss.fileMention)}
+        className={clsx(css.refChip, referenceKind === undefined && css.slashChip)}
         data-ref-chip={referenceKind ?? slashKind}
         title={label}
-        onClick={(event) => {
-          if (event.detail > 1 || (event.detail !== 0 && event.currentTarget.ownerDocument.getSelection()?.isCollapsed === false)) return
-          open()
-        }}
       >
-        {contents}
-      </button>)
+        {referenceKind !== undefined && (
+          <ReferenceIcon kind={referenceKind} size={16} className={css.refIcon} />
+        )}
+        {displayLabel}
+      </span>,
+    )
     cursor = end
   }
   if (parts.length === 0) return <span className={css.plainRun}>{text}</span>

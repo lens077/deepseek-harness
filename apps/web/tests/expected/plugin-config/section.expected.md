@@ -13,6 +13,15 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "对话布局":
+      - img
+      - text: 对话布局
+    - button "汇总面板":
+      - img
+      - text: 汇总面板
+    - button "项目待办":
+      - img
+      - text: 项目待办
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -31,6 +40,10 @@
       - listitem:
         - 'button "展开设置: Agent 循环"':
           - text: Agent 循环 Agent 如何派发工具调用。
+          - img
+      - listitem:
+        - 'button "展开设置: 文件共享锁"':
+          - text: 文件共享锁 多 Agent 同时竞争同一文件时的解决方案。
           - img
       - listitem:
         - 'button "展开设置: Subagent"':

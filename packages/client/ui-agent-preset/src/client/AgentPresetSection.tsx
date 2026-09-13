@@ -13,8 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Button, IconBrowseOutline16, IconCopyOutline16, IconFolderOpenOutline16,
-  IconPlusOutline16, IconTrashOutline16, Modal, Switch, Tag, Tooltip,
+  Button, IconBrowseOutline16, IconCopyOutline16, IconFolderOpenOutline16, IconPlusOutline16, IconTrashOutline16, Modal, Tag, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -58,8 +57,6 @@ export interface AgentPresetSectionInjected {
   remove: () => Promise<void>
   /** Make one preset the default for sessions created later. */
   makeDefault: (id: string) => Promise<void>
-  /** Show or hide preset selection on new-session surfaces. */
-  setPickerVisible: (showPicker: boolean) => Promise<void>
 }
 
 /** Full component props. */
@@ -217,10 +214,8 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
       <button
         type="button"
         className={css.creatorButton}
-        disabled={!state.authorable || !state.showPicker || state.policySaving}
-        title={!state.showPicker
-          ? t('enablePickerToCreate')
-          : state.authorable ? undefined : t('duplicateUnavailable')}
+        disabled={!state.authorable}
+        title={state.authorable ? undefined : t('duplicateUnavailable')}
         onClick={() => {
           props.startCreatorDraft?.()
           props.close()
@@ -236,34 +231,11 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
     <div className={css.section}>
       <h2 className={css.title}>{t('nav')}</h2>
       <p className={css.intro}>{t('sectionIntro')}</p>
-      <div className={css.pickerPreference}>
-        <div className={css.pickerPreferenceCopy}>
-          <span className={css.pickerPreferenceTitleRow}>
-            <span className={css.pickerPreferenceTitle}>{t('showPicker')}</span>
-            <Tag>{t('showPickerBeta')}</Tag>
-          </span>
-          <p className={css.pickerPreferenceDescription}>{t('showPickerDescription')}</p>
-        </div>
-        <Switch
-          checked={state.showPicker}
-          label={t('showPicker')}
-          disabled={state.status !== 'ready' || state.policySaving}
-          onChange={(next) => { void props.setPickerVisible(next) }}
-        />
-      </div>
       {state.error === null ? null : <p className={css.error} role="alert">{state.error}</p>}
       {([['system', t('builtInGroup')], ['user', t('customGroup')]] as const).map(([trust, heading]) => {
         const group = state.rows
           .filter(row => row.trust === trust)
-          .map(row => ({
-            row,
-            text: presetDisplayText(row, t),
-            selectionAction: row.broken !== undefined
-              ? t('brokenBadge')
-              : row.isDefault
-                ? t(state.showPicker ? 'inUse' : 'selectionOffDefault')
-                : t(state.showPicker ? 'setDefault' : 'enablePickerToSetDefault'),
-          }))
+          .map(row => ({ row, text: presetDisplayText(row, t) }))
         // The custom group is where a preset of one's own will appear, so it
         // stays on screen even while empty: heading plus the creator entry.
         const tail = trust === 'user' ? creatorButton : null
@@ -273,17 +245,12 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
             <h3 className={css.groupHead}>{heading}</h3>
             {group.length === 0 ? null : (
               <ul className={css.cards}>
-                {group.map(({ row, text, selectionAction }) => (
+                {group.map(({ row, text }) => (
                   <li
                     key={row.id}
-                    className={[
-                      css.card,
-                      row.broken !== undefined ? css.cardBroken : undefined,
-                      row.isDefault ? css.cardActive : undefined,
-                      !state.showPicker && row.broken === undefined && !row.isDefault
-                        ? css.cardSelectionDisabled
-                        : undefined,
-                    ].filter(Boolean).join(' ')}
+                    className={row.broken !== undefined
+                      ? `${css.card} ${css.cardBroken}`
+                      : row.isDefault ? `${css.card} ${css.cardActive}` : css.card}
                   >
                     {/* The card body IS the control: picking a preset is the
                       common act, so it should not hide behind a small button.
@@ -301,16 +268,15 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                       // `disabled`, which would take the card out of the tab
                       // order. With the reason moved onto the badge, that is
                       // the only way anyone without a pointer reaches it.
-                      disabled={row.isDefault
-                        || (row.broken === undefined && (!state.showPicker || state.policySaving))}
+                      disabled={row.isDefault}
                       aria-disabled={row.broken !== undefined}
                       // Without this the name is the whole card read aloud —
                       // title, badge, description, id.
-                      aria-label={`${selectionAction}: ${text.name}`}
+                      aria-label={`${row.broken !== undefined ? t('brokenBadge') : row.isDefault ? t('inUse') : t('setDefault')}: ${text.name}`}
                       // The reason rides the badge, not the whole card: two
                       // tooltips over one target would race, and the card's
                       // own label answers what clicking it would do.
-                      title={selectionAction}
+                      title={row.broken !== undefined ? t('brokenBadge') : row.isDefault ? t('inUse') : t('setDefault')}
                       onClick={() => {
                         if (row.broken !== undefined) return
                         void props.makeDefault(row.id)
@@ -333,13 +299,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                         <Tag>
                           {row.trust === 'user' ? t('userTrust') : t('builtIn')}
                         </Tag>
-                        {row.isDefault
-                          ? (
-                            <Tag tone="solid" className={css.inUse}>
-                              {state.showPicker ? t('inUse') : t('selectionOffDefault')}
-                            </Tag>
-                          )
-                          : null}
+                        {row.isDefault ? <Tag tone="solid" className={css.inUse}>{t('inUse')}</Tag> : null}
                       </span>
                       <CardDescription text={text.description ?? t('noDescription')} />
                       {/* Visually hidden, deliberately: the pointer path is the

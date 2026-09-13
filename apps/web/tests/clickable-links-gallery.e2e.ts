@@ -348,7 +348,7 @@ describe('web e2e: clickable links gallery', () => {
     const mentions = markdown.locator('code button')
     expect(await mentions.count()).toBe(1)
     expect(await mentions.first().getAttribute('title')).toBe('site/report.html')
-    expect(await page.getByText('Files changed', { exact: true }).count()).toBe(1)
+    expect(await page.getByText('Produced', { exact: true }).count()).toBe(1)
     expect(await page.locator('[class*="centerCol"] button[aria-label^="Open "]').count()).toBeGreaterThanOrEqual(5)
     expect(await page.locator('button[aria-label="Open c/broken.css"]').count()).toBe(0)
 
@@ -373,8 +373,10 @@ describe('web e2e: clickable links gallery', () => {
     ]) {
       const toggle = page.getByRole('button', { name: row }).first()
       await toggle.waitFor({ timeout: 10_000 })
-      const box = await toggle.boundingBox()
-      await toggle.click(box === null ? {} : { position: { x: box.width - 8, y: box.height / 2 } })
+      if (await toggle.getAttribute('aria-expanded') !== 'true') {
+        const box = await toggle.boundingBox()
+        await toggle.click(box === null ? {} : { position: { x: box.width - 8, y: box.height / 2 } })
+      }
     }
     // Both generic rows (the unclassified str_replace_editor and the unknown
     // design_tokens_sync) expand to their IN/OUT surfaces.

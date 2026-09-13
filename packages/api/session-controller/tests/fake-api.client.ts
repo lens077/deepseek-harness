@@ -28,7 +28,8 @@ import {
   type RemoteStreamOptions,
 } from '@deepseek-ai/dsh-api-gateway/client'
 import type { SessionRemotes } from '../src/client/sessions/remotes.ts'
-import { followSnapshot, pageThrough } from './remote/history.client.ts'
+import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session/types'
+import { historyRecordLastSeq } from '../src/client/sessions/history-records.ts'
 
 const AVAILABLE_STREAM_CONNECTION = {
   generation: {
@@ -148,6 +149,12 @@ export class FakeApiClient {
   onCancel: (payload: unknown) => Promise<RemoteResult<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
   onOpenWorkspacePath: (payload: unknown) => Promise<RemoteResult<{ opened: true }>> =
     () => Promise.resolve(ok({ opened: true as const }))
+  onDirectories: (payload: unknown) => Promise<RemoteResult<{ primaryDirectory: string; additionalDirectories: readonly string[] }>> =
+    () => Promise.resolve(ok({ primaryDirectory: '/f/ws', additionalDirectories: [] }))
+  onDelete: (payload: unknown) => Promise<RemoteResult<{ sessionIds: readonly SessionId[] }>> =
+    payload => Promise.resolve(ok({ sessionIds: [(payload as { sessionId: SessionId }).sessionId] }))
+  onSearchQuestions: (payload: unknown) => Promise<RemoteResult<{ items: readonly never[]; complete: boolean }>> =
+    () => Promise.resolve(ok({ items: [], complete: true }))
 
   private readonly followConns = new Map<SessionId, ValueStreamConn<SessionFollowFrame>[]>()
   private readonly controlConns: ValueStreamConn<SessionControlFrame>[] = []
@@ -236,6 +243,18 @@ export class FakeApiClient {
           payload,
           this.onOpenWorkspacePath(payload),
         ),
+        directories: payload => this.record('session.directories', payload, this.onDirectories(payload)),
+        replaceDirectories: payload => this.record(
+          'session.replaceDirectories',
+          payload,
+          this.onDirectories(payload),
+        ),
+        delete: payload => this.record('session.delete', payload, this.onDelete(payload)),
+        searchQuestions: payload => this.record(
+          'session.searchQuestions',
+          payload,
+          this.onSearchQuestions(payload),
+        ),
         page: request => this.page(request),
         follow: (request, signal) => this.openFollow(request, signal),
         control: signal => this.openControl(signal),
@@ -271,6 +290,23 @@ export class FakeApiClient {
           'workspace.archiveSession',
           payload,
           this.onWorkspaceArchiveSession(payload),
+        ),
+        archiveSessions: payload => this.record(
+          'workspace.archiveSessions',
+          payload,
+          Promise.resolve(ok({ archivedSessionIds: [...payload.sessionIds] })),
+        ),
+        unarchiveSession: payload => this.record(
+          'workspace.unarchiveSession',
+          payload,
+          Promise.resolve(ok({ archivedSessionIds: [] })),
+        ),
+        setSessionMembership: payload => this.record(
+          'workspace.setSessionMembership',
+          payload,
+          Promise.resolve(ok({ workspace: fakeWorkspace(String(payload.workspaceId), {
+            sessionIds: payload.member ? payload.sessionIds : [],
+          }) })),
         ),
         follow: signal => this.openWorkspace(signal),
       },
@@ -362,7 +398,11 @@ export class FakeApiClient {
     if (!result.ok) return result
     return {
       ok: true,
-      value: pageThrough(result.value, request.throughSeq),
+      value: {
+        ...result.value,
+        records: result.value.records
+          .filter(record => historyRecordLastSeq(record) <= request.throughSeq),
+      },
     }
   }
 
@@ -383,7 +423,27 @@ export class FakeApiClient {
       })
       if (!response.ok) throw response.error
       const page = response.value
-      yield followSnapshot(page, request, this.followCursor, this.assistantStreamBaseline)
+      const tail = page.records.at(-1)
+      const cursor = this.followCursor ?? (tail === undefined ? -1 : historyRecordLastSeq(tail))
+      yield {
+        type: 'snapshot',
+        header: {
+          version: SESSION_FORMAT_VERSION,
+          id: sessionId,
+          createdAt: 0,
+          isSeeded: false,
+          ...(request.address.kind === 'subagent'
+            ? { origin: 'subagent' as const, parentSession: request.address.parentSessionId }
+            : {}),
+        },
+        cursor,
+        records: page.records.filter(record => historyRecordLastSeq(record) <= cursor),
+        hasMore: page.hasMore,
+        projections: page.projections ?? { asOfSeq: cursor, values: {} },
+        ...request.assistantStream === true
+          ? { assistantStream: this.assistantStreamBaseline }
+          : {},
+      }
       yield* stream.values
     } finally {
       stream.dispose()

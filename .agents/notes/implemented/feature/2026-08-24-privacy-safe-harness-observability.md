@@ -12,6 +12,8 @@ The shipped telemetry service was disabled by default, but enabling the referenc
 
 ## Decision
 
+Own-request monetary estimates and advisory budgets are owned by [usage governance](2026-09-12-own-request-usage-governance.md). That projection complements the local diagnosis here; exporter privacy remains an independent decision.
+
 1. Expand the `sessionStats` projection with complete `turnMs`/`stepMs`, tool call/result/error counts, model retry count and scheduled delay, and one counter for each core `turn/end` reason. These are scalar, content-free folds over the append-only log. The Web stats strip shows total turn time and nonzero retry/failure/interruption signals; pagination and compaction cannot change them.
 2. Make the reference OTel backend metadata-only by default, independently of delivery mode. A closed structural allowlist keeps identifier-shaped correlation, lineage, lifecycle coordinates, timing, token usage, provider/model/tool identity, retry delay, and outcome/error classification. It removes opaque tool call ids, `cwd`, and all content-bearing payloads. Unknown event bodies retain only their serialized byte count, and no content hash is exported. Retained identifiers are syntax-bounded but deliberately not presented as anonymous; deployments with sensitive topology or tenant naming keep telemetry disabled.
 3. Require two independent explicit opt-ins: `captureContent: true` for raw bodies and `includeAnonymousUserId: true` for the persistent Harness-home Resource identity. The base bundle enables either only when its environment value is exactly `true`; `mode` remains `DISABLED` by default.

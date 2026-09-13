@@ -39,7 +39,6 @@ import {
 } from './continuation-messages.ts'
 import { assertSubagentMaxDepth } from './depth.ts'
 import { foldSubagentDescriptor, snapshotSubagentDescriptor } from './descriptor.ts'
-import { establishCatalogChild } from './catalog.ts'
 import { SubagentError } from './error.ts'
 import { isAdjacentAgentSendMessageTool } from './internal.ts'
 import type { ActivationObserver } from './lifecycle.ts'
@@ -171,15 +170,13 @@ export class SubagentContinuationManager {
           composition: { persona: request.persona, toolFilter: request.toolFilter },
           signal: spec.signal,
         })
-        const childHeader = activation.handle.agent.session.header
-        return await this.submitMaterialized(
+        return this.submitMaterialized(
           activation,
           isAdjacentAgentSendMessageTool(this.ctx.get('tools')?.get('send_message', activation.handle.agent))
             ? withContinuableReturnGuidance(parent.id, request.prompt)
             : request.prompt,
           { source: { kind: 'user' }, signal: spec.signal, delivery: 'queue' },
           parent,
-          () => { establishCatalogChild(parent.session, childHeader, descriptor) },
         )
       })
       return { childId, messageId }
@@ -310,9 +307,7 @@ export class SubagentContinuationManager {
             return undefined
           }
         }
-        const messageId = this.submitAdmitted(activation, content, options, parent)
-        activation.announced = true
-        return messageId
+        return this.submitAdmitted(activation, content, options, parent)
       })
       /* v8 ignore start -- only a delivery that lost the disposal cutoff retries. */
       if (live !== undefined) return live
@@ -453,13 +448,12 @@ export class SubagentContinuationManager {
     return await this.submitMaterialized(activation, content, options, parent)
   }
 
-  /** Admit a materialized child, commit its creation fact, and release it on failure. */
+  /** Submit to a freshly materialized Activation or roll it back completely. */
   private async submitMaterialized(
     activation: Activation,
     content: ContentBlock[],
     options: ChildDeliveryOptions,
     parent: Agent,
-    commit?: () => void,
   ): Promise<MessageId> {
     try {
       if (contentHasImage(content)) {
@@ -468,18 +462,11 @@ export class SubagentContinuationManager {
           throw new SubagentError(`subagent "${activation.childId}" is closing`, 'ACTIVATION_CLOSING')
         }
       }
-      const messageId = this.submitAdmitted(activation, content, options, parent)
-      commit?.()
-      activation.announced = true
-      return messageId
+      return this.submitAdmitted(activation, content, options, parent)
     } catch (error: unknown) {
-      try {
-        await this.activations.dispose(activation)
-      } catch (cleanupError: unknown) {
-        this.ctx.logger.warn(
-          `subagent continuation: disposal after admission or catalog append failure also failed: ${String(cleanupError)}`,
-        )
-      }
+      /* v8 ignore next -- rollback disposal failures must not mask the
+       * pre-acceptance signal, drain, or lifecycle failure. */
+      await this.activations.dispose(activation).catch(() => undefined)
       throw error
     }
   }

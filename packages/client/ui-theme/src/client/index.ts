@@ -129,6 +129,45 @@ declare module '@deepseek-ai/cordis' {
 const BUILTIN_THEMES: readonly ThemeDefinition[] = Object.freeze([
   Object.freeze({ id: 'light', colorScheme: 'light' as const, tokens: Object.freeze({}) }),
   Object.freeze({ id: 'dark', colorScheme: 'dark' as const, tokens: Object.freeze({}) }),
+  Object.freeze({ id: 'glass', colorScheme: 'light' as const, tokens: Object.freeze({
+    '--dsw-alias-bg-base': 'color-mix(in srgb, #dfe9f4 72%, white)',
+    '--dsw-alias-bg-layer-1': 'color-mix(in srgb, white 62%, transparent)',
+    '--dsw-alias-bg-layer-2': 'color-mix(in srgb, #edf4fb 68%, white)',
+    '--dsw-alias-bg-overlay': 'rgba(255,255,255,.78)',
+    '--dsw-alias-border-l1': 'rgba(85,125,160,.22)',
+    '--dsw-alias-brand-primary': '#3977a8',
+    '--dsw-specific-sidebar-fill': 'rgba(255,255,255,.56)',
+  }) }),
+  Object.freeze({ id: 'rainbow', colorScheme: 'light' as const, tokens: Object.freeze({
+    '--dsw-alias-bg-base': '#fff8f1',
+    '--dsw-alias-bg-layer-1': 'rgba(255,255,255,.72)',
+    '--dsw-alias-brand-primary': '#c026d3',
+    '--dsw-alias-button-primary-fill': '#c026d3',
+    '--dsw-specific-sidebar-fill': 'rgba(255,255,255,.64)',
+  }) }),
+  Object.freeze({ id: 'deepseek-muse', colorScheme: 'dark' as const, tokens: Object.freeze({
+    '--dsw-alias-bg-base': '#101820',
+    '--dsw-alias-bg-layer-1': '#162532',
+    '--dsw-alias-bg-layer-2': '#1b2f3e',
+    '--dsw-alias-bg-overlay': 'rgba(16,24,32,.92)',
+    '--dsw-alias-brand-primary': '#49d7b0',
+    '--dsw-alias-brand-text': '#9af3db',
+    '--dsw-specific-sidebar-fill': '#0d151d',
+  }) }),
+  Object.freeze({ id: 'forest', colorScheme: 'dark' as const, tokens: Object.freeze({
+    '--dsw-alias-bg-base': '#101a16',
+    '--dsw-alias-bg-layer-1': '#17251e',
+    '--dsw-alias-bg-layer-2': '#1e3026',
+    '--dsw-alias-brand-primary': '#8acb88',
+    '--dsw-specific-sidebar-fill': '#0d1511',
+  }) }),
+  Object.freeze({ id: 'sunset', colorScheme: 'light' as const, tokens: Object.freeze({
+    '--dsw-alias-bg-base': '#fff8f2',
+    '--dsw-alias-bg-layer-1': '#fff1e8',
+    '--dsw-alias-bg-layer-2': '#ffe9dc',
+    '--dsw-alias-brand-primary': '#d85a3a',
+    '--dsw-specific-sidebar-fill': '#fff4ec',
+  }) }),
 ])
 
 const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([

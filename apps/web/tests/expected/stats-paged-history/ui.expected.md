@@ -1,13 +1,22 @@
 - banner:
   - navigation "Session hierarchy":
     - button "{{workspace}}" [disabled]
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
+    - button "Close the file panel" [pressed]:
+      - img
+      - text: Files
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Flow"
+- complementary "Files in this session":
+  - text: Changed
+  - paragraph: This session has not changed any file yet.
+  - separator "Drag to resize the file panel"
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
@@ -37,6 +46,14 @@
   - button "Jump to turn 26"
   - button "Jump to turn 27"
   - button "Jump to turn 28"
+- button "Search questions":
+  - img
+- button "Previous question":
+  - img
+- button "Next question":
+  - img
+- button "Back to bottom":
+  - img
 - text: m1 7/25 {{clock}}
 - button "Copy":
   - img
@@ -458,10 +475,22 @@
   - img
   - text: Ran for {{duration}}
 - text: 7/25 {{clock}}
-- button "Back to bottom":
+- button "Collapse flow graph" [expanded]:
   - img
+- text: Task flow 28 done · Elapsed {{duration}}
+- button "Switch style":
+  - text: Step rail
+  - img
+- button "Open in canvas":
+  - img
+  - text: Open in canvas
+- region "Task flow graph":
+  - button "Show earlier turns": History 27 · 27 done
+  - text: "#28 m28 Execution {{duration}} · 1 steps"
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
 - button "Select model, current DeepSeek-V4-Flash":
@@ -471,3 +500,6 @@
 - button "28 turns 28 steps":
   - img
   - text: 28 turns 28 steps
+- 'button "Usage and cost: Usage and cost"':
+  - img
+  - text: Usage and cost

@@ -5,7 +5,7 @@ import type { SessionPendingInteractionBase } from '@deepseek-ai/dsh-client-ui-s
 import type { ScheduleId, ScheduleRecord } from '@deepseek-ai/dsh-schedule/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, owningGroupKey, workspaceLabel,
+  deriveFlat, deriveGroups, derivePinned, deriveSearchResults, owningGroupKey, workspaceLabel,
   UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -45,6 +45,27 @@ describe('owningGroupKey', () => {
     const workspaces = [workspace('first', ['owned'])]
     expect(owningGroupKey(workspaces, sid('owned'))).toBe('first')
     expect(owningGroupKey(workspaces, sid('loose'))).toBe(UNGROUPED_KEY)
+  })
+})
+
+describe('derivePinned', () => {
+  it('orders visible pinned sessions by recency and carries pending state', () => {
+    const newest = summary('newest', 30)
+    const awaiting = { ...summary('awaiting', 20), running: true }
+    const archivedRow = summary('archived', 40)
+    const blank = { ...summary('blank', 50), blank: true }
+    const subagent = { ...summary('subagent', 60), origin: 'subagent' as const }
+    const attention: ReadonlyMap<SessionId, SessionPendingInteractionBase> = new Map([[
+      awaiting.id, { key: 'question:1', kind: 'question', sessionId: awaiting.id },
+    ]])
+    const rows = derivePinned(
+      list(newest, awaiting, archivedRow, blank, subagent),
+      [subagent.id, blank.id, archivedRow.id, awaiting.id, sid('unknown'), newest.id],
+      archived('archived'),
+      attention,
+    )
+    expect(rows.map(row => row.id)).toEqual([sid('newest'), sid('awaiting')])
+    expect(rows[1]).toMatchObject({ pendingInteraction: 'question', running: true })
   })
 })
 
@@ -185,6 +206,37 @@ describe('deriveGroups', () => {
     ).items.map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
   })
 
+  it('derives failed only from the exact error digest outcome', () => {
+    const digest = (outcome: 'completed' | 'error' | 'blocked' | 'aborted' | null) => ({
+      question: 'q', questionTruncated: false, questionSeq: 1, questionAt: 1,
+      reply: null, replyTruncated: false, outcome, replySeq: null, repliedAt: null,
+      changedFiles: [], changedFileCount: 0, history: [],
+    })
+    const absent = summary('absent', 5)
+    const open = { ...summary('open', 4), projectionValues: { sessionDigest: digest(null) } }
+    const errored = { ...summary('errored', 3), projectionValues: { sessionDigest: digest('error') } }
+    const blocked = { ...summary('blocked', 2), projectionValues: { sessionDigest: digest('blocked') } }
+    const aborted = { ...summary('aborted', 1), projectionValues: { sessionDigest: digest('aborted') } }
+    const sessions = list(absent, open, errored, blocked, aborted)
+    const workspaces = [workspace('project', ['absent', 'open', 'errored', 'blocked', 'aborted'], 'Project')]
+    const expected = [
+      [sid('absent'), false],
+      [sid('open'), false],
+      [sid('errored'), true],
+      [sid('blocked'), false],
+      [sid('aborted'), false],
+    ]
+
+    expect(deriveGroups(
+      sessions, workspaces, noArchive, noAttention, view(['project']),
+    )[0]!.sessions.map(node => [node.id, node.failed])).toEqual(expected)
+    expect(deriveFlat(sessions, noArchive, noAttention)
+      .map(node => [node.id, node.failed])).toEqual(expected)
+    expect(deriveSearchResults(
+      sessions, workspaces, 'project', noArchive, noAttention, { items: [], hasMore: false }, 10,
+    ).items.map(node => [node.id, node.failed])).toEqual(expected)
+  })
+
   it('hides subagent-origin sessions without hiding ordinary forks', () => {
     const parent = summary('parent', 1)
     const subagent = {
@@ -248,6 +300,35 @@ describe('deriveGroups', () => {
       list(summary('tie-a', 1), summary('tie-b', 1)), [], noArchive, noAttention, view([UNGROUPED_KEY]),
     )[0]!
       .sessions.map(node => node.id)).toEqual([sid('tie-a'), sid('tie-b')])
+  })
+
+  it('nests Ungrouped sessions by the browser-local placement map only', () => {
+    const parent = summary('un-parent', 1)
+    const nested = { ...summary('un-nested', 10), parentId: parent.id }
+    const sibling = { ...summary('un-sibling', 20), parentId: parent.id }
+    const owned = summary('owned', 30)
+    const strayChildOfOwned = summary('stray-child', 40)
+    const groups = deriveGroups(
+      list(parent, nested, sibling, owned, strayChildOfOwned),
+      [workspace('project', ['owned'])],
+      noArchive,
+      noAttention,
+      {
+        expandedGroups: ['project', UNGROUPED_KEY],
+        ungroupedNestedUnder: {
+          [nested.id]: parent.id,
+          // A parent accounted by a Workspace is outside the bucket: top level.
+          [strayChildOfOwned.id]: owned.id,
+        },
+      },
+    )
+
+    const ungrouped = groups.find(group => group.key === UNGROUPED_KEY)!
+    expect(ungrouped.sessions.map(node => node.id)).toEqual([strayChildOfOwned.id, sibling.id, parent.id])
+    expect(ungrouped.sessions.at(-1)!.children?.map(node => node.id)).toEqual([nested.id])
+    // Fork lineage alone still never nests.
+    expect(ungrouped.sessions.find(node => node.id === sibling.id)!.children ?? []).toEqual([])
+    expect(groups.find(group => group.key === 'project')!.sessions.map(node => node.id)).toEqual([owned.id])
   })
 
   it('tolerates Workspace membership arriving before its Session summary', () => {
@@ -401,6 +482,7 @@ describe('deriveSearchResults', () => {
           runningSubagentCount: 0,
           pendingInteraction: 'plan-review',
           completed: false,
+          failed: false,
           hasActiveSchedule: false,
           snippet: 'title session body excerpt',
         },
@@ -411,6 +493,7 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
+          failed: false,
           hasActiveSchedule: false,
         },
         {
@@ -420,6 +503,7 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
+          failed: false,
           hasActiveSchedule: false,
           snippet: 'body needle excerpt',
         },
@@ -499,12 +583,18 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setGroupExpanded('alpha', true)
     store.actions.syncSessionOrderAccount('alpha', ['two', 'one'], { one: 1, two: 2 })
     store.actions.setSessionOrder('alpha', ['one', 'two'])
+    expect(store.getSnapshot().ungroupedNestedUnder).toEqual({})
+    store.actions.setUngroupedNesting('child', 'parent')
+    expect(store.getSnapshot().sessionStatusIndicatorMode).toBe('animated')
+    store.actions.setSessionStatusIndicatorMode('static')
     expect(store.getSnapshot().groupBy).toBe('flat')
     expect(store.getSnapshot()).toMatchObject({
       orderBy: 'updated',
       groupExpansion: { alpha: true },
       sessionOrderByAccount: { alpha: ['one', 'two'] },
       sessionUpdatedAtByAccount: { alpha: { one: 1, two: 2 } },
+      ungroupedNestedUnder: { child: 'parent' },
+      sessionStatusIndicatorMode: 'static',
     })
   })
 

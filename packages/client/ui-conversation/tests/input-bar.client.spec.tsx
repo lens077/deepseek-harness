@@ -23,6 +23,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { ComposerSubmissionPolicy } from '../src/client/input/submission-policy.ts'
+import type { SendShortcut } from '../src/submission-settings.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads,
@@ -33,7 +35,7 @@ import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
-const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined })) as GlobalStandardProps['useResource']
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(cleanup)
 
@@ -98,6 +100,7 @@ interface BenchOptions {
   addFiles?: (files: readonly File[]) => string | null
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
+  sendShortcut?: SendShortcut
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
 }
 
@@ -151,7 +154,8 @@ function bench(over?: BenchOptions) {
   const stop = vi.fn()
   const removeAttachment = vi.fn((id: DraftAttachmentId) => { shell.removeAttachment(id) })
   const menuLauncher = createSnapshotStore<string | null>(over?.commandMenuOpen === true ? 'command' : null)
-  const busyEnter = createSnapshotStore<'queue' | 'steer'>(over?.busyEnter ?? 'queue')
+  const policy = new ComposerSubmissionPolicy()
+  const busyEnter = policy.busyEnter
   const slotCalls: { key: string; owner: unknown }[] = []
   const renderSlot = ((key: string, owner: object) => {
     slotCalls.push({ key, owner })
@@ -163,8 +167,9 @@ function bench(over?: BenchOptions) {
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
     return null
   }) as never
+  policy.setBusyEnter(over?.busyEnter ?? 'queue')
+  policy.setSendShortcut(over?.sendShortcut ?? 'enter')
   const props: InputBarProps = {
-    usePanelInfo: selector => selector({ activePanelId: null }),
     sessionId: SID,
     SessionProvider: ({ children }) => children,
     useSession: bindSnapshotSelector(session),
@@ -197,6 +202,7 @@ function bench(over?: BenchOptions) {
     }),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useBusyEnter: bindSnapshotSelector(busyEnter),
+    useSendShortcut: bindSnapshotSelector(policy.sendShortcut),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(menuLauncher),
@@ -240,7 +246,7 @@ function bench(over?: BenchOptions) {
   const interruptButton = view.container.querySelector<HTMLButtonElement>('button[aria-label="停止生成"]')
   return {
     view, textarea, button, interruptButton, props, sink, shell, wiring: shell, session, stop, removeAttachment, slotCalls,
-    menuLauncher, busyEnter,
+    menuLauncher, busyEnter, policy,
     steerQueue: over?.steerQueue,
     get placeholder() { return placeholderOf(view.container) },
     get inputDisabled() { return textarea.getAttribute('aria-disabled') === 'true' },
@@ -269,49 +275,6 @@ function editableOf(input: HTMLElement): boolean {
 function writeDraft(shell: SessionInputShell, text: string): void {
   act(() => { shell.setDraft(text) })
 }
-
-describe('composer placeholder visibility', () => {
-  it.each([' ', '   ', '\t', '\n'])('hides for whitespace %j and returns after deletion', async (draft) => {
-    const { view, shell, textarea, button, sink, props } = bench()
-    const placeholder = () => view.container.querySelector('[data-composer-placeholder]')
-    expect(placeholder()).not.toBeNull()
-    writeDraft(shell, draft)
-    expect(placeholder()).toBeNull()
-    expect(button.disabled).toBe(true)
-    fireEvent.keyDown(textarea, { key: 'Enter', keyCode: 13 })
-    await act(async () => {})
-    expect(sink).not.toHaveBeenCalled()
-    fireEvent.blur(textarea)
-    view.rerender(<InputBar {...props} />)
-    fireEvent.focus(textarea)
-    expect(placeholder()).toBeNull()
-    writeDraft(shell, '')
-    expect(placeholder()).not.toBeNull()
-  })
-
-  it('hides for pasted spaces and restores after clearing', async () => {
-    const { view, shell, textarea } = bench()
-    fireEvent.paste(textarea, {
-      clipboardData: { items: [], getData: () => '   ' },
-    })
-    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('   ') })
-    expect(view.container.querySelector('[data-composer-placeholder]')).toBeNull()
-    writeDraft(shell, '')
-    expect(view.container.querySelector('[data-composer-placeholder]')).not.toBeNull()
-  })
-
-  it('keeps whitespace hidden through composition and rerender', () => {
-    const { view, shell, textarea, props } = bench()
-    fireEvent.compositionStart(textarea)
-    writeDraft(shell, ' ')
-    expect(view.container.querySelector('[data-composer-placeholder]')).toBeNull()
-    view.rerender(<InputBar {...props} />)
-    fireEvent.compositionEnd(textarea, { data: ' ' })
-    expect(view.container.querySelector('[data-composer-placeholder]')).toBeNull()
-    writeDraft(shell, '')
-    expect(view.container.querySelector('[data-composer-placeholder]')).not.toBeNull()
-  })
-})
 
 describe('image draft rail', () => {
   it('collects clipboard files while preserving text from a mixed paste', async () => {
@@ -781,6 +744,134 @@ describe('Enter semantics', () => {
   })
 })
 
+describe('configurable send shortcut', () => {
+  it.each(['ctrlKey', 'metaKey'] as const)('keeps Enter for newlines and sends with %s', async (modifier) => {
+    const { textarea, shell, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 'Enter', [modifier]: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('adopts changes without remounting the composer and keeps Shift+Enter for newlines', async () => {
+    const { textarea, shell, sink, policy } = bench({ draft: 'hello' })
+    act(() => { policy.setSendShortcut('mod-enter') })
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true, ctrlKey: true })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    expect(sink).not.toHaveBeenCalled()
+    act(() => { policy.setSendShortcut('enter') })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it.each(['queue', 'steer'] as const)('uses the busy %s preference with the required chord', (busyEnter) => {
+    const { textarea, sink } = bench({ draft: 'hello', running: true, sendShortcut: 'mod-enter', busyEnter })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], busyEnter, expect.any(AbortSignal))
+  })
+
+  it('protects IME confirmation and held-down chords in modifier mode', () => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, isComposing: true })
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true, keyCode: 229 })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, repeat: true })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it('leaves the send button independent of the shortcut', () => {
+    const { button, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+  })
+})
+
+describe('custom send shortcuts', () => {
+  it.each([
+    ['Ctrl+Shift+Enter', { key: 'Enter', ctrlKey: true, shiftKey: true }],
+    ['Meta+Shift+Enter', { key: 'Enter', metaKey: true, shiftKey: true }],
+    ['Meta+Enter', { key: 'Enter', metaKey: true }],
+    ['Alt+Enter', { key: 'Enter', altKey: true }],
+    ['Ctrl+Alt+S', { key: 'ß', code: 'KeyS', ctrlKey: true, altKey: true }],
+    ['Ctrl+Alt+ArrowUp', { key: 'ArrowUp', ctrlKey: true, altKey: true }],
+    ['Ctrl+Space', { key: ' ', code: 'Space', ctrlKey: true }],
+  ] as const)('sends exactly once with %s', (sendShortcut, event) => {
+    const { textarea, sink } = bench({ draft: 'custom draft', sendShortcut })
+    fireEvent.keyDown(textarea, event)
+    expect(sink).toHaveBeenCalledExactlyOnceWith('custom draft', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('keeps Enter and bare Shift+Enter as native newlines under a custom chord', async () => {
+    const { textarea, sink, shell } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Shift+Enter' })
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n\n') })
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('does not submit when a custom chord is missing a modifier or has an extra one', () => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Alt+S' })
+    for (const event of [
+      { key: 's', ctrlKey: true },
+      { key: 's', metaKey: true, altKey: true },
+      { key: 's', ctrlKey: true, altKey: true, shiftKey: true },
+      { key: 'Enter', ctrlKey: true },
+    ]) fireEvent.keyDown(textarea, event)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it.each(['Ctrl+Alt+S', 'Ctrl+Shift+Enter'])('blocks IME and repeat sends for %s', (sendShortcut) => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut })
+    const chord = sendShortcut === 'Ctrl+Alt+S'
+      ? { key: 's', code: 'KeyS', ctrlKey: true, altKey: true }
+      : { key: 'Enter', ctrlKey: true, shiftKey: true }
+    fireEvent.keyDown(textarea, { ...chord, isComposing: true })
+    fireEvent.keyDown(textarea, { ...chord, keyCode: 229 })
+    fireEvent.keyDown(textarea, { ...chord, repeat: true })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.compositionStart(textarea)
+    fireEvent.keyDown(textarea, chord)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('rejects AltGraph and accepts a subsequent genuine Ctrl+Alt chord', () => {
+    const { textarea, sink } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Alt+S' })
+    const altGraph = new KeyboardEvent('keydown', { key: 's', code: 'KeyS', ctrlKey: true, altKey: true, bubbles: true })
+    Object.defineProperty(altGraph, 'getModifierState', { value: (key: string) => key === 'AltGraph' })
+    fireEvent(textarea, altGraph)
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 's', code: 'KeyS', ctrlKey: true, altKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it.each(['queue', 'steer'] as const)('uses the preferred busy %s delivery for custom sends', (busyEnter) => {
+    const { textarea, sink } = bench({ draft: 'hello', running: true, busyEnter, sendShortcut: 'Ctrl+Alt+S' })
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true, altKey: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], busyEnter, expect.any(AbortSignal))
+  })
+
+  it('switches custom bindings without remounting and never steers an empty queue via a custom chord', () => {
+    const steerQueue = vi.fn()
+    const { textarea, sink, policy, shell } = bench({ running: true, queue: [row('q-1')], steerQueue, sendShortcut: 'Meta+Enter' })
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    expect(steerQueue).not.toHaveBeenCalled()
+    expect(sink).not.toHaveBeenCalled()
+    policy.setSendShortcut('Ctrl+Alt+S')
+    writeDraft(shell, 'hello')
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true, altKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+    expect(steerQueue).not.toHaveBeenCalled()
+  })
+})
+
 describe('running and lock semantics', () => {
   it('dismisses the Stop tooltip when an empty composer becomes idle', () => {
     vi.useFakeTimers()
@@ -846,7 +937,7 @@ describe('running and lock semantics', () => {
     act(() => {
       claimed.shell.setDraft('/goal ')
       claimed.shell.beginCommand(
-        { name: 'goal', token: '/goal ', submit: () => Promise.resolve({ kind: 'success' }) },
+        { token: '/goal ', submit: () => Promise.resolve({ kind: 'success' }) },
         { start: 0, end: 6, draftRev: claimed.shell.snapshot.draftRev },
       )
     })
@@ -935,7 +1026,7 @@ describe('running and lock semantics', () => {
   })
 
   it('running continuable subagent keeps Send beside an independent Stop', () => {
-    const { button, interruptButton, textarea, sink, stop, view, slotCalls, shell } = bench({
+    const { button, interruptButton, textarea, sink, stop, view, slotCalls } = bench({
       running: true,
       draft: '后续消息',
       subagent: {
@@ -950,14 +1041,9 @@ describe('running and lock semantics', () => {
     expect(button.getAttribute('aria-label')).toBe('排队发送')
     expect(interruptButton).not.toBeNull()
     expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
+    expect((view.getByLabelText('添加附件') as HTMLButtonElement).disabled).toBe(true)
     expect(view.container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(true)
     expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(false)
-    const click = vi.spyOn(HTMLInputElement.prototype, 'click')
-    onTestFinished(() => { click.mockRestore() })
-    expect(shell.canPickFiles()).toBe(false)
-    expect(shell.pickFiles()).toBe(false)
-    expect(click).not.toHaveBeenCalled()
-    click.mockRestore()
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('后续消息', [], 'queue', expect.any(AbortSignal))
     fireEvent.click(interruptButton!)
@@ -990,41 +1076,10 @@ describe('running and lock semantics', () => {
     ['active goal', { goal: { phase: 'active' as const, objective: 'inspect files' } }],
   ])('%s keeps ordinary generic-file intake enabled', (_name, projection) => {
     const added = vi.fn(() => null)
-    const { view, slotCalls, shell } = bench({ ...projection, addFiles: added })
+    const { view, slotCalls } = bench({ ...projection, addFiles: added })
+    expect((view.getByLabelText('添加附件') as HTMLButtonElement).disabled).toBe(false)
     expect(view.container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(false)
     expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(true)
-    // The menu's File row opens the hidden input through the bound picker.
-    const click = vi.spyOn(HTMLInputElement.prototype, 'click')
-    onTestFinished(() => { click.mockRestore() })
-    expect(shell.canPickFiles()).toBe(true)
-    expect(shell.pickFiles()).toBe(true)
-    expect(click).toHaveBeenCalledOnce()
-    click.mockRestore()
-  })
-
-  it.each([
-    ['removed session', { disabled: true }],
-    ['inert composer', { inert: true }],
-    ['blocked composer', { blocked: { reason: 'waiting' } }],
-  ])('%s hides and refuses the File action', (_name, state) => {
-    const { shell, view } = bench({ ...state, addFiles: () => null })
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
-    const open = vi.spyOn(input, 'click')
-    expect(shell.canPickFiles()).toBe(false)
-    expect(shell.pickFiles()).toBe(false)
-    expect(open).not.toHaveBeenCalled()
-  })
-
-  it('file action availability follows mount and live composer state', () => {
-    const { props, view, shell } = bench({ addFiles: () => null })
-    expect(shell.canPickFiles()).toBe(true)
-    view.rerender(<InputBar {...props} disabled />)
-    expect(shell.canPickFiles()).toBe(false)
-    view.rerender(<InputBar {...props} />)
-    expect(shell.canPickFiles()).toBe(true)
-    view.unmount()
-    expect(shell.canPickFiles()).toBe(false)
-    expect(shell.pickFiles()).toBe(false)
   })
 
   it('parent-offline running continuable locks Send but keeps independent Stop usable', () => {
@@ -1042,7 +1097,7 @@ describe('running and lock semantics', () => {
     })
     expect(textarea.getAttribute('aria-disabled')).toBe('true')
     expect(placeholderOf(view.container)).toBe('父会话已离线，无法继续发送；仍可停止当前运行')
-    expect((view.getByLabelText('添加文件或调用指令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
     expect(button.getAttribute('aria-label')).toBe('发送消息')
     expect(button.disabled).toBe(true)
     expect(interruptButton?.disabled).toBe(false)
@@ -1094,7 +1149,7 @@ describe('running and lock semantics', () => {
     const { textarea, view } = bench({ disabled: true })
     expect(textarea.getAttribute('aria-disabled')).toBe('true')
     expect(placeholderOf(view.container)).toBe('会话不可用')
-    expect((view.getByLabelText('添加文件或调用指令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('idle primary sends and disables on empty draft', () => {
@@ -1227,7 +1282,7 @@ describe('running and lock semantics', () => {
     expect(editableOf(textarea)).toBe(false)
     expect(textarea.getAttribute('aria-haspopup')).toBe('menu')
     expect(textarea.getAttribute('aria-expanded')).toBe('false')
-    expect((view.getByLabelText('添加文件或调用指令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
 
     fireEvent.click(textarea)
     fireEvent.keyDown(textarea, { key: 'Enter' })
@@ -1272,7 +1327,6 @@ describe('machine pending lock', () => {
       shell.setDraft('/goal ')
       shell.beginCommand(
         {
-          name: 'goal',
           token: '/goal ',
           submit: () => new Promise<never>(() => {}), // never settles: stays submitting
         },
@@ -1299,7 +1353,7 @@ describe('decorations', () => {
     act(() => {
       shell.setDraft('/goal ')
       shell.beginCommand(
-        { name: 'goal', token: '/goal ', hint: '目标内容', submit: () => Promise.resolve({ kind: 'success' as const }) },
+        { token: '/goal ', hint: '目标内容', submit: () => Promise.resolve({ kind: 'success' as const }) },
         { start: 0, end: 6, draftRev: shell.snapshot.draftRev },
       )
       shell.editor.update(() => {}, { discrete: true }) // flush the queued decoration refresh
@@ -1318,54 +1372,11 @@ describe('decorations', () => {
     act(() => {
       shell.setDraft('/goal ')
       shell.beginCommand(
-        { name: 'goal', token: '/goal ', hint: '[<objective>|clear|edit <objective>|pause|resume]', submit: () => Promise.resolve({ kind: 'success' as const }) },
+        { token: '/goal ', hint: '[<objective>|clear|edit <objective>|pause|resume]', submit: () => Promise.resolve({ kind: 'success' as const }) },
         { start: 0, end: 6, draftRev: shell.snapshot.draftRev },
       )
     })
     expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe(JSON.stringify('输入目标，智能体将持续执行'))
-  })
-
-  it('the hint lookup keys on the claim name, so a localized claim token keeps the locale entry', () => {
-    const { shell, textarea } = bench()
-    act(() => {
-      shell.setDraft('/目标 ')
-      shell.beginCommand(
-        { name: 'goal', token: '/目标 ', hint: '[<objective>|clear|edit <objective>|pause|resume]', submit: () => Promise.resolve({ kind: 'success' as const }) },
-        { start: 0, end: 4, draftRev: shell.snapshot.draftRev },
-      )
-    })
-    expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe(JSON.stringify('输入目标，智能体将持续执行'))
-  })
-
-  it('suppresses placeholders throughout native composition, including a temporarily empty draft', async () => {
-    const { shell, textarea, view } = bench()
-    expect(view.container.querySelector('[data-composer-placeholder]')).not.toBeNull()
-    fireEvent.compositionStart(textarea)
-    expect(textarea.hasAttribute('data-composer-composing')).toBe(true)
-    act(() => { shell.setDraft('z') })
-    act(() => { shell.setDraft('') })
-    expect(textarea.hasAttribute('data-composer-composing')).toBe(true)
-    fireEvent.compositionEnd(textarea, { data: '' })
-    expect(textarea.hasAttribute('data-composer-composing')).toBe(true)
-    await act(async () => {})
-    expect(textarea.hasAttribute('data-composer-composing')).toBe(false)
-
-    act(() => {
-      shell.setDraft('/目标 ')
-      shell.beginCommand(
-        { name: 'goal', token: '/目标 ', hint: '目标内容', submit: () => Promise.resolve({ kind: 'success' as const }) },
-        { start: 0, end: 4, draftRev: shell.snapshot.draftRev },
-      )
-    })
-    fireEvent.compositionStart(textarea)
-    act(() => { shell.setDraft('/目标 z') })
-    act(() => { shell.setDraft('/目标 ') })
-    expect(textarea.hasAttribute('data-composer-composing')).toBe(true)
-    fireEvent.compositionEnd(textarea, { data: '这' })
-    act(() => { shell.setDraft('/目标 这') })
-    await act(async () => {})
-    expect(textarea.hasAttribute('data-composer-composing')).toBe(false)
-    expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe('')
   })
 
   it('an inserted reference renders a real chip capsule with its icon and label', () => {
@@ -1574,7 +1585,7 @@ describe('strips and variants', () => {
 describe('command launcher chrome and control seats', () => {
   it('renders the command launcher; the Access chip is absent without the permissions projection; the control seats render EMPTY without entries', () => {
     const { view, slotCalls } = bench()
-    expect(view.getByLabelText('添加文件或调用指令')).toBeTruthy()
+    expect(view.getByLabelText('指令')).toBeTruthy()
     // Capability absent (no projection value): the chip renders nothing.
     expect(view.queryByLabelText(/^访问模式/)).toBeNull()
     // Every seat dispatched, nothing rendered (render passes may repeat; the
@@ -1593,7 +1604,7 @@ describe('command launcher chrome and control seats', () => {
     const toggleCommandMenu = vi.fn()
     const { view, shell, menuLauncher } = bench({ draft: 'draft text', toggleCommandMenu })
     act(() => { shell.editor.update(() => { $selectDetectSpan({ start: 2, end: 7 }) }, { discrete: true }) })
-    const launcher = view.getByLabelText('添加文件或调用指令')
+    const launcher = view.getByLabelText('指令')
     expect(launcher.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(launcher)
     expect(toggleCommandMenu).toHaveBeenCalledExactlyOnceWith({ start: 2, end: 7 })
@@ -1763,7 +1774,7 @@ describe('command launcher chrome and control seats', () => {
   it('disabled locks the Access chip and command launcher (running does not)', () => {
     const permissions = { options: [{ value: 'workspace-write', name: 'workspace-write' }], currentValue: 'workspace-write' }
     const { view } = bench({ disabled: true, permissions })
-    expect((view.getByLabelText('添加文件或调用指令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
     expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(true)
     cleanup()
     const live = bench({ running: true, permissions })

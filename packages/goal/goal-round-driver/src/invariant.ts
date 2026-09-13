@@ -61,7 +61,6 @@ function validateEvent(
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   for (const session of ctx.sessions.list()) {
     const prior: SessionEvent[] = []
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     for (const event of session.snapshotEvents()) {
       validateEvent(prior, event, fail)
       prior.push(event)
@@ -71,7 +70,6 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName !== 'session/event') return
     const [session, event] = args as [Session, SessionEvent]
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     validateEvent(session.snapshotEvents(), event, fail)
   }, { global: true })
 }, { inject: ['sessions'] })

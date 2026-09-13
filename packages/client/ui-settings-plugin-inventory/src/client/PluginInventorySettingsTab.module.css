@@ -126,8 +126,9 @@
 .cardContent {
   box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
   min-height: 52px;
   border: 0;
@@ -149,36 +150,14 @@
   outline-offset: -2px;
 }
 
-.cardMainRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-}
-
-.cardTitle,
-.cardIdentity {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .cardTitle {
-  flex: 1;
   min-width: 0;
+  overflow: hidden;
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-}
-
-.cardIdentity {
-  display: block;
-  width: 100%;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: 11px;
-  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cardTrailing {

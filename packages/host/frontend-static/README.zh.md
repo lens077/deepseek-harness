@@ -37,9 +37,9 @@ kind: "package-reference"
 
 `distIndex` 是组合应用的组装事实：[`dsh-web-app`](../../bundle/web-app/README.zh.md) 通过前端包的 exports 解析它并挂载本插件；部署绝不硬编码它。
 
-### 服务器实施的约束
+### 服务器强制什么
 
-请求从 dist 根目录（包含 `distIndex` 的目录）提供。dist 根目录与配置的 index 路径以 HTTP 200 渲染 `index.html`；任何其他已有文件按自身 MIME 类型直接提供，未知扩展名按 `application/octet-stream` 提供。解析到根目录之外的路径以 403 拒绝，因此精心构造的路径无法读取 dist 之上的文件。dist 根目录内不存在或不是文件的目标——文件缺失、目录或配置的 index 缺失——返回空 404。没有匹配具名路由的非 GET／HEAD 请求返回 405。每个成功的 index 响应都经 webserver 的 `renderIndex` 渲染，因此启动 manifest（元数据清单）会通过 `/` 与配置的 index 路径送达页面。
+请求从 dist 根目录（包含 `distIndex` 的目录）提供。dist 根目录与配置的 index 路径以 HTTP 200 渲染 `index.html`；任何其他已有文件按自身 MIME 类型直接提供，未知扩展名按 `application/octet-stream` 提供。解析到根目录之外的路径以 403 拒绝，因此精心构造的路径无法读取 dist 之上的文件。dist 根目录内缺失或非文件的 target——文件缺失、目录或配置的 index 缺失——返回空 404。没有匹配具名路由的非 GET／HEAD 请求回答 405。每个成功的 index 响应都经 webserver 的 `renderIndex` 渲染，因此启动 manifest 在 `/` 与配置的 index 路径上到达页面。
 
 响应带有 HTTP 缓存头，因此刷新页面只重新下载真正变化的内容。文件名以 Vite 的 `-<8 位哈希>` 结尾的文件（`assets/` 与 `preview/` 下的每个 chunk、样式表、字体、语法与 source map）为 `public, max-age=31536000, immutable`：其 URL 随字节变化，浏览器可一直保留到下次构建。渲染后的 index 为 `private, no-cache`，其余未哈希文件（`favicon.svg`、`manifest.webmanifest`、`preview.html`）为 `no-cache`；两者都带有对响应字节计算的强 `ETag`，并在 `If-None-Match` 匹配时对 GET 与 HEAD 回答空 304。Index 的 tag 覆盖注入的启动 manifest 与转换器，因此改变插件图的 Host 重启会让页面失效，而壳资产仍保持缓存。
 
@@ -47,7 +47,7 @@ kind: "package-reference"
 
 ### 可观察的失败
 
-遍历返回 403 而不是错误页。dist 根目录内不存在或不是文件的目标返回空 404，因此失效链接或拼错的 pathname 是显式失败，而不是静默的 SPA 回退。第二次占据席位会抛错，而席位无人占据时 webserver 返回 404——本插件的 fiber 被 dispose（资源释放）后，浏览器看到的就是该响应。
+遍历返回 403 而不是错误页。dist 根目录内缺失或非文件的 target 返回空 404，因此失效链接或拼错的 pathname 是显式失败，而不是静默的 SPA 回退。第二次占据席位会抛错，而席位无人占据时 webserver 回答 404——本插件 fiber 被 dispose 后浏览器看到的就是它。
 
 -----
 
@@ -116,4 +116,4 @@ kind: "package-reference"
 
 </details>
 
-**运行时不变式：** 不发布伴生入口。唯一受本包所有的关系是单个回退席位，但无法从 teardown 流中探测它：`internal/plugin` 在正在释放的 fiber 执行 effect disposer 前触发，因此通知发出时合法所有者仍占据席位，任何占位探测都会把每次正确释放误报为失败；这不同于 webserver companion 对保留路径的探测，后者不会与存活注册冲突。席位的注册／释放对称性由本包真实组合的 HMR（热模块替换）安全测试覆盖。
+**运行时不变式：** 不发布伴生入口。唯一关系是单个 fallback seat，但 teardown event 在 disposer 前发出，运行时探测会误报；register/release 对称性由真实组合的 HMR 测试覆盖。

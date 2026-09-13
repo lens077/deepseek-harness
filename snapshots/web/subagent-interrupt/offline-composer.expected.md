@@ -5,9 +5,10 @@
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
   - img
   - text: Standard mode
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -35,7 +36,9 @@
     - button "Steer queued message":
       - img
 - textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
-- button "Add files or run commands" [disabled]:
+- button "Commands" [disabled]:
+  - img
+- button "Add attachment" [disabled]:
   - img
 - 'button "Access mode, current: Custom" [disabled]': Custom
 - button "Stop generating"

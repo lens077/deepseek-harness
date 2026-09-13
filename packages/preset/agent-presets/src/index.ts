@@ -51,7 +51,7 @@ export type {
   AgentPresetComposition, AgentPresetCompositionRow, CompositionRowEnablement,
 } from './composition-inventory.ts'
 
-/** Settings namespace carrying the user's preset-picker preference and chosen default. */
+/** Settings namespace carrying the user's chosen default preset. */
 export const SETTINGS_NAMESPACE = 'agent-presets'
 
 /** Refuse an empty preset id before invoking a domain operation. */
@@ -61,18 +61,15 @@ function validatePresetId(value: string, field: 'agentPreset' | 'from'): void {
   }
 }
 
-/** Resolved preset-selection settings; the registration base supplies both fields. */
+/** The user-writable slice of this plugin's config. */
 export interface AgentPresetSettings {
-  /** Saved default used when mode selection is enabled. */
-  default: string
-  /** Whether visible mode selection and the saved user default govern unnamed new sessions. */
-  modeSelectionEnabled: boolean
+  /** Preset mounted when a session names none. */
+  default?: string
 }
 
 /** Runtime schema for the user-writable slice. */
 export const AgentPresetSettingsSchema: z<AgentPresetSettings> = z.object({
   default: z.string(),
-  modeSelectionEnabled: z.boolean(),
 })
 
 export { COMPOSITION_FILE, discoverPresets, scanRoot, SHIPPED_PRESET_ROOT } from './discovery.ts'
@@ -192,7 +189,7 @@ export class AgentPresets extends TypertRemoteService {
       this.settings = settingsCtx.settings.register(
         SETTINGS_NAMESPACE,
         AgentPresetSettingsSchema,
-        { base: { default: config.default, modeSelectionEnabled: true } },
+        { base: { default: config.default } },
       )
       this.settingsService = settingsCtx.settings
       settingsCtx.effect(() => () => {
@@ -241,21 +238,7 @@ export class AgentPresets extends TypertRemoteService {
    * every running session on the preset it was composed from.
    */
   get defaultId(): string {
-    // Hiding the picker is also the product's safe-default boundary: a stale
-    // user choice from an older build must not silently compose a non-standard
-    // new session while there is no control that reports that choice.
-    return this.selectionPolicy().defaultId
-  }
-
-  /** Read one internally consistent snapshot of the selection policy. */
-  private selectionPolicy(): { enabled: boolean; defaultId: string } {
-    const settings = this.settings?.get()
-    if (settings === undefined) return { enabled: true, defaultId: this.config.default }
-    const enabled = settings.modeSelectionEnabled
-    return {
-      enabled,
-      defaultId: enabled ? settings.default : this.config.default,
-    }
+    return this.settings?.get().default ?? this.config.default
   }
 
   /**
@@ -268,30 +251,25 @@ export class AgentPresets extends TypertRemoteService {
 
   /**
    * The roster off the Host: {@link list} projected to path-free rows, with
-   * the policy-effective default marked, this deployment's authoring
-   * capability, and its mode-selection policy beside it.
+   * the default marked and this deployment's authoring capability beside it.
    *
    * Whether a client can open a preset's directory is the Host's own opener
    * capability, not a roster property — a caller needing both joins them.
-   * @returns the rows, authoring capability, and effective selection policy.
+   * @returns the rows and the authoring capability.
    */
   @Remote('list')
   async remoteExportList(): Promise<AgentPresetRoster> {
-    // Keep the visible policy and marked default from the same settings
-    // snapshot even when discovery yields while settings are hot-reloaded.
-    const policy = this.selectionPolicy()
-    const presets = await this.list()
+    const defaultId = this.defaultId
     return {
-      presets: presets.map(preset => ({
+      presets: (await this.list()).map(preset => ({
         id: preset.id,
         trust: preset.trust,
-        isDefault: preset.id === policy.defaultId,
+        isDefault: preset.id === defaultId,
         ...preset.name === undefined ? {} : { name: preset.name },
         ...preset.description === undefined ? {} : { description: preset.description },
         ...preset.broken === undefined ? {} : { broken: preset.broken },
       })),
       authorable: this.authorable,
-      modeSelectionEnabled: policy.enabled,
     }
   }
 

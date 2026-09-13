@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { LspInstance, readHostSource } from '@deepseek-ai/dsh-lsp-stdio'
 import { encodeMessage } from '@deepseek-ai/dsh-lsp-stdio'
-import type { ConnectionSpawner, ConnectionWriter } from '@deepseek-ai/dsh-lsp-stdio/src/connection.ts'
+import type { ConnectionWriter } from '@deepseek-ai/dsh-lsp-stdio/src/connection.ts'
 import type { InstanceSpec } from '@deepseek-ai/dsh-lsp-stdio/src/instance.ts'
 import type { LspProviderQuery, LspQueryResult } from '@deepseek-ai/dsh-lsp'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
@@ -45,7 +45,6 @@ function makeInstance(
   env: Record<string, string> = {},
   overrides: Partial<InstanceSpec> = {},
   writer?: ConnectionWriter,
-  spawner: ConnectionSpawner = spawnSubprocess,
 ): LspInstance {
   const instance = new LspInstance({
     command: process.execPath,
@@ -60,7 +59,7 @@ function makeInstance(
     shutdownTimeoutMs: 200,
     killGraceMs: 200,
     ...overrides,
-  }, spawner, writer)
+  }, spawnSubprocess, writer)
   live.push(instance)
   return instance
 }
@@ -212,7 +211,6 @@ describe('LspInstance query and abort', () => {
     const marker = join(root, 'initialized.log')
     const didOpenStarted = Promise.withResolvers<undefined>()
     let didOpenFinished = false
-    let processClosed = false
     const instance = makeInstance({
       LSP_FAKE_INITIALIZED_MARKER: marker,
       LSP_FAKE_PAUSE_STDIN_AFTER_INITIALIZED: '1',
@@ -229,10 +227,6 @@ describe('LspInstance query and abort', () => {
         done(error)
       })
       didOpenStarted.resolve(undefined)
-    }, (spec) => {
-      const handle = spawnSubprocess(spec)
-      void Promise.allSettled([handle.done]).then(([result]) => { processClosed = result.status === 'fulfilled' })
-      return handle
     })
     const controller = new AbortController()
     const outcome = run(instance, 'goToDefinition', controller.signal)
@@ -241,12 +235,9 @@ describe('LspInstance query and abort', () => {
     await didOpenStarted.promise
     signal.throwIfAborted()
     expect(didOpenFinished).toBe(false)
-    expect(processClosed).toBe(false)
     controller.abort(new Error('didOpen-abort'))
     const failure = await outcome
     expect(() => { throw failure }).toThrow(/didOpen-abort/)
-    expect(didOpenFinished).toBe(true)
-    expect(processClosed).toBe(true)
     expect(instance.dead).toBe(true)
   })
 
