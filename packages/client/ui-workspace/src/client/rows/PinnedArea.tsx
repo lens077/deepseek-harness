@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { SessionNode } from '../tree.ts'
 import { SessionNodeItem, type SessionRowContext } from './Rows.tsx'
 import css from './PinnedArea.module.css'
@@ -19,10 +19,19 @@ export function PinnedArea({ rows, row, count, emptyLabel, ariaLabel }: {
   emptyLabel: string
   ariaLabel: string
 }) {
+  const [collapsed, setCollapsed] = useState(false)
   return (
     <section className={css.area} aria-label={ariaLabel}>
-      <div className={css.label}>{row.t('section.pinned')}</div>
-      <div className={css.list} style={{ '--pinned-rows': count } as CSSProperties} role="tree">
+      <button
+        type="button"
+        className={css.label}
+        aria-expanded={!collapsed}
+        onClick={() => { setCollapsed(value => !value) }}
+      >
+        <span>{row.t('section.pinned')}</span>
+        <span aria-hidden="true" className={css.chevron}>{collapsed ? '›' : '⌄'}</span>
+      </button>
+      {!collapsed && <div className={css.list} style={{ '--pinned-rows': count } as CSSProperties} role="tree">
         {rows.length === 0
           ? <div className={css.empty}>{emptyLabel}</div>
           : rows.map(node => (
@@ -47,7 +56,7 @@ export function PinnedArea({ rows, row, count, emptyLabel, ariaLabel }: {
               t={row.t}
             />
           ))}
-      </div>
+      </div>}
     </section>
   )
 }

@@ -35,7 +35,8 @@ const LABEL = 'event-sourcing researcher'
 const ONE_SHOT_LABEL = 'event-sourcing reviewer'
 const NESTED_LABEL = 'example editor'
 const PARENT_PROMPT = 'Ask a research subagent to explain event sourcing.'
-const INITIAL_PROMPT = 'Explain event sourcing in one sentence.'
+// The task-flow summary stays within the authored task, before the injected parent session ID.
+const INITIAL_PROMPT = 'Explain event sourcing in one sentence for a reader who knows databases but has not used an event log.'
 /** The grandchild's own first message; its arrival is what says its history finished loading. */
 const NESTED_PROMPT = 'Give one concrete event sourcing example.'
 const FOLLOWUP = 'Now give the same explanation to a human reader.'
@@ -384,10 +385,11 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     onTestFailed(() => saveFailureShot(page, 'web-e2e-subagent-open'))
     await page.getByRole('button', { name: '3 subagents' }).hover()
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
-    await expect.poll(
-      () => page.getByText(/^Explain event sourcing in one sentence\.Your parent agent id is /).count(),
-      { timeout: 15_000 },
-    ).toBe(1)
+    const initialMessage = page.locator('[data-chat-flow-kind="user"]').getByText(INITIAL_PROMPT, { exact: false })
+    await expect.poll(() => initialMessage.count(), { timeout: 15_000 }).toBe(1)
+    const parent = scaffold.ctx.agents.roots()[0]
+    expect(parent).toBeDefined()
+    expect(await initialMessage.textContent()).toContain(`${INITIAL_PROMPT}Your parent agent id is "${parent!.id}".`)
     if (scaffold.ctx.agents.get(childId) !== undefined) {
       throw new Error(`viewing the child activated it; API calls: ${apiCalls.join(', ')}`)
     }
@@ -455,7 +457,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       { timeout: 10_000 },
     ).toBe('running')
     await ended
-    await expect.poll(() => page.getByText(FOLLOWUP, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => page.locator('[data-chat-flow-kind="user"]').getByText(FOLLOWUP, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: 10_000 }).toBeUndefined()
     expect(await page.getByRole('button', { name: 'Stop generating' }).count()).toBe(0)
   })
@@ -505,7 +507,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     // about the transcript below it. The golden pins that transcript, and
     // `captureStableAria` calls two identical polls stable — including two of
     // "Loading history…". Wait for the message the golden asserts.
-    await page.getByText(NESTED_PROMPT).waitFor()
+    await page.locator('[data-chat-flow-kind="user"]').getByText(NESTED_PROMPT, { exact: true }).waitFor()
     const hierarchy = page.getByRole('navigation', { name: 'Session hierarchy' })
     const crumbs = await hierarchy.getByRole('button').allTextContents()
     expect(crumbs.slice(-2)).toEqual([LABEL, NESTED_LABEL])

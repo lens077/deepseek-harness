@@ -10,6 +10,7 @@ import type { ImageAttachmentLimits } from '@deepseek-ai/dsh-attachment'
 import type { NormalizationPolicy } from '../src/normalization.ts'
 import {
   commitPreparedImageFile,
+  imageFileExists,
   prepareImageFile,
   publishImmutableObject,
   readImageFile,
@@ -260,6 +261,29 @@ describe('local attachment store', () => {
     await mkdir(target, { recursive: true })
     await expect(readImageFile(unreadableRoot, ref))
       .rejects.toMatchObject({ code: 'ATTACHMENT_READ_FAILED' })
+  })
+
+  it('probes object existence without reading or verifying bytes', async () => {
+    const storageRoot = await root()
+    const ref = await saveImageFile(storageRoot, { data: PNG, mediaType: 'image/png' }, LIMITS, POLICY)
+    const sha256 = String(ref.attachmentId).slice('sha256:'.length)
+    await expect(imageFileExists(storageRoot, ref)).resolves.toBe(true)
+    await expect(imageFileExists(storageRoot, { ...ref, attachmentId: 'bad' as never }))
+      .rejects.toMatchObject({ code: 'INVALID_ATTACHMENT_REF' })
+
+    const missingRoot = await root()
+    await expect(imageFileExists(missingRoot, ref)).resolves.toBe(false)
+
+    const blockedRoot = await root()
+    await mkdir(join(blockedRoot, 'objects'), { recursive: true })
+    await writeFile(join(blockedRoot, 'objects', sha256.slice(0, 2)), Uint8Array.of(1))
+    await expect(imageFileExists(blockedRoot, ref))
+      .rejects.toMatchObject({ code: 'ATTACHMENT_READ_FAILED' })
+
+    const controller = new AbortController()
+    const reason = new Error('cancel probe')
+    controller.abort(reason)
+    await expect(imageFileExists(storageRoot, ref, controller.signal)).rejects.toBe(reason)
   })
 
   it('rejects conflicting existing objects and reference metadata mismatches', async () => {

@@ -32,6 +32,8 @@ import type { Page } from 'playwright'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-settings'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include, { type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import Group from '@deepseek-ai/cordis-plugin-group'
@@ -296,8 +298,8 @@ export interface LaunchOptions {
    */
   extraOverlayPath?: string
   /**
-   * Additional package manifests whose dependency closures supply experimental
-   * profile layers named by {@link extraOverlayPath}.
+   * Additional source-checkout package manifests whose dependency closures
+   * supply private profile layers named by {@link extraOverlayPath}.
    */
   extraInstallAnchors?: string[]
   /**
@@ -396,6 +398,11 @@ export interface LaunchOptions {
   telemetryMode?: 'FEEDBACK_ONLY'
   /** SDK batch cadence for a scenario-owned collector; omitted to retain the SDK default. */
   telemetryScheduledDelayMillis?: number
+  /**
+   * Export raw event bodies to the scenario-owned collector. Omitted, the
+   * shipped metadata-only projection applies and no text reaches the wire.
+   */
+  telemetryCaptureContent?: boolean
   /**
    * Browse through a trusted non-loopback hostname that the browser resolves
    * to loopback (for example `*.localhost`). The test server stays bound to
@@ -515,10 +522,6 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   const patches: PatchOptions[] = [
     ...basePatches,
     ...surfacePatches,
-    // Keyless scenarios retain the recorded default; explicit scenario overlays win.
-    ...mode === 'record' || options.deepSeekMissingCredential === true
-      ? []
-      : [{ id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }],
     ...extraOverlayPatches,
     // The roster's shipped presets are the plugin's own, bundled inside
     // `dsh-agent-presets` and prepended by it. Pin only the machine-local
@@ -569,6 +572,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         id: 'session-telemetry-otel',
         config: {
           mode: options.telemetryMode ?? 'FEEDBACK_ONLY',
+          ...(options.telemetryCaptureContent === true ? { captureContent: true } : {}),
           exporter: { url: options.telemetryUrl },
           ...(options.telemetryScheduledDelayMillis === undefined ? {} : {
             processor: { scheduledDelayMillis: options.telemetryScheduledDelayMillis },
@@ -1423,6 +1427,10 @@ function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): st
     .replace(/\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
     .replace(/(?<!\d)\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[AP]M)?(?!\d)/gi, '{{clock}}')
     .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
+    // A window boundary rendered as a locale date (the inbox's "since …")
+    // moves with the wall clock, so the day itself cannot enter a golden.
+    .replace(/(?<!\d)\d{1,2}\/\d{1,2}\/\d{4}(?!\d)/g, '{{date}}')
+    .replace(/(?<!\d)\d{4}\/\d{1,2}\/\d{1,2}(?!\d)/g, '{{date}}')
 }
 
 /**
@@ -1498,7 +1506,7 @@ export async function captureExpandedTurnProcessAria(
           host.scrollTop = host.scrollHeight
           return host.scrollHeight - host.clientHeight - host.scrollTop
         })
-        return Math.abs(distanceFromBottom) <= 1 && await backToBottom.count() === 0
+        return Math.abs(distanceFromBottom) <= 1 && await backToBottom.isDisabled()
       }, { timeout: 10_000 }).toBe(true)
     }
     return await captureStableAria(page, selector, workspaceCwd)

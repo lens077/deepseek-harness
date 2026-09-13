@@ -43,15 +43,6 @@
     },
     {
       "path": "../ui-slots"
-    },
-    {
-      "path": "../../feedback/command-feedback"
-    },
-    {
-      "path": "../ui-commands"
-    },
-    {
-      "path": "../store"
     }
   ]
 }

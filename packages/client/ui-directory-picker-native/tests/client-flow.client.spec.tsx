@@ -11,7 +11,9 @@ import { apply as nodeApply } from '../src/index.ts'
 
 afterEach(cleanup)
 
-const HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow'] as const
+const HOLES = [
+  'conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow', 'sidebar.workspaces.sessionDirectoryFlow',
+] as const
 
 async function bench() {
   const ctx = new Context()
@@ -39,7 +41,7 @@ describe('directory-picker-native client half', () => {
     expect(inject).toEqual(['slots', 'uiWorkspace'])
   })
 
-  it('fills both directory-flow holes for declarations before or after apply, and leaves with its fiber', async () => {
+  it('fills all three directory-flow holes for declarations before or after apply, and leaves with its fiber', async () => {
     const before = await bench()
     before.declare()
     const fiber = before.ctx.plugin({ inject: [...inject], apply })
@@ -76,14 +78,15 @@ describe('directory-picker-native client half', () => {
     try {
       // The rival subscribes first, so synchronous declaration notifications
       // let it occupy the pair before this provider's waiting injection runs.
-      b.slots.inject(HOLES[0], () => b.slots.inject(HOLES[1], function* () {
+      b.slots.inject(HOLES[0], () => b.slots.inject(HOLES[1], () => b.slots.inject(HOLES[2], function* () {
         yield b.slots.register({ name: HOLES[0] } as never, () => null)
         yield b.slots.register({ name: HOLES[1] } as never, () => null)
-      }))
+        yield b.slots.register({ name: HOLES[2] } as never, () => null)
+      })))
       await b.ctx.plugin({ inject: [...inject], apply }).await()
       b.declare()
       await new Promise(resolve => setTimeout(resolve, 20))
-      // The rival keeps both holes; this provider rolled back wholesale and
+      // The rival keeps every hole; this provider rolled back wholesale and
       // surfaced the conflict on the fail-loud channel — no partial mix.
       for (const hole of HOLES) expect(b.slots.entries(hole)).toHaveLength(1)
       expect(rejections.map(String).join('\n')).toContain('already has a registration')
@@ -139,11 +142,11 @@ describe('directory-picker-native client half', () => {
       .toThrow(/already has a registration/)
   })
 
-  it('drives the injected pick through the hole entry and reports the picked path', async () => {
+  it.each(HOLES)('drives the injected pick through %s and reports the picked path', async (hole) => {
     const b = await bench()
     b.declare()
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    const entry = b.slots.entries(HOLES[0])[0]!
+    const entry = b.slots.entries(hole)[0]!
     const injected = (entry.inject as () => { pick: () => Promise<string | null> })()
     await expect(injected.pick()).resolves.toBe('/tmp/picked')
     expect(b.pickDirectory).toHaveBeenCalledOnce()

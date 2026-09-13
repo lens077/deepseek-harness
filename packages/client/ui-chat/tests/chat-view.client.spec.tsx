@@ -24,13 +24,12 @@ import type { KeyedSnapshotSelectorHook, SnapshotSelectorHook } from '@deepseek-
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { EMPTY_CONVERSATION_SNAPSHOT } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { ChatNodeSeat } from '../src/client/chat/ChatNodeSeat.tsx'
 import { useTurnDataValue } from '../src/client/chat/use-turn-data.ts'
-import { en, zh } from '../src/client/locale.ts'
+import { zh } from '../src/client/locale.ts'
 import { AssistantNodeView } from '../src/client/chat/AssistantNodeView.tsx'
 import { CommandNodeView, ManualCompactionNodeView } from '../src/client/chat/CommandNodeView.tsx'
 import {
@@ -46,7 +45,7 @@ import type { TurnProcessSpec } from '../src/client/contract/turn-process.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
 // Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
-const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined })) as GlobalStandardProps['useResource']
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 afterEach(() => {
   cleanup()
@@ -60,6 +59,15 @@ beforeEach(() => {
 
 const SID = 's1' as SessionId
 type RoutedChatNodeOwner = ChatNodeOwnerProps & { readonly node: ChatNode }
+
+/**
+ * The rail's back-to-bottom entry. It is always mounted; being pinned to the
+ * tail shows as `disabled`, so tests read follow state from that flag rather
+ * than from the control's presence.
+ */
+function backToBottom(view: { getByLabelText: (text: string) => HTMLElement }): HTMLButtonElement {
+  return view.getByLabelText('回到底部') as HTMLButtonElement
+}
 
 function sessionSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
@@ -251,7 +259,6 @@ function makeHarness(
     key => chatSource.source.getSnapshot().nodes.processSource(key),
   )
   const openFile = vi.fn<(path: string) => Promise<void>>().mockResolvedValue(undefined)
-  const openSkill = vi.fn<(name: string) => void>()
   const loadOlder = vi.fn()
   const loadThrough = vi.fn<(seq: number) => Promise<void>>().mockResolvedValue(undefined)
   // Mutable outline holder: tests swap the value and drive a re-render via set().
@@ -366,7 +373,6 @@ function makeHarness(
   // ChatView never invokes it (pass-through stub).
   const SessionProviderStub: ChatViewSlotProps['SessionProvider'] = ({ children }) => <>{children}</>
   const props: ChatViewSlotProps = {
-    usePanelInfo: selector => selector({ activePanelId: null }),
     sessionId: SID,
     useSession: bindSnapshotSelector(session.source),
     useChat: bindSnapshotSelector(chatSource.source),
@@ -374,6 +380,7 @@ function makeHarness(
     useChatNodeProcess,
     useConversation: bindSnapshotSelector(createSnapshotStore(EMPTY_CONVERSATION_SNAPSHOT)),
     useTrajectory: (() => { throw new Error('unused') }),
+    useTaskFlow: (() => { throw new Error('unused') }),
     useSessions: emptySessions(),
     useResource,
     useSessionPendingInteraction: bindSnapshotSelector(
@@ -392,20 +399,29 @@ function makeHarness(
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
     useTranscriptView: bindSnapshotSelector(transcriptView),
+    useQuestionNavigation: bindSnapshotSelector(createSnapshotStore({
+      previousShortcut: 'Ctrl+ArrowUp',
+      nextShortcut: 'Ctrl+ArrowDown',
+      focusPolicy: 'editable' as const,
+      expandButtonSide: 'right' as const,
+    })),
     renderSlot,
     SessionProvider: SessionProviderStub,
     viewRequest: null,
     openView,
     completeViewRequest: () => {},
     openFile,
-    openSkill,
     loadOlder,
     loadThrough,
+    loadAll: () => Promise.resolve(),
+    searchQuestions: () => Promise.resolve({ hits: [], complete: true }),
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     chatScroll,
     forkAt,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
+    turnFiles: () => [],
+    turnFilesAvailable: () => false,
     t,
   }
   const set = (next: HarnessUpdate): void => {
@@ -427,8 +443,8 @@ function makeHarness(
     session.set(sessionUpdate)
   }
   return {
-    set, setSession: session.set, setChat: chatSource.set, ChatView, props,
-    openFile, openSkill, loadOlder, loadThrough, openView,
+    set, setSession: session.set, setChat: chatSource.set, ChatView, props, chat,
+    openFile, loadOlder, loadThrough, openView,
     setOutline: (value: unknown) => { outlineValue = value },
     chatScroll, forkAt, toolOwners,
     setTranscriptView: (mode: TranscriptViewMode) => { transcriptView.set(mode) },
@@ -540,16 +556,6 @@ describe('Chat node rendering', () => {
     expect(formatRunDuration(-500, t)).toBe('0秒')
     expect(formatRunDuration(15_999, t)).toBe('15秒')
     expect(formatRunDuration(125_000, t)).toBe('2分05秒')
-    // The hour rolls at exactly 3600s, never at 60 displayed minutes.
-    expect(formatRunDuration(3_599_999, t)).toBe('59分59秒')
-    expect(formatRunDuration(3_600_000, t)).toBe('1小时00分00秒')
-    expect(formatRunDuration(3_903_000, t)).toBe('1小时05分03秒')
-    expect(formatRunDuration(7_261_000, t)).toBe('2小时01分01秒')
-  })
-
-  it('formatRunDuration uses the English hour template', () => {
-    const t = makeTranslate(en, commonEn)
-    expect(formatRunDuration(3_903_000, t)).toBe('1h 05m 03s')
   })
 
 })
@@ -685,13 +691,13 @@ describe('ChatView', () => {
     let releaseJump: (() => void) | undefined
     h.loadThrough.mockImplementation(() => new Promise<void>((resolve) => { releaseJump = resolve }))
     const view = render(<h.ChatView {...h.props} />)
-    // Pinned to the tail on open: the back-to-bottom control is absent.
-    expect(view.queryByRole('button', { name: '回到底部' })).toBeNull()
+    // Pinned to the tail on open: the back-to-bottom control is greyed out.
+    expect(backToBottom(view).disabled).toBe(true)
 
     const first = view.getByRole('button', { name: '加载并跳转到第 1 轮' })
     fireEvent.click(first)
     // The click itself leaves the tail...
-    expect(view.getByRole('button', { name: '回到底部' })).toBeTruthy()
+    expect(backToBottom(view).disabled).toBe(false)
     // ...so a non-reader scroll delivery at the floor (the first prepend's
     // compensation fires one) no longer snaps to the tail and cancel the jump.
     const scroller = view.container.querySelector('[class*="scroll"]') as HTMLElement
@@ -1615,7 +1621,7 @@ describe('ChatView', () => {
     const toggle = turnProcessControl(view.container)!
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(firstRow.getAttribute('hidden')).toBe('until-found')
-    expect(view.getByLabelText('回到底部')).toBeTruthy()
+    expect(backToBottom(view).disabled).toBe(false)
   })
 
   it('folds when the process controller first appears off-tail', () => {
@@ -1642,7 +1648,7 @@ describe('ChatView', () => {
     const toggle = turnProcessControl(view.container)!
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(contextRow?.getAttribute('hidden')).toBe('until-found')
-    expect(view.getByLabelText('回到底部')).toBeTruthy()
+    expect(backToBottom(view).disabled).toBe(false)
   })
 
   it('keeps a focused process row visible when a live Turn completes', () => {
@@ -1851,22 +1857,6 @@ describe('ChatView', () => {
     expect(view.container.querySelector('[data-turn-tail="1"]')?.textContent).toContain('用时 19秒')
   })
 
-  it('the actions-owning assistant footer shows an hour-scale run time', () => {
-    const h = makeHarness({
-      nodes: [
-        user(1, 'hi'),
-        assistant(2, 'mid-turn text', 1, 1),
-        assistant(16, 'final answer', 1, 2),
-        toolResult(18, 'trailing'),
-      ],
-      turnTimings: new Map([[1, { startTime: 1_000, endTime: 3_904_000 }]]),
-      turnEnds: new Map([[1, 20]]),
-    })
-    const view = render(<h.ChatView {...h.props} />)
-    expect(view.container.querySelector('[data-turn-tail="1"]')?.textContent)
-      .toContain('用时 1小时05分03秒')
-  })
-
   it('the settled footer exposes ttft, decode throughput, and usage as the details trigger', () => {
     const first: AssistantMessageNode = {
       kind: 'assistant', seq: 2, time: 2_000, turn: 1, step: 1, blocks: [{ kind: 'text', text: 'mid' }],
@@ -1967,6 +1957,59 @@ describe('ChatView', () => {
       tail.getAttribute('data-turn-tail'), tail.getAttribute('data-actions-reveal'),
     ]))).toEqual(new Map([['1', 'hover'], ['2', 'always']]))
     expect(view.container.querySelectorAll('[data-chat-flow-kind="user"]')).toHaveLength(2)
+  })
+
+  it('restates the opening question before a long completed Turn tail', () => {
+    const h = makeHarness({
+      nodes: [
+        user(1, 'do the long thing'),
+        assistant(2, 'thinking'),
+        toolResult(3, 'a'),
+        toolResult(4, 'b'),
+        assistant(5, 'final answer'),
+      ],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 9_000 }]]),
+      turnEnds: new Map([[1, 6]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const recap = view.container.querySelector('[data-turn-recap]') as HTMLElement
+    expect(recap).not.toBeNull()
+    expect(recap.textContent).toContain('回应')
+    expect(recap.textContent).toContain('#1')
+    expect(recap.textContent).toContain('do the long thing')
+    const rows = [...view.container.querySelectorAll('[data-chat-flow-key], [data-turn-recap]')]
+    expect(rows.indexOf(recap)).toBeGreaterThan(
+      rows.indexOf(view.container.querySelector('[data-chat-flow-key="fixture:assistant:5"]') as HTMLElement),
+    )
+  })
+
+  it('consumes a loaded cross-surface reveal and scrolls to its question row', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'first ask'), assistant(2, 'first answer'), user(4, 'later ask'), assistant(5, 'answer')],
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const scrollport = view.container.querySelector('[class*="_scroll_"]') as HTMLElement
+    const metrics = installScrollMetrics(scrollport, 1_000, 400)
+    metrics.setLayout(1_000, 500)
+    const row = view.container.querySelector('[data-chat-flow-key="fixture:user:1"]') as HTMLElement
+    row.getBoundingClientRect = () => ({
+      top: 100, bottom: 140, left: 0, right: 500, width: 500, height: 40,
+      x: 0, y: 100, toJSON: () => ({}),
+    })
+
+    act(() => { h.chat.actions.requestReveal(1) })
+    expect(h.loadThrough).not.toHaveBeenCalled()
+    expect(h.chat.store.getSnapshot().reveal).toBeNull()
+    expect(scrollport.scrollTop).toBe(576)
+  })
+
+  it('loads through an unloaded cross-surface question before consuming the request', () => {
+    const h = makeHarness({ nodes: [user(4, 'later ask'), assistant(5, 'answer')] }, { hasMore: true })
+    render(<h.ChatView {...h.props} />)
+
+    act(() => { h.chat.actions.requestReveal(1) })
+    expect(h.loadThrough).toHaveBeenCalledWith(1)
+    expect(h.chat.store.getSnapshot().reveal).toBeNull()
   })
 
   it('the run-time label is withheld when the turn start is outside the window', () => {
@@ -2193,17 +2236,6 @@ describe('ChatView', () => {
     expect(status.textContent).toMatch(/^深度求索中\.\.\.2分0\d秒$/)
   })
 
-  it('the running clock reads hours once the turn passes an hour', () => {
-    const startTime = Date.now() - 3_903_000
-    const trigger: UserMessageNode = { ...user(1, 'go'), time: startTime + 1 }
-    const h = makeHarness(
-      { nodes: [trigger], turnTimings: new Map([[1, { startTime }]]) },
-      { running: true },
-    )
-    const view = render(<h.ChatView {...h.props} />)
-    expect(view.getByRole('status').textContent).toMatch(/^深度求索中\.\.\.1小时05分0\d秒$/)
-  })
-
   it('hands each ordered root call to the keyed business-node slot', () => {
     const block = toolResult(3, 'a')
     const h = makeHarness({ nodes: [block] })
@@ -2365,15 +2397,15 @@ describe('ChatView', () => {
     expect(h.chatScroll.read()).toBeNull()
   })
 
-  it('scrolling away disables follow and shows the back-to-bottom button; clicking returns', () => {
+  it('scrolling away disables follow and arms the back-to-bottom button; clicking returns', () => {
     const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
     const view = render(<h.ChatView {...h.props} />)
     const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, writable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 300, writable: true })
     readerScroll(scroller, 100) // far from bottom
-    const backButton = view.getByLabelText('回到底部')
-    expect(backButton).toBeTruthy()
+    const backButton = backToBottom(view)
+    expect(backButton.disabled).toBe(false)
     // Streaming growth must NOT drag a scrolled-away reader down.
     act(() => {
       h.setChat({ partial: { turn: 1, step: 1, blocks: [{ kind: 'text', text: 'grow' }] } })
@@ -2381,8 +2413,8 @@ describe('ChatView', () => {
     expect(scroller.scrollTop).toBe(100)
     fireEvent.click(backButton)
     expect(scroller.scrollTop).toBe(1000)
-    // At the bottom again: follow re-arms and the button unmounts.
-    expect(view.queryByLabelText('回到底部')).toBeNull()
+    // At the bottom again: follow re-arms and the button greys out.
+    expect(backToBottom(view).disabled).toBe(true)
   })
 
   it('keeps following when a stream-finalization shrink clamp delivers its scroll', () => {
@@ -2400,12 +2432,53 @@ describe('ChatView', () => {
     fireEvent.scroll(scroller)
     fireEvent(scroller, new Event('scrollend'))
     expect(scroller.scrollTop).toBe(500)
-    expect(view.queryByLabelText('回到底部')).toBeNull()
+    expect(backToBottom(view).disabled).toBe(true)
     expect(h.chatScroll.read()).toBeNull()
 
     metrics.setHeight(1_200)
     act(() => { h.setSession({ running: true }) })
     expect(scroller.scrollTop).toBe(900)
+  })
+
+  it.each([
+    { movement: 'only the browser clamps', readerTop: null, expectedTop: 530, following: true },
+    { movement: 'the reader also moves', readerTop: 450, expectedTop: 450, following: false },
+  ])('retains shrink-clamp ownership before a delayed sample when $movement', ({ readerTop, expectedTop, following }) => {
+    let notify: (() => void) | undefined
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    act(() => { h.setSession({ running: true }) })
+    expect(scroller.scrollTop).toBe(700)
+    fireEvent.scroll(scroller)
+
+    // The browser's intermediate floor can disappear before the throttled
+    // sample runs: a finalizing row shrinks, then the composer or tail grows.
+    metrics.setLayout(800, scroller.scrollTop)
+    fireEvent.scroll(scroller)
+    act(() => { notify?.() })
+    if (readerTop !== null) {
+      scroller.scrollTop = readerTop
+      fireEvent.scroll(scroller)
+    }
+    metrics.setHeight(830)
+    act(() => { notify?.() })
+    fireEvent(scroller, new Event('scrollend'))
+
+    expect(scroller.scrollTop).toBe(expectedTop)
+    expect(backToBottom(view).disabled).toBe(following)
+    if (following) expect(h.chatScroll.read()).toBeNull()
+    else expect(h.chatScroll.read()?.scrollTop).toBe(expectedTop)
   })
 
   it('keeps following when a shrink clamp regrows before scrollend', () => {
@@ -2424,7 +2497,7 @@ describe('ChatView', () => {
     fireEvent(scroller, new Event('scrollend'))
 
     expect(scroller.scrollTop).toBe(662)
-    expect(view.queryByLabelText('回到底部')).toBeNull()
+    expect(backToBottom(view).disabled).toBe(true)
     expect(h.chatScroll.read()).toBeNull()
   })
 
@@ -2578,7 +2651,7 @@ describe('ChatView', () => {
     scroller.scrollTop = 500
     fireEvent.scroll(scroller)
     fireEvent(scroller, new Event('scrollend'))
-    expect(view.getByLabelText('回到底部')).toBeTruthy()
+    expect(backToBottom(view).disabled).toBe(false)
   })
 
   it('one ResizeObserver owns pinned dynamic-height follow and ignores growth while away', () => {
@@ -2672,7 +2745,7 @@ describe('ChatView', () => {
     // Inside FOLLOW_THRESHOLD (24) but not flush with the floor — the chrome
     // re-render from setAtBottom must not force scrollTop to scrollHeight.
     readerScroll(scroller, 690) // distance-to-bottom = 10
-    expect(view.queryByLabelText('回到底部')).toBeNull()
+    expect(backToBottom(view).disabled).toBe(true)
     expect(scroller.scrollTop).toBe(690)
   })
 
@@ -2689,7 +2762,7 @@ describe('ChatView', () => {
       // Open jump uses the host, not the local .scroll node.
       expect(host.scrollTop).toBe(2000)
       readerScroll(host, 100)
-      expect(view.getByLabelText('回到底部')).toBeTruthy()
+      expect(backToBottom(view).disabled).toBe(false)
       fireEvent.click(view.getByLabelText('回到底部'))
       expect(host.scrollTop).toBe(2000)
     } finally {
@@ -2728,7 +2801,7 @@ describe('ChatView', () => {
       view.rerender(<h.ChatView {...h.props} />)
       expect(host.scrollTop).toBe(580) // approximate 100 + the row's 480px reflow shift
       // The restored position is above the floor: follow stays disarmed.
-      expect(view.getByLabelText('回到底部')).toBeTruthy()
+      expect(backToBottom(view).disabled).toBe(false)
     } finally {
       rect.mockRestore()
       host.remove()
@@ -2895,7 +2968,10 @@ describe('ChatView', () => {
     })
     const noHistoryView = render(<noHistory.ChatView {...noHistory.props} />)
     expect(noHistoryView.getByText('No compactable history yet.')).toBeTruthy()
-    expect(noHistoryView.queryByRole('button')).toBeNull()
+    // The generic row is not a disclosure: the only button on screen is the
+    // rail's always-mounted back-to-bottom entry.
+    expect(noHistoryView.queryByRole('button', { name: /compact/ })).toBeNull()
+    expect(noHistoryView.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['回到底部'])
 
     const failed = makeHarness({
       nodes: [command({

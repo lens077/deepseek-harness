@@ -10,7 +10,7 @@ const root = resolve(import.meta.dirname, '..')
 const CLIENT_OUT = 'packages/extensions/cordis-client-runner/src/client/api-catalog.ts'
 
 const CLIENT_SERVICES: Readonly<Record<string, readonly string[]>> = {
-  layout: ['selectPanel', 'beginNavigation', 'toggleSidebar', 'openRightbar', 'closeRightbar'],
+  layout: ['toggleSidebar', 'openRightbar', 'closeRightbar'],
   locale: ['getLocale', 'getSnapshot', 'subscribe', 'setLocale', 'addLanguage', 'register', 'bind'],
   sessions: [
     'open', 'openSubagent', 'setSubagentCatalogOpen', 'refreshSubagents', 'search', 'fork',
@@ -19,7 +19,7 @@ const CLIENT_SERVICES: Readonly<Record<string, readonly string[]>> = {
   slots: ['register', 'inject'],
   theme: ['getTheme', 'setTheme', 'setFontSize', 'register', 'overrideTokens'],
   uiWorkspace: [
-    'openSession', 'openWorkspace', 'forkSession', 'connectWorkspace', 'startSession', 'archiveSession', 'pickDirectory', 'listDirectory',
+    'connectWorkspace', 'startSession', 'archiveSession', 'pickDirectory', 'listDirectory',
     'createDirectory',
   ],
   workspaces: [

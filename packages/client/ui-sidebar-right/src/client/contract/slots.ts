@@ -21,7 +21,6 @@
  * therefore live with their declarer.
  */
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import type { RightbarOwnerProps } from '@deepseek-ai/dsh-client-ui-layout/client'
 // The locale plugin's own merge carries the shared `common` vocabulary that the
 // lookup chain consults after this namespace misses.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -38,8 +37,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 
   interface SlotMap {
-    /** Session content selected by the root-scoped right Sidebar controller. */
-    'rightbar.session': { kind: 'single'; scope: 'session'; owner: RightbarOwnerProps }
     /**
      * One tab's body, dispatched with the `id` of the type in force for
      * `tab.kind`. A tab type registers here under its definition's `id` and
@@ -105,7 +102,7 @@ export interface SidebarRightTabNavigation {
 export interface SidebarRightTabPlacement {
   /** Land a new tab in this pane instead. */
   readonly paneId?: PaneId
-  /** Resource tabs reveal existing content by default; `false` permits duplicates. Pages always deduplicate within the target pane. */
+  /** Defaults to `true`: a tab already showing the same content is focused instead of a second one opening. */
   readonly revealIfOpened?: boolean
   /** `true` opens in this tab's place — its pane and strip slot — and closes this tab in the same step. */
   readonly replaceTab?: boolean

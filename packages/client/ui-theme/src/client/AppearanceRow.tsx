@@ -34,6 +34,15 @@ const CUBES: readonly { id: ThemePreference; labelKey: ThemeKey; Icon: typeof Ic
   { id: 'system', labelKey: 'appearance.system', Icon: IconFollowsystemOutline16 },
 ]
 
+/** Expressive built-in palettes shown as a compact secondary selector. */
+const STYLE_IDS: readonly { id: ThemePreference; labelKey: ThemeKey }[] = [
+  { id: 'glass', labelKey: 'themeStyles.glass' },
+  { id: 'rainbow', labelKey: 'themeStyles.rainbow' },
+  { id: 'deepseek-muse', labelKey: 'themeStyles.deepseek-muse' },
+  { id: 'forest', labelKey: 'themeStyles.forest' },
+  { id: 'sunset', labelKey: 'themeStyles.sunset' },
+]
+
 /**
  * Render the Appearance row.
  * @param props - composed slot props.
@@ -57,6 +66,18 @@ export function AppearanceRow({ t, setTheme, useStore }: AppearanceRowComponentP
             {t(labelKey)}
           </button>
         ))}
+      </div>
+      <div className={css.stylePicker}>
+        <div className={css.styleTitle}>{t('themeStyles.title')}</div>
+        <div className={css.styleDescription}>{t('themeStyles.description')}</div>
+        <div className={css.styleChips} role="group" aria-label={t('themeStyles.title')}>
+          {STYLE_IDS.map(({ id, labelKey }) => (
+            <button key={id} type="button" className={clsx(css.styleChip, preference === id && css.selected)} aria-pressed={preference === id} onClick={() => { setTheme(id) }}>
+              <span className={css.swatch} aria-hidden="true" />
+              {t(labelKey)}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

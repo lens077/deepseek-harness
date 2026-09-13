@@ -2,8 +2,7 @@
   "extends": "../../../tsconfig.base.client.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "lib/types",
-    "types": ["client-build-environment", "node"]
+    "outDir": "lib/types"
   },
   "include": [
     "src"
@@ -11,15 +10,6 @@
   "references": [
     {
       "path": "../../../vendor/cordis"
-    },
-    {
-      "path": "../../../vendor/loader"
-    },
-    {
-      "path": "../../../vendor/include"
-    },
-    {
-      "path": "../../api/gateway/tsconfig.client.json"
     },
     {
       "path": "../../api/session-controller/tsconfig.client.json"
@@ -49,9 +39,6 @@
       "path": "../../client/ui-conversation"
     },
     {
-      "path": "../../client/ui-layout"
-    },
-    {
       "path": "../../client/ui-slots"
     },
     {
@@ -65,21 +52,6 @@
     },
     {
       "path": "../../subagent/subagent"
-    },
-    {
-      "path": "../../api/remotes/tsconfig.client.json"
-    },
-    {
-      "path": "../../client/modules"
-    },
-    {
-      "path": "../../client/web"
-    },
-    {
-      "path": "../remote-mock"
-    },
-    {
-      "path": "../../client/hmr"
     }
   ]
 }

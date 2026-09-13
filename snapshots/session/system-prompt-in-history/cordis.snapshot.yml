@@ -8,7 +8,7 @@
   name: '@deepseek-ai/dsh-agent-default-model'
   config:
     provider: deepseek-official
-    model: deepseek-flash
+    model: deepseek-v4-flash
 
 - id: session-persistence-jsonl
   name: '@deepseek-ai/dsh-session-persistence-jsonl'
@@ -24,8 +24,8 @@
           - id: deepseek-official
             name: DeepSeek
             models:
-              - id: deepseek-flash
+              - id: deepseek-v4-flash
                 systemPromptUpdate: in-history
-                inputModalities: [text, image]
+              - id: deepseek-v4-pro
     - id: in-history-prompt-update
       name: '../../../packages/test-support/session-snapshot/tests/fixtures/in-history-prompt-update.ts'

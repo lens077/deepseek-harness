@@ -1,9 +1,10 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the ask_user_question tool to" [disabled]
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
     - button "Close the file panel" [pressed]:
@@ -41,7 +42,9 @@
   - listitem: Which color do you prefer?
 - button "Inspect"
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
 - button "Select model, current DeepSeek-V4-Flash":

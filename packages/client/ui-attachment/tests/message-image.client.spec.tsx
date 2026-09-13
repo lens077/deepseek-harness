@@ -12,7 +12,6 @@ import { MessageImages } from '../src/client/MessageImages.tsx'
 
 // Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
-const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 afterEach(cleanup)
 
@@ -50,6 +49,7 @@ const useSessionPendingInteraction: MessageImagesProps['useSessionPendingInterac
 const useConversation: MessageImagesProps['useConversation'] = selector => selector(EMPTY_CONVERSATION_SNAPSHOT)
 const useChat: MessageImagesProps['useChat'] = selector => selector(EMPTY_CHAT_SNAPSHOT)
 const useTrajectory: MessageImagesProps['useTrajectory'] = selector => selector(emptyTrajectory)
+const useTaskFlow: MessageImagesProps['useTaskFlow'] = () => { throw new Error('unused') }
 
 describe('MessageImage', () => {
   it('renders a cached URL on the first frame while refreshing it', () => {
@@ -273,13 +273,14 @@ describe('ImageGallery', () => {
       sessionId: 'message-images-test' as MessageImagesProps['sessionId'],
       useSession,
       useSessions,
-      usePanelInfo, useResource,
+      useResource,
       useSessionPendingInteraction,
       useWorkspaces,
       useProjection: () => undefined,
       useConversation,
       useChat,
       useTrajectory,
+      useTaskFlow,
       useInput,
       inputActions: {
         setDraft: vi.fn(),

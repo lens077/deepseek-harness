@@ -1,13 +1,11 @@
-/** Browser title selection follows the active main panel without subscribing the frame. */
 import { useEffect, useRef, useState } from 'react'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 
 /** Props for the browser title projection. */
-export type DocumentTitleProps = Pick<PropsRuntime<'root'>, 'useSessions' | 'usePanelInfo'> & {
+export interface DocumentTitleProps {
+  /** Durable title of the selected session, or undefined for the product title. */
+  title?: string
   /** Build-configured or localized product title. */
   productTitle: string
-  /** Current session title supplied by the frame when available. */
-  title?: string
   /** Number of Sessions still running across the application. */
   running?: number
   /** Number of inbox entries requiring attention. */
@@ -20,13 +18,7 @@ export type DocumentTitleProps = Pick<PropsRuntime<'root'>, 'useSessions' | 'use
  * @param props - Selected session title projection.
  * @returns No rendered content.
  */
-export function DocumentTitle({ useSessions, usePanelInfo, title, productTitle, running = 0, badge = 0 }: DocumentTitleProps): null {
-  const showSessionTitle = usePanelInfo(info => info.activePanelId === null)
-  const sessionTitle = useSessions((state) => {
-    const current = state.current
-    return !showSessionTitle || current === undefined ? undefined : state.byId[current]?.title
-  })
-  const selectedTitle = showSessionTitle ? (title ?? sessionTitle) : undefined
+export function DocumentTitle({ title, productTitle, running = 0, badge = 0 }: DocumentTitleProps): null {
   const [finishedAway, setFinishedAway] = useState(false)
   const previous = useRef(running)
   useEffect(() => {
@@ -43,9 +35,9 @@ export function DocumentTitle({ useSessions, usePanelInfo, title, productTitle, 
   const status = finishedAway ? '✓ ' : running > 0 ? '● ' : ''
   useEffect(() => {
     const count = badge > 0 ? `(${badge}) ` : ''
-    const label = selectedTitle === undefined ? productTitle : `${selectedTitle} — ${productTitle}`
+    const label = title === undefined ? productTitle : `${title} — ${productTitle}`
     document.title = `${count}${status}${label}`
     return () => { document.title = productTitle }
-  }, [badge, productTitle, selectedTitle, status])
+  }, [badge, productTitle, status, title])
   return null
 }

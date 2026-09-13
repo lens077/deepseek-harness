@@ -76,7 +76,7 @@
       name: '@deepseek-ai/dsh-agent-default-model'
       config:
         provider: deepseek-official
-        model: deepseek-flash
+        model: deepseek-v4-flash
 
     # Prompt-driven model and reasoning-effort routing for Web prompts.
     # Disabled here so a person's choice stays untouched; an overlay enables

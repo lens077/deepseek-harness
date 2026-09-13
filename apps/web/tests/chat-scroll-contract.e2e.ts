@@ -271,6 +271,12 @@ async function loadedFlowRows(page: Page): Promise<number> {
 }
 
 async function openSeed(page: Page, fixture: ChatScrollFixture, tailMarker?: string): Promise<void> {
+  const mobileNav = page.getByRole('navigation', { name: 'Mobile navigation' })
+  if (await mobileNav.isVisible()) {
+    await mobileNav.getByRole('button', { name: 'Workspaces', exact: true }).click()
+    const manage = page.getByRole('button', { name: 'Search & manage', exact: true })
+    if (await manage.isVisible()) await manage.click()
+  }
   // Search collapsed into a header action; expand it before filling.
   const searchButton = page.getByRole('button', { name: 'Search sessions' })
   if (await searchButton.getAttribute('aria-expanded') !== 'true') await searchButton.click()
@@ -581,7 +587,7 @@ describe('web e2e: long Chat scroll contract', () => {
       // transcript (scoped: the sidebar search row also carries it) and no
       // page remains.
       expect(await world.page.locator('[data-conversation-scroll]')
-        .getByText(HISTORY_FIXTURE.markers.user(1), { exact: false }).count()).toBe(1)
+        .locator('[data-chat-flow-kind="user"]').getByText(HISTORY_FIXTURE.markers.user(1), { exact: false }).count()).toBe(1)
       expect(await world.page.getByRole('button', { name: 'Load earlier', exact: true }).count()).toBe(0)
       assertClean(world)
     })
@@ -647,7 +653,7 @@ describe('web e2e: long Chat scroll contract', () => {
       await expect.poll(() => world.page.getByRole('tooltip').count(), { timeout: 15_000 }).toBe(0)
       await nextPaint(world.page)
       const marker = world.page.locator('[data-conversation-scroll]')
-        .getByText(HISTORY_FIXTURE.markers.user(1), { exact: false })
+        .locator('[data-chat-flow-kind="user"]').getByText(HISTORY_FIXTURE.markers.user(1), { exact: false })
       expect(await marker.count()).toBe(1)
       const scrollport = await world.page.locator('[data-conversation-scroll]').boundingBox()
       const row = await marker.boundingBox()
@@ -684,10 +690,11 @@ describe('web e2e: long Chat scroll contract', () => {
         await liveRow.waitFor({ timeout: 15_000 })
         expect(await liveRow.getAttribute('data-state')).toBe('running')
         await expectBottom(world.page)
-        expect(await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).count()).toBe(0)
+        // The rail keeps the button mounted; following renders it disabled.
+        expect(await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).isEnabled()).toBe(false)
 
         await wheelTranscript(world.page, -1_200)
-        await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).waitFor({ timeout: 10_000 })
+        await expect.poll(() => world.page.getByRole('button', { name: 'Back to bottom', exact: true }).isEnabled(), { timeout: 10_000 }).toBe(true)
         const awayAnchor = await visibleFlowAnchor(world.page)
         const chunksBeforeRelease = world.assistantFrames.filter(frame => frame.type === 'chunk').length
         await writeFile(releasePath, 'release\n')
@@ -774,9 +781,9 @@ describe('web e2e: long Chat scroll contract', () => {
       await world.page.getByRole('tab', { name: 'Trajectory', exact: true }).click()
       await world.page.getByLabel('Trajectory timeline').waitFor({ timeout: 30_000 })
       await world.page.setViewportSize({ width: 700, height: 900 })
-      // The narrow breakpoint auto-collapses the sidebar. Re-open it because
-      // this scenario switches sessions while pinning the narrow Chat scroll owner.
-      await world.page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
+      await world.page.locator('[data-mobile="true"]').waitFor({ state: 'visible' })
+      const overview = world.page.getByRole('region', { name: 'Overview', exact: true })
+      if (await overview.isVisible()) await overview.getByRole('button', { name: 'Close digest', exact: true }).click()
       await world.page.getByRole('tab', { name: 'Chat', exact: true }).click()
       await nextPaint(world.page)
       await expectSameFlowTop(world.page, sessionAnchor, RESPONSIVE_REFLOW_TOLERANCE)
@@ -877,17 +884,17 @@ describe('web e2e: long Chat scroll contract', () => {
       await lastToolRow.focus()
       await world.page.keyboard.press('End')
       await expectBottom(world.page)
-      await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+      await expect.poll(() => backToBottom.isDisabled(), { timeout: 10_000 }).toBe(true)
       for (let press = 0; press < 3; press += 1) {
         await world.page.keyboard.press('PageUp')
         await nextPaint(world.page)
       }
-      await backToBottom.waitFor({ timeout: 10_000 })
+      await expect.poll(() => backToBottom.isEnabled(), { timeout: 10_000 }).toBe(true)
       await expect.poll(async () => (await scrollGeometry(world.page)).distanceFromBottom, { timeout: 10_000 })
         .toBeGreaterThan(100)
       await world.page.keyboard.press('End')
       await expectBottom(world.page)
-      await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+      await expect.poll(() => backToBottom.isDisabled(), { timeout: 10_000 }).toBe(true)
       assertClean(world)
     })
   }, 180_000)
@@ -918,7 +925,7 @@ describe('web e2e: long Chat scroll contract', () => {
         // release bottom ownership, exactly like a wheel scroll would, even
         // while streaming keeps re-asserting the floor between frames.
         await flingTranscript(world.page, -900)
-        await backToBottom.waitFor({ timeout: 10_000 })
+        await expect.poll(() => backToBottom.isEnabled(), { timeout: 10_000 }).toBe(true)
         const awayAnchor = await visibleFlowAnchor(world.page)
         const chunksBeforeRelease = world.assistantFrames.filter(frame => frame.type === 'chunk').length
         await writeFile(releasePath, 'release\n')
@@ -941,7 +948,7 @@ describe('web e2e: long Chat scroll contract', () => {
           await flingTranscript(world.page, 1_600)
         }
         await expectBottom(world.page)
-        await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+        await expect.poll(() => backToBottom.isDisabled(), { timeout: 10_000 }).toBe(true)
         const chunksAtRepin = world.assistantFrames.filter(frame => frame.type === 'chunk').length
         await expect.poll(
           () => world.assistantFrames.filter(frame => frame.type === 'chunk').length,

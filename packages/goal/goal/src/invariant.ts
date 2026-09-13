@@ -43,7 +43,6 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
 
   const seed = (session: Session): GoalFoldState => {
     const state = emptyGoalFoldState()
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     for (const event of session.snapshotEvents()) applyChecked(state, event, fail)
     states.set(session, state)
     return state

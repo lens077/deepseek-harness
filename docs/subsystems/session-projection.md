@@ -6,6 +6,8 @@ The session-projection seam — a [capability seam](../capability-seams.md) thro
 
 Source: [`packages/session/session-projection/src/index.ts`](../../packages/session/session-projection/src/index.ts)
 
+The [session-stats contributor](../../packages/session/session-stats/README.md) publishes `sessionStats` for log-wide lifecycle figures and `usageLedger` for own-session model usage, route pricing, tool diagnostics, and advisory policy. Its [public types](../../packages/session/session-stats/src/types.ts) define `UsageLedgerProjection`, price tables, and governance fields. The ledger uses `init`'s exact inherited-prefix length to exclude fork history from spend; carriers do not perform that accounting.
+
 ## The unit
 
 `SessionProjectionStateMap` is the merge-extensible table of host fold states, while `SessionProjectionMap` retains the client-visible whole values. A domain contributes one `ProjectionDefinition` per state key; a `wire` block makes that key client-visible, and rendering belongs to the slot system, never this layer:

@@ -19,6 +19,8 @@ import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/ch
 import { StatsPills } from '../src/client/chat/StatsPills.tsx'
 import { zh } from '../src/client/locale.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
+import { usageList } from './usage-fixture.client.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 afterEach(() => {
   cleanup()
@@ -64,9 +66,7 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
         }
         : node,
   }
-  const props = {
-    node: viewNode, t: translate, renderMessageImages, openFile: vi.fn(), openSkill: vi.fn(), useChat: useDetachedChat,
-  } as unknown as ChatNodeViewProps
+  const props = { node: viewNode, t: translate, renderMessageImages, useChat: useDetachedChat } as ChatNodeViewProps
   switch (node.kind) {
     case 'user':
     case 'steering':
@@ -1044,9 +1044,12 @@ describe('small branch tails', () => {
     }] as const
     const snap = chatSnapshotFixture({ nodes })
     const source = { getSnapshot: () => snap, subscribe: () => () => {} }
+    const list = usageList({ root: undefined })
     const view = render(
       <StatsPills
         t={t}
+        sessionId={'root' as SessionId}
+        useSessions={bindSnapshotSelector({ getSnapshot: () => list, subscribe: () => () => {} })}
         useChat={bindSnapshotSelector(source)}
         useProjection={(key: string) => key === 'tokenUsage'
           ? { uncachedInputTokens: 0, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 }
@@ -1087,10 +1090,6 @@ describe('user file attachments', () => {
     expect(view.getByTitle('notes.pdf').textContent).toContain('3.2MB')
     expect(view.getByTitle('tiny.txt').textContent).toContain('12B')
     expect(view.getByTitle('mid.csv').textContent).toContain('500KB')
-    const icons = ['notes.pdf', 'tiny.txt', 'mid.csv'].map(name =>
-      view.getByTitle(name).querySelector('svg')?.innerHTML,
-    )
-    expect(new Set(icons).size).toBe(icons.length)
     expect(view.getByText('summarize these')).toBeTruthy()
   })
 })

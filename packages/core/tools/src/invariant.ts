@@ -58,7 +58,6 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   const seed = (session: Session): number | null => {
     let openTurn: number | null = null
     dispatchRoots.set(session, new Map())
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     for (const event of session.snapshotEvents()) {
       validateDispatch(session, event)
       commitDispatch(session, event)

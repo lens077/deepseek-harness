@@ -39,6 +39,8 @@ async function loadComposition(): Promise<Context> {
   await writeFile(join(dist, 'app.js'), 'export {}')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
+  await mkdir(join(dist, 'assets'))
+  await writeFile(join(dist, 'assets', 'index-CZtKvndi.js'), 'export const hashed = true')
   await mkdir(join(dist, 'empty'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -50,6 +52,10 @@ async function loadComposition(): Promise<Context> {
     '  config:',
     "    host: '127.0.0.1'",
     '    port: 0',
+    // The shipped Web composition compresses; the validators below must
+    // survive the compression middleware's response wrapping.
+    '    compression: gzip',
+    '    compressionThresholdBytes: 0',
     "- name: '@deepseek-ai/dsh-client-connection'",
     '- id: frontend',
     "  name: '@deepseek-ai/dsh-host-frontend-static'",
@@ -85,11 +91,20 @@ async function loadComposition(): Promise<Context> {
 
 /** GET (by default) one path against the running server; returns status, content-type, and the body. */
 async function request(port: number, path: string, init?: RequestInit): Promise<{ status: number; type: string | null; body: string }> {
+  const { status, type, body } = await requestWithHeaders(port, path, init)
+  return { status, type, body }
+}
+
+/** {@link request} plus the response headers the caching assertions read. */
+async function requestWithHeaders(
+  port: number, path: string, init?: RequestInit,
+): Promise<{ status: number; type: string | null; body: string; headers: Headers }> {
   const response = await fetch(`http://127.0.0.1:${String(port)}${path}`, init)
   return {
     status: response.status,
     type: response.headers.get('content-type'),
     body: await response.text(),
+    headers: response.headers,
   }
 }
 
@@ -139,14 +154,42 @@ describe('real Loader composition', () => {
     // Unknown extension ships as octet-stream.
     expect(await request(port, '/blob.bin')).toMatchObject({ status: 200, type: 'application/octet-stream', body: 'BLOB' })
 
+    // Vite's hashed outputs are immutable for a year and carry no validator;
+    // every unhashed file revalidates through a strong ETag, and a matching
+    // If-None-Match answers an empty 304 on GET and HEAD alike.
+    const hashed = await requestWithHeaders(port, '/assets/index-CZtKvndi.js')
+    expect(hashed).toMatchObject({ status: 200, body: 'export const hashed = true' })
+    expect(hashed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(hashed.headers.get('etag')).toBeNull()
+    const unhashed = await requestWithHeaders(port, '/app.js')
+    expect(unhashed.headers.get('cache-control')).toBe('no-cache')
+    const tag = unhashed.headers.get('etag')
+    expect(tag).toMatch(/^"[A-Za-z0-9_-]+"$/)
+    const revalidated = await requestWithHeaders(port, '/app.js', { headers: { 'if-none-match': `"stale", W/${tag!}` } })
+    expect(revalidated).toMatchObject({ status: 304, body: '' })
+    expect(revalidated.headers.get('etag')).toBe(tag)
+    expect(revalidated.headers.get('cache-control')).toBe('no-cache')
+    expect(await request(port, '/app.js', { method: 'HEAD', headers: { 'if-none-match': tag! } })).toMatchObject({ status: 304, body: '' })
+    expect(await request(port, '/app.js', { headers: { 'if-none-match': '"other"' } })).toMatchObject({ status: 200, body: 'export const rebuilt = true' })
+    await writeFile(join(root!, 'dist', 'app.js'), 'export const rebuilt = 2')
+    const changed = await requestWithHeaders(port, '/app.js', { headers: { 'if-none-match': tag! } })
+    expect(changed).toMatchObject({ status: 200, body: 'export const rebuilt = 2' })
+    expect(changed.headers.get('etag')).not.toBe(tag)
+
     // Only the root and index path render index.html through registered taps.
     const untap = server.tapIndex(html => html.replace('<head>', '<head><script>window.__T__=1</script>'))
     for (const path of ['/', '/index.html', '/?fixture']) {
-      const got = await request(port, path, authenticated())
+      const got = await requestWithHeaders(port, path, authenticated())
       expect(got.status).toBe(200)
       expect(got.type).toBe('text/html; charset=utf-8')
       expect(got.body).toContain('__T__')
       expect(got.body).toContain('shell')
+      // The rendered page is per-visitor: no shared cache keeps it, and the
+      // browser's copy is reused only after a 304 confirms the tap output.
+      expect(got.headers.get('cache-control')).toBe('private, no-cache')
+      const indexTag = got.headers.get('etag')
+      expect(indexTag).toMatch(/^"[A-Za-z0-9_-]+"$/)
+      expect(await request(port, path, authenticated({ headers: { 'if-none-match': indexTag! } }))).toMatchObject({ status: 304, body: '' })
     }
     expect(await request(port, '/', authenticated({ method: 'HEAD' }))).toEqual({
       status: 200,

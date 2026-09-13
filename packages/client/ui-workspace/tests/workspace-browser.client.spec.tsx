@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
@@ -9,7 +9,6 @@ import type {
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionPendingInteractionSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
@@ -19,7 +18,6 @@ import { zh } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
-const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 afterEach(cleanup)
 const scrollIntoView = vi.fn()
@@ -80,24 +78,41 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     expandSidebar: vi.fn(),
     useSessions: hook(sessionState([])),
     useSessionPendingInteraction: hook(noPendingInteraction),
-    usePanelInfo, useResource,
+    useSessionPins: hook({ enabled: false, sidebarArea: false, sidebarRows: 5, pinnedSessionIds: [] }),
+    useResource,
     useWorkspaces: hook(workspaceState([])),
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
     startSession: vi.fn(),
+    startScratchSession: vi.fn(),
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
     renameSession: vi.fn(async () => {}),
+    sessionDirectories: vi.fn(async () => ({ primaryDirectory: '/', additionalDirectories: [] })),
+    replaceSessionDirectories: vi.fn(async (_id, directories) => ({
+      primaryDirectory: '/', additionalDirectories: [...directories],
+    })),
     forkSession: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
+    archiveSessions: vi.fn(async () => {}),
+    unarchiveSession: vi.fn(async () => {}),
+    deleteSession: vi.fn(async id => [id]),
+    addTodos: vi.fn(),
+    todosAvailable: () => false,
+    setPinned: vi.fn(async () => undefined),
+    setSessionMembership: vi.fn(async (_workspaceId, sessionIds) => workspace('moved', [...sessionIds])),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
+    useSessionDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
+    useSessionSelection: selector => selector({ selected: [], anchor: undefined, lead: undefined }),
+    setSessionSelection: vi.fn(),
+    clearSessionSelection: vi.fn(),
     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
     ...overrides,
@@ -112,31 +127,108 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
   b.view.rerender(<WorkspaceBrowser {...b.props} />)
 }
 
-describe('WorkspaceBrowser', () => {
-  it('moves focus into Workspace controls without selecting a Session while a main panel is active', () => {
-    const panelInfo = { activePanelId: 'panel-a' as MainPanelId }
-    const b = mount({
-      usePanelInfo: hook(panelInfo),
-      useSessions: hook(sessionState([summary('current', 1)], { current: sid('current') })),
-      useWorkspaces: hook(workspaceState([workspace('alpha', ['current'])])),
+describe('mobile WorkspaceBrowser', () => {
+  it('filters names and preserves selected Workspace across full search and management', () => {
+    mount({
+      mobile: true,
+      useSessions: hook(sessionState([summary('alpha-s', 2), summary('another', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s', 'another']), workspace('beta', [])])),
     })
-    fireEvent.click(screen.getByText('alpha'))
-    const current = screen.getByText('current').closest('[role="treeitem"]')
-    expect(current?.getAttribute('aria-selected')).toBe('false')
-    fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
-    const input = screen.getByPlaceholderText('搜索会话…')
-    expect(document.activeElement).toBe(input)
-    fireEvent.click(screen.getByRole('button', { name: '清除搜索' }))
-    const add = screen.getByRole('button', { name: '添加工作区' })
-    add.focus()
-    fireEvent.click(add)
-    expect(document.activeElement).toBe(add)
+    fireEvent.change(screen.getByRole('searchbox', { name: '按名称筛选' }), { target: { value: 'alpha' } })
+    expect(screen.queryByRole('button', { name: /beta/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    fireEvent.change(screen.getByRole('searchbox', { name: '按名称筛选' }), { target: { value: 'alpha-s' } })
+    expect(screen.queryByRole('button', { name: 'another' })).toBeNull()
+    const management = screen.getByRole('button', { name: '搜索与管理' })
+    expect(management.textContent).toBe('')
+    expect(management.querySelector('svg')).not.toBeNull()
+    fireEvent.click(management)
+    expect(screen.getByRole('button', { name: '搜索会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '添加工作区' }))
     expect(screen.getByTestId('directory-flow')).toBeTruthy()
-    expect(panelInfo.activePanelId).toBe('panel-a')
-    expect(b.props.open).not.toHaveBeenCalled()
-    expect(b.props.startSession).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '返回浏览' }))
+    expect(screen.getByRole('heading', { name: 'alpha' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'alpha-s' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'another' })).toBeNull()
   })
 
+  it('drills into a Workspace, opens its Session, and returns focus to the Workspace list', () => {
+    const calls: string[] = []
+    mount({
+      mobile: true,
+      wide: false,
+      useSessions: hook(sessionState([summary('alpha-s', 2), summary('beta-s', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s']), workspace('beta', ['beta-s'])])),
+      open: (id) => { calls.push(id) },
+      onSessionOpened: () => { calls.push('opened') },
+    })
+    expect(screen.queryByText('alpha-s')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    expect(screen.getByRole('heading', { name: 'alpha' })).toBe(document.activeElement)
+    expect(screen.getByText('/projects/alpha')).toBeTruthy()
+    expect(screen.queryByText('beta')).toBeNull()
+    expect(screen.queryByText('beta-s')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'alpha-s' }))
+    expect(calls).toEqual(['alpha-s', 'opened'])
+    fireEvent.click(screen.getByRole('button', { name: '返回工作区列表' }))
+    expect(screen.getByRole('button', { name: /alpha/ })).toBe(document.activeElement)
+    expect(screen.getByRole('button', { name: /beta/ })).toBeTruthy()
+    expect(screen.queryByText('alpha-s')).toBeNull()
+  })
+
+  it('includes Ungrouped and nested Sessions without exposing archived or inactive blank rows', () => {
+    const open = vi.fn()
+    mount({
+      mobile: true,
+      open,
+      useSessions: hook(sessionState([
+        summary('parent', 4), summary('child', 3), summary('loose', 2),
+        summary('archived', 1), summary('blank', 0, { blank: true }),
+      ])),
+      useWorkspaces: hook(workspaceState([{
+        ...workspace('alpha', ['parent', 'child', 'archived', 'blank']),
+        nestedUnder: { child: sid('parent') },
+      }], [sid('archived')])),
+    })
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    expect(screen.getByRole('button', { name: 'child' })).toBeTruthy()
+    expect(screen.queryByText('archived')).toBeNull()
+    expect(screen.queryByText('新会话')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '返回工作区列表' }))
+    fireEvent.click(screen.getByRole('button', { name: /未分组/ }))
+    expect(screen.getByRole('heading', { name: '未分组' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'loose' }))
+    expect(open).toHaveBeenCalledWith(sid('loose'))
+  })
+
+  it('shows empty Workspaces and returns to the list when the selected Workspace disappears', () => {
+    const b = mount({
+      mobile: true,
+      useWorkspaces: hook(workspaceState([workspace('empty', []), workspace('remaining', [])])),
+    })
+    fireEvent.click(screen.getByRole('button', { name: /empty/ }))
+    expect(screen.getByText('暂无会话')).toBeTruthy()
+    rerender(b, { useWorkspaces: hook(workspaceState([workspace('remaining', [])])) })
+    expect(screen.getByRole('heading', { name: '工作区' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /remaining/ })).toBeTruthy()
+  })
+
+  it('keeps desktop grouping preferences unchanged while showing every mobile Session', () => {
+    const items = Array.from({ length: 8 }, (_, index) => summary(`session-${index}`, index))
+    const b = mount({
+      mobile: true,
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([workspace('alpha', items.map(item => item.id))])),
+    })
+    act(() => { b.store.actions.setGroupBy('flat') })
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    for (const item of items) expect(screen.getByRole('button', { name: item.displayTitle })).toBeTruthy()
+    expect(b.store.getSnapshot().groupBy).toBe('flat')
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
+  })
+})
+
+describe('WorkspaceBrowser', () => {
   it('workspace hover card shows a POSIX home descendant as ~', () => {
     vi.useFakeTimers()
     try {
@@ -190,10 +282,11 @@ describe('WorkspaceBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     expect(screen.getByText('分组方式')).toBeTruthy() // the menu heading label
-    expect(screen.getByRole('separator')).toBeTruthy()
-    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '按工作区', '单列表', '手动排序', '最近更新',
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    expect(screen.getAllByRole('menuitem').slice(0, 5).map(item => item.textContent)).toEqual([
+      '按工作区', '单列表', '已归档', '手动排序', '最近更新',
     ])
+    expect(screen.getByRole('menuitem', { name: '自适应' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '手动排序' }).querySelector('svg')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
@@ -447,6 +540,36 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
   })
 
+  it('renders pinned sessions in recency order with pin actions', async () => {
+    const setPinned = vi.fn(async () => undefined)
+    const items = [summary('older', 1), summary('newer', 3), { ...summary('blank', 4), blank: true }, summary('gone', 5)]
+    const pins = { enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [sid('older'), sid('gone'), sid('newer'), sid('blank'), sid('unknown')] }
+    const b = mount({
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer', 'blank', 'gone'])], [sid('gone')])),
+      useSessionPins: hook(pins),
+      setPinned,
+    })
+    const area = screen.getByRole('region', { name: '置顶会话' })
+    expect(area.textContent).toContain('newer')
+    expect(area.textContent).toContain('older')
+    expect(area.textContent).not.toContain('gone')
+    expect(area.textContent).not.toContain('blank')
+    expect(area.querySelector('[style*="--pinned-rows: 3"]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '会话“newer”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    expect(setPinned).toHaveBeenCalledWith([sid('newer')], false)
+    b.view.unmount()
+  })
+
+  it('shows the pinned empty hint only in the enabled wide pinned area', () => {
+    const base = { enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [] }
+    const b = mount({ useSessionPins: hook(base) })
+    expect(screen.getByText('右键会话或使用 ⋯ 菜单可置顶')).toBeTruthy()
+    b.view.rerender(<WorkspaceBrowser {...b.props} wide={false} useSessionPins={hook(base)} />)
+    expect(screen.queryByText('右键会话或使用 ⋯ 菜单可置顶')).toBeNull()
+  })
+
   it('archives a session from the row menu and hides archived rows in both modes', async () => {
     const archiveSession = vi.fn(async () => {})
     const b = mount({
@@ -490,6 +613,57 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
+  it('records a nested fork of an Ungrouped source locally and nests the child once it lands', async () => {
+    const forkSession = vi.fn(async () => sid('loose-child'))
+    const loose = summary('loose', 3)
+    const owned = summary('owned', 2)
+    const b = mount({
+      useSessions: hook(sessionState([loose, owned])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['owned'])])),
+      forkSession,
+    })
+    fireEvent.click(screen.getByText('未分组'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“loose”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    expect(forkSession).toHaveBeenCalledWith(sid('loose'), 'nested')
+    await vi.waitFor(() => {
+      expect(b.store.getSnapshot().ungroupedNestedUnder).toEqual({ 'loose-child': 'loose' })
+    })
+
+    // The child summary lands: the source becomes a branch holding the child
+    // (a sibling fork would render beside it without any branch affordance).
+    const child = { ...summary('loose-child', 1), parentId: loose.id }
+    rerender(b, { useSessions: hook(sessionState([loose, owned, child])) })
+    expect(screen.getByRole('button', { name: '1 个子会话' })).toBeTruthy()
+    expect(screen.getByText('loose-child')).toBeTruthy()
+  })
+
+  it('does not record local nesting for sibling forks, failed forks, or Workspace-accounted sources', async () => {
+    const forkSession = vi.fn<WorkspaceBrowserProps['forkSession']>()
+      .mockResolvedValueOnce(sid('sibling-child'))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(sid('owned-child'))
+    const b = mount({
+      useSessions: hook(sessionState([summary('loose', 3), summary('owned', 2)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['owned'])])),
+      forkSession,
+    })
+    fireEvent.click(screen.getByText('未分组'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“loose”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制为平级会话' }))
+    fireEvent.click(screen.getByRole('button', { name: '会话“loose”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“owned”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '新建嵌套子会话' }))
+    await vi.waitFor(() => { expect(forkSession).toHaveBeenCalledTimes(3) })
+    await Promise.resolve()
+    expect(forkSession.mock.calls).toEqual([
+      [sid('loose'), 'sibling'], [sid('loose'), 'nested'], [sid('owned'), 'nested'],
+    ])
+    expect(b.store.getSnapshot().ungroupedNestedUnder).toEqual({})
+  })
+
   it('renders a fork child as a top-level row without a session twist', () => {
     const parent = summary('parent-s', 2)
     const child = { ...summary('child-s', 1), parentId: parent.id }
@@ -520,18 +694,21 @@ describe('WorkspaceBrowser', () => {
     expect(startSession).toHaveBeenCalledWith(wid('alpha'))
   })
 
-  it('auto-expands the Ungrouped bucket for a loose current session; its header has no menu and its ＋ is inert', () => {
+  it('auto-expands the Ungrouped bucket for a loose current session; its header has no menu and its ＋ starts a scratch session', () => {
     const startSession = vi.fn()
+    const startScratchSession = vi.fn()
     mount({
       useSessions: hook(sessionState([summary('loose', 1)], { current: sid('loose') })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
       startSession,
+      startScratchSession,
     })
     // The loose session's group is UNGROUPED_KEY: expanded by the effect.
     expect(screen.getByText('loose')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '工作区“未分组”的操作' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '在“未分组”中新建会话' }))
     expect(startSession).not.toHaveBeenCalled()
+    expect(startScratchSession).toHaveBeenCalledOnce()
   })
 
   it('keeps an already-expanded group when the selection moves within it', () => {
@@ -1496,5 +1673,80 @@ describe('WorkspaceBrowser', () => {
     fireEvent.change(screen.getByPlaceholderText('搜索会话…'), { target: { value: 'needle' } })
     const row = screen.getByText('Needle A').closest('[role="treeitem"]') as HTMLElement
     expect(row.hasAttribute('draggable')).toBe(false)
+  })
+})
+
+describe('pinned sessions', () => {
+  const pinsView = (over: Partial<{ enabled: boolean; sidebarArea: boolean; sidebarRows: number; pinnedSessionIds: SessionId[] }> = {}) =>
+    hook({ enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [] as SessionId[], ...over })
+  const sessions = () => sessionState([summary('old-s', 1), summary('new-s', 3), summary('other-s', 2), summary('gone-s', 4)])
+  const workspaces = () => workspaceState([workspace('alpha', ['old-s', 'new-s', 'other-s', 'gone-s'])], [sid('gone-s')])
+  const pinnedArea = () => screen.getByRole('region', { name: '置顶会话' })
+  const pinnedTitles = () => [...pinnedArea().querySelectorAll('[role="treeitem"]')]
+    .map(row => row.getAttribute('data-session-id'))
+
+  it('lists pinned rows by recency in a fixed-height area, dropping archived and unknown ids', () => {
+    const b = mount({
+      useSessions: hook(sessions()),
+      useWorkspaces: hook(workspaces()),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('gone-s'), sid('missing'), sid('new-s')] }),
+    })
+    expect(pinnedTitles()).toEqual(['new-s', 'old-s'])
+    const list = pinnedArea().querySelector<HTMLElement>('[role="tree"]')
+    expect(list?.style.getPropertyValue('--pinned-rows')).toBe('3')
+    // Clicking a pinned row opens it; its menu leads with unpin.
+    fireEvent.click(pinnedArea().querySelector('[data-session-id="new-s"]')!)
+    expect(b.props.open).toHaveBeenCalledWith(sid('new-s'))
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: '会话“old-s”的操作' }))
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('取消置顶')
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    expect(b.props.setPinned).toHaveBeenCalledWith([sid('old-s')], false)
+    // The tree's own row offers pin, first, above rename.
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“other-s”的操作' }))
+    expect(screen.getAllByRole('menuitem').slice(0, 2).map(item => item.textContent)).toEqual(['置顶', '重命名'])
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
+    expect(b.props.setPinned).toHaveBeenCalledWith([sid('other-s')], true)
+  })
+
+  it('shows the empty hint, hides the area when the policy or the rail says so, and offers no pin verb while disabled', () => {
+    const b = mount({ useSessions: hook(sessions()), useWorkspaces: hook(workspaces()), useSessionPins: pinsView() })
+    expect(within(pinnedArea()).getByText(zh['pinned.empty'])).toBeTruthy()
+    rerender(b, { useSessionPins: pinsView({ sidebarArea: false }) })
+    expect(screen.queryByRole('region', { name: '置顶会话' })).toBeNull()
+    rerender(b, { useSessionPins: pinsView({ enabled: false }) })
+    expect(screen.queryByRole('region', { name: '置顶会话' })).toBeNull()
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“other-s”的操作' }))
+    expect(screen.queryByRole('menuitem', { name: '置顶' })).toBeNull()
+    rerender(b, { useSessionPins: pinsView(), wide: false })
+    expect(screen.queryByRole('region', { name: '置顶会话' })).toBeNull()
+  })
+
+  it('pins or unpins the whole right-click selection and only warns when the provider refuses', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const setPinned = vi.fn(async () => undefined)
+    const b = mount({
+      useSessions: hook(sessions()),
+      useWorkspaces: hook(workspaces()),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s')] }),
+      useSessionSelection: selector => selector({ selected: [sid('old-s'), sid('new-s')], anchor: sid('old-s'), lead: sid('new-s') }),
+      setPinned,
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.contextMenu(screen.getAllByText('new-s').at(-1)!)
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('置顶')
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
+    await waitFor(() => { expect(setPinned).toHaveBeenCalledWith([sid('old-s'), sid('new-s')], true) })
+    rerender(b, { useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }) })
+    fireEvent.contextMenu(screen.getAllByText('new-s').at(-1)!)
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(setPinned).toHaveBeenCalledWith([sid('old-s'), sid('new-s')], false) })
+    // A single-row pin failure is logged, not thrown into React.
+    setPinned.mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: '会话“old-s”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(warn).toHaveBeenCalledWith('session pin rejected:', expect.any(Error)) })
+    warn.mockRestore()
   })
 })

@@ -34,7 +34,7 @@ import type {
 import type { ViewTab } from '../src/client/contract/views.ts'
 
 // Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
-const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined })) as GlobalStandardProps['useResource']
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
 // jsdom implements no Range geometry (Lexical's scroll-into-view measures the
 // caret with one once the surface is genuinely contenteditable).
@@ -91,6 +91,7 @@ type SessionSlotProps = ComponentProps<typeof ConversationSession>
 
 const useChat: SessionSlotProps['useChat'] = () => { throw new Error('unused') }
 const useTrajectory: SessionSlotProps['useTrajectory'] = () => { throw new Error('unused') }
+const useTaskFlow: SessionSlotProps['useTaskFlow'] = () => { throw new Error('unused') }
 
 function workspace(id = 'w1'): WorkspaceView {
   return {
@@ -126,6 +127,10 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Settings-owned content-width mode; defaults to the fill logic. */
+    widthMode?: 'fill' | 'adaptive'
+    noSession?: boolean
+    railOccupied?: boolean
   } = {},
 ) {
   const root = sid('root')
@@ -196,10 +201,11 @@ function mount(
           useSession={useSession}
           useConversation={useConversation}
           useConversationViews={useConversationViews}
+          useTabsLeading={selector => selector([])}
           useChat={useChat}
           useTrajectory={useTrajectory}
+          useTaskFlow={useTaskFlow}
           useSessions={props.useSessions}
-          usePanelInfo={props.usePanelInfo}
           useResource={useResource}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
@@ -225,8 +231,8 @@ function mount(
           useConversationViews={useConversationViews}
           useChat={useChat}
           useTrajectory={useTrajectory}
+          useTaskFlow={useTaskFlow}
           useSessions={props.useSessions}
-          usePanelInfo={props.usePanelInfo}
           useResource={useResource}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
@@ -253,7 +259,6 @@ function mount(
           useSession={useSession}
           useConversation={useConversation}
           useSessions={props.useSessions}
-          usePanelInfo={props.usePanelInfo}
           useSessionPendingInteraction={useSessionPendingInteraction}
           useWorkspaces={props.useWorkspaces}
           useProjection={(() => undefined)}
@@ -267,6 +272,7 @@ function mount(
           resolveDraftAttachments={() => []}
           toggleCommandMenu={vi.fn()}
           useBusyEnter={bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue'))}
+          useSendShortcut={bindSnapshotSelector(createSnapshotStore<'enter'>('enter'))}
           useNotices={bindSnapshotSelector(wiring.notices)}
           useLexicon={bindSnapshotSelector(wiring.lexicon)}
           useMenuLauncher={bindSnapshotSelector(createSnapshotStore<string | null>(null))}
@@ -298,8 +304,7 @@ function mount(
       : (opts?.fallback ?? null)
   )) as ConversationRootProps['renderSlotChain']
   const props: ConversationRootProps = {
-    usePanelInfo: selector => selector({ activePanelId: null }),
-    sessionId: SID,
+    sessionId: options.noSession === true ? undefined : SID,
     SessionProvider: ({ children }) => children,
     useSession,
     useConversation,
@@ -309,18 +314,21 @@ function mount(
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
+    useRailSeat: selector => selector(options.railOccupied === true ? [{}] : []),
+    useContentWidthMode: selector => selector(options.widthMode ?? 'fill'),
     useInput,
     inputActions,
     renderSlot,
     renderSlotChain,
     selectWorkspace: retargetWorkspace,
+    startScratchSession: () => Promise.resolve(),
     t,
   }
   const view = render(<ConversationRoot {...props} />)
   return {
     view, store, wiring, sink, retargetWorkspace, session, conversation, slotCalls, lineageOwners, seatOwners, open,
     pickerOwner: () => pickerOwner,
-    rerender: () => { view.rerender(<ConversationRoot {...props} />) },
+    rerender: (sessionId = props.sessionId) => { view.rerender(<ConversationRoot {...props} sessionId={sessionId} />) },
   }
 }
 
@@ -343,6 +351,25 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
+  it('preserves the composer subtree when the first session activates an occupied rail', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), undefined, undefined, {
+      noSession: true, railOccupied: true, summaryBlank: true,
+    })
+    const selectors = ['[data-conversation-scroll]', '[data-composer-seat]', '[data-composer-input]', '[aria-label="选择工作区"]']
+    const before = selectors.map(selector => b.view.container.querySelector(selector))
+    expect(before.every(node => node !== null)).toBe(true)
+    expect(b.view.queryByTestId('view-conversation.session.rail')).toBeNull()
+    expect(b.view.container.querySelector('[class*="railPanel"]')).toBeNull()
+
+    b.rerender(SID)
+
+    selectors.forEach((selector, index) => {
+      expect(b.view.container.querySelector(selector)).toBe(before[index])
+    })
+    expect(b.view.getByTestId('view-conversation.session.rail')).toBeTruthy()
+    expect(b.view.getByRole('textbox').getAttribute('contenteditable')).toBe('true')
+  })
+
   it('does not redispatch composer child slots for an unrelated Session publication', () => {
     const b = mount(sessionSnapshotOf())
     const childKeys = new Set([
@@ -382,20 +409,26 @@ describe('ConversationRoot resident composer', () => {
     expect(seat('conversation.input.plan')).toEqual({ locked: true })
   })
 
-  it('lets the no-workspace posture win over a block', () => {
-    // Picking a workspace is the earlier prerequisite; naming a model first
-    // would send the user somewhere they cannot act yet.
+  it('keeps model selection available for an Ungrouped blank session with a resolved cwd', () => {
     const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, {
       summaryBlank: true,
       composerBlock: { reason: 'select a model first' },
     })
     const box = b.view.getByRole('textbox')
-    expect(box.getAttribute('aria-disabled')).not.toBe('true')
-    expect(box.getAttribute('contenteditable')).not.toBe('true')
-    expect(box.getAttribute('aria-haspopup')).toBe('menu')
-    expect(box.getAttribute('data-placeholder')).not.toBe('select a model first')
+    expect(box.getAttribute('aria-disabled')).toBe('true')
+    expect(box.getAttribute('data-placeholder')).toBe('select a model first')
+    expect(box.getAttribute('aria-haspopup')).not.toBe('menu')
     const modelSeat = b.seatOwners.filter(call => call.key === 'conversation.input.model').at(-1)?.owner
-    expect(modelSeat).toEqual({ locked: true })
+    expect(modelSeat).toEqual({ locked: false })
+  })
+
+  it('accepts a first prompt in an Ungrouped scratch session', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, { summaryBlank: true })
+    const box = b.view.getByRole('textbox')
+    expect(box.getAttribute('contenteditable')).toBe('true')
+    expect(box.getAttribute('aria-haspopup')).not.toBe('menu')
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(b.sink).toHaveBeenCalled()
   })
 
   it('keeps composer text in the machine, mirrors to the Conversation store, and submits through the sink', () => {
@@ -447,6 +480,7 @@ describe('ConversationRoot resident composer', () => {
     expect(host?.contains(header)).toBe(false)
     expect(host?.contains(seat)).toBe(true)
     expect(seat?.contains(textarea)).toBe(true)
+    expect(b.slotCalls).toContain('conversation.session.header.leading')
     expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
@@ -619,9 +653,22 @@ describe('ConversationRoot resident composer', () => {
     expect(b.view.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
-  it('publishes the column width as a px variable for the shared width axis', () => {
+  it('fill mode (default): no width handles, no published width variables', () => {
     const b = mount(sessionSnapshotOf())
     const root = b.view.container.querySelector('[data-phase]') as HTMLElement
+    expect(root.getAttribute('data-width-mode')).toBe('fill')
+    expect(b.view.container.querySelector('[data-width-handle]')).toBeNull()
+    // No root observer in fill mode: the 100% axis needs no measurements.
+    Object.defineProperty(root, 'offsetWidth', { value: 1200, configurable: true })
+    act(() => { fireResize(root) })
+    expect(root.style.getPropertyValue('--dsh-conversation-column-width')).toBe('')
+    expect(root.style.getPropertyValue('--dsh-chat-user-width')).toBe('')
+  })
+
+  it('adaptive mode publishes the column width as a px variable for the shared width axis', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { widthMode: 'adaptive' })
+    const root = b.view.container.querySelector('[data-phase]') as HTMLElement
+    expect(root.getAttribute('data-width-mode')).toBe('adaptive')
     // jsdom offsetWidth is 0 until faked: the observer publishes whatever the
     // layout reports, and the CSS clamp() floors the axis at 680px either way.
     Object.defineProperty(root, 'offsetWidth', { value: 1200, configurable: true })
@@ -632,8 +679,8 @@ describe('ConversationRoot resident composer', () => {
     expect(root.style.getPropertyValue('--dsh-chat-user-width')).toBe('')
   })
 
-  it('drag → persist → window clamp round-trip on a width handle', () => {
-    const b = mount(sessionSnapshotOf())
+  it('adaptive mode: drag → persist → window clamp round-trip on a width handle', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { widthMode: 'adaptive' })
     const root = b.view.container.querySelector('[data-phase]') as HTMLElement
     Object.defineProperty(root, 'offsetWidth', { value: 1600, configurable: true })
     act(() => { fireResize(root) })
@@ -681,8 +728,8 @@ describe('ConversationRoot resident composer', () => {
     }
   })
 
-  it('hero phase renders no width handles (no transcript to size)', () => {
-    const b = mount(sessionSnapshotOf({ blank: true }))
+  it('adaptive hero phase renders no width handles (no transcript to size)', () => {
+    const b = mount(sessionSnapshotOf({ blank: true }), undefined, undefined, { widthMode: 'adaptive' })
     expect(b.view.container.querySelector('[data-width-handle]')).toBeNull()
   })
 })

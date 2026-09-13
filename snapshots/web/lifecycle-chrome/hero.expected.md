@@ -39,7 +39,9 @@
   - img
 - textbox "Describe what you want to build, / commands, @ files or sessions":
   - paragraph
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
 - button "Select model, current DeepSeek-V4-Flash":

@@ -42,7 +42,6 @@ function validateEvent(session: Session, fallbackRoot: string, event: SessionEve
 /** Install validation for loaded and newly appended sandbox modes and directories. */
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   for (const session of ctx.sessions.list()) {
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     for (const event of session.snapshotEvents()) validateEvent(session, ctx.sandboxPolicy.workspaceRoot, event, fail)
   }
   ctx.on('internal/dispatch', (_mode, eventName, args) => {

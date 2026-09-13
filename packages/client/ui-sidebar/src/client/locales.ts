@@ -1,4 +1,4 @@
-/** `sidebar` namespace dictionaries for shell controls and global panels. */
+/** `sidebar` namespace dictionaries: shell controls (brand row, New Session, fold toggle). */
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
@@ -7,7 +7,6 @@ export const zh = {
   'session.new.label': '新建会话',
   'toggle.open': '打开侧边栏',
   'toggle.collapse': '收起侧边栏',
-  'panels.label': '全局面板',
   'brand.tagline': '基于官方DSH分叉，改进更多个性化功能',
   'mobile.navigation': '移动端主导航',
   'mobile.workspaces': '工作区',
@@ -24,7 +23,6 @@ export const en = {
   'session.new.label': 'New session',
   'toggle.open': 'Open sidebar',
   'toggle.collapse': 'Collapse sidebar',
-  'panels.label': 'Global panels',
   'brand.tagline': 'Forked from official DSH with more personalized features',
   'mobile.navigation': 'Mobile navigation',
   'mobile.workspaces': 'Workspaces',

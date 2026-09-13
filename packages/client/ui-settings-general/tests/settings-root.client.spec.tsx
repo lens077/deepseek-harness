@@ -6,11 +6,10 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
-import { en, zh } from '../src/client/locales.ts'
+import { en } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
-const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 afterEach(() => {
   cleanup()
@@ -35,7 +34,6 @@ const useSessionPendingInteraction: SettingsRootComponentProps['useSessionPendin
 
 function mount({
   wide = true,
-  dictionary = en,
   connectionState = 'connected',
   onboardingActive = true,
   rows = [
@@ -49,7 +47,6 @@ function mount({
   ],
 }: {
   wide?: boolean
-  dictionary?: typeof en | typeof zh
   connectionState?: ConnectionSnapshot
   onboardingActive?: boolean
   rows?: Row[]
@@ -79,11 +76,11 @@ function mount({
   const props: SettingsRootComponentProps = {
     useSessions,
     useSessionPendingInteraction,
-    usePanelInfo, useResource,
+    useResource,
     useWorkspaces: unusedHook,
     wide,
     reconnect,
-    t: makeTranslate(dictionary),
+    t: makeTranslate(en),
     useConnectionState: (select) => {
       const [, force] = useState(0)
       useEffect(() => {
@@ -129,23 +126,27 @@ function openPanel() {
 }
 
 describe('SettingsRoot trigger', () => {
-  it.each([
-    { column: 'expanded English', wide: true, dictionary: en, name: 'Settings' },
-    { column: 'collapsed English', wide: false, dictionary: en, name: 'Settings' },
-    { column: 'expanded Chinese', wide: true, dictionary: zh, name: '设置' },
-    { column: 'collapsed Chinese', wide: false, dictionary: zh, name: '设置' },
-  ])('uses the locale name and accepts keyboard-style activation for the $column trigger', ({
-    wide, dictionary, name,
-  }) => {
-    const { renderSlot } = mount({ wide, dictionary })
-    const trigger = screen.getByRole('button', { name })
-    expect(trigger.getAttribute('aria-label')).toBe(name)
-    expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide })
+  it('renders the trigger seat content as the accessible name (no aria-label of its own)', () => {
+    const { renderSlot } = mount()
+    const trigger = screen.getByRole('button', { name: 'Settings' })
+    expect(trigger.hasAttribute('aria-label')).toBe(false)
+    expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: true })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
-    trigger.focus()
-    fireEvent.click(trigger, { detail: 0 })
+    fireEvent.click(trigger)
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(screen.getByRole('button', { name, expanded: true })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Settings', expanded: true })).toBeTruthy()
+  })
+
+  it('names the rail trigger from the localized header and opens every settings section', () => {
+    const { renderSlot } = mount({ wide: false })
+    expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
+    const trigger = screen.getByRole('button', { name: 'Settings Title' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: 'Settings Title' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Models' }))
+    expect(screen.getByTestId('section-models')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(document.activeElement).toBe(trigger)
   })
 
   it('shows outage, retry progress, and a two-second recovery confirmation', () => {
@@ -262,19 +263,19 @@ describe('SettingsPanel navigation', () => {
         { id: 'models', order: 10, label: 'Models' },
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
         { id: 'plugins', order: 30, label: 'Plugins' },
-        { id: 'contributed', order: 40, label: 'Contributed' },
+        { id: 'vision-toolkit', order: 35, label: 'Vision tools' },
+        { id: 'conversation-layout', order: 40, label: 'Conversation layout' },
+        { id: 'contributed', order: 50, label: 'Contributed' },
       ],
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Contributed']
+    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Vision tools', 'Conversation layout', 'Contributed']
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The three ids the shell names get their own glyph; every other section —
-    // including one this package never heard of — shares the gear.
     expect(new Set(glyphs.slice(0, 4)).size).toBe(4)
-    expect(glyphs[4]).toBe(glyphs[0])
+    expect(glyphs.slice(4)).toEqual([glyphs[0], glyphs[0], glyphs[0]])
   })
 
   it('switches the rendered section on nav click', () => {

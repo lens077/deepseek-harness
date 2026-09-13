@@ -43,6 +43,28 @@ function turnEndReasons(events: readonly SessionEvent[]): string[] {
   return events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])
 }
 
+/** Wait for the responsive sidebar and conversation width before measuring dock geometry. */
+async function setMeasuredViewport(page: Page, width: number, sidebarCollapsed: boolean): Promise<void> {
+  await page.setViewportSize({ width, height: 1000 })
+  await page.locator('[data-sidebar-collapsed="true"]').waitFor({
+    state: sidebarCollapsed ? 'attached' : 'detached',
+    timeout: 10_000,
+  })
+  await page.locator('[data-conversation-scroll]').evaluate(async (host) => {
+    const deadline = performance.now() + 5_000
+    let previous = host.getBoundingClientRect().width
+    let stableFrames = 0
+    while (performance.now() < deadline) {
+      await new Promise<void>((resolve) => { requestAnimationFrame(() => { resolve() }) })
+      const current = host.getBoundingClientRect().width
+      stableFrames = Math.abs(current - previous) < 0.01 ? stableFrames + 1 : 0
+      if (stableFrames >= 3) return
+      previous = current
+    }
+    throw new Error('conversation width did not settle after the viewport changed')
+  })
+}
+
 describe('web e2e: queue row actions', () => {
   let scaffold: WebScaffold | undefined
   let browser: Browser | undefined
@@ -346,9 +368,9 @@ describe('web e2e: queue row actions', () => {
       expect(todoBox!.width).toBeCloseTo(queuePanelBox!.width, 1)
     }
     await expectAlignedContextPanels()
-    await page.setViewportSize({ width: 640, height: 1000 })
+    await setMeasuredViewport(page, 640, true)
     await expectAlignedContextPanels()
-    await page.setViewportSize({ width: 1680, height: 1000 })
+    await setMeasuredViewport(page, 1680, false)
 
     await queueHeader.click()
     const removeButtons = page.getByRole('button', { name: 'Remove queued message' })

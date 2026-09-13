@@ -1,7 +1,7 @@
 /**
- * The default preset is a user setting behind the preset picker. While the
- * picker is hidden, `config.default` remains the deployment's safe default;
- * once shown, the settings document overrides it and is hot-reloaded.
+ * The default preset is a user setting. `config.default` is the deployment's
+ * engineering default; the settings document overrides it and is hot-reloaded,
+ * so a person can change which preset new sessions get without a restart.
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -65,27 +65,17 @@ const toolNames = (ctx: Context, agent?: unknown): string[] =>
   ctx.tools.schemas(agent as never).map(schema => schema.name).sort()
 
 describe('the default preset as a user setting', () => {
-  it('shows mode selection on the composition default by default', async () => {
+  it('falls back to the composition default while the user set none', async () => {
     const { ctx } = await harness()
 
-    expect((await ctx.agentPresets.remoteExportList()).modeSelectionEnabled).toBe(true)
-    expect(ctx.agentPresets.defaultId).toBe('standard')
-
-    await ctx.settings.update(NS, { modeSelectionEnabled: false })
-    expect((await ctx.agentPresets.remoteExportList()).modeSelectionEnabled).toBe(false)
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
 
-  it('temporarily ignores the saved user default while selection is off', async () => {
+  it('takes the user default over the composition default', async () => {
     const { ctx } = await harness()
 
     await ctx.settings.update(NS, { default: 'minimal' })
-    expect(ctx.agentPresets.defaultId).toBe('minimal')
 
-    await ctx.settings.update(NS, { modeSelectionEnabled: false })
-    expect(ctx.agentPresets.defaultId).toBe('standard')
-
-    await ctx.settings.update(NS, { modeSelectionEnabled: true })
     expect(ctx.agentPresets.defaultId).toBe('minimal')
   })
 
@@ -119,11 +109,6 @@ describe('the default preset as a user setting', () => {
 
       expect(ctx.agentPresets.defaultId).toBe('minimal')
       expect(toolNames(ctx, running.agent)).toEqual(['alpha'])
-
-      await ctx.settings.update(NS, { modeSelectionEnabled: false })
-
-      expect(ctx.agentPresets.defaultId).toBe('standard')
-      expect(toolNames(ctx, running.agent)).toEqual(['alpha'])
     } finally {
       await running.dispose()
     }
@@ -132,12 +117,10 @@ describe('the default preset as a user setting', () => {
   it('re-inherits the composition default when the user setting is cleared', async () => {
     const { ctx } = await harness()
     await ctx.settings.update(NS, { default: 'minimal' })
-    expect((await ctx.agentPresets.remoteExportList()).modeSelectionEnabled).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('minimal')
 
     await ctx.settings.replace(NS, {})
 
-    expect((await ctx.agentPresets.remoteExportList()).modeSelectionEnabled).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
 
@@ -178,14 +161,12 @@ describe('a settings provider that goes away', () => {
   it('falls back to the composition default when the provider unloads', async () => {
     const { ctx, settingsFiber } = await harness()
     await ctx.settings.update(NS, { default: 'minimal' })
-    expect((await ctx.agentPresets.remoteExportList()).modeSelectionEnabled).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('minimal')
 
     // Unloading the provider takes the user layer with it; the roster keeps
     // working on its composition default rather than holding a stale override.
     await settingsFiber.dispose()
 
-    expect((await ctx.agentPresets.remoteExportList()).modeSelectionEnabled).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
 })

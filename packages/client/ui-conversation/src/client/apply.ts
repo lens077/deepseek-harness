@@ -2,7 +2,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
-import { IconPaperclipOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createSnapshotStore, type BoundActions } from '@deepseek-ai/dsh-client-store'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -35,7 +34,6 @@ import { QuestionShortcutRow } from './settings/QuestionShortcutRow.tsx'
 import type { QuestionShortcutRowInjected } from './settings/QuestionShortcutRow.tsx'
 import { QuestionNavigationPolicy } from './input/question-navigation-policy.ts'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
-import { ConversationPanel } from './skeleton/ConversationPanel.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
@@ -92,23 +90,10 @@ const ABSENT_FILE_UPLOADS = {
 }
 
 interface WorkspaceNavigation {
-  openSession(sessionId: SessionId): void
-  openWorkspace(
+  connectWorkspace(
     workspaceId: Parameters<ConversationInjected['selectWorkspace']>[0],
-    beforeOpen: (sessionId: SessionId) => void,
-  ): Promise<void>
+  ): Promise<SessionId>
   startScratchSession(): Promise<SessionId>
-}
-
-/** Action registration used by the composer without importing its command-UI consumer. */
-interface FileCommandRegistry {
-  register(contribution: {
-    name: string
-    label(): string
-    icon: typeof IconPaperclipOutline16
-    available(session: { sessionId: SessionId }): boolean
-    ui: { kind: 'action'; run(session: { sessionId: SessionId }): void }
-  }): () => void
 }
 
 /** Resolve the session-scoped Conversation action face, failing loud. */
@@ -251,17 +236,6 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const inputHub = new InputHub(ctx, t)
   const composerBlocks = new ComposerBlockRegistry()
 
-  ctx.inject(['commandUi'], (scope) => {
-    const commands = scope.get('commandUi') as FileCommandRegistry
-    scope.effect(() => commands.register({
-      name: 'file',
-      label: () => t('input.file'),
-      icon: IconPaperclipOutline16,
-      available: session => inputHub.canPickFiles(session.sessionId),
-      ui: { kind: 'action', run: (session) => { inputHub.pickFiles(session.sessionId) } },
-    }), 'ui-conversation: File action')
-  })
-
   // Conversation assembly and input share the Session binding lifecycle. The
   // source roster is installed before any consuming Slot entry.
   ctx.uiSession.provide({
@@ -282,7 +256,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   })
 
   const registerConversationRoot = () => slots.register({
-    name: 'main.conversation',
+    name: 'conversation',
     locale: NS,
     children: {
       'conversation.session': { kind: 'single', scope: 'session' },
@@ -301,7 +275,8 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         railSeat,
         contentWidthMode: contentWidthPolicy.mode,
       },
-      selectWorkspace: workspaceId => workspaceNavigation.openWorkspace(workspaceId, (nextId) => {
+      selectWorkspace: async (workspaceId) => {
+        const nextId = await workspaceNavigation.connectWorkspace(workspaceId)
         if (sessionId !== undefined && nextId !== sessionId) {
           const from = inputHub.shell(sessionId)
           const draft = from.snapshot.draft
@@ -321,7 +296,8 @@ export function apply(ctx: Context, config: Config = Config({})): void {
             }
           }
         }
-      }),
+        sessions.open(nextId)
+      },
       startScratchSession: async () => {
         await workspaceNavigation.startScratchSession()
       },
@@ -369,7 +345,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     store: conversationStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionHeaderInjected => ({
       hooks: { conversationViews, tabsLeading },
-      open: (id) => { workspaceNavigation.openSession(id) },
+      open: (id) => { sessions.open(id) },
       selectView: (view) => {
         activateView(sessionId, view)
         actions.setView(view)
@@ -471,12 +447,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     },
   }, InputBar)
 
-  slots.inject('main', function* () {
-    yield slots.register({
-      name: 'main',
-      key: 'conversation',
-      children: { 'main.conversation': { kind: 'single', scope: 'session-maybe' } },
-    }, ConversationPanel)
+  slots.inject('conversation', function* () {
     yield registerConversationRoot()
     yield registerConversationSession()
     yield registerConversationHeader()

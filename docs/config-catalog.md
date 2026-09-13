@@ -925,7 +925,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/host/frontend-static/src/index.ts:30`](../packages/host/frontend-static/src/index.ts)
+Source: [`packages/host/frontend-static/src/index.ts:31`](../packages/host/frontend-static/src/index.ts)
 
 <a id="deepseek-aidsh-host-open-in-app"></a>
 
@@ -2192,6 +2192,105 @@ export interface Config {
 ```
 
 Source: [`packages/context/session-reference/src/config.ts:11`](../packages/context/session-reference/src/config.ts)
+
+<a id="deepseek-aidsh-session-stats"></a>
+
+## `@deepseek-ai/dsh-session-stats`
+
+Requires: `sessionProjections`
+
+```ts config-catalog
+/** Deployment prices and read-only budget/detector settings. Invalid configuration fails plugin load. */
+export type Config = UsageStatsConfig
+
+/** Plugin configuration; no prices or budgets are inferred when absent. */
+export interface UsageStatsConfig {
+  /** Deployment price table; omit to display tokens without monetary estimates. */
+  pricing?: UsagePricingTable
+  /** Optional advisory budgets and diagnostic thresholds exposed with each ledger. */
+  governance?: UsageGovernancePolicy
+}
+
+/** Deployment-owned prices keyed by exact `provider/model`, never guessed from model names. */
+export interface UsagePricingTable {
+  /** Uppercase three-letter ISO 4217 currency for all rates and budgets. */
+  currency: string
+  /** Exact provider/model route keys; missing entries suppress complete cost totals. */
+  routes: Record<string, UsageRoutePrice>
+}
+
+/** Read-only advice; never interrupts, downgrades, or reroutes an agent. */
+export interface UsageGovernancePolicy {
+  /** Optional cumulative budgets; require configured prices and currency. */
+  budgets?: UsageBudgetPolicy
+  /** Optional sample-gated heuristics; absent thresholds disable their individual checks. */
+  waste?: UsageWastePolicy
+}
+
+/** Prices per million tokens in the table's currency. */
+export interface UsageRoutePrice {
+  /** Uncached prompt input price per million tokens. */
+  input: number
+  /** Cache-read price per million tokens. */
+  cacheRead: number
+  /** Cache-write price per million tokens. */
+  cacheWrite: number
+  /** Inclusive output price per million tokens; reasoning is not priced again. */
+  output: number
+  /** Optional recurring discounts or surcharges; unmatched hours use the base prices. */
+  tiers?: UsagePricingTier[]
+}
+
+/** Advisory cumulative budgets in the pricing table's currency. */
+export interface UsageBudgetPolicy {
+  /** Positive budget for the selected session's own requests. */
+  session?: number
+  /** Positive budget for the session and its subagent descendants. */
+  tree?: number
+  /** Positive budget for all available nonempty sessions. */
+  all?: number
+  /** Fraction in (0, 1] at which a warning starts; ratio >= 1 means exceeded. */
+  warningRatio: number
+}
+
+/** Optional diagnostic thresholds. Ratios use 0..1 except retry/prefix changes per step. */
+export interface UsageWastePolicy {
+  /** Minimum reporting steps before input/cache/retry/prefix checks, or measured requests for TTFT. */
+  minUsageSteps: number
+  /** Minimum dispatched calls before the tool-error check. */
+  minToolCalls: number
+  /** Warn above this average billed-input token count per reporting step. */
+  averageInputTokens?: number
+  /** Warn below this cache-read share of all reported prompt tokens. */
+  cacheHitRatio?: number
+  /** Warn above this first-token waiting share of recorded model time. */
+  ttftShare?: number
+  /** Warn above this paired-error count divided by dispatched calls. */
+  toolErrorRatio?: number
+  /** Warn above this scheduled-retry count per reporting step; may exceed 1. */
+  retryRatio?: number
+  /** Warn above this prefix-change count per reporting step; may exceed 1. */
+  cacheBreakRatio?: number
+}
+
+/** Multiplier applied to all four prices during non-overlapping recurring windows. */
+export interface UsagePricingTier {
+  /** Nonnegative factor applied to the route's base prices, such as 0.5 for half price. */
+  multiplier: number
+  /** Matching UTC windows; overlaps within a route are rejected. */
+  windows: UsagePricingWindow[]
+}
+
+/** UTC recurring half-open hourly window. Sunday is 0, Saturday is 6. */
+export interface UsagePricingWindow {
+  /** UTC weekdays 0..6; omit to match every day. */
+  weekdaysUtc?: number[]
+  /** Integer [start, end) hours; 0 <= start < end <= 24. */
+  hoursUtc: [number, number]
+}
+```
+
+Source: [`packages/session/session-stats/src/index.ts:22`](../packages/session/session-stats/src/index.ts)
 
 <a id="deepseek-aidsh-session-telemetry-otel"></a>
 
@@ -3672,6 +3771,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-jobs` ([`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-layout` ([`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-message-feedback` ([`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-model-routing` ([`packages/client/ui-model-routing/src/index.ts`](../packages/client/ui-model-routing/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-model-selection` ([`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-open-in-app` ([`packages/client/ui-open-in-app/src/index.ts`](../packages/client/ui-open-in-app/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-permission-presets` ([`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts))
@@ -3718,7 +3818,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-session` ([`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts))
 - `@deepseek-ai/dsh-session-checkpoint-policy` — requires `llm` · `sessionPersistence` · `sessions` · `tools` ([`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts))
 - `@deepseek-ai/dsh-session-projection` ([`packages/session/session-projection/src/index.ts`](../packages/session/session-projection/src/index.ts))
-- `@deepseek-ai/dsh-session-stats` — requires `sessionProjections` ([`packages/session/session-stats/src/index.ts`](../packages/session/session-stats/src/index.ts))
 - `@deepseek-ai/dsh-session-turn-outline` — requires `sessionProjections` ([`packages/session/session-turn-outline/src/index.ts`](../packages/session/session-turn-outline/src/index.ts))
 - `@deepseek-ai/dsh-skill-badge` — requires `skills` ([`packages/skill/skill-badge/src/index.ts`](../packages/skill/skill-badge/src/index.ts))
 - `@deepseek-ai/dsh-storage` ([`packages/storage/storage/src/index.ts`](../packages/storage/storage/src/index.ts))

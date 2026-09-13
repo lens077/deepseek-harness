@@ -13,7 +13,6 @@ import { dirname, resolve } from 'node:path'
 import * as yaml from 'js-yaml'
 import { parse as parseToml, type TomlTableWithoutBigInt, type TomlValueWithoutBigInt } from 'smol-toml'
 import parseSpdx from 'spdx-expression-parse'
-import { browserBundledExternals } from './browser-bundled-externals.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const OUT = 'THIRD_PARTY_NOTICES.md'
@@ -372,11 +371,14 @@ function normalizeRepo(raw: string | undefined): string | undefined {
 }
 
 /**
- * Direct npm dependencies distributed through installed runtime libraries or
- * browser builds. Tooling declarations alone do not imply distribution.
+ * External npm dependencies, tiered by which workspace area declares them at
+ * runtime: a package is runtime when any manifest outside `DEV_ONLY_AREAS`
+ * names it in `dependencies`/`optionalDependencies`. A package declared only
+ * by tooling, test infrastructure, the website, or the demo leaves — whatever
+ * the declaring section is called — is development-only.
  */
-function collectNpmDeps(manifests: Map<string, Manifest>, names: Set<string>, browser: ReadonlySet<string>): ExternalDep[] {
-  return [...tierExternalDeps(manifests, names, browser)]
+function collectNpmDeps(manifests: Map<string, Manifest>, names: Set<string>): ExternalDep[] {
+  return [...tierExternalDeps(manifests, names)]
     .filter(([name]) => !FIRST_PARTY.has(name))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, runtime]) => ({ name, ...installedMetadata(name, manifests), runtime }))
@@ -386,12 +388,9 @@ function collectNpmDeps(manifests: Map<string, Manifest>, names: Set<string>, br
  * Tier every external dependency the workspace declares.
  * @param manifests - workspace manifests keyed by repository-relative path.
  * @param names - every workspace package name, which never counts as external.
- * @param browser - Direct third-party packages resolved by the browser builds.
  * @returns each external package mapped to whether it is a runtime dependency.
  */
-export function tierExternalDeps(
-  manifests: Map<string, Manifest>, names: Set<string>, browser: ReadonlySet<string> = new Set(),
-): Map<string, boolean> {
+export function tierExternalDeps(manifests: Map<string, Manifest>, names: Set<string>): Map<string, boolean> {
   const tiers = new Map<string, boolean>()
   // `tsx` is runtime by fiat: the root source-run scripts execute through its ESM hook.
   tiers.set('tsx', true)
@@ -400,13 +399,10 @@ export function tierExternalDeps(
     for (const kind of ALL_KINDS) {
       for (const [dep, range] of Object.entries(manifest[kind] ?? {})) {
         if (names.has(dep) || range.startsWith('workspace:')) continue
-        const runtime = browser.has(dep) || !devOnly && (RUNTIME_KINDS as readonly string[]).includes(kind)
+        const runtime = !devOnly && (RUNTIME_KINDS as readonly string[]).includes(kind)
         tiers.set(dep, (tiers.get(dep) ?? false) || runtime)
       }
     }
-  }
-  for (const name of browser) {
-    if (!names.has(name) && !tiers.has(name)) throw new Error(`gen-third-party-notices: browser package ${name} has no workspace dependency declaration`)
   }
   return tiers
 }
@@ -634,18 +630,6 @@ export function isPermissive(license: string): boolean {
 }
 
 /**
- * Reject unapproved non-permissive licenses on installed or browser-bundled code.
- * @param dependencies - Disclosed runtime package identities and declared licenses.
- * @throws When a runtime package has no permissive license or exact owner authorization.
- */
-export function assertRuntimeLicenses(dependencies: readonly { name: string; license: string }[]): void {
-  const rejected = dependencies.filter(dep => !isPermissive(dep.license) && !isOwnerAuthorizedRuntime(dep.name))
-  if (rejected.length > 0) {
-    throw new Error(`gen-third-party-notices: runtime ${rejected.map(dep => `${dep.name} (${dep.license})`).join(', ')} is not a permissive license; review the distribution terms and record the decision before regenerating.`)
-  }
-}
-
-/**
  * Render the sentence that isolates non-permissive development tooling, or
  * nothing at all when every development dependency is permissive.
  * @param deps - development dependencies whose license is not permissive.
@@ -687,15 +671,14 @@ ${rows.join('\n')}
 
 /**
  * Render the complete notices document.
- * @returns The exact bytes THIRD_PARTY_NOTICES.md must hold after resolving browser inputs.
+ * @returns the exact bytes `THIRD_PARTY_NOTICES.md` must hold.
  */
-export async function render(): Promise<string> {
-  const browser = await browserBundledExternals(root)
+export function render(): string {
   // The linked-manifest cache is keyed by name only, so it must not outlive
   // the manifests map it was resolved from; render() owns that single load.
   workspaceLinkedManifestCache.clear()
   const { manifests, names } = loadWorkspaceManifests()
-  const npm = collectNpmDeps(manifests, names, browser)
+  const npm = collectNpmDeps(manifests, names)
   const runtimeDeps = npm.filter(dep => dep.runtime)
   const devDeps = npm.filter(dep => !dep.runtime)
   const vendored = collectVendored()
@@ -707,7 +690,15 @@ export async function render(): Promise<string> {
     ? collectClaudeDistribution(manifests)
     : undefined
   const nonPermissiveDev = devDeps.filter(dep => !isPermissive(dep.license))
-  assertRuntimeLicenses(runtimeDeps)
+  // A copyleft license reaching a shipped surface is a distribution decision,
+  // not a rendering detail; the notices cannot quietly absorb it.
+  const nonPermissiveRuntime = runtimeDeps.filter(dep =>
+    !isPermissive(dep.license)
+    && !isOwnerAuthorizedRuntime(dep.name),
+  )
+  if (nonPermissiveRuntime.length > 0) {
+    throw new Error(`gen-third-party-notices: runtime ${nonPermissiveRuntime.map(dep => `${dep.name} (${dep.license})`).join(', ')} is not a permissive license; review the distribution terms and record the decision before regenerating.`)
+  }
   const patchedLines = patched.map(({ spec, patch }) => `- \`${spec}\` — [\`${patch}\`](${patch})`)
 
   return `<!-- Generated by scripts/gen-third-party-notices.ts — do not edit by hand.
@@ -731,7 +722,7 @@ ${vendored.map(row => `| \`${row.npmName}\` | \`${row.upstreamName}\` | [${row.u
 
 ## Runtime npm dependencies
 
-External packages installed for runtime use or distributed inside the prebuilt browser artifacts. Browser inputs are resolved through the shipping tsdown and Vite configurations, independently of npm dependency sections. The tier covers every plugin a user can mount from \`cordis.yml\` — not only what the \`dsh\` CLI, Web UI, and Python SDK runtime load by default.
+External packages that a workspace package resolves at runtime. The tier covers every plugin a user can mount from \`cordis.yml\` — not only what the \`dsh\` CLI, Web UI, and Python SDK runtime load by default.
 
 ${renderNpmTable(runtimeDeps)}
 
@@ -742,7 +733,7 @@ ${renderClaudeDistribution(claudeDistribution)}
 
 ## Development-only npm dependencies
 
-External packages **directly declared** for development, tests, types, or tooling, without a runtime installation or browser-build relationship. A package here may still be pulled in transitively by a runtime dependency — \`pnpm-lock.yaml\` is the authority on that full closure.
+External packages **directly declared** only by repository tooling, test infrastructure, the documentation site, the demo leaves, or the native launcher's build workspace. No shipped surface names them itself. A package here may still be pulled in transitively by a runtime dependency — \`pnpm-lock.yaml\` is the authority on the full closure — so this tier records who declares a package, not what a build ultimately bundles.
 
 ${renderNpmTable(devDeps)}
 ${renderNonPermissiveNote(nonPermissiveDev)}
@@ -764,8 +755,8 @@ ${python.map(dep => `| [\`${dep.name}\`](${dep.repo}) | ${dep.license} | ${dep.r
 /** CLI entry: default writes the notices, `--check` fails if the committed copy
  * is stale. Guarded behind an entry-point check so importing this module for
  * tests neither regenerates the committed file nor calls process.exit. */
-async function main(): Promise<void> {
-  const content = await render()
+function main(): void {
+  const content = render()
   if (process.argv.includes('--check')) {
     let committed: string | null = null
     try {
@@ -788,5 +779,5 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) {
-  await main()
+  main()
 }

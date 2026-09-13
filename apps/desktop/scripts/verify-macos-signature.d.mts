@@ -8,31 +8,31 @@ import type { MacOSSigningEnvironment } from './desktop-release-environment.mjs'
 export function assertMacOSSignatureDetails(details: string, expected: MacOSSigningEnvironment): void
 
 /**
- * Require the signature properties Apple validates for executable runtime content.
+ * Require the signature properties Apple validates for executable seed content.
  * @param details - Output from `codesign --display --verbose=4`.
  * @param expected - Public release identity.
  */
-export function assertMacOSRuntimeSignatureDetails(details: string, expected: MacOSSigningEnvironment): void
+export function assertMacOSSeedSignatureDetails(details: string, expected: MacOSSigningEnvironment): void
 
 /**
- * Sign one Mach-O file embedded in the runtime tree.
+ * Sign one Mach-O file embedded in the seed store.
  * @param path - Writable standalone Mach-O file.
  * @param identifier - Stable code-signing identifier derived from the release app ID and CAS digest.
  * @param expected - Public release identity.
  * @returns Resolves after codesign exits successfully.
  */
-export function signMacOSRuntimeCode(
+export function signMacOSSeedCode(
   path: string,
   identifier: string,
   expected: MacOSSigningEnvironment,
 ): Promise<void>
 
 /**
- * Verify one Mach-O file embedded in the runtime tree.
+ * Verify one Mach-O file embedded in the seed store.
  * @param path - Mach-O file to inspect.
  * @param expected - Public release identity.
  */
-export function verifyMacOSRuntimeCode(path: string, expected: MacOSSigningEnvironment): void
+export function verifyMacOSSeedCode(path: string, expected: MacOSSigningEnvironment): void
 
 /**
  * Verify the full application signature and its release owner.
@@ -40,13 +40,6 @@ export function verifyMacOSRuntimeCode(path: string, expected: MacOSSigningEnvir
  * @param expected - Public release identity.
  */
 export function verifyMacOSSignature(appPath: string, expected: MacOSSigningEnvironment): void
-
-/**
- * Verify an independently distributed application's signature, ticket, and Gatekeeper acceptance.
- * @param appPath - Path to the stapled `.app` directory.
- * @param expected - Public release identity.
- */
-export function verifyMacOSNotarizedApplication(appPath: string, expected: MacOSSigningEnvironment): void
 
 /**
  * Verify the release identity, stapled ticket, and Gatekeeper acceptance of one disk image.

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import WebSocket, { type RawData } from 'ws'
 import { afterEach, describe, expect, it } from 'vitest'
-import { startInspector, type InspectorHandle } from '../src/host/bridge/controller.ts'
+import type { InspectorHandle } from '../src/host/bridge/controller.ts'
 
 const packageDirectory = fileURLToPath(new URL('..', import.meta.url))
 const clientBundlePath = join(packageDirectory, 'lib/client.js')
@@ -115,6 +115,8 @@ describe.skipIf(!built)('Inspector built Client in Chromium', () => {
   })
 
   it('forwards Console values and exposes the built bundle as read-only source', async () => {
+    // This built-Client smoke also starts the built Host and its sibling Worker.
+    const { startInspector } = await import(new URL('../lib/index.js', import.meta.url).href) as typeof import('../src/index.ts')
     inspector = await startInspector({ port: 0, captureFetch: false, maxClientSourceBytes: 1_000_000 })
     const bundle = await readFile(clientBundlePath)
     const sourceMap = await readFile(clientSourceMapPath)

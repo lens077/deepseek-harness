@@ -6,9 +6,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError, stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import { CardForm, numberField, textField } from '../src/client/card-form.ts'
+import { CardForm, choiceField, numberField, scaledNumberField, textField } from '../src/client/card-form.ts'
 import { AgentLoopCardController, type AgentLoopSettings } from '../src/client/agent-loop-card-controller.ts'
 import { BashCardController, type BashSettings } from '../src/client/bash-card-controller.ts'
+import { FileLockCardController, type FileLockSettings } from '../src/client/file-lock-card-controller.ts'
 import {
   SettingsDescribeMirror, type SettingsMirrorSnapshot,
 } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
@@ -430,6 +431,129 @@ describe('AgentLoopCardController', () => {
     host.publish({ status: 'ready', writable: false, value: { maxParallelToolCalls: 10 } })
 
     expect(controller.inject().hooks.agentLoopCard.getSnapshot().writable).toBe(false)
+  })
+})
+
+describe('choiceField', () => {
+  const spec = choiceField('mode', ['wait', 'read-now'])
+
+  it('accepts an offered token, clears on empty, and refuses anything else', () => {
+    expect(spec.parse('read-now')).toEqual({ kind: 'set', value: 'read-now' })
+    expect(spec.parse('  ')).toEqual({ kind: 'clear' })
+    expect(spec.parse('later')).toBeUndefined()
+  })
+
+  it('renders a non-string stored value as empty', () => {
+    expect(spec.format(7)).toBe('')
+    expect(spec.format('wait')).toBe('wait')
+  })
+})
+
+describe('scaledNumberField', () => {
+  const spec = scaledNumberField('ms', 1000)
+
+  it('converts between the stored and the displayed unit', () => {
+    expect(spec.format(30_000)).toBe('30')
+    expect(spec.format('30')).toBe('')
+    expect(spec.parse('2.5')).toEqual({ kind: 'set', value: 2500 })
+    expect(spec.parse('')).toEqual({ kind: 'clear' })
+    expect(spec.parse('soon')).toBeUndefined()
+  })
+})
+
+describe('FileLockCardController', () => {
+  /** A ready section carrying the shipped composition defaults. */
+  function ready(host: StubSettingsScope<FileLockSettings>, user: Partial<FileLockSettings> = {}): void {
+    const base: FileLockSettings = {
+      readWaitMs: 30_000, writeWaitMs: 600_000, leaseTtlMs: 1_800_000, delegatedReadTimeout: 'wait',
+    }
+    host.publish({ status: 'ready', writable: true, value: { ...base, ...user }, base, user })
+  }
+
+  it('shows each wait in the unit it is edited in', () => {
+    const host = stubSettingsScope<FileLockSettings>()
+    const controller = new FileLockCardController(host.scope)
+    ready(host)
+
+    expect(controller.inject().hooks.fileLockCard.getSnapshot()).toMatchObject({
+      readWaitSeconds: { text: '30', overridden: false },
+      writeWaitMinutes: { text: '10', overridden: false },
+      leaseTtlMinutes: { text: '30', overridden: false },
+      delegatedReadTimeout: { text: 'wait', overridden: false },
+    })
+  })
+
+  it('writes a seconds draft back as milliseconds', async () => {
+    const host = stubSettingsScope<FileLockSettings>()
+    acceptWrites(host)
+    const controller = new FileLockCardController(host.scope)
+    ready(host)
+    const face = controller.inject()
+
+    face.edit('readWaitMs', '5')
+    face.edit('writeWaitMs', '2')
+    face.save()
+    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledWith('writeWaitMs', 120_000) })
+
+    expect(host.set).toHaveBeenCalledWith('readWaitMs', 5000)
+    expect(face.hooks.fileLockCard.getSnapshot()).toMatchObject({
+      dirty: false,
+      readWaitSeconds: { text: '5', overridden: true },
+      writeWaitMinutes: { text: '2', overridden: true },
+    })
+  })
+
+  it('rounds a fractional draft to whole milliseconds', async () => {
+    const host = stubSettingsScope<FileLockSettings>()
+    acceptWrites(host)
+    const controller = new FileLockCardController(host.scope)
+    ready(host)
+    const face = controller.inject()
+
+    face.edit('readWaitMs', '0.15')
+    face.save()
+    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledWith('readWaitMs', 150) })
+  })
+
+  it('blocks the save while a wait draft is not a number', () => {
+    const host = stubSettingsScope<FileLockSettings>()
+    const controller = new FileLockCardController(host.scope)
+    ready(host)
+    const face = controller.inject()
+
+    face.edit('leaseTtlMs', 'soon')
+
+    expect(face.hooks.fileLockCard.getSnapshot()).toMatchObject({
+      dirty: true,
+      invalid: true,
+      leaseTtlMinutes: { text: 'soon', invalid: true },
+    })
+  })
+
+  it('stages a delegated-read choice and resets it back to the composition layer', async () => {
+    const host = stubSettingsScope<FileLockSettings>()
+    acceptWrites(host)
+    const controller = new FileLockCardController(host.scope)
+    ready(host, { delegatedReadTimeout: 'read-now' })
+    const face = controller.inject()
+
+    expect(face.hooks.fileLockCard.getSnapshot().delegatedReadTimeout)
+      .toMatchObject({ text: 'read-now', overridden: true })
+
+    face.resetField('delegatedReadTimeout')
+    face.save()
+    await vi.waitFor(() => { expect(host.unset).toHaveBeenCalledWith('delegatedReadTimeout') })
+    expect(face.hooks.fileLockCard.getSnapshot().delegatedReadTimeout)
+      .toMatchObject({ text: 'wait', overridden: false })
+  })
+
+  it('reports a read-only document so the card can disable its controls', () => {
+    const host = stubSettingsScope<FileLockSettings>()
+    const controller = new FileLockCardController(host.scope)
+
+    host.publish({ status: 'ready', writable: false, value: { readWaitMs: 30_000 } })
+
+    expect(controller.inject().hooks.fileLockCard.getSnapshot().writable).toBe(false)
   })
 })
 

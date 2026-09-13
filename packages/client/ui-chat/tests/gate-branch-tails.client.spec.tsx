@@ -8,6 +8,8 @@ import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/ch
 import { StatsPills } from '../src/client/chat/StatsPills.tsx'
 import { zh } from '../src/client/locale.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
+import { usageList } from './usage-fixture.client.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 const t: AssistantMarkdownProps['t'] = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
@@ -44,9 +46,12 @@ describe('render branch tails', () => {
     ] as const
     const snap = chatSnapshotFixture({ nodes })
     const source = { getSnapshot: () => snap, subscribe: () => () => {} }
+    const list = usageList({ root: undefined })
     const view = render(
       <StatsPills
         t={t}
+        sessionId={'root' as SessionId}
+        useSessions={bindSnapshotSelector({ getSnapshot: () => list, subscribe: () => () => {} })}
         useChat={bindSnapshotSelector(source)}
         useProjection={() => undefined}
       />,

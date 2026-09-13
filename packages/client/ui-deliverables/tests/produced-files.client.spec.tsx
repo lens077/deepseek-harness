@@ -8,7 +8,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SessionLiveEventEntry, SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionLiveEventEntry } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
   ConversationNodeAssembler, UiConversation,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -19,33 +19,18 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
-import type { ChatFileMentions, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {
+  ChatFileDiffExpansion, ChatFileMentions, TurnTailOwnerProps,
+} from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import { Deliverables, selectDeliverables, type DeliverablesInjected } from '../src/client/Deliverables.tsx'
-import { PresentedOpenController } from '../src/client/present-open.ts'
-import { ProducedFiles } from '../src/client/ProducedFiles.tsx'
+import { ProducedFiles, type ProducedFilesInjected, type ProducedFilesProps } from '../src/client/ProducedFiles.tsx'
 import {
-  basename, deliverablesDefinition, presentedForClosing, producedFileMentions, producedForClosing, selectProducedFiles,
+  basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
   type DeliverablesTurnData,
 } from '../src/client/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-
-function openProps(controller = new PresentedOpenController()) {
-  controller.host.set({ name: 'desktop', available: true, fileManager: 'finder' })
-  const sessions: SessionListState = { ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined }
-  return {
-    useSessions: <T,>(select: (state: SessionListState) => T): T => select(sessions),
-    reloadPresentedHost: vi.fn(() => controller.loadHost()),
-    usePresentedHost: <T,>(select: (state: ReturnType<typeof controller.host.getSnapshot>) => T): T =>
-      select(controller.host.getSnapshot()),
-    openPresented: vi.fn((...args: Parameters<PresentedOpenController['open']>) => controller.open(...args)),
-    usePresentedOpen: <T,>(select: (state: ReturnType<typeof controller.state.getSnapshot>) => T): T =>
-      select(controller.state.getSnapshot()),
-  }
-}
+import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 
 afterEach(() => {
   cleanup()
@@ -100,6 +85,8 @@ function tailOwner(
 ): TurnTailOwnerProps {
   return { seq, openFile, turn: turnLocation(turn, data) }
 }
+
+const SESSION_ID = 'deliverables-test' as SessionId
 
 interface TimelineSnapshot {
   readonly timeline: ConversationTimelineSnapshot
@@ -385,10 +372,6 @@ describe('produced-file Turn data', () => {
     ))
       .toThrow('deliverables start requires turn/start')
     expect(deliverablesDefinition.update(context, unrelated)).toBe(state)
-    for (const files of [[], [null, { path: '' }]]) {
-      const declaration = matched(at(3, 'deliverables/presented', { turn: 1, callId: 'present', files }), 'update')
-      expect(deliverablesDefinition.update(context, declaration)).toBe(state)
-    }
   })
 
   it('replays a tail page once prepend supplies its missing Turn start', () => {
@@ -426,13 +409,26 @@ describe('produced-file Turn data', () => {
 
 describe('ProducedFiles row', () => {
   const t = makeTranslate(zh)
+  const diffs = (
+    fileDiffs: ProducedFilesProps['fileDiffs'] = () => [],
+    expansion: ChatFileDiffExpansion = 'all',
+  ): Pick<ProducedFilesProps, 'fileDiffs' | 'useDiffExpansion'> => ({
+    fileDiffs,
+    useDiffExpansion: selector => selector(expansion),
+  })
 
-  it('renders the bounded chips and opens the file it was clicked for', () => {
+  const everyPathChanged: ProducedFilesProps['fileDiffs'] = path => [
+    { label: 'Turn 1 · Edit', oldText: `old ${path}`, newText: `new ${path}` },
+  ]
+
+  it('renders the bounded CSS candidates and opens a file through the owner', () => {
     const paths = ['deep/a.html', 'b.css', 'c.ts', 'd.ts', 'e.ts', 'f.ts', 'g.ts', 'h.ts']
     const openFile = vi.fn<(path: string) => void>()
 
-    const view = render(<ProducedFiles matched={paths} openFile={openFile} t={t} />)
-    expect(view.getByText('本轮文件改动')).toBeTruthy()
+    const view = render(
+      <ProducedFiles matched={paths} openFile={openFile} {...diffs()} t={t} />,
+    )
+    expect(view.getByText('产物')).toBeTruthy()
     const row = view.container.querySelector('[data-produced-files-row]')
     if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
     expect(within(row).getAllByRole('button')).toHaveLength(6)
@@ -442,27 +438,9 @@ describe('ProducedFiles row', () => {
     expect(chip.getAttribute('title')).toBe('deep/a.html')
     expect(view.queryByRole('button', { name: '打开 g.ts' })).toBeNull()
     fireEvent.click(chip)
-    // The row hands over the path it was given; where it opens is the
-    // Sidebar's decision, not this row's.
     expect(openFile).toHaveBeenCalledWith('deep/a.html')
-  })
-
-  it('renders a remainder counter after every chip but the last when every file fits', () => {
-    const view = render(<ProducedFiles matched={['a.md', 'b.md', 'c.md']} openFile={() => {}} t={t} />)
-    const row = view.container.querySelector('[data-produced-files-row]')
-    if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
-    expect(within(row).getAllByRole('button')).toHaveLength(3)
-    // One counter per chip that could be the last visible one; the final chip hides nothing.
-    expect([...row.querySelectorAll('[data-shown]')].map(node => node.getAttribute('data-shown'))).toEqual(['1', '2'])
-  })
-
-  it('offers no folder action, because a directory has no preview to open', () => {
-    const openFile = vi.fn<(path: string) => void>()
-    const overflowing = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
-    const view = render(<ProducedFiles matched={overflowing} openFile={openFile} t={t} />)
-    expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
-    // Nothing in the row reaches the local machine any more.
-    expect(openFile).not.toHaveBeenCalled()
+    // The Sidebar has no directory form, so the row offers no folder action.
+    expect(view.queryByRole('button', { name: /文件夹/ })).toBeNull()
   })
 
   it('uses singular English copy when exactly one file is hidden', () => {
@@ -470,12 +448,93 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']}
         openFile={() => {}}
+        {...diffs()}
         t={makeTranslate(en)}
       />,
     )
     const row = view.container.querySelector('[data-produced-files-row]')
     if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
     expect(within(row).getByText('+ 1 file')).toBeTruthy()
+  })
+
+  it('expands every changed file under the all preference and toggles them independently', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...diffs(everyPathChanged, 'all')}
+        t={t}
+      />,
+    )
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(2)
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getAllByText('Turn 1 · Edit')).toHaveLength(1)
+    expect(view.getByRole('button', { name: '打开 a.md' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('opens only a one-file Turn under the single preference', () => {
+    const one = render(
+      <ProducedFiles
+        matched={['out/report.md']}
+        openFile={() => {}}
+        {...diffs(everyPathChanged, 'single')}
+        t={t}
+      />,
+    )
+    expect(one.getByText('Turn 1 · Edit')).toBeTruthy()
+    cleanup()
+    const many = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...diffs(everyPathChanged, 'single')}
+        t={t}
+      />,
+    )
+    expect(many.queryByText('Turn 1 · Edit')).toBeNull()
+  })
+
+  it('keeps changed files closed under none until their chips are clicked', () => {
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={() => {}}
+        {...diffs(everyPathChanged, 'none')}
+        t={t}
+      />,
+    )
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: '打开 a.md' }))
+    expect(view.getByText('Turn 1 · Edit')).toBeTruthy()
+  })
+
+  it('opens files without a recorded diff through the owner instead of toggling', () => {
+    const openFile = vi.fn()
+    const view = render(
+      <ProducedFiles
+        matched={['a.md', 'b.md']}
+        openFile={openFile}
+        {...diffs(path => path === 'a.md' ? everyPathChanged(path) : [], 'none')}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '打开 b.md' }))
+    expect(openFile).toHaveBeenCalledWith('b.md')
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+  })
+
+  it('offers the owner opener inside an expanded diff', () => {
+    const openFile = vi.fn()
+    const view = render(
+      <ProducedFiles
+        matched={['deep/out/report.md']}
+        openFile={openFile}
+        {...diffs(everyPathChanged)}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '在侧栏中打开 report.md' }))
+    expect(openFile).toHaveBeenCalledWith('deep/out/report.md')
   })
 })
 
@@ -515,12 +574,10 @@ describe('plugin registration', () => {
     // The owning view's child declaration, stood up by a bench root entry.
     ctx.slots.register({
       name: 'root',
-      children: { 'conversation.chat.turnTail': { kind: 'chain', scope: 'session' }, 'tool.call.toolview': { kind: 'keyed', scope: 'session' } },
+      children: { 'conversation.chat.turnTail': { kind: 'chain', scope: 'session' } },
     } as never, () => null)
     // ui-theme's Appearance row binds a durable scope through these two.
-    const session = {
-      canOpenWorkspacePath: () => Promise.resolve({ ok: true as const, value: true }),
-    }
+    const session = {}
     ctx.provide('remote', {
       $on: () => () => {},
       $host: { home: undefined, isLoopback: false },
@@ -534,8 +591,21 @@ describe('plugin registration', () => {
     await fiber.await()
     const [entry] = ctx.slots.entries('conversation.chat.turnTail')
     expect(entry).toBeDefined()
-    expect(ctx.slots.entries('tool.call.toolview')).toHaveLength(1)
-    expect(entry?.inject).toBeDefined()
+    const injected = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
+    expect(injected.hooks.diffExpansion.getSnapshot()).toBe('none')
+    expect(injected.fileDiffs('out/report.md')).toEqual([])
+    expect(injected.hooks.diffExpansion.subscribe(() => {})).toBeTypeOf('function')
+
+    ctx.provide('chatFileDiffs', {
+      expansion: { getSnapshot: () => 'single' as const, subscribe: () => () => {} },
+      forPath: (sessionId: SessionId, path: string) => sessionId === SESSION_ID && path === 'out/report.md'
+        ? [{ label: 'Turn 2 · edit', oldText: 'a', newText: 'b' }]
+        : [],
+      forTurn: () => [],
+    } as never)
+    const withDiffs = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
+    expect(withDiffs.hooks.diffExpansion.getSnapshot()).toBe('single')
+    expect(withDiffs.fileDiffs('out/report.md')).toHaveLength(1)
 
     // The prose face is live while the plugin is: a produced turn yields a
     // resolver whose matches open through the owner-supplied opener.
@@ -546,200 +616,15 @@ describe('plugin registration', () => {
       (path) => { opened.push(path) },
     )
     const service = (ctx as unknown as { get(name: string): ChatFileMentions | undefined }).get('chatFileMentions')
-    const mentions = service?.forClosing(owner, SessionId('viewed-session'))
-    expect(mentions?.resolve('report.html')?.label).toBe('Open site/report.html in sidebar')
+    const mentions = service?.forClosing(owner)
     mentions?.resolve('report.html')?.open()
     expect(opened).toEqual(['site/report.html'])
-    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
-    vi.stubGlobal('fetch', fetcher)
-    const preview = vi.fn<(path: string) => void>()
-    for (const produced of [[], [{ path: 'out/report.docx', seq: 1 }]]) {
-      const delivered = tailOwner({ produced, presented: [{ path: 'out/report.docx', seq: 2, index: 0 }] }, 3, preview)
-      const mentions = service?.forClosing(delivered, SessionId('child-session'))
-      for (const text of ['report.docx', 'out/report.docx']) {
-        const mention = mentions?.resolve(text)
-        expect(mention?.label).toBe('Open out/report.docx in sidebar')
-        mention?.open()
-      }
-    }
-    expect(preview.mock.calls).toEqual(Array.from({ length: 4 }, () => ['out/report.docx']))
-    expect(fetcher).not.toHaveBeenCalled()
-    const face = entry!.inject!(SessionId('child-session') as never) as unknown as DeliverablesInjected
-    fetcher.mockResolvedValueOnce(Response.json({ name: 'desktop', available: true, fileManager: 'finder' }))
-    await face.reloadPresentedHost()
-    expect(face.hooks.presentedHost.getSnapshot()).toMatchObject({ name: 'desktop' })
-    ctx.emit('connection/reset')
-    expect(face.hooks.presentedHost.getSnapshot()).toBeNull()
-    await face.openPresented(SessionId('child-session'), 2, 0)
-    expect(face.hooks.presentedOpen.getSnapshot()['/api/present.open?sessionId=child-session&seq=2&index=0']).toBe('opened')
     // A turn that produced nothing yields no vocabulary at all.
-    expect(service?.forClosing(tailOwner(undefined, 2), SessionId('viewed-session'))).toBeUndefined()
+    expect(service?.forClosing(tailOwner(undefined, 2))).toBeUndefined()
 
-    fetcher.mockResolvedValueOnce(Response.json({ name: 'last-host', available: true, fileManager: 'finder' }))
-    await face.reloadPresentedHost()
     await fiber.dispose()
-    const reset = vi.fn()
-    const unsubscribe = face.hooks.presentedHost.subscribe(reset)
-    ctx.emit('connection/reset')
-    expect(reset).not.toHaveBeenCalled()
-    unsubscribe()
     expect(ctx.slots.entries('conversation.chat.turnTail')).toHaveLength(0)
-    expect(ctx.slots.entries('tool.call.toolview')).toHaveLength(0)
     // Fiber teardown retracts the service: the consumer's ctx.get sees the off state.
     expect((ctx as unknown as { get(name: string): unknown }).get('chatFileMentions')).toBeUndefined()
   })
-})
-
-
-describe('presented files', () => {
-  const file = (path = 'report.docx') => ({ path })
-
-  it('replays deliveries without mutation calls, preserves indices, and isolates turns', () => {
-    const value = assembler([
-      at(1, 'turn/start', { turn: 1 }),
-      at(2, 'deliverables/presented', { turn: 1, callId: 'nested', files: [null, { ...file(), description: 'Final report' }] }),
-      at(3, 'deliverables/presented', { turn: 1, callId: 'again', files: [{ ...file(), description: 'Updated report' }] }),
-      at(4, 'turn/end', { turn: 1 }),
-      at(5, 'turn/start', { turn: 2 }),
-    ])
-    const first = presentedForClosing(tailOwner(deliverablesOf(value), 3))
-    expect(first).toMatchObject([{ path: 'report.docx', seq: 2, index: 1, description: 'Final report' }])
-    expect(presentedForClosing(tailOwner(deliverablesOf(value), 4)))
-      .toMatchObject([{ path: 'report.docx', seq: 3, description: 'Updated report' }])
-    expect(selectDeliverables(tailOwner(deliverablesOf(value, 2), 9))).toBeNull()
-  })
-
-  it('uses the viewed fork Session in every open action and expands all delivered files', () => {
-    const value = assembler([
-      at(1, 'turn/start', { turn: 1 }),
-      at(2, 'deliverables/presented', { turn: 1, callId: 'nested', files: Array.from({ length: 8 }, (_, i) => file(`report-${i}.docx`)) }),
-    ])
-    const preview = vi.fn()
-    const owner = tailOwner(deliverablesOf(value), 3, preview)
-    const matched = selectDeliverables(owner)!
-    const props = openProps()
-    props.openPresented.mockResolvedValue(undefined)
-    const view = render(<Deliverables {...props} matched={matched} openFile={owner.openFile} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
-    expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(4)
-    const expand = view.getByRole('button', { name: 'Show all 8 delivered files' })
-    expect(expand.getAttribute('aria-expanded')).toBe('false')
-    fireEvent.click(expand)
-    expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(8)
-    expect(view.getByRole('button', { name: 'Collapse delivered files' }).getAttribute('aria-expanded')).toBe('true')
-    expect(view.queryByRole('link')).toBeNull()
-    fireEvent.click(view.getByRole('button', { name: 'Preview report-0.docx in sidebar' }))
-    fireEvent.click(view.getByRole('button', { name: 'Open report-0.docx in sidebar' }))
-    expect(preview).toHaveBeenCalledTimes(2)
-    expect(preview).toHaveBeenLastCalledWith('report-0.docx')
-    fireEvent.click(view.getByRole('button', { name: 'More file actions for report-0.docx' }))
-    fireEvent.click(view.getByRole('menuitem', { name: 'Open in default app' }))
-    expect(props.openPresented).toHaveBeenCalledWith('child-session', 2, 0, 'open')
-    fireEvent.click(view.getByRole('button', { name: 'Collapse delivered files' }))
-    expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(4)
-    expect(view.queryByText('Files changed')).toBeNull()
-  })
-})
-
-
-it.each([null, [], 'invalid'])('declines non-object delivery data: %j', (data) => {
-  expect(deliverablesDefinition.match(at(1, 'deliverables/presented', data).event)).toBeNull()
-})
-
-it.each([{}, { turn: '1', callId: 'bad', files: [] },
-  { turn: 1.5, callId: 'bad', files: [] }, { turn: 0, callId: 'bad', files: [] },
-  { turn: 1, files: [] }, { turn: 1, callId: '', files: [] }, { turn: 1, callId: 'bad', files: null },
-])('ignores malformed delivery data and keeps the existing produced row: %j', (data) => {
-  const value = assembler([
-    at(1, 'turn/start', { turn: 1 }),
-    call(2, 'write-a', 'write', { file_path: 'a.txt', content: 'a' }),
-    result(3, 'write-a'),
-    at(4, 'deliverables/presented', data),
-  ])
-  const owner = tailOwner(deliverablesOf(value), 5)
-  const matched = selectDeliverables(owner)!
-  const view = render(<Deliverables {...openProps()} matched={matched} openFile={owner.openFile} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  expect(view.getByText('Files changed')).toBeTruthy()
-  expect(view.queryByText('Deliverables')).toBeNull()
-})
-
-it('shows descriptions and falls back to file metadata without hiding extensionless deliveries', () => {
-  const view = render(<Deliverables {...openProps()} matched={{ produced: [], presented: [
-    { path: 'out/report.txt', description: 'Quarterly summary', seq: 2, index: 0 },
-    { path: 'LICENSE', seq: 2, index: 1 },
-  ] }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  expect(view.getByText('Quarterly summary')).toBeTruthy()
-  expect(view.getByText('File')).toBeTruthy()
-  expect(view.getByTitle('out/report.txt')).toBeTruthy()
-  expect(view.getByText('report.txt')).toBeTruthy()
-})
-
-it('marks delivery cards that directly follow the produced-files row', () => {
-  const shared = { ...openProps(), openFile: () => {}, sessionId: SessionId('session'), t: makeTranslate(en) }
-  const presented = [{ path: 'report.txt', seq: 2, index: 0 }]
-  const view = render(<Deliverables {...shared} matched={{ produced: ['source.ts'], presented }} />)
-  expect(view.getByText('Files changed')).toBeTruthy()
-  expect(view.container.querySelector('[data-presented-files-row]')?.parentElement
-    ?.getAttribute('data-after-produced-files')).toBe('true')
-})
-
-it('distinguishes PDF, Word, Markdown, and code files with compact decorative card icons', () => {
-  const paths = ['report.pdf', 'report.docx', 'README.md', 'index.tsx']
-  const view = render(<Deliverables {...openProps()} matched={{ produced: [], presented:
-    paths.map((path, index) => ({ path, seq: 2, index })),
-  }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  const icons = [...view.container.querySelectorAll('[data-presented-file]')].map((card) => {
-    const icon = card.querySelector('svg')!
-    expect(icon.getAttribute('aria-hidden')).toBe('true')
-    expect(icon.getAttribute('width')).toBe('20')
-    return icon.innerHTML
-  })
-  expect(new Set(icons).size).toBe(paths.length)
-})
-
-it('lets one delivered file span the complete row without an expansion control', () => {
-  const view = render(<Deliverables {...openProps()} matched={{ produced: [], presented: [
-    { path: 'report.pdf', seq: 2, index: 0 },
-  ] }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  expect(view.container.querySelector('[data-presented-files-row]')?.getAttribute('data-single')).toBe('true')
-  expect(view.queryByRole('button', { name: /delivered files/ })).toBeNull()
-})
-
-
-it.each(['opening', 'opened', 'error'] as const)('shows the %s state and permits retries after failure', (phase) => {
-  const controller = new PresentedOpenController()
-  controller.state.set({ '/api/present.open?sessionId=session&seq=2&index=0': phase })
-  const props = openProps(controller)
-  const view = render(<Deliverables {...props} matched={{ produced: [], presented: [
-    { path: 'report.txt', seq: 2, index: 0 },
-  ] }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  expect(view.getByText(en[`presented.${phase}`])).toBeTruthy()
-  expect((view.getByRole('button', { name: 'More file actions for report.txt' }) as HTMLButtonElement).disabled).toBe(phase === 'opening')
-})
-
-
-it('explains a missing desktop and retries failed Host metadata', () => {
-  const controller = new PresentedOpenController()
-  const props = openProps(controller)
-  const matched = { produced: [], presented: [{ path: 'file.txt', seq: 2, index: 0 }] }
-  controller.host.set('error')
-  const view = render(<Deliverables {...props} matched={matched} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  props.reloadPresentedHost.mockResolvedValue(undefined)
-  fireEvent.click(view.getByRole('button', { name: 'Retry' }))
-  expect(props.reloadPresentedHost).toHaveBeenCalledOnce()
-  controller.host.set({ name: 'server', available: false, fileManager: null })
-  view.rerender(<Deliverables {...props} matched={matched} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
-  expect(view.getByText(en['presented.unavailable'])).toBeTruthy()
-})
-
-
-it('loads desktop information only when delivery cards appear', () => {
-  const controller = new PresentedOpenController()
-  const props = openProps(controller)
-  controller.host.set(null)
-  props.reloadPresentedHost.mockResolvedValue(undefined)
-  const shared = { ...props, openFile: () => {}, sessionId: SessionId('session'), t: makeTranslate(en) }
-  const view = render(<Deliverables {...shared} matched={{ produced: ['source.ts'], presented: [] }} />)
-  expect(props.reloadPresentedHost).not.toHaveBeenCalled()
-  view.rerender(<Deliverables {...shared} matched={{ produced: [], presented: [{ path: 'report.txt', seq: 2, index: 0 }] }} />)
-  expect(props.reloadPresentedHost).toHaveBeenCalledOnce()
 })

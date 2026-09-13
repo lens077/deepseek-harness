@@ -3,9 +3,10 @@
  * shell renders only 'root'). Owns the grid tracks (sidebar | center |
  * rightbar), the drag handles (pointer capture + rAF throttle), the column
  * solve (columns.ts), and the child-slot render decisions: the sidebar slot
- * receives live parameters from that solve. The root-scoped main slot selects
- * the Conversation or a global panel. Each column occupant owns its Session
- * binding and reports the geometry it needs.
+ * renders HERE with live parameters from that solve, and the session-aware
+ * occupants render in fixed column positions; the strict right-column entry
+ * gates itself on current-session availability while the session-maybe
+ * conversation retains identity.
  *
  * The right column is a track, not a box: its occupant draws its panel anchored
  * to the frame's right edge at the resolved normal width, and the
@@ -14,7 +15,7 @@
  * track but hides the outer resize handle. Everything arrives through the framework
  * shares — zero cordis or framework imports, zero self-made hooks.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
@@ -38,7 +39,7 @@ export interface AppFrameInjected {
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay' | 'center.overlay'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'rightbar' | 'shell.overlay' | 'center.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
   & InjectFace<AppFrameInjected>
@@ -55,16 +56,6 @@ function CenterColumn(props: { children?: ReactNode; overlay?: ReactNode; inacti
       <div className={css.centerOverlay}>{props.overlay}</div>
     </div>
   )
-}
-
-/** Subscribe to the main key without subscribing the column frame to each panel id. */
-type PanelInfoHook = NonNullable<PropsRuntime<'root'>['usePanelInfo']>
-
-const defaultPanelInfo: PanelInfoHook = selector => selector({ activePanelId: null })
-
-function MainPanel({ usePanelInfo, renderSlot }: { usePanelInfo: PanelInfoHook } & PropsRenderSlots<'main'>) {
-  const panelId = usePanelInfo(info => info.activePanelId)
-  return renderSlot('main', {}, { entryKey: panelId ?? 'conversation' })
 }
 
 /**
@@ -146,15 +137,14 @@ function DragHandle(props: { side: 'sidebar' | 'rightbar'; left: number; onStart
 export function AppFrame({
   useStore,
   useSessions,
-  usePanelInfo,
   useBadge,
   useMobileAppearance,
   actions,
   renderSlot,
+  SessionProvider,
   t,
 }: AppFrameProps) {
-  const panelInfo = usePanelInfo
-  const layoutInfo = useStore(state => state.layoutInfo)
+  const panels = useStore(s => s)
   const appearance = useMobileAppearance(value => value)
   const badge = useBadge(value => value)
   const running = useSessions(s => s.ids.filter(id => s.byId[id]?.running === true).length)
@@ -163,7 +153,7 @@ export function AppFrame({
     return current === undefined ? undefined : s.byId[current]?.title
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
-  const viewport = layoutInfo.viewportWidth
+  const viewport = panels.viewportWidth
   // Phone presentation: one full-width surface between the header and the
   // bottom navigation. The right Sidebar derives its own fullscreen below the
   // same breakpoint, so the right track needs no phone geometry here.
@@ -207,15 +197,15 @@ export function AppFrame({
   }, [actions])
 
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
-  const sidebarCollapsed = narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0
+  const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
   const sidebarPreference = sidebarCollapsed
     ? 0
-    : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
-  const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
+    : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
+  const rightbarPreference = panels.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
   // include that space before the occupant's first shown report arrives.
-  const normal = computeColumns(viewport, !layoutInfo.rightbarShown && narrow ? 0 : sidebarPreference, rightbarPreference)
-  const cols = computeColumns(viewport, sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0)
+  const normal = computeColumns(viewport, !panels.rightbarShown && narrow ? 0 : sidebarPreference, rightbarPreference)
+  const cols = computeColumns(viewport, sidebarPreference, panels.rightbarTrack ? rightbarPreference : 0)
   const colsRef = useRef(cols)
   colsRef.current = cols
   const rightbarWidth = useRef(normal.rightbar)
@@ -239,15 +229,6 @@ export function AppFrame({
     actions.setRightbar(rightbarBase.current - dx)
   }, [actions])
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
-  const sidebar = useMemo(() => renderSlot('sidebar', {
-    collapsed: sidebarCollapsed,
-    width: mobile ? viewport : cols.sidebar,
-    ...mobileNavigation,
-  }), [renderSlot, sidebarCollapsed, mobile, viewport, cols.sidebar, mobileView])
-  const main = useMemo(() => (
-    <MainPanel usePanelInfo={panelInfo} renderSlot={renderSlot} />
-  ), [panelInfo, renderSlot])
-  const overlays = useMemo(() => renderSlot('shell.overlay', {}), [renderSlot])
 
   return (
     <div
@@ -263,38 +244,50 @@ export function AppFrame({
       data-mobile-view={mobile ? mobileView : undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}
-      data-rightbar-fullscreen={layoutInfo.rightbarFullscreen || undefined}
-      data-rightbar-instant={layoutInfo.rightbarInstant || undefined}
+      data-rightbar-fullscreen={panels.rightbarFullscreen || undefined}
+      data-rightbar-instant={panels.rightbarInstant || undefined}
       data-dragging={dragging || undefined}
     >
       <DocumentTitle
         productTitle={productTitle}
-        useSessions={useSessions}
-        usePanelInfo={panelInfo}
         badge={badge}
         running={running}
         {...documentTitle === undefined ? {} : { title: documentTitle }}
       />
       <div className={css.sidebarCol}>
-        {sidebar}
+        {/* Render-site slot call with live concession output: a closed
+            sidebar keeps the mounted slot at the compact-rail width, and the
+            component sees its rendered state as owner params decided here
+            (collapsed follows the resolved rail, so a derived auto-collapse
+            renders the rail UI too). */}
+        {renderSlot('sidebar', {
+          collapsed: sidebarCollapsed,
+          width: mobile ? viewport : cols.sidebar,
+          ...mobileNavigation,
+        })}
       </div>
       <>
-        <CenterColumn
-          inactive={mobile && mobileView !== 'conversation' && mobileView !== 'new'}
-          overlay={renderSlot('center.overlay', mobileNavigation)}
-        >
-          {main}
-        </CenterColumn>
+        {/* Both column occupants stay at fixed tree positions from first
+            paint — no loading gate: a bare status line reads worse than
+            the shell's own pending rendering. The conversation is
+            session-maybe; SessionProvider withholds the strict right-column
+            entry while no session is current. */}
+        <CenterColumn inactive={mobile && mobileView !== 'conversation' && mobileView !== 'new'} overlay={renderSlot('center.overlay', mobileNavigation)}>{renderSlot('conversation', {})}</CenterColumn>
         <RightbarColumn>
-          {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
+          {/* Strict session entry: with no session there is no surface, and the
+              column is an empty zero-width track. The occupant receives the
+              panel width it should draw at; the track is the frame's business. */}
+          <SessionProvider>
+            {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
+          </SessionProvider>
         </RightbarColumn>
       </>
       <div className={css.overlayLayer} data-shell-overlay>
-        {overlays}
+        {renderSlot('shell.overlay', {})}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {!mobile && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
-      {!mobile && layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
+      {!mobile && panels.rightbarShown && !panels.rightbarFullscreen && normal.rightbar > 0 && (
         <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
       )}
     </div>

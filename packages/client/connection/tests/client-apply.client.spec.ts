@@ -6,10 +6,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   apply,
-  type ClientConnectionRpc,
   type ClientTransportHooks,
   type ConnectionGenerationSource,
-  type RpcFetch,
   type ConnectionHandle,
   type ConnectionState,
 } from '../src/client/index.ts'
@@ -485,20 +483,6 @@ describe('connection client apply', () => {
     })
   })
 
-  it('uses an already decoded rpc carrier from the transport hooks instead of the HTTP caller', async () => {
-    ;(globalThis as Win).location = { hostname: 'preview.example', search: '' }
-    const rpc: ClientConnectionRpc = {
-      call: vi.fn(async (_channel: string, endpoint: string, payload: unknown) => ({ ok: true as const, value: { endpoint, payload } })),
-      open: vi.fn((_channel: string, endpoint: string) => (async function *(): AsyncGenerator { yield endpoint })()),
-    }
-    ;(globalThis as Win).__DSH_TRANSPORT__ = { rpc }
-    const handle = await mount()
-    expect(handle.rpc).toBe(rpc)
-    await expect(handle.rpc.call('/api', 'session/list', { args: [] })).resolves.toEqual({
-      ok: true, value: { endpoint: 'session/list', payload: { args: [] } },
-    })
-  })
-
   it('exposes a worker-local Gateway stream through connection.rpc.open', async () => {
     ;(globalThis as Win).location = { hostname: 'preview.example', search: '' }
     const openStream = vi.fn<NonNullable<ClientTransportHooks['openStream']>>(
@@ -508,7 +492,7 @@ describe('connection client apply', () => {
       })(),
     )
     ;(globalThis as Win).__DSH_TRANSPORT__ = {
-      fetch: vi.fn<RpcFetch>(),
+      fetch: vi.fn<ClientTransportHooks['fetch']>(),
       openStream,
       ownsHost: true,
     }

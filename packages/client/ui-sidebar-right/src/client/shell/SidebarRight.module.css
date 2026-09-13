@@ -29,10 +29,9 @@
   flex-direction: column;
   min-width: 0;
   /* The same ground as the conversation: this is a column of the page, not a
-     raised surface. The edge is the weight of the kit's split dividers inside
-     (ui-dockkit `.divider`), so the panel's outline and its inner rules match. */
+     raised surface. */
   background: var(--dsw-alias-bg-base);
-  border-left: 0.5px solid var(--dsw-alias-border-l4);
+  border-left: 0.5px solid var(--dsw-alias-border-l1);
   transform: translateX(100%);
   visibility: hidden;
   transition:
@@ -60,36 +59,26 @@
   }
 }
 
-/* The geometry of a message's action row button (ui-chat MessageIconActions),
-   shared with the kit's split control beside it: a 28px circle around a 15px glyph. */
 .iconButton {
-  display: inline-flex;
+  display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
   line-height: 1;
   background: transparent;
   border: none;
-  border-radius: 28px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
-.iconButton svg {
-  width: 15px;
-  height: 15px;
-}
-
 .iconButton:hover {
+  color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-interactive-bg-hover);
-}
-
-/* The expand button's glyph, so collapse and expand share one affordance. */
-.collapseGlyph {
-  transform: scaleX(-1);
 }
 
 .panelBody {
@@ -100,7 +89,6 @@
 
 .unavailable {
   margin: 0;
-  padding: 12px;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsh-content-font-size-secondary, 13px);
 }

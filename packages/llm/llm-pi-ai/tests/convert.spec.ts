@@ -10,7 +10,7 @@ import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
 
-function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
+function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0, reasoning?: number): Usage {
   return {
     input,
     output,
@@ -18,6 +18,7 @@ function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
     cacheWrite,
     totalTokens: input + output + cacheRead + cacheWrite,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    ...reasoning === undefined ? {} : { reasoning },
   }
 }
 
@@ -983,6 +984,23 @@ describe('mapStopReason / mapUsage', () => {
       cacheWriteTokens: 2,
     })
     expect(mapUsage(usage(10, 5))).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 })
+  })
+
+  it('preserves pi-ai reasoning detail, including zero, without changing totals', () => {
+    expect(mapUsage(usage(10, 5, 8, 2, 3))).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 25,
+      cacheReadTokens: 8,
+      cacheWriteTokens: 2,
+      reasoningTokens: 3,
+    })
+    expect(mapUsage(usage(10, 5, 0, 0, 0))).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      reasoningTokens: 0,
+    })
   })
 })
 

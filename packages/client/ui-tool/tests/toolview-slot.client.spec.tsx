@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import {
   apply as applyChat, inject as injectChat, type ToolResultNode,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -43,13 +42,13 @@ const toolResult = (seq: number, callId: string, name: string, args = '{"command
 })
 
 /** Test-owned AppFrame role: declares and renders the resident conversation area. */
-type AppRootProps = PropsRenderSlots<'main'>
+type AppRootProps = PropsRenderSlots<'conversation'>
 function AppRoot({ renderSlot }: AppRootProps) {
-  return <>{renderSlot('main', {}, { entryKey: 'conversation' })}</>
+  return <>{renderSlot('conversation', {})}</>
 }
 
 const LAYOUT_CHILDREN = {
-  'main': { kind: 'keyed', scope: 'root' },
+  'conversation': { kind: 'single', scope: 'session-maybe' },
 } as const
 
 /**
@@ -67,11 +66,7 @@ async function bench(nodes: ToolResultNode[]) {
   const sidebarRight = { openResource: vi.fn<(address: string) => void>() }
   runtime.ctx.provide('sidebarRight', sidebarRight as never)
   runtime.ctx.provide('uiWorkspace', {
-    openWorkspace: vi.fn(async (_workspaceId: WorkspaceId, beforeOpen: (id: SessionId) => void) => {
-      beforeOpen(SID)
-      runtime.sessions.open(SID)
-    }),
-    openSession: (id: SessionId) => { runtime.sessions.open(id) },
+    connectWorkspace: vi.fn(async () => SID),
   } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
@@ -217,11 +212,7 @@ describe('registrant declaration injection', () => {
     runtime.ctx.provide('layout', { openDetails: vi.fn(), closeDetails: vi.fn() })
     runtime.ctx.provide('sidebarRight', { openResource: vi.fn() } as never)
     runtime.ctx.provide('uiWorkspace', {
-      openWorkspace: vi.fn(async (_workspaceId: WorkspaceId, beforeOpen: (id: SessionId) => void) => {
-        beforeOpen(SID)
-        runtime.sessions.open(SID)
-      }),
-      openSession: (id: SessionId) => { runtime.sessions.open(id) },
+      connectWorkspace: vi.fn(async () => SID),
     } as never)
     const locale = new LocaleRuntime(runtime.ctx)
     runtime.ctx.provide('locale', locale)

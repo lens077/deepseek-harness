@@ -550,12 +550,12 @@ describe('per-call sandbox policy resolution', () => {
     Object.assign(agent.session.header, { cwd: sessionCwd })
     const result = await call(ctx, 'pwsh', { command: 'Write-Output hi', description: 'say hi' }, agent)
     expect(result.isError).toBe(false)
-    // The policy's workspace root is the session cwd canonicalized by the
+    // The policy's primary workspace root is the session cwd canonicalized by the
     // policy service (realpath + resolve), NEVER the web server's launch dir;
     // the calling session's identity rides along for backend per-session state.
     expect(bash.requests[0]?.sandboxPolicy).toEqual({
       mode: 'read-only',
-      workspaceRoot: resolvePath(realpathSync.native(sessionCwd)),
+      workspaceRoots: [resolvePath(realpathSync.native(sessionCwd))],
       sessionId: 'policy-session',
     })
   })
@@ -565,7 +565,7 @@ describe('per-call sandbox policy resolution', () => {
     await call(ctx, 'pwsh', { command: 'Write-Output hi', description: 'say hi' })
     expect(bash.requests[0]?.sandboxPolicy).toEqual({
       mode: 'read-only',
-      workspaceRoot: resolvePath(realpathSync.native(process.cwd())),
+      workspaceRoots: [resolvePath(realpathSync.native(process.cwd()))],
     })
 
     // The base FakeBash advertises no sandboxMode, so the tool must not stamp
@@ -625,15 +625,16 @@ describe('sandbox escalation through ctx.approval', () => {
     expect(schema.parameters.properties).not.toHaveProperty('sandbox_permissions')
   })
 
-  it('rejects injected escalation without a sandbox and non-widening escalation without prompting', async () => {
+  it('rejects injected escalation without a sandbox and runs a covered escalation without prompting', async () => {
     const plain = await setup()
     expect(text(await call(plain.ctx, 'pwsh', escalate))).toContain('not available in this composition')
 
-    const { ctx } = await setupSandboxed(true)
+    const { ctx, bash } = await setupSandboxed(true)
     const prompted = vi.fn()
     ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
     const result = await call(ctx, 'pwsh', { ...escalate, sandbox_permissions: 'workspace-write' }, sandboxAgent('workspace-write'))
-    expect(text(result)).toContain('not strictly wider')
+    expect(result.isError).toBe(false)
+    expect(bash.modes.at(-1)).toBe('workspace-write')
     expect(prompted).not.toHaveBeenCalled()
 
     const malformed = sandboxAgent()

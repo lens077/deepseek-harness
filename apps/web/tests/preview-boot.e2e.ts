@@ -34,10 +34,7 @@ import {
   IMAGE_FILE_NAME, PREVIEW_FIXTURE_MANIFEST_FILE, PREVIEW_FIXTURE_MANIFEST_VERSION,
   type PreviewFixtureManifest,
 } from '@deepseek-ai/dsh-experimental-webworker-runtime'
-import {
-  VFS_EXAMPLE_SESSION_IDS,
-  buildVfsExampleFiles,
-} from '../../../packages/experimental/webworker-runtime/tests/vfs-example-fixture.ts'
+import { buildVfsExampleFiles } from '../../../packages/experimental/webworker-runtime/tests/vfs-example-fixture.ts'
 import { captureStableAria, compareOrRefreshGolden, webSnapshotMode } from './scaffold.ts'
 import { newEnglishPage, REPO_ROOT, saveFailureShot } from './support.ts'
 
@@ -320,7 +317,7 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
     await page.locator('[data-composer-input][data-placeholder="Describe what you want to build, / commands, @ files or sessions"]')
       .waitFor({ timeout: 30_000 })
 
-    const exercised = await page.evaluate(async ({ seededSessionId, seededSessionTitle }) => {
+    const exercised = await page.evaluate(async () => {
       type Result<T> = { result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } } }
       interface PreviewTransport {
         fetch(input: string, init: RequestInit): Promise<Response>
@@ -355,14 +352,6 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
         if (!body.result.ok) throw new Error(`${endpoint} failed: ${body.result.error.message}`)
         return body.result.value
       }
-      // Keep the fixture title stable for later UI assertions; increasing seqs
-      // prove that the cold Session acquired its write lease and appended.
-      const firstRename = await remote<{ title: string; seq: number }>('session/rename', {
-        request: { sessionId: seededSessionId, title: seededSessionTitle },
-      })
-      const secondRename = await remote<{ title: string; seq: number }>('session/rename', {
-        request: { sessionId: seededSessionId, title: seededSessionTitle },
-      })
       const skills = await remote<{ skills: Array<{ name: string }> }>(
         'skills/list', { request: { sessionId } },
       )
@@ -395,17 +384,10 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
       await remote('credentials/unset', { ref: 'PREVIEW_TEST_SECRET' })
       await new Promise((resolve) => { setTimeout(resolve, 250) })
       return {
-        renamedTitle: secondRename.title,
-        renameAdvanced: secondRename.seq > firstRename.seq,
         skillCount: skills.skills.length,
         credentialConfigured: credentials.PREVIEW_TEST_SECRET?.configured,
       }
-    }, {
-      seededSessionId: VFS_EXAMPLE_SESSION_IDS.main,
-      seededSessionTitle: SHOWCASE_TITLE,
     })
-    expect(exercised.renamedTitle).toBe(SHOWCASE_TITLE)
-    expect(exercised.renameAdvanced).toBe(true)
     expect(exercised.skillCount).toBeGreaterThan(0)
     expect(exercised.credentialConfigured).toBe(true)
 
@@ -415,8 +397,8 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
     await showcase.click()
     await page.getByText(SHOWCASE_TAIL, { exact: true }).waitFor({ timeout: 30_000 })
 
-    expect(await page.getByText(SHOWCASE_OLDEST, { exact: true }).count()).toBe(0)
-    await page.getByRole('button', { name: 'PREVIEW.md', exact: true }).waitFor()
+    expect(await page.locator('[class*="userRow"]').getByText(SHOWCASE_OLDEST, { exact: true }).count()).toBe(0)
+    await page.getByText('PREVIEW.md', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'src/preview.ts', exact: true }).waitFor()
     await page.getByText('Update to-do list', { exact: true }).waitFor()
     await page.getByText('Error: ENOENT: no such file, open missing.txt', { exact: true }).waitFor()
@@ -430,7 +412,7 @@ async function bootPreview(origin: string, browser: Browser): Promise<void> {
     await catalog.press('Escape')
 
     await page.getByRole('button', { name: 'Load earlier', exact: true }).click()
-    await page.getByText(SHOWCASE_OLDEST, { exact: true }).waitFor({ timeout: 15_000 })
+    await page.locator('[class*="userRow"]').getByText(SHOWCASE_OLDEST, { exact: true }).waitFor({ timeout: 15_000 })
     expect(pageErrors.map(error => error.message)).toEqual([])
     expect(consoleErrors.filter(line =>
       /watchFile|failed to watch|node-addon-system\.probe|sandbox backend is usable|SANDBOX_UNAVAILABLE/i.test(line))).toEqual([])

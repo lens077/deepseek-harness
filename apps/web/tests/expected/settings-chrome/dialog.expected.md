@@ -13,6 +13,15 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "对话布局":
+      - img
+      - text: 对话布局
+    - button "汇总面板":
+      - img
+      - text: 汇总面板
+    - button "项目待办":
+      - img
+      - text: 项目待办
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -41,10 +50,62 @@
   - button "减小字号":
     - img
   - text: px 对话显示 控制已完成轮次的过程内容
-  - button "紧凑":
-    - text: 紧凑
+  - button "Compact":
+    - text: Compact
     - img
   - text: 繁忙时的发送行为 智能体运行时 Enter 键和发送按钮的行为；Cmd/Ctrl+Enter 使用另一行为
   - button "排队发送":
     - text: 排队发送
     - img
+  - text: 工作区默认显示会话数 设置每个折叠工作区默认显示的会话数量。
+  - button "5":
+    - text: "5"
+    - img
+  - text: 对话内容宽度 占满整个内容区，或启用可拖拽的自适应宽度
+  - button "占满内容区":
+    - text: 占满内容区
+    - img
+  - text: 会话连选与多选 按住 Shift 连选一段会话，按住 Ctrl（macOS 为 Command）逐个多选；Ctrl+A 全选，Esc 取消选择。
+  - button "启用":
+    - text: 启用
+    - img
+  - text: 对话状态动画 关闭动画时仍显示静态状态边框；完全关闭时仅保留状态点和辅助说明。
+  - button "打开（默认）":
+    - text: 打开（默认）
+    - img
+  - strong: 提问导航快捷键
+  - paragraph: 在当前会话的历史提问之间快速跳转。
+  - button "恢复默认"
+  - text: 上一个提问
+  - textbox "上一个提问": Ctrl+ArrowUp
+  - text: 下一个提问
+  - textbox "下一个提问": Ctrl+ArrowDown
+  - group "快捷键触发范围":
+    - text: 快捷键触发范围
+    - radio "所有表单控件及可编辑区域聚焦时不触发" [checked]
+    - text: 所有表单控件及可编辑区域聚焦时不触发
+    - radio "只排除文本输入框"
+    - text: 只排除文本输入框
+    - radio "无论何时都触发"
+    - text: 无论何时都触发
+  - group "提问栏展开按钮位置":
+    - text: 提问栏展开按钮位置
+    - radio "右侧（状态之后）" [checked]
+    - text: 右侧（状态之后）
+    - radio "左侧（编号之前）"
+    - text: 左侧（编号之前）
+  - text: 任务流程条样式 输入框上方常驻流程条的绘制方式。
+  - button "步骤轨道":
+    - text: 步骤轨道
+    - img
+  - text: 任务流程画布样式 「流程」视图放大画布的绘制方式。
+  - button "卡片节点图":
+    - text: 卡片节点图
+    - img
+  - text: 任务流程字号 流程条和画布的文字大小，独立于正文字号。
+  - group "任务流程字号":
+    - button "减小任务流程字号":
+      - img
+    - text: 11px
+    - button "增大任务流程字号":
+      - img

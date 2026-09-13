@@ -83,39 +83,31 @@ export class DesktopHostProcess {
   })
   private exitPromise: Promise<void> | undefined
   private stderr = ''
-  private failureReported = false
 
   /**
    * @param node - absolute bundled upstream Node.js executable.
-   * @param runtimeDir - immutable packages carried by the current application.
-   * @param projectDir - active or staged desktop plugin profile.
+   * @param projectDir - active or staged desktop npm project.
    * @param inspectPort - optional loopback inspector port for workspace development.
-   * @param environment - Child environment; runtime and package-manager overrides are removed.
-   * @param onFailure - Receives the first fatal child or transport failure, including after readiness.
    */
   constructor(
     private readonly node: string,
-    private readonly runtimeDir: string,
     private readonly projectDir: string,
     private readonly inspectPort?: number,
-    private readonly environment: NodeJS.ProcessEnv = process.env,
-    private readonly onFailure?: (error: Error) => void,
   ) {}
 
   /** Start the child once and resolve only after its complete composition is active. */
   async start(): Promise<DesktopHostReady> {
     if (this.child !== undefined) return this.readyPromise
-    const entry = join(this.runtimeDir, 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'index.js')
+    const entry = join(this.projectDir, 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'index.js')
     const child = spawn(this.node, [
       ...(this.inspectPort === undefined ? [] : [`--inspect=127.0.0.1:${String(this.inspectPort)}`]),
       entry,
-      this.runtimeDir,
       this.projectDir,
       ...(this.inspectPort === undefined ? [] : ['--allow-linked-profile']),
     ], {
       cwd: this.projectDir,
-      env: Object.fromEntries(Object.entries(this.environment).filter(([name]) => (
-        name !== 'NODE_OPTIONS' && name !== 'NODE_PATH' && !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
+      env: Object.fromEntries(Object.entries(process.env).filter(([name]) => (
+        name !== 'NODE_OPTIONS' && !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
       ))),
       stdio: ['ignore', 'pipe', 'pipe', 'pipe', 'pipe', 'ipc'],
     })
@@ -152,7 +144,7 @@ export class DesktopHostProcess {
     })
     child.once('error', (error) => { this.fail(error) })
     this.exitPromise = new Promise<void>((resolve) => {
-      child.once('close', (code) => {
+      child.once('exit', (code) => {
         const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
         if (code !== 0 && code !== null) this.fail(new Error(`dsh desktop host exited with ${String(code)}${suffix}`))
         else this.fail(new Error(`dsh desktop host stopped${suffix}`))
@@ -281,7 +273,7 @@ export class DesktopHostProcess {
   private send(message: DesktopHostCommand): void {
     const child = this.child
     if (child === undefined || !child.connected) throw new Error('dsh desktop host IPC is unavailable')
-    child.send(message, (error) => { if (error !== null) this.fail(error) })
+    child.send(message)
   }
 
   private acceptResponseBytes(chunk: Buffer): void {
@@ -408,12 +400,6 @@ export class DesktopHostProcess {
 
   private fail(error: Error): void {
     this.readyReject(error)
-    if (!this.failureReported) {
-      this.failureReported = true
-      try { this.onFailure?.(error) } catch (listenerError) {
-        console.error('desktop host failure listener failed', listenerError)
-      }
-    }
     for (const pending of this.pending.values()) {
       void pending.requestReader?.cancel(error).catch(() => undefined)
       if (pending.controller === undefined) pending.reject(error)

@@ -12,6 +12,8 @@ Status: implemented
 
 ## 决策
 
+本会话请求的金额估算与提醒式预算由[用量治理](2026-09-12-own-request-usage-governance.zh.md)负责。该投影补充本记录的本地诊断，exporter 隐私仍是独立决策。
+
 1. 扩展 `sessionStats` projection，新增完整 `turnMs`/`stepMs`、工具调用/结果/错误计数、模型重试次数与计划等待时间，以及每种核心 `turn/end` 原因的独立计数器。这些字段是对 append-only 日志的标量、无内容折叠。Web 统计条展示总 turn 耗时与非零的重试/失败/中断信号；分页和压缩不会改变这些数字。
 2. 让参考 OTel 后端默认使用 metadata-only，并与投递模式相互独立。封闭的结构化 allowlist 保留符合标识符形态的关联字段、谱系、生命周期坐标、耗时、token 用量、提供方/模型/工具身份、重试等待，以及结果/错误分类；同时移除不透明的工具调用 id、`cwd` 与所有承载内容的 payload。未知事件 body 只保留序列化字节数，并且不导出内容哈希。保留的标识符受语法约束，但不会被描述为匿名化；若部署拓扑或租户命名也敏感，应保持 telemetry 关闭。
 3. 要求两个相互独立的显式 opt-in：`captureContent: true` 用于原始 body，`includeAnonymousUserId: true` 用于持久的 Harness home Resource 身份。base bundle 只有在环境变量精确等于 `true` 时才启用对应选项；`mode` 仍默认为 `DISABLED`。

@@ -81,9 +81,6 @@
       "path": "../../typert/protocol"
     },
     {
-      "path": "../../feedback/command-feedback"
-    },
-    {
       "path": "../../session/session-inbox"
     },
     {

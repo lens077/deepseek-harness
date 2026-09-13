@@ -375,7 +375,6 @@ export class TeamRoster {
       try {
         signal.throwIfAborted()
         await this.ctx.sessions.flush(session)
-        // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
         const suffix = session.snapshotEvents(session.inheritedEventCount)
         if (messageAccepted(suffix, message => message.id === messageId)) return
         if (this.ctx.sessions.get(childId) !== session) continue
@@ -483,7 +482,6 @@ export class TeamRoster {
 
   /** Whether a Session's own suffix identifies a provider-owned subagent child. */
   private subagentDescriptor(agent: Agent): boolean {
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
     return foldSubagentDescriptor(agent.session.snapshotEvents(agent.session.inheritedEventCount)) !== undefined
   }
 }

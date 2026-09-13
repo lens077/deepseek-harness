@@ -149,26 +149,20 @@ suite('persistent Bash through a real cordis.yml Loader composition', () => {
       'multiline',
       'value="line one"\nprintf "%s:%s\\n" "$value" "it\'s fine"',
     ))
-    expect(multiline).toBe("line one:it's fine\n[Command finished with exit code 0]")
+    expect(multiline).toBe("line one:it's fine")
     expect(multiline).not.toContain('DSH_PERSISTENT_BASH')
 
     const heredoc = text(await execute(
       'heredoc',
       "cat <<'EOF'\nalpha\nbeta\nEOF",
     ))
-    expect(heredoc).toBe('alpha\nbeta\n[Command finished with exit code 0]')
+    expect(heredoc).toBe('alpha\nbeta')
 
     const pipeline = text(await execute(
       'pipeline',
       '{ sleep 0.1; printf "delayed\\n"; } | cat',
     ))
-    expect(pipeline).toBe('delayed\n[Command finished with exit code 0]')
-
-    // Every trailing newline is dropped before the status trailer.
-    const trailing = text(await execute('trailing-newlines', 'printf "tail\\n\\n\\n"'))
-    expect(trailing).toBe('tail\n[Command finished with exit code 0]')
-    expect(text(await execute('nonzero', 'exit_code() { return 3; }; exit_code')))
-      .toBe('[Command finished with exit code 3]')
+    expect(pipeline).toBe('delayed')
 
     const large = text(await execute('large-output', 'seq 1 12050'))
     expect(large.startsWith('1\n2\n3\n')).toBe(true)
@@ -177,12 +171,15 @@ suite('persistent Bash through a real cordis.yml Loader composition', () => {
 
     // `exec` replaces the wrapper before its end marker prints; the seam's
     // stdin_read readiness is what returns the replacement shell's prompt
-    // instead of spinning until the tool deadline.
+    // instead of spinning until the tool deadline. The replacement shell
+    // inherits the spawn-declared PS1 (and the PROMPT_COMMAND that re-asserts
+    // it), so the prompt it prints is the persistent-shell marker rather than
+    // the backend default.
     const execed = text(await execute('exec-replacement', 'exec bash --noprofile --norc -i'))
-    expect(execed).toBe('dsh> ')
+    expect(execed).toBe('__DSH_PERSISTENT_BASH_PROMPT__ ')
 
     const exited = text(await execute('exit', 'exit'))
     expect(exited).toContain('next bash call starts from the workspace')
-    expect(text(await execute('after-exit', 'printf "%s\\n" "$PWD"'))).toBe(`${root}\n[Command finished with exit code 0]`)
+    expect(text(await execute('after-exit', 'printf "%s\\n" "$PWD"'))).toBe(root)
   }, 20_000)
 })

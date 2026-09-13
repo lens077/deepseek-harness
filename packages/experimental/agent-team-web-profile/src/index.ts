@@ -1,3 +1,3 @@
-/** Experimental Web profile layer for the Agent Teams Client plugins. */
+/** Private Web profile layer for the Agent Teams Client plugins. */
 
 export {}

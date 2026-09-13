@@ -1,7 +1,7 @@
 /**
  * Deliverables plugin, browser half: registers the produced-files row into
  * the chat view's turn-tail chain, and provides the `chatFileMentions`
- * service that links inline-code mentions of produced or delivered files in the closing
+ * service that links inline-code mentions of produced files in the closing
  * prose. All policy lives here — the supported mutation calls, mention
  * matching, chip cap, and copy — so
  * composing this plugin out of cordis.yml removes both surfaces entirely;
@@ -9,19 +9,16 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ChatFileDiffExpansion, ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { PresentedOpenController } from './present-open.ts'
-import { PresentRow } from './PresentRow.tsx'
-import { Deliverables, selectDeliverables, type DeliverablesInjected } from './Deliverables.tsx'
+import { ProducedFiles } from './ProducedFiles.tsx'
 import { en, NS, zh, type DeliverablesKey } from './locales.ts'
 import {
-  deliverablesDefinition, presentedForClosing, producedFileMentions, selectProducedFiles,
+  deliverablesDefinition, producedFileMentions, selectProducedFiles,
 } from './turn-deliverables.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -42,9 +39,6 @@ export const inject = ['slots', 'locale', 'uiConversation', 'remote', 'remote.se
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const opener = new PresentedOpenController()
-  ctx.effect(() => () => opener.dispose())
-  ctx.on('connection/reset', () => { opener.resetHost() })
   // The inline diff preference and recorded hunks come from ui-session-files
   // when it is composed in; without it every chip simply opens the file.
   const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
@@ -57,29 +51,24 @@ export function apply(ctx: ClientContext): void {
     'conversation.chat.turnTail',
     () => ctx.slots.register({
       name: 'conversation.chat.turnTail',
-      select: selectDeliverables,
+      select: selectProducedFiles,
       locale: NS,
-      inject: (sessionId: SessionId): DeliverablesInjected => ({
+      inject: (sessionId: SessionId) => ({
         fileDiffs: (path: string) => ctx.get('chatFileDiffs')?.forPath(sessionId, path) ?? [],
-        hooks: { presentedOpen: opener.state, presentedHost: opener.host, diffExpansion },
-        reloadPresentedHost: () => opener.loadHost(),
-        openPresented: (sessionId, seq, index, action) => opener.open(sessionId, seq, index, action),
+        hooks: { diffExpansion },
       }),
-    }, Deliverables),
+    }, ProducedFiles),
   )
-  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
-    { name: 'tool.call.toolview', key: 'present', locale: NS }, PresentRow,
-  ))
   // The prose side of the same vocabulary: the chat view reaches this face
   // via ctx.get, so its absence — this plugin composed out — is the off state.
   const t = ctx.locale.bind(NS)
   const mentions: ChatFileMentions = {
     forClosing(owner) {
+      // Same claim test the turn-tail chain entry runs: no produced files,
+      // no vocabulary — the two surfaces agree by construction.
       const paths = selectProducedFiles(owner)
-      const presented = presentedForClosing(owner)
-      if (paths === null && presented.length === 0) return undefined
-      return producedFileMentions([...new Set([...paths ?? [], ...presented.map(file => file.path)])], owner.openFile,
-        path => t('presented.previewButton', { name: path }))
+      if (paths === null) return undefined
+      return producedFileMentions(paths, owner.openFile, path => t('produced.open', { name: path }))
     },
   }
   ctx.provide('chatFileMentions', mentions)

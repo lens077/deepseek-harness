@@ -4,9 +4,8 @@
   - button "1 subagent":
     - text: 1 subagent
     - img
-- img
-- text: Minimal mode
-- button "More actions":
+- button "Session log":
+  - text: Session log
   - img
-- button "Open right sidebar":
+- button "Open the sidebar":
   - img

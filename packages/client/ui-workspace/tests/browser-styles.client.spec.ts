@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(fileURLToPath(new URL('../src/client/rows/WorkspaceBrowser.module.css', import.meta.url)), 'utf8')
 const rowsCss = readFileSync(fileURLToPath(new URL('../src/client/rows/Rows.module.css', import.meta.url)), 'utf8')
+const mobileCss = readFileSync(fileURLToPath(new URL('../src/client/rows/MobileWorkspaceBrowser.module.css', import.meta.url)), 'utf8')
 
 /**
  * Declarations of one selector rule, keyed by property with whitespace collapsed.
@@ -33,6 +34,30 @@ function declarationsFrom(source: string, selector: string): Map<string, string>
 const declarations = (selector: string): Map<string, string> | undefined => declarationsFrom(css, selector)
 const rowDeclarations = (selector: string): Map<string, string> | undefined => declarationsFrom(rowsCss, selector)
 
+describe('mobile Workspace browsing density', () => {
+  const mobile = (selector: string) => declarationsFrom(mobileCss, selector)
+
+  it('separates Workspaces with a thin rule and keeps name, count, and path compact', () => {
+    expect(mobile('.list > li:has(.workspace)')?.get('border-bottom'))
+      .toBe('0.5px solid var(--dsw-alias-border-l3)')
+    expect(mobile('.workspace')?.get('padding')).toBe('10px 0')
+    expect(mobile('.identity > .count')?.get('grid-row')).toBe('1')
+    expect(mobile('.identity > .path')?.get('grid-row')).toBe('2')
+    expect(mobile('.name')?.get('font-size')).toBe('14px')
+    expect(mobile('.path')?.get('line-height')).toBe('17px')
+  })
+
+  it('keeps touch targets and search text readable without a management text row', () => {
+    for (const selector of ['.workspace', '.session', '.back', '.filter']) {
+      expect(mobile(selector)?.get('min-height')).toBe('44px')
+    }
+    expect(mobile('.manage')?.get('position')).toBe('absolute')
+    expect(mobile('.manage')?.get('width')).toBe('44px')
+    expect(mobile('.manage')?.get('height')).toBe('44px')
+    expect(mobile('.filter')?.get('font-size')).toBe('16px')
+  })
+})
+
 describe('WorkspaceBrowser.module.css list', () => {
   const root = declarations('.root')
   const listArea = declarations('.listArea')
@@ -45,8 +70,8 @@ describe('WorkspaceBrowser.module.css list', () => {
 
   it('counts the themed scrollbar inside the shell trailing inset', () => {
     expect(root?.get('--dsh-session-list-edge-inset')).toBe('var(--dsh-sidebar-inline-padding)')
-    expect(root?.get('--dsh-session-list-scrollbar-width')).toBe('8px')
-    expect(root?.get('--dsh-session-list-scrollbar-offset')).toBe('2px')
+    expect(root?.get('--dsh-session-list-scrollbar-width')).toBe('12px')
+    expect(root?.get('--dsh-session-list-scrollbar-offset')).toBe('0px')
     expect(root?.get('padding-right')).toBe('var(--dsh-session-list-edge-inset)')
     expect(listArea?.get('margin-left')).toBe('-4px')
     expect(listArea?.get('padding-left')).toBe('4px')
@@ -62,11 +87,15 @@ describe('WorkspaceBrowser.module.css list', () => {
       '- var(--dsh-session-list-scrollbar-offset)',
       ')',
     ].join(' '))
-    expect(declarations('.list::-webkit-scrollbar')).toBeUndefined()
+    expect(declarations('.list::-webkit-scrollbar')?.get('width'))
+      .toBe('var(--dsh-session-list-scrollbar-width)')
+    expect(declarations('.list::-webkit-scrollbar-thumb')?.get('min-height')).toBe('48px')
+    expect(declarations('.list::-webkit-scrollbar-thumb')?.get('border-radius')).toBe('6px')
   })
 
   it('reserves the scrollbar whether or not the list overflows', () => {
     expect(list!.get('scrollbar-gutter')).toBe('stable')
+    expect(list!.get('scrollbar-width')).toBe('auto')
   })
 
   it('keeps 2px between rows and 4px between workspace groups', () => {
@@ -94,6 +123,35 @@ describe('WorkspaceBrowser.module.css list', () => {
       expect(marker?.get('background')).toContain('0 5px / 5px 7px')
       expect(marker?.get('background')).toContain('4px 5px / calc(100% - 4px) 2px')
     }
+  })
+
+  it('draws a slow token-colored status perimeter without reusing drag markers', () => {
+    const perimeter = rowDeclarations('.sessionStatusPerimeter')
+    expect(perimeter?.get('position')).toBe('absolute')
+    expect(perimeter?.get('inset')).toBe('1px')
+    expect(perimeter?.get('pointer-events')).toBe('none')
+    expect(rowDeclarations('.sessionRow')?.get('position')).toBe('relative')
+    expect(rowDeclarations('.searchResultRow')?.get('position')).toBe('relative')
+    expect(rowDeclarations('.sessionStatusPerimeterRunning')?.get('--session-status-color'))
+      .toBe('var(--dsw-alias-state-business-primary)')
+    expect(rowDeclarations('.sessionStatusPerimeterCompleted')?.get('--session-status-color'))
+      .toBe('var(--dsw-alias-state-success-primary)')
+    expect(rowDeclarations('.sessionStatusPerimeterError')?.get('--session-status-color'))
+      .toBe('var(--dsw-alias-state-error-primary)')
+    // The overlay is the static ring mask and clip; the rotating gradient is a
+    // centered square inside it, so no part of the sweep paints outside the row.
+    const animated = rowDeclarations('.sessionStatusPerimeterAnimated')
+    expect(animated?.get('overflow')).toBe('hidden')
+    expect(animated?.get('mask-composite')).toBe('exclude')
+    const arc = rowDeclarations('.sessionStatusPerimeterAnimated::before')
+    expect(arc?.get('aspect-ratio')).toBe('1')
+    expect(arc?.get('width')).toBe('120%')
+    expect(arc?.get('translate')).toBe('-50% -50%')
+    expect(rowsCss).toContain('animation: session-status-orbit 8s linear infinite;')
+    expect(rowsCss).toContain('to { rotate: 1turn; }')
+    expect(rowsCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.sessionStatusPerimeterAnimated::before[\s\S]*animation: none;/,
+    )
   })
 
   it('keeps the compact fade, overflow control, search field, and row heights', () => {

@@ -1,13 +1,15 @@
 /**
  * Driver tests: the child-process message protocol mapped onto the promise,
  * the WM_CLOSE abort service (including the show-race retry and the kill
- * last resort) against fakes, plus the real spawn plumbing: hosts that cannot
- * open the folder dialog prove the default path rejects cleanly and hosts
- * that can briefly open and auto-abort a real one.
+ * last resort) against fakes, plus the real spawn plumbing — POSIX hosts
+ * prove the default path rejects cleanly (koffi cannot load ole32 there),
+ * and win32 hosts briefly open and auto-abort a real dialog.
  */
 
-import { spawnSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { EventEmitter } from 'node:events'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { describe, expect, it, vi } from 'vitest'
 import { pickWin32Directory, type Win32DialogInternals, type Win32DialogWorkerLike } from '../src/win32-dialog.ts'
 import type { Win32DialogWorkerMessage } from '../src/win32-dialog-worker.ts'
@@ -42,27 +44,17 @@ function harness(overrides: Partial<Win32DialogInternals> = {}): Harness {
 
 const live = (): AbortSignal => new AbortController().signal
 
-/** CLSID_FileOpenDialog, spelled out here so the probe below owns its own copy. */
-const CLSID_FILE_OPEN_DIALOG = 'dc1c5a9c-e88a-4dde-a5a1-60f82a20aef7'
-
-/**
- * Whether this host can open the shell's folder dialog. Some Windows Server
- * images answer `CoCreateInstance(CLSID_FileOpenDialog)` with
- * CLASS_E_CLASSNOTAVAILABLE (0x80040111) instead of an object, so no dialog
- * can ever appear there. PowerShell activates the class outside the code
- * under test, which keeps a GUID or vtable regression in `src` failing the
- * smoke below instead of silently skipping it. Every exception from that
- * activation reads as refusal, so a host that fails the probe for another
- * reason only loses the real-dialog case; a probe that cannot run at all —
- * no `powershell.exe` — keeps the win32 assumption.
- */
-const opensRealDialog = process.platform === 'win32' && spawnSync('powershell.exe', [
-  '-NoLogo',
-  '-NoProfile',
-  '-NonInteractive',
-  '-Command',
-  `try { [void][Activator]::CreateInstance([Type]::GetTypeFromCLSID([Guid]'${CLSID_FILE_OPEN_DIALOG}')) } catch { exit 1 }`,
-], { encoding: 'utf8' }).status !== 1
+async function sourceWorkerSmoke(operation: string): Promise<void> {
+  const driver = new URL('../src/win32-dialog.ts', import.meta.url).href
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    '--import', 'tsx/esm', '--input-type=module', '--eval',
+    `import assert from 'node:assert/strict';
+     import { pickWin32Directory } from ${JSON.stringify(driver)};
+     ${operation}
+     console.log('worker rejection verified');`,
+  ], { cwd: fileURLToPath(new URL('..', import.meta.url)), timeout: 25_000 })
+  expect(stdout.trim()).toBe('worker rejection verified')
+}
 
 describe('pickWin32Directory', () => {
   it('resolves the selected path and the cancellation null', async () => {
@@ -168,22 +160,24 @@ describe('pickWin32Directory', () => {
     expect(close.mock.calls.length).toBeGreaterThan(10)
   })
 
-  // Hosts without the folder dialog exercise the REAL default plumbing end to
-  // end: the tsx-bootstrapped worker spawns, loads koffi, and reports the
-  // refusal — ole32.dll fails to load on POSIX, and a Windows Server image
-  // that refuses the dialog class reports the same rejection.
-  it.skipIf(opensRealDialog)('rejects through the real worker where the Win32 surface is unavailable', async () => {
-    await expect(pickWin32Directory(live())).rejects.toThrow('win32 folder dialog failed')
+  // Source-launch smoke: native ESM resolution must run outside Vite's module runner.
+  it.skipIf(process.platform === 'win32')('rejects through the real worker where the Win32 surface is unavailable', async () => {
+    await sourceWorkerSmoke(`
+      await assert.rejects(pickWin32Directory(new AbortController().signal), /win32 folder dialog failed/);
+    `)
   }, 30_000)
 
-  // Hosts with the dialog run the true COM smoke instead: a real dialog opens
-  // briefly and the abort service closes it (the same lever a disconnecting
-  // client pulls).
-  it.skipIf(!opensRealDialog)('opens and abort-closes a real dialog', async () => {
-    const controller = new AbortController()
-    setTimeout(() => {
-      controller.abort()
-    }, 400)
-    await expect(pickWin32Directory(controller.signal)).rejects.toThrow('native directory picker aborted')
+  // win32 hosts run the true COM smoke instead: a real dialog opens briefly
+  // and the abort service closes it (the same lever a disconnecting client pulls).
+  it.skipIf(process.platform !== 'win32')('opens and abort-closes a real dialog', async () => {
+    await sourceWorkerSmoke(`
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 400);
+      try {
+        await assert.rejects(pickWin32Directory(controller.signal), /native directory picker aborted/);
+      } finally {
+        clearTimeout(timer);
+      }
+    `)
   }, 30_000)
 })

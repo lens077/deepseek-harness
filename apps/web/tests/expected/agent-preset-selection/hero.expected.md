@@ -2,6 +2,7 @@
   - img
   - text: workspace
   - img
+- button "Start without a folder"
 - button "Standard mode":
   - img
   - text: Standard mode

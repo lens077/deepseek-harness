@@ -123,7 +123,7 @@ function directoryEntries(
 ): LlmConfigurableProvider[] {
   const catalog = new Set(catalogProviderIds())
   const entries = new Map<string, LlmConfigurableProvider>()
-  const declare = (provider: string, displayName: string, error?: string): void => {
+  const declare = (provider: string, displayName: string): void => {
     entries.set(provider, {
       provider,
       displayName,
@@ -133,11 +133,10 @@ function directoryEntries(
       // narrowing a shipped provider's models stores a profile too, and that
       // route is still one pi-ai knows.
       declared: !catalog.has(provider),
-      ...error === undefined ? {} : { error },
     })
   }
   for (const provider of catalog) declare(provider, provider)
-  for (const [provider, profile] of profiles) declare(provider, profile.displayName, profile.catalogError)
+  for (const [provider, profile] of profiles) declare(provider, profile.displayName)
   return [...entries.values()]
 }
 
@@ -151,14 +150,16 @@ export function apply(ctx: Context, config: Config): void {
    * snapshot's identity — which is also what makes the adapter's own snapshot
    * stable across operations that observe no change.
    *
-   * Catalog diagnostics stay in the snapshot beside serviceable models, so
-   * stored configuration remains visible after an installed catalog changes.
-   * Scalar configuration errors still reject resolution.
+   * No fallback for an unserviceable snapshot lives here: the section schema
+   * resolves the whole profile set, so a write that could not be served is
+   * refused where it is written, and the settings seam keeps a namespace's
+   * last good value for a stored section that fails. Anything reaching this
+   * point has already resolved once.
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
     if (raw === lastRaw && memoized !== undefined) return memoized
-    const next = resolveProfiles(raw.providers, 'deferred')
+    const next = resolveProfiles(raw.providers)
     lastRaw = raw
     memoized = next
     return next
@@ -293,16 +294,11 @@ export function apply(ctx: Context, config: Config): void {
   ensureRegistrationFacts()
 
   ctx.inject(['settings'], (settingsCtx) => {
-    let registering = true
     settingsCtx.settings.installSection(ctx, NS, Config, config, {
-      validate: (value) => {
-        // Stored catalog drift must not prevent registration of the repair UI.
-        if (registering) {
-          resolveProfiles(value.providers, 'deferred')
-        } else {
-          assertServiceable(value, current())
-        }
-      },
+      // Refuse an unserviceable section where it is written: without this a
+      // schema-valid profile the adapter cannot serve would be stored and then
+      // silently disable every route in this namespace.
+      validate: assertServiceable,
       setSource: (source) => {
         current = source
       },
@@ -332,6 +328,5 @@ export function apply(ctx: Context, config: Config): void {
         }
       },
     })
-    registering = false
   })
 }

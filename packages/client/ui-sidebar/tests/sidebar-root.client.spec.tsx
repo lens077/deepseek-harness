@@ -13,7 +13,6 @@ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
-const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 // English-dictionary translate stub: the shell renders the same copy the
 // assertions below query by accessible name.
@@ -46,8 +45,8 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
     <SidebarRoot
       collapsed={current.collapsed} width={current.width}
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
-      usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
+      startUngrouped={async () => {}}
       startSession={startSession} toggleSidebar={toggleSidebar} t={t}
       renderSlot={((
         key: string,
@@ -63,8 +62,14 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
           footerActionOwner = owner
           return <div data-testid="footer-action-seat" data-wide={owner.wide} />
         }
-        regionOwner = owner as SidebarSectionOwnerProps
-        return <div data-testid="region" data-wide={owner.wide} />
+        if (key === 'sidebar.nav.entry') {
+          return <div data-testid="navigation-seat" data-wide={owner.wide} />
+        }
+        if (key === 'sidebar.workspaces') {
+          regionOwner = owner as SidebarSectionOwnerProps
+          return <div data-testid="region" data-wide={owner.wide} />
+        }
+        throw new Error(`unexpected sidebar slot: ${key}`)
       }) as SidebarRootComponentProps['renderSlot']}
     />
   )
@@ -112,14 +117,14 @@ describe('SidebarRoot shell', () => {
     const { container } = render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
-      usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
+      startUngrouped={async () => {}}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
 
-    expect(screen.getByText('DSH Local Build')).toBeTruthy()
+    expect(screen.getByText('Sumery DSH Pro')).toBeTruthy()
     expect(screen.getByText('1.2.3-rc.4-0123456-dirty')).toBeTruthy()
     expect(container.querySelector('svg')).not.toBeNull()
   })
@@ -132,14 +137,14 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
-      usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
+      startUngrouped={async () => {}}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
 
-    expect(screen.getByText('DSH Local Build')).toBeTruthy()
+    expect(screen.getByText('Sumery DSH Pro')).toBeTruthy()
     expect(screen.getByText(expected)).toBeTruthy()
   })
 
@@ -147,14 +152,14 @@ describe('SidebarRoot shell', () => {
     render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
-      usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
+      startUngrouped={async () => {}}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
 
-    expect(screen.getByText('DSH Local Build')).toBeTruthy()
+    expect(screen.getByText('Sumery DSH Pro')).toBeTruthy()
   })
 
   it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
@@ -171,6 +176,9 @@ describe('SidebarRoot shell', () => {
   it('keeps the region mounted through collapse and expands on its request', () => {
     vi.useFakeTimers()
     const b = mountShell()
+    const region = screen.getByTestId('region')
+    const navigation = screen.getByTestId('navigation-seat')
+    expect(navigation.getAttribute('data-wide')).toBe('true')
     b.rerender({ collapsed: true })
     // Wide content survives the crossfade window, then settles into the rail.
     expect(b.regionOwner().wide).toBe(true)
@@ -178,7 +186,9 @@ describe('SidebarRoot shell', () => {
     b.rerender({})
     expect(b.regionOwner().wide).toBe(false)
     expect(b.footerActionOwner().wide).toBe(false)
-    expect(screen.getByTestId('region')).toBeTruthy()
+    expect(screen.getByTestId('region')).toBe(region)
+    expect(screen.getByTestId('navigation-seat')).toBe(navigation)
+    expect(navigation.getAttribute('data-wide')).toBe('false')
     b.regionOwner().expandSidebar()
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
   })

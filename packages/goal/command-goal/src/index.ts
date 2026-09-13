@@ -4,7 +4,6 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { CommandDefinitionId } from '@deepseek-ai/dsh-commands/brand'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { GoalError } from '@deepseek-ai/dsh-goal'
 import type { GoalPhase, GoalRef, GoalView } from '@deepseek-ai/dsh-goal'
@@ -189,9 +188,8 @@ function executeGoalCommand(ctx: Context, invocation: CommandInvocation): Comman
 /** Register the Codex-shaped `/goal` command for every composed command adapter. */
 export function apply(ctx: Context): void {
   ctx.commands.register({
-    definitionId: CommandDefinitionId('@deepseek-ai/dsh-command-goal'),
     name: 'goal',
-    description: 'Set or view the goal for a long-running task',
+    description: 'set or view the goal for a long-running task',
     input: { hint: '[<objective>|clear|edit <objective>|pause|resume]', attachments: true },
     handler: invocation => executeGoalCommand(ctx, invocation),
   })

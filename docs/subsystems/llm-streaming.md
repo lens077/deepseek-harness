@@ -249,7 +249,7 @@ interface LlmFailure {
 
 ## Request-image pricing
 
-An adapter whose provider charges visual tokens for request images declares per-route pricing by overriding `LlmAdapter.imageRequestPricing`, and `ctx.llm.imageRequestPricing(provider, model)` resolves it synchronously for consumers. The token meter resolves the routed model's pricing on every measurement so compaction pressure, retention, and range selection price image history as the routed request actually sends it; the DeepSeek adapter reproduces its own request projection (per-model pixel budget, oldest-first offload) and prices retained images with the published vision accounting, while provider usage remains the authoritative anchor for completed requests.
+An adapter whose provider charges visual tokens for request images declares per-route pricing by overriding `LlmAdapter.imageRequestPricing`, and `ctx.llm.imageRequestPricing(provider, model)` resolves it synchronously for consumers. The token meter resolves the routed model's pricing on every measurement so compaction pressure, retention, and range selection price image history as the routed request actually sends it; the DeepSeek adapter reproduces its own request projection (per-model pixel budget, oldest-first offload) and prices retained images with the published v4 vision accounting, while provider usage remains the authoritative anchor for completed requests.
 
 ```ts type-equiv
 /**
@@ -327,16 +327,16 @@ interface AppIdentity {
 
 ## `TokenUsage`
 
-Per-call token accounting. Counts are **disjoint**: `inputTokens` is uncached input only; cached input is reported separately, and billed input is the sum of the three. Adapters whose providers fold cache hits into a single prompt total (DeepSeek's `prompt_tokens`) subtract them back out. Optional `totalTokens` is an exact aggregate prompt-plus-output count preserved from the provider or reconstructed from authoritative aggregate counters; adapters omit it when unavailable or inconsistent. `reasoningTokens`, when present, is informational detail already included in `outputTokens`; totals must not add it again.
+Per-call token accounting. Counts are **disjoint** across three input buckets: `inputTokens` is uncached input, `cacheReadTokens` is cached-read input, and `cacheWriteTokens` is cached-write input; billed input is their sum. Adapters whose providers fold cache hits into a single prompt total (DeepSeek's `prompt_tokens`) subtract them back out. Optional `totalTokens` is an exact aggregate prompt-plus-output count preserved from the provider or reconstructed from authoritative aggregate counters; adapters omit it when unavailable or inconsistent. `reasoningTokens`, when present, is an informational subset already included in `outputTokens`; totals and prices must not add it again.
 
 ```ts type-equiv
 /**
  * Token accounting for one model call (cache fields are optional).
  *
- * Counts are DISJOINT: `inputTokens` is uncached input only; cached input is
- * reported separately as `cacheReadTokens`/`cacheWriteTokens` (billed input =
- * sum of the three). Adapters whose providers fold cache hits into a total
- * prompt count (DeepSeek's `prompt_tokens`) subtract them out.
+ * Counts are DISJOINT across three input buckets: `inputTokens` is uncached
+ * input; `cacheReadTokens` and `cacheWriteTokens` are cached input buckets
+ * (billed input = sum of the three). Adapters whose providers fold cache hits
+ * into a total prompt count (DeepSeek's `prompt_tokens`) subtract them out.
  */
 interface TokenUsage {
   inputTokens: number
@@ -351,6 +351,10 @@ interface TokenUsage {
   totalTokens?: number
   cacheReadTokens?: number
   cacheWriteTokens?: number
+  /**
+   * Reasoning-token detail already included in `outputTokens`.
+   * Never add to totals or price separately.
+   */
   reasoningTokens?: number
 }
 ```
@@ -492,8 +496,6 @@ interface LlmConfigurableProvider {
    * from outside.
    */
   declared?: boolean
-  /** Configuration diagnostic for repair; unaffected models may remain serviceable. */
-  error?: string
 }
 ```
 

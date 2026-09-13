@@ -1,9 +1,10 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Load the editing-cordis-compositions ski" [disabled]
-  - button "More actions":
+  - button "Session log":
+    - text: Session log
     - img
-  - button "Open right sidebar":
+  - button "Open the sidebar":
     - img
   - tablist:
     - button "Close the file panel" [pressed]:
@@ -66,7 +67,9 @@
   - text: Ran for {{duration}}
 - text: {{date}} {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
+- button "Commands":
+  - img
+- button "Add attachment":
   - img
 - 'button "Access mode, current: Full access"': Full access
 - button "Select model, current DeepSeek-V4-Flash":

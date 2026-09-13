@@ -34,9 +34,8 @@ export function registerClaimDecoration(editor: LexicalEditor, activeToken: () =
       if (node.getStyle() === TOKEN_STYLE) node.setStyle('')
       return
     }
+    const token = activeToken()
     const text = node.getTextContent()
-    const active = activeToken()
-    const token = text === active?.trimEnd() ? text : active
     if (token === null || !text.startsWith(token)) {
       if (node.getStyle() === TOKEN_STYLE) node.setStyle('')
       return

@@ -21,8 +21,6 @@ import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-// Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
@@ -72,7 +70,7 @@ const NS = 'workspace'
  * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = [
-  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout',
+  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker',
 ]
 
 /**
@@ -130,9 +128,6 @@ export function apply(ctx: Context): void {
     getSnapshot: () => ctx.remote.$host,
     subscribe: listener => ctx.on('connection/reset', listener),
   }
-  const openSession: WorkspaceBrowserInjected['open'] = (sessionId) => {
-    uiWorkspace.openSession(sessionId)
-  }
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
@@ -142,7 +137,7 @@ export function apply(ctx: Context): void {
         console.warn('new session failed:', reason)
       })
     },
-    open: openSession,
+    open: (sessionId) => { sessions.open(sessionId) },
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
     renameSession: async (sessionId, title) => {
@@ -156,7 +151,20 @@ export function apply(ctx: Context): void {
     sessionDirectories: sessionId => ctx.sessions.directories(sessionId),
     replaceSessionDirectories: (sessionId, additionalDirectories) =>
       ctx.sessions.replaceDirectories(sessionId, additionalDirectories),
-    forkSession: (sessionId, placement) => uiWorkspace.forkSession(sessionId, placement),
+    forkSession: async (sessionId, placement) => {
+      try {
+        const childId = await ctx.sessions.fork({
+          sessionId,
+          increaseTitle: true,
+          ...(placement === undefined ? {} : { placement }),
+        })
+        ctx.sessions.open(childId)
+        return childId
+      } catch {
+        // Fork or child-rename failure keeps the current selection.
+        return undefined
+      }
+    },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {

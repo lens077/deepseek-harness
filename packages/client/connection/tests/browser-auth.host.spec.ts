@@ -227,6 +227,23 @@ describe('BrowserAuth', () => {
     expect(store).toMatchObject({ reads: 0, modifies: 2 })
   })
 
+  it('authenticates every request and prints a clean URL when authentication is not required', async () => {
+    const open = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30, false)
+    expect(open.authenticatedUrl('http://127.0.0.1:3080')).toBe('http://127.0.0.1:3080/')
+    for (const candidate of [
+      request('/'),
+      request('/', 'localhost:3080'),
+      request('/index.html', 'dsh.example.com'),
+      request('/?token=stale'),
+    ]) {
+      const res = response()
+      expect(open.authorizeIndex(candidate, res.value)).toBe(true)
+      expect(res.state).toEqual({})
+    }
+    expect(open.isAuthenticated(request('/', 'localhost:3080'))).toBe(true)
+    expect(open.isAuthenticated({ headers: new Headers() })).toBe(true)
+  })
+
   it('fails loud on an invalid owner record instead of replacing it', async () => {
     const unsupported = new RecordCredentials()
     unsupported.record = { kind: 'api-key', key: 'not-a-cookie-secret' }

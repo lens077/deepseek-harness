@@ -1,0 +1,29 @@
+# Deterministic prices and advisory budgets for the usage-governance browser fixture.
+# This row replaces the shipped session-stats config, so every active field is
+# repeated here instead of inheriting a partial configuration.
+- id: session-stats
+  name: '@deepseek-ai/dsh-session-stats'
+  config:
+    pricing:
+      currency: USD
+      routes:
+        deepseek-official/deepseek-v4-flash:
+          input: 1
+          cacheRead: 1
+          cacheWrite: 1
+          output: 1
+    governance:
+      budgets:
+        session: 0.0003
+        tree: 0.0006
+        all: 0.001
+        warningRatio: 0.75
+      waste:
+        minUsageSteps: 1
+        minToolCalls: 1
+        averageInputTokens: 1000
+        cacheHitRatio: 0.5
+        ttftShare: 0.6
+        toolErrorRatio: 0.2
+        retryRatio: 0.2
+        cacheBreakRatio: 0.25

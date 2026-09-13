@@ -46,7 +46,7 @@ export function runLiveWritePathContract(
   make: () => Promise<LiveWriteBackend>,
 ): void {
   describe(`live session write path: ${name}`, () => {
-    it('routes published events into the active write handle within one batching window', async ({ task, signal }) => {
+    it('routes published events into the active write handle within one batching window', async () => {
       const { ctx } = await make()
       const session = ctx.sessions.create(SessionId('routed'))
       const handle = await ctx.sessionPersistence.create(session.header)
@@ -63,15 +63,12 @@ export function runLiveWritePathContract(
         vi.useRealTimers()
       }
       // The deadline started a background write; wait for its durability.
-      await expect.poll(async () => {
-        signal.throwIfAborted()
-        const events = await readAll(ctx.sessionPersistence, session.id)
-        signal.throwIfAborted()
-        return events.map(event => [event.type, event.seq])
-      }, { timeout: task.timeout }).toEqual([
-        ['turn/start', 0],
-        ['turn/end', 1],
-      ])
+      await vi.waitFor(async () => {
+        expect((await readAll(ctx.sessionPersistence, session.id)).map(event => [event.type, event.seq])).toEqual([
+          ['turn/start', 0],
+          ['turn/end', 1],
+        ])
+      })
       await handle.close()
       await ctx.fiber.dispose()
     })

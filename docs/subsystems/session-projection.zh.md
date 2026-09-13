@@ -6,6 +6,8 @@
 
 源码：[`packages/session/session-projection/src/index.ts`](../../packages/session/session-projection/src/index.ts)
 
+[session-stats 贡献方](../../packages/session/session-stats/README.zh.md)发布全日志生命周期数据 `sessionStats`，以及表示本会话模型用量、路由估价、工具诊断与提醒策略的 `usageLedger`。[公开类型](../../packages/session/session-stats/src/types.ts)定义 `UsageLedgerProjection`、价格表和治理字段。账本使用 `init` 收到的精确继承前缀长度，将 fork 历史排除在支出之外；传输载体不负责这一记账逻辑。
+
 ## 投影单元
 
 `SessionProjectionStateMap` 是 host 侧折叠状态的 merge-extensible 类型表，`SessionProjectionMap` 则继续表示客户端可见的全量值。领域为每个状态 key 贡献一个 `ProjectionDefinition`；`wire` 块使该 key 对客户端可见，渲染归 slot 体系管，永远不归本层：

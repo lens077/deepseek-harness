@@ -103,8 +103,12 @@ async function mockCollector(
 async function boot(url: string) {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
+  // The wire test asserts raw bodies and the stable user id, so it opts into
+  // both; the privacy tests below cover the metadata-only default.
   const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
     mode: SessionTelemetryMode.FEEDBACK_ONLY,
+    captureContent: true,
+    includeAnonymousUserId: true,
     exporter: { url, headers: { authorization: 'Bearer test-token' } },
   })
   return { ctx, fiber }
@@ -156,7 +160,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
       attributes: { 'session.id': 'wire', 'event.type': 'manual', 'event.seq': 99 },
       body: { direct: true },
     })
-    recordFeedback(session, { text: 'explicit report' })
+    recordFeedback(session, 'explicit report')
     await fiber.dispose()
 
     expect(captures.length).toBeGreaterThan(0)
@@ -244,6 +248,67 @@ describe('OpenTelemetrySessionBackend wire', () => {
     expect(ops).toHaveLength(0)
   })
 
+  it('redacts content and omits the user id by default even when feedback is submitted', async () => {
+    const { url, captures } = await mockCollector()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
+      mode: SessionTelemetryMode.FEEDBACK_ONLY,
+      exporter: { url },
+    })
+    const session = ctx.sessions.create(SessionId('metadata-only'), { meta: { cwd: '/private/raw' } })
+    session.append('turn/start', { turn: 1 })
+    session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createAssistantMessage({
+        content: [{ type: 'text', text: 'secret-body-must-not-leave' }],
+        source: { provider: 'mock', model: 'mock' },
+      }),
+      stream: [],
+    }, { surfaceOp: 'append' })
+    recordFeedback(session, 'private report text')
+    await fiber.dispose()
+
+    expect(captures.length).toBeGreaterThan(0)
+    const resource = captures[0]!.body.resourceLogs[0]!.resource.attributes
+    expect(resource.some(attribute => attribute.key === 'user.id')).toBe(false)
+    const wire = JSON.stringify(captures)
+    expect(wire).not.toContain('secret-body-must-not-leave')
+    expect(wire).not.toContain('private report text')
+    expect(wire).not.toContain('/private/raw')
+    expect(eventTypes(captures)).toEqual(session.snapshotEvents().map(event => event.type))
+    for (const { record } of allRecords(captures)) {
+      expect(record.attributes).toContainEqual({
+        key: 'dsh.telemetry.content_mode', value: { stringValue: 'metadata-only' },
+      })
+    }
+  })
+
+  it('adds a stable user id without enabling raw content after identity opt-in', async () => {
+    const { url, captures } = await mockCollector()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
+      mode: SessionTelemetryMode.FEEDBACK_ONLY,
+      includeAnonymousUserId: true,
+      exporter: { url },
+    })
+    const session = ctx.sessions.create(SessionId('identified'), { meta: {} })
+    session.append('turn/start', { turn: 1 })
+    recordFeedback(session, 'identity-does-not-enable-content')
+    await fiber.dispose()
+
+    const resource = captures[0]!.body.resourceLogs[0]!.resource.attributes
+    expect(resource).toContainEqual({ key: 'user.id', value: { stringValue: getOrCreateAnonymousUserId() } })
+    expect(JSON.stringify(captures)).not.toContain('identity-does-not-enable-content')
+    const start = allRecords(captures).find(({ record }) =>
+      record.attributes?.some(attribute => attribute.key === 'event.type' && attribute.value.stringValue === 'turn/start'))
+    expect(start?.record.attributes).toContainEqual({
+      key: 'dsh.telemetry.content_mode', value: { stringValue: 'metadata-only' },
+    })
+  })
+
   it('drains records enqueued after a timer export began: dispose during an in-flight batch', async () => {
     // Hold the first authorized batch while a second submission queues its suffix.
     const gate = Promise.withResolvers<boolean>()
@@ -258,16 +323,17 @@ describe('OpenTelemetrySessionBackend wire', () => {
     await ctx.plugin(SessionStore)
     const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
       mode: SessionTelemetryMode.FEEDBACK_ONLY,
+      captureContent: true,
       exporter: { url },
       processor: { scheduledDelayMillis: 10 },
     })
     const session = ctx.sessions.create(SessionId('drain'), { meta: {} })
     session.append('request/header', { header: { config: { provider: 'mock', model: 'mock' } }, reason: 'initial' })
     session.append('turn/start', { turn: 1 })
-    recordFeedback(session, { text: 'first report' })
+    recordFeedback(session, 'first report')
     await arrived.promise
 
-    recordFeedback(session, { text: 'second report' })
+    recordFeedback(session, 'second report')
     session.append('turn/start', { turn: 2 })
     const shutdown = vi.spyOn(ctx.sessionTelemetry, 'shutdown')
     const disposal = fiber.dispose()
@@ -300,10 +366,10 @@ describe('OpenTelemetrySessionBackend wire', () => {
     const session = ctx.sessions.create(SessionId('bounded-shutdown'), { meta: {} })
     session.append('request/header', { header: { config: { provider: 'mock', model: 'mock' } }, reason: 'initial' })
     session.append('turn/start', { turn: 1 })
-    recordFeedback(session, { text: 'first report' })
+    recordFeedback(session, 'first report')
     await arrived.promise
 
-    recordFeedback(session, { text: 'second report' })
+    recordFeedback(session, 'second report')
     const started = performance.now()
     await fiber.dispose()
     expect(performance.now() - started).toBeLessThan(1_000)
@@ -330,7 +396,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     const session = ctx.sessions.create(SessionId('gzip'), { meta: {} })
     session.append('request/header', { header: { config: { provider: 'mock', model: 'mock' } }, reason: 'initial' })
     session.append('turn/start', { turn: 1 })
-    recordFeedback(session, { text: 'compressed report' })
+    recordFeedback(session, 'compressed report')
     await fiber.dispose()
 
     expect(captures.length).toBeGreaterThan(0)
@@ -350,7 +416,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     // No flush(): the coordinator's optional-call forwarding no-ops, and the
     // batch processor owns export cadence end to end (see the backend note).
     expect('flush' in ctx.sessionTelemetry && ctx.sessionTelemetry.flush !== undefined).toBe(false)
-    recordFeedback(session, { text: 'warning feedback' })
+    recordFeedback(session, 'warning feedback')
     await fiber.dispose()
     const start = allRecords(captures).find(r =>
       r.record.attributes?.some(a => a.key === 'event.type' && a.value.stringValue === 'turn/start'))
@@ -363,6 +429,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     await ctx.plugin(SessionStore)
     const fiber = await ctx.plugin(OpenTelemetrySessionBackend, {
       mode: SessionTelemetryMode.FEEDBACK_ONLY,
+      captureContent: true,
       exporter: { url },
     })
     ctx.on('session-telemetry/record', (_record, next) => {
@@ -378,9 +445,9 @@ describe('OpenTelemetrySessionBackend wire', () => {
     const session = ctx.sessions.create(SessionId('feedback-only'), { meta: {} })
     session.append('request/header', { header: { config: { provider: 'mock', model: 'mock' } }, reason: 'initial' })
     session.append('turn/start', { turn: 1 })
-    recordFeedback(session, { text: 'first report' })
+    recordFeedback(session, 'first report')
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
-    recordFeedback(session, { text: 'second report' })
+    recordFeedback(session, 'second report')
     session.append('turn/start', { turn: 2 })
     await fiber.dispose()
 
@@ -435,7 +502,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     const session = ctx.sessions.create(SessionId('disabled'), { meta: {} })
     session.append('request/header', { header: { config: { provider: 'mock', model: 'mock' } }, reason: 'initial' })
     session.append('turn/start', { turn: 1 })
-    recordFeedback(session, { text: 'local report' })
+    recordFeedback(session, 'local report')
 
     expect(warn).toHaveBeenCalledWith(
       'OpenTelemetry session upload is DISABLED; this feedback is not uploaded through OpenTelemetry',
@@ -449,7 +516,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     })
     await ctx.sessionTelemetry.shutdown()
     await fiber.dispose()
-    recordFeedback(session, { text: 'after disposal' })
+    recordFeedback(session, 'after disposal')
     expect(warn).toHaveBeenCalledTimes(1)
     expect(captures).toEqual([])
   })
@@ -472,35 +539,32 @@ describe('OpenTelemetrySessionBackend wire', () => {
     const defaultCtx = new Context()
     await defaultCtx.plugin(SessionStore)
     const defaulted = await defaultCtx.plugin(OpenTelemetrySessionBackend, { exporter: { url } })
-    expect(defaultCtx.sessionTelemetry.sharing).toBe('feedback-only')
+    expect(defaultCtx.sessionTelemetry.sharing).toBe('disabled')
     await defaulted.dispose()
 
     // No record was emitted by any mode, so nothing reached the collector.
     expect(captures).toEqual([])
   })
 
-  it('defaults direct construction to feedback-only delivery', async () => {
+  it('defaults direct construction to disabled delivery', async () => {
     const { url, captures } = await mockCollector()
     const ctx = new Context()
-    try {
-      await ctx.plugin(SessionStore)
-      new OpenTelemetrySessionBackend(ctx, {
-        exporter: { url },
-        processor: { scheduledDelayMillis: 1 },
-      })
-      const session = ctx.sessions.create(SessionId('direct-default'), { meta: {} })
-      session.append('request/header', { header: { config: { provider: 'deepseek-official', model: 'mock' } }, reason: 'initial' })
-      session.append('turn/start', { turn: 1 })
-      expect(captures).toEqual([])
-      recordFeedback(session, { text: 'explicit report' })
-      const submitted = session.snapshotEvents().map(event => event.type)
-      await expect.poll(() => eventTypes(captures)).toEqual(submitted)
-      session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
-      await ctx.sessionTelemetry.shutdown()
-      expect(eventTypes(captures)).toEqual(submitted)
-    } finally {
-      await ctx.fiber.dispose()
-    }
+    await ctx.plugin(SessionStore)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    new OpenTelemetrySessionBackend(ctx, {
+      exporter: { url },
+      processor: { maxExportBatchSize: 0 },
+    })
+    const session = ctx.sessions.create(SessionId('direct-default'), { meta: {} })
+    session.append('request/header', { header: { config: { provider: 'deepseek-official', model: 'mock' } }, reason: 'initial' })
+    session.append('turn/start', { turn: 1 })
+    recordFeedback(session, 'local report')
+    await ctx.fiber.dispose()
+
+    expect(warn).toHaveBeenCalledWith(
+      'OpenTelemetry session upload is DISABLED; this feedback is not uploaded through OpenTelemetry',
+    )
+    expect(captures).toEqual([])
   })
 })
 
@@ -517,7 +581,7 @@ describe('OpenTelemetrySessionBackend route and feedback', () => {
       if (provider !== undefined) session.append('request/header', { header: { config: { provider, model: 'm' } }, reason: 'initial' })
       session.append('turn/start', { turn: 1 })
       expect(captures).toEqual([])
-      recordFeedback(session, { text: 'explicit report' })
+      recordFeedback(session, 'explicit report')
       const expected = session.snapshotEvents().map(event => event.type)
       await expect.poll(() => eventTypes(captures)).toEqual(expected)
       session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
@@ -534,7 +598,7 @@ describe('OpenTelemetrySessionBackend route and feedback', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     const donor = Session.create(SessionId('stored-feedback'))
-    recordFeedback(donor, { text: 'old feedback is not a submission' })
+    recordFeedback(donor, 'old feedback is not a submission')
     const restored = ctx.sessions.create(donor.id, { seed: donor.snapshotEvents(), meta: donor.header })
     try {
       const first = await ctx.plugin(OpenTelemetrySessionBackend, { mode: SessionTelemetryMode.FEEDBACK_ONLY, exporter: { url } })
@@ -615,7 +679,7 @@ describe('OpenTelemetrySessionBackend route and feedback', () => {
       meta: session.header, events: session.snapshotEvents(), inheritedEventCount: session.inheritedEventCount,
     })
     await notify()
-    recordFeedback(session, { text: 'older feedback' })
+    recordFeedback(session, 'older feedback')
     session.append('turn/start', { turn: 1 })
     await notify()
     const child = ctx.sessions.create(SessionId('foreign'))
@@ -645,7 +709,7 @@ describe('OpenTelemetrySessionBackend route and feedback', () => {
       const child = Session.create(SessionId('cold-child'), parent.snapshotEvents(), {
         ...parent.header, id: SessionId('cold-child'), parentSession: parent.id, isSeeded: true,
       }, parent.seq)
-      recordFeedback(child, { text: 'child-owned stored feedback' })
+      recordFeedback(child, 'child-owned stored feedback')
       const handle = await ctx.sessionPersistence.create(child.header, { inheritedEventCount: child.inheritedEventCount })
       try {
         await handle.append(child.snapshotEvents())
@@ -688,7 +752,9 @@ describe('OpenTelemetrySessionBackend route and feedback', () => {
       await ctx.plugin(SessionStore)
       await ctx.plugin(JsonlPersistence, { root, compression: 'none' })
       await ctx.plugin(MessageFeedbackService, { maxNoteBytes: 1024 })
-      await ctx.plugin(OpenTelemetrySessionBackend, { mode, exporter: { url }, processor: { scheduledDelayMillis: 1 } })
+      await ctx.plugin(OpenTelemetrySessionBackend, {
+        mode, captureContent: true, exporter: { url }, processor: { scheduledDelayMillis: 1 },
+      })
       const session = Session.create(SessionId('cold-feedback'))
       if (provider !== undefined) session.append('request/header', { header: { config: { provider, model: 'm' } }, reason: 'initial' })
       const message = createAssistantMessage({ content: [{ type: 'text', text: 'answer' }], source: { provider: provider ?? 'mock', model: 'm' } })
@@ -742,12 +808,15 @@ describe('OpenTelemetrySessionBackend config fails loud', () => {
     expectTypeOf<SessionTelemetryMode.FEEDBACK_ONLY>().toExtend<SessionTelemetryMode>()
     expect(Object.values(SessionTelemetryMode)).toEqual(['FEEDBACK_ONLY', 'DISABLED'])
     expect(() => Config({ mode: 'FULL' } as unknown as Config)).toThrow()
-    expect(DEFAULT_TELEMETRY_MODE).toBe(SessionTelemetryMode.FEEDBACK_ONLY)
-    expect(Config({}).mode).toBe(DEFAULT_TELEMETRY_MODE)
+    expect(DEFAULT_TELEMETRY_MODE).toBe(SessionTelemetryMode.DISABLED)
+    expect(Config({})).toMatchObject({
+      mode: DEFAULT_TELEMETRY_MODE,
+      captureContent: false,
+      includeAnonymousUserId: false,
+    })
   })
 
   it.each([
-    [{}, /exporter\.url is required/],
     [{ mode: SessionTelemetryMode.FEEDBACK_ONLY }, /exporter\.url is required/],
     [{ mode: SessionTelemetryMode.FEEDBACK_ONLY, exporter: { url: '' } }, /exporter\.url is required/],
     [{ mode: SessionTelemetryMode.FEEDBACK_ONLY, exporter: { url: 'not a url' } }, /not a valid URL/],

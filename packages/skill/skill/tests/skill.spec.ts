@@ -454,7 +454,6 @@ describe('SkillRegistry registry', () => {
       description: 'Stable description',
       resourceBase: { kind: 'opaque', description: 'candidate resources' },
     })])
-    expect(listed[0]?.path).toBe(candidate.path)
     expect(listed[0]?.resourceBase).toBe(candidate.resourceBase)
     expect(listed[0]?.invocation).toBe(invocation)
     expect(listCalls).toBe(1)

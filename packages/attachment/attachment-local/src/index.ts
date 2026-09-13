@@ -1,6 +1,6 @@
 /** Local durable attachment backend rooted below `DSH_HOME`. @module @deepseek-ai/dsh-attachment-local */
 
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
@@ -15,7 +15,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import { dshCachePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { NormalizationPolicy } from './normalization.ts'
 import { CompressionLimiter, compressionFailure } from './compression-limiter.ts'
 import {
@@ -170,15 +170,12 @@ export class LocalAttachmentStore extends AttachmentStore {
   readonly normalizationPolicy: Readonly<NormalizationPolicy>
   /** Resolved instance-level compression limit. */
   readonly imageCompressionConcurrency: number
-  private readonly cacheRoot: string
   private readonly compression: CompressionLimiter
   private readonly requestInflight = new Map<string, SharedRequest<RequestImageAttachment>>()
 
   constructor(ctx: Context, config: Config) {
     super(ctx)
-    const dshHome = resolveDshHome(config.dshHome)
-    this.root = join(dshHome, 'attachments', 'v1')
-    this.cacheRoot = dshCachePath({ dshHome }, 'attachments')
+    this.root = resolve(join(resolveDshHome(config.dshHome), 'attachments', 'v1'))
     this.imageLimits = Object.freeze({
       maxImageBytes: config.maxImageBytes ?? DEFAULT_MAX_IMAGE_BYTES,
       maxImagesPerMessage: config.maxImagesPerMessage ?? DEFAULT_MAX_IMAGES_PER_MESSAGE,
@@ -278,7 +275,7 @@ export class LocalAttachmentStore extends AttachmentStore {
     if (operation === undefined) {
       const shared = new SharedRequest<RequestImageAttachment>(sharedSignal => this.compression.run(async () => {
         const request = await readRequestImageFile(
-          this.cacheRoot,
+          this.root,
           stored ?? await this.readImage(ref, sharedSignal),
           policy,
           sharedSignal,
