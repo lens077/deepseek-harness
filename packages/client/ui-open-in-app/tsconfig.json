@@ -24,6 +24,9 @@
       "path": "../store"
     },
     {
+      "path": "../ui-chat"
+    },
+    {
       "path": "../ui-conversation"
     },
     {
@@ -34,6 +37,9 @@
     },
     {
       "path": "../ui-session"
+    },
+    {
+      "path": "../ui-sidebar-right"
     },
     {
       "path": "../ui-slots"

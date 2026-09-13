@@ -10,7 +10,7 @@
  */
 
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { connect } from 'node:net'
+import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -225,6 +225,54 @@ describe('open-in-app host routes (real Loader composition)', () => {
     }
   })
 
+  it('launches a file: editors take the file, Finder reveals it, terminals get its folder', async () => {
+    const launches: string[][] = []
+    const commands: string[][] = []
+    const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
+    const workspace = join(home, 'workspace')
+    const file = join(workspace, 'src', 'a.ts')
+    await cursorBundle(home)
+    await mkdir(join(workspace, 'src'), { recursive: true })
+    await writeFile(file, 'export {}\n')
+    darwinFixture(home, launches)
+    const fixtureRun = internals.catalog.run
+    internals.catalog = {
+      ...internals.catalog,
+      run: async (command, args, signal) => {
+        if (command === 'open') {
+          commands.push([command, ...args])
+          return { stdout: '', stderr: '' }
+        }
+        /* v8 ignore next -- the darwin fixture always supplies a runner */
+        if (fixtureRun === undefined) throw new Error('no runner')
+        return fixtureRun(command, args, signal)
+      },
+    }
+    const base = await boot()
+    try {
+      const open = (app: string, path: string): Promise<Response> => fetch(`${base}/open-in-app/open`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ app, path }),
+      })
+      expect((await open('cursor', file)).status).toBe(200)
+      expect((await open('finder', file)).status).toBe(200)
+      expect((await open('terminal', file)).status).toBe(200)
+      // The directory still opens in Finder, not revealed as a selection.
+      expect((await open('finder', workspace)).status).toBe(200)
+      expect(launches).toEqual([
+        ['open', '-a', join(home, 'Applications', 'Cursor.app'), file],
+        ['open', '-a', 'Terminal', join(workspace, 'src')],
+      ])
+      expect(commands).toEqual([
+        ['open', '-R', file],
+        ['open', workspace],
+      ])
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('resolves the catalog once: list reads, menu opens, and launches share the pass', async () => {
     const launches: string[][] = []
     const home = await mkdtemp(join(tmpdir(), 'dsh-open-in-app-home-'))
@@ -349,6 +397,13 @@ describe('open-in-app host routes (real Loader composition)', () => {
       expect((await post(JSON.stringify({ app: 'cursor', path: 'relative/dir' }))).status).toBe(400)
       expect((await post(JSON.stringify({ app: 'cursor', path: '' }))).status).toBe(400)
       expect((await post(JSON.stringify({ app: 'cursor', path: join(home, 'missing') }))).status).toBe(404)
+      // Neither a file nor a directory (a socket) is nothing an application can open.
+      const socket = createServer().listen(join(home, 'sock'))
+      try {
+        expect((await post(JSON.stringify({ app: 'cursor', path: join(home, 'sock') }))).status).toBe(404)
+      } finally {
+        await new Promise<void>((resolve) => { socket.close(() => { resolve() }) })
+      }
       const oversize = await post(JSON.stringify({ app: 'cursor', path: '/'.padEnd(70_000, 'x') }))
       expect(oversize.status).toBe(413)
       expect(launches).toEqual([])

@@ -11,7 +11,10 @@
  * any resolution result, icon, or launch is reachable. On top of that fence
  * the open route validates its body at the wire: an `application/json` media
  * type, a 64 KiB ceiling, string `app`/`path` fields, a resolved-available
- * catalog id, and an absolute path naming an existing directory.
+ * catalog id, and an absolute path naming an existing directory or file. A
+ * file launch hands editors the file, file managers reveal it in its folder,
+ * and directory-only applications (terminals, Git GUIs) receive its parent
+ * directory.
  *
  * The catalog resolves lazily, once per plugin life, on the first request
  * that needs it, into one map of verified launchers: the apps route serves
@@ -21,7 +24,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { isAbsolute } from 'node:path'
+import { dirname, isAbsolute } from 'node:path'
 import { stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
@@ -31,7 +34,7 @@ import z from '@deepseek-ai/schemastery'
 import { OPEN_IN_APP_CATALOG, type OpenInAppApp } from './catalog.ts'
 import {
   launchResolved, resolveLaunch, resolveOpenInAppApps,
-  type OpenInAppInternals, type OpenInAppResolvedLaunch,
+  type OpenInAppInternals, type OpenInAppResolvedLaunch, type OpenInAppTarget,
 } from './resolver.ts'
 import { extractAppIcon, type OpenInAppIcon } from './icons.ts'
 import { internals } from './internals.ts'
@@ -281,26 +284,30 @@ export function apply(ctx: Context, config: Config): void {
         sendJson(res, 400, { code: 'bad-request', message: 'path must be an absolute file or directory path' })
         return
       }
-      let exists = false
+      let target: OpenInAppTarget | undefined
       try {
-        const target = await stat(parsed.path)
-        exists = target.isFile() || target.isDirectory()
+        const entry = await stat(parsed.path)
+        target = entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : undefined
       } catch {
-        // Swallows ENOENT/EACCES: both mean there is no launch target.
-        exists = false
+        // Swallows ENOENT/EACCES: both mean there is nothing to open.
+        target = undefined
       }
-      if (!exists) {
+      if (target === undefined) {
         sendJson(res, 404, { code: 'not-found', message: `file or directory does not exist: ${parsed.path}` })
         return
       }
-      let outcome = await launchResolved(resolved, parsed.path, config.launchWatchMs, catalogInternals())
+      // A directory-only application takes the file's folder; the target
+      // then really is a directory, so no launcher treats it as a file.
+      const launchPath = target === 'file' && app.directoryOnly === true ? dirname(parsed.path) : parsed.path
+      const launchTarget: OpenInAppTarget = launchPath === parsed.path ? target : 'directory'
+      let outcome = await launchResolved(resolved, launchPath, config.launchWatchMs, catalogInternals(), launchTarget)
       if (outcome === 'missing') {
         // The verified launcher is gone (uninstalled since resolution):
         // refresh this one entry and retry once with the fresh launcher.
         const fresh = await refreshResolution(app)
         outcome = fresh === undefined
           ? 'failed'
-          : await launchResolved(fresh, parsed.path, config.launchWatchMs, catalogInternals())
+          : await launchResolved(fresh, launchPath, config.launchWatchMs, catalogInternals(), launchTarget)
       }
       if (outcome === 'launched') {
         sendJson(res, 200, { ok: true })

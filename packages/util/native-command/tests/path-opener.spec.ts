@@ -17,7 +17,9 @@ vi.mock('node:child_process', () => ({ execFile: execFileMock }))
 
 import { release as osRelease } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
-import { canOpenNativePath, openNativePath, openNativeTextFile, type PathOpenerRunner } from '../src/index.ts'
+import {
+  canOpenNativePath, openNativePath, openNativeTextFile, revealNativePath, type PathOpenerRunner,
+} from '../src/index.ts'
 
 const signal = () => new AbortController().signal
 
@@ -286,6 +288,77 @@ describe('browser-renderable documents', () => {
         "Invoke-Item -LiteralPath 'C:\\workspace\\page.html'",
       ],
     ])
+  })
+})
+
+describe('revealNativePath', () => {
+  it('selects the file in Finder with open -R', async () => {
+    const run = vi.fn<PathOpenerRunner>(async () => ({ stdout: '', stderr: '' }))
+    await revealNativePath('/Users/test/src/a.ts', signal(), { platform: 'darwin', run })
+    expect(run).toHaveBeenCalledWith('open', ['-R', '/Users/test/src/a.ts'], expect.any(AbortSignal))
+  })
+
+  it('selects the file in Explorer through Start-Process so its non-zero exit is not a failure', async () => {
+    const run = vi.fn<PathOpenerRunner>(async () => ({ stdout: '', stderr: '' }))
+    await revealNativePath("C:\\Users\\test's dir\\a.ts", signal(), { platform: 'win32', run })
+    expect(run).toHaveBeenCalledWith('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      "Start-Process -FilePath explorer.exe -ArgumentList '\"/select,C:\\Users\\test''s dir\\a.ts\"'",
+    ], expect.any(AbortSignal))
+  })
+
+  it('opens the parent directory on desktop Linux, which has no portable select verb', async () => {
+    const run = vi.fn<PathOpenerRunner>(async () => ({ stdout: '', stderr: '' }))
+    await revealNativePath('/home/test/src/a.ts', signal(), { platform: 'linux', osRelease: '6.8.0-generic', env: {}, run })
+    expect(run).toHaveBeenCalledWith('xdg-open', ['/home/test/src'], expect.any(AbortSignal))
+  })
+
+  it('translates a WSL path and selects it in Explorer, rejecting an empty translation', async () => {
+    const run = vi.fn<PathOpenerRunner>(async command => ({
+      stdout: command === 'wslpath' ? '\\\\wsl.localhost\\Ubuntu\\home\\test\\a.ts\n' : '', stderr: '',
+    }))
+    const wsl = { platform: 'linux' as const, osRelease: '6.8.0-generic', env: { WSL_DISTRO_NAME: 'Ubuntu' }, run }
+    await revealNativePath('/home/test/a.ts', signal(), wsl)
+    expect(run.mock.calls.map(call => [call[0], call[1]])).toEqual([
+      ['wslpath', ['-w', '/home/test/a.ts']],
+      ['powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        "Start-Process -FilePath explorer.exe -ArgumentList '\"/select,\\\\wsl.localhost\\Ubuntu\\home\\test\\a.ts\"'",
+      ]],
+    ])
+    const empty = vi.fn<PathOpenerRunner>(async () => ({ stdout: '\n', stderr: '' }))
+    await expect(revealNativePath('/home/test/a.ts', signal(), { ...wsl, run: empty }))
+      .rejects.toThrow('wslpath returned no Windows path')
+    expect(empty).toHaveBeenCalledOnce()
+  })
+
+  it('does not invoke Windows when the request aborts during WSL translation', async () => {
+    const abort = new AbortController()
+    const run = vi.fn<PathOpenerRunner>(async () => {
+      abort.abort(new Error('closed'))
+      return { stdout: 'C:\\a.ts\n', stderr: '' }
+    })
+    await expect(revealNativePath('/home/test/a.ts', abort.signal, {
+      platform: 'linux', osRelease: '6.8.0-generic', env: { WSL_DISTRO_NAME: 'Ubuntu' }, run,
+    })).rejects.toThrow('closed')
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('rejects unsupported platforms', async () => {
+    const run = vi.fn<PathOpenerRunner>(async () => ({ stdout: '', stderr: '' }))
+    await expect(revealNativePath('/x', signal(), { platform: 'aix', run })).rejects.toThrow('unsupported on aix')
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('samples the ambient platform and runs the default command adapter without a shell', async () => {
+    execFileMock.mockImplementationOnce((_command, _args, _options, callback) => { callback(null, '', '') })
+    await revealNativePath('/tmp/ambient/a.ts', signal(), { osRelease: '6.8.0-generic', env: {} })
+    const [command, , options] = execFileMock.mock.calls.at(-1)!
+    const expected = process.platform === 'win32' ? 'powershell.exe' : process.platform === 'linux' ? 'xdg-open' : 'open'
+    expect(command).toBe(expected)
+    expect(options.windowsHide).toBe(true)
   })
 })
 

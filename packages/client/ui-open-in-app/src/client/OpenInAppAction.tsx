@@ -3,7 +3,7 @@ import { IconChevronDownOutline14, Menu, Tooltip, type MenuItem } from '@deepsee
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { NS, type OpenInAppKey } from './locales.ts'
+import { APP_LABEL_KEY, NS, SIDEBAR_CHOICE, type OpenInAppKey } from './locales.ts'
 import css from './OpenInAppAction.module.css'
 
 /** Browser operations and state injected into the Session Header contribution. */
@@ -13,7 +13,10 @@ export interface OpenInAppActionInjected {
     openInAppChoice: ObservableSnapshot<string>
   }
   launch: (appId: string, path: string) => Promise<void>
-  choose: (appId: string) => void
+  /** Remember a catalog id or the Sidebar entry ({@link SIDEBAR_CHOICE}). */
+  choose: (choice: string) => void
+  /** Open the Sidebar file tree for the current session (the Sidebar entry's main action). */
+  openSidebar: () => void
   iconUrl: (appId: string) => string
 }
 
@@ -22,48 +25,6 @@ export type OpenInAppActionProps =
   PropsRuntime<'conversation.session.header.utilities'>
   & PropsLocale<typeof NS>
   & InjectFace<OpenInAppActionInjected>
-
-/**
- * Label keys per catalog id: the browser renders only ids it can name, so a
- * host catalog extension without a matching dictionary entry stays invisible
- * instead of showing a raw id.
- */
-const APP_LABEL_KEY: Record<string, OpenInAppKey | undefined> = {
-  finder: 'app.finder',
-  explorer: 'app.explorer',
-  filemanager: 'app.filemanager',
-  cursor: 'app.cursor',
-  vscode: 'app.vscode',
-  vscodeinsiders: 'app.vscodeinsiders',
-  windsurf: 'app.windsurf',
-  zed: 'app.zed',
-  sublimetext: 'app.sublimetext',
-  xcode: 'app.xcode',
-  androidstudio: 'app.androidstudio',
-  intellij: 'app.intellij',
-  pycharm: 'app.pycharm',
-  webstorm: 'app.webstorm',
-  phpstorm: 'app.phpstorm',
-  goland: 'app.goland',
-  rider: 'app.rider',
-  rustrover: 'app.rustrover',
-  fork: 'app.fork',
-  sourcetree: 'app.sourcetree',
-  github: 'app.github',
-  tower: 'app.tower',
-  gitkraken: 'app.gitkraken',
-  smartgit: 'app.smartgit',
-  sublimemerge: 'app.sublimemerge',
-  ghostty: 'app.ghostty',
-  warp: 'app.warp',
-  iterm: 'app.iterm',
-  kitty: 'app.kitty',
-  terminal: 'app.terminal',
-  windowsterminal: 'app.windowsterminal',
-  gitbash: 'app.gitbash',
-  gnometerminal: 'app.gnometerminal',
-  konsole: 'app.konsole',
-}
 
 /** App ids whose icon image already failed this page; a 404 icon is fetched once, not per menu open. */
 const failedIcons = new Set<string>()
@@ -110,6 +71,30 @@ function AppIcon({ id, url, size }: { id: string; url: string; size: number }): 
 }
 
 /**
+ * The Sidebar entry's glyph: a window with its right column marked, drawn
+ * inline like the app-square fallback so the two menus rows align.
+ * @param props - rendered size.
+ * @returns the glyph.
+ */
+function SidebarIcon({ size }: { size: number }): React.JSX.Element {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      className={css.icon}
+      aria-hidden
+    >
+      <rect x={3} y={4} width={18} height={16} rx={3} />
+      <path d="M15 4v16" />
+    </svg>
+  )
+}
+
+/**
  * Quick launches settle well under this delay, so their busy dress never
  * paints — the visible dim-and-wait treatment is reserved for launches that
  * are actually taking a while, instead of flashing on every click.
@@ -119,10 +104,13 @@ const BUSY_DRESS_DELAY_MS = 250
 /**
  * Session-header split button: the main button opens the session's workspace
  * directory in the remembered application, the chevron opens the menu of
- * every application the host probed as installed. It renders nothing until
- * the host reported at least one nameable application and the session has a
- * known workspace directory, so a host without the capability never grows
- * the control.
+ * every application the host probed as installed plus the Sidebar preview
+ * entry. The remembered entry also decides where Chat's file clicks go
+ * (`chatFileOpener`), so picking here changes both. With the Sidebar
+ * remembered, the main button opens the Sidebar file tree instead. It
+ * renders nothing until the host reported at least one nameable application
+ * and the session has a known workspace directory, so a host without the
+ * capability never grows the control.
  * @param props - session runtime, injected controller face, and localized copy.
  * @returns the split button and its menu, or null when there is nothing to offer.
  */
@@ -145,12 +133,15 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
   const apps = (available ?? [])
     .map(id => ({ id, labelKey: APP_LABEL_KEY[id] }))
     .filter((entry): entry is { id: string; labelKey: OpenInAppKey } => entry.labelKey !== undefined)
+  const sidebar = choice === SIDEBAR_CHOICE
   const currentEntry = apps.find(entry => entry.id === choice) ?? apps[0]
   if (currentEntry === undefined || cwd === undefined || cwd === '') return null
 
-  const current = currentEntry.id
-  const currentLabel = t(currentEntry.labelKey)
-  const title = phase === 'error' ? t('open.error') : t('open.title', { app: currentLabel })
+  const current = sidebar ? SIDEBAR_CHOICE : currentEntry.id
+  const title = sidebar
+    ? t('open.sidebar.title')
+    : phase === 'error' ? t('open.error') : t('open.title', { app: t(currentEntry.labelKey) })
+  const tooltip = sidebar ? t('open.sidebar.tooltip') : phase === 'error' ? t('open.error') : t('open.tooltip')
 
   const launch = (appId: string): void => {
     if (inFlight.current) return
@@ -172,11 +163,14 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
     })
   }
 
-  const items: MenuItem[] = apps.map(entry => ({
-    id: entry.id,
-    label: t(entry.labelKey),
-    icon: <AppIcon id={entry.id} url={props.iconUrl(entry.id)} size={18} />,
-  }))
+  const items: MenuItem[] = [
+    ...apps.map(entry => ({
+      id: entry.id,
+      label: t(entry.labelKey),
+      icon: <AppIcon id={entry.id} url={props.iconUrl(entry.id)} size={18} />,
+    })),
+    { id: SIDEBAR_CHOICE, label: t('menu.sidebar'), icon: <SidebarIcon size={18} /> },
+  ]
 
   return (
     <Menu
@@ -194,20 +188,23 @@ export function OpenInAppAction(props: OpenInAppActionProps): React.JSX.Element 
         // gesture never opened.
         if (inFlight.current) return
         props.choose(id)
-        launch(id)
+        if (id === SIDEBAR_CHOICE) props.openSidebar()
+        else launch(id)
       }}
       anchor={(
         <div className={css.split}>
-          <Tooltip label={phase === 'error' ? t('open.error') : t('open.tooltip')} side="bottom">
+          <Tooltip label={tooltip} side="bottom">
             <button
               type="button"
               className={css.main}
               data-state={phase}
               disabled={phase === 'busy'}
               aria-label={title}
-              onClick={() => { launch(current) }}
+              onClick={() => { if (sidebar) props.openSidebar(); else launch(current) }}
             >
-              <AppIcon id={current} url={props.iconUrl(current)} size={15} />
+              {sidebar
+                ? <SidebarIcon size={15} />
+                : <AppIcon id={current} url={props.iconUrl(current)} size={15} />}
             </button>
           </Tooltip>
           <button

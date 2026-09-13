@@ -52,7 +52,7 @@ kind: "package-reference"
 <a id="question-navigation"></a>
 ## 提问导航
 
-提问轨道可以搜索完整的 Host 索引、按需加载剩余 Session 历史，并在已加载提问之间移动。搜索结果位于当前窗口之外时，Chat 会先调用 `loadThrough(seq)`，再把目标放到转录阅读线。提问行滚出视口上方后，粘性栏会显示该提问，以及可用的 Turn 结果、耗时和改动文件统计。一个已完成 Turn 跨越至少四个 Chat 行时，会在 Turn tail 前复述其开场提问。可选的 `chatReveal` 服务接收跨 Session 表面提供的同一 Session id 与提问 seq；它会保留请求直到该 Session 的 Chat store 挂载，再使用同一加载与定位路径。快捷键和焦点策略由 `ui-conversation` 设置提供。
+提问轨道可以搜索完整的 Host 索引、按需加载剩余 Session 历史，并在已加载提问之间移动。搜索结果位于当前窗口之外时，Chat 会先调用 `loadThrough(seq)`，再把目标放到转录阅读线。提问行滚出视口上方后，粘性栏会显示该提问，以及可用的 Turn 结果、耗时和改动文件统计。一个已完成 Turn 跨越至少四个 Chat 行时，会在 Turn tail 前复述其开场提问。可选的 `chatReveal` 服务接收跨 Session 表面提供的同一 Session id 与提问 seq；它会保留请求直到该 Session 的 Chat store 挂载，再使用同一加载与定位路径。文件点击——产出文件标签、行内提及、工具行路径——在提供了可选的 `chatFileOpener` 服务且其 `active()` 为真时交给该服务（组合进来的 [`ui-open-in-app`](../ui-open-in-app/README.zh.md) 会把它们送到用户选择的桌面应用），传入绝对 Host 路径；否则 Chat 在右侧 Sidebar 的文本预览中按请求的行打开文件。打开器的拒绝即该次点击的失败，其消息就是打开失败对话框显示的内容。快捷键和焦点策略由 `ui-conversation` 设置提供。
 
 -----
 

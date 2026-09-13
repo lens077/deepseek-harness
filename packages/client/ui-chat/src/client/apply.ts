@@ -8,7 +8,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 // The `file` entry of `SidebarRightResourceParamsMap`, which types `{ params: { line } }` below.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-textpreview/client'
-import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import { fileAddressFor, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 // Type-only service and declaration merges used by the apply world.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -135,9 +135,11 @@ export function apply(ctx: Context): void {
             chatNodeProcess: key => chat.getSnapshot().nodes.processSource(key),
           },
           fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner),
-          // Files open in the right Sidebar, not in a desktop application: the
-          // content stays in the product, beside the conversation that produced
-          // it. A relative path, or an absolute one inside the session's
+          // A file click goes to the user's chosen desktop application when
+          // the optional `chatFileOpener` service says so (its own failures
+          // surface through the open-failure dialog); otherwise the file opens
+          // in the right Sidebar, beside the conversation that produced it.
+          // A relative path, or an absolute one inside the session's
           // workspace, is addressed under this session's scope,
           // `dsh-resource://file/session/<id>/<relative path>`; an absolute path
           // elsewhere is addressed as `dsh-resource://file/absolute/<path>` and
@@ -149,13 +151,9 @@ export function apply(ctx: Context): void {
           // to land.
           openFile: async (path, options) => {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
-            const opener = ctx.get('openInAppController') as {
-              launch: (appId: string, path: string) => Promise<void>
-              choice: { getSnapshot: () => string }
-            } | undefined
-            const selectedApp = opener?.choice.getSnapshot()
-            if (selectedApp !== undefined && selectedApp !== '') {
-              await opener.launch(selectedApp, path)
+            const opener = ctx.get('chatFileOpener')
+            if (opener?.active() === true) {
+              await opener.open(resolveWorkspacePath(cwd, path))
               return
             }
             const url = fileAddressFor(sessionId, cwd, path)

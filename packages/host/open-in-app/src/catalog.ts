@@ -100,6 +100,13 @@ export interface OpenInAppPlatformSpec {
 export interface OpenInAppApp {
   readonly id: string
   readonly platforms: Readonly<Partial<Record<OpenInAppPlatform, OpenInAppPlatformSpec>>>
+  /**
+   * The application takes only a directory (terminals, Git GUIs): a file
+   * launch hands it the file's parent directory instead of the file. Editors
+   * and IDEs leave this unset and receive the file itself; the file managers
+   * reveal the file in its folder.
+   */
+  readonly directoryOnly?: true
 }
 
 /** macOS spec checking the known application directories for the named bundles. */
@@ -296,24 +303,43 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
   jetBrains('rustrover', 'RustRover', 'rustrover', 'rustrover64.exe', ['RustRover.app']),
   {
     id: 'fork',
+    directoryOnly: true,
     platforms: {
       darwin: macApp('Fork.app'),
       win32: spec(installRecord('Fork'), file(['${LOCALAPPDATA}/Fork/Fork.exe'])),
     },
   },
-  { id: 'sourcetree', platforms: { darwin: macApp('Sourcetree.app') } },
+  {
+    id: 'sourcetree',
+    directoryOnly: true,
+    platforms: { darwin: macApp('Sourcetree.app') },
+  },
   {
     id: 'github',
+    directoryOnly: true,
     platforms: {
       darwin: macApp('GitHub Desktop.app'),
       win32: spec({ kind: 'github-desktop', root: '${LOCALAPPDATA}/GitHubDesktop' }),
     },
   },
-  { id: 'tower', platforms: { darwin: macApp('Tower.app') } },
-  { id: 'gitkraken', platforms: { darwin: macApp('GitKraken.app') } },
-  { id: 'smartgit', platforms: { darwin: macApp('SmartGit.app') } },
+  {
+    id: 'tower',
+    directoryOnly: true,
+    platforms: { darwin: macApp('Tower.app') },
+  },
+  {
+    id: 'gitkraken',
+    directoryOnly: true,
+    platforms: { darwin: macApp('GitKraken.app') },
+  },
+  {
+    id: 'smartgit',
+    directoryOnly: true,
+    platforms: { darwin: macApp('SmartGit.app') },
+  },
   {
     id: 'sublimemerge',
+    directoryOnly: true,
     platforms: {
       darwin: macApp('Sublime Merge.app'),
       win32: spec(
@@ -326,6 +352,7 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
   },
   {
     id: 'ghostty',
+    directoryOnly: true,
     platforms: {
       darwin: macApp('Ghostty.app'),
       linux: desktopSpec(
@@ -335,10 +362,19 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
       ),
     },
   },
-  { id: 'warp', platforms: { darwin: macApp('Warp.app') } },
-  { id: 'iterm', platforms: { darwin: macApp('iTerm.app') } },
+  {
+    id: 'warp',
+    directoryOnly: true,
+    platforms: { darwin: macApp('Warp.app') },
+  },
+  {
+    id: 'iterm',
+    directoryOnly: true,
+    platforms: { darwin: macApp('iTerm.app') },
+  },
   {
     id: 'kitty',
+    directoryOnly: true,
     platforms: {
       darwin: macApp('kitty.app'),
       linux: desktopSpec(
@@ -350,6 +386,7 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
   },
   {
     id: 'terminal',
+    directoryOnly: true,
     platforms: {
       darwin: spec({
         kind: 'fixed',
@@ -358,9 +395,14 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
       }),
     },
   },
-  { id: 'windowsterminal', platforms: { win32: spec(cli('wt', '-d')) } },
+  {
+    id: 'windowsterminal',
+    directoryOnly: true,
+    platforms: { win32: spec(cli('wt', '-d')) },
+  },
   {
     id: 'gitbash',
+    directoryOnly: true,
     platforms: {
       win32: spec(
         // Git for Windows registers as "Git version <x.y.z>"; the bare "Git"
@@ -372,6 +414,7 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
   },
   {
     id: 'gnometerminal',
+    directoryOnly: true,
     platforms: {
       linux: desktopSpec(
         'org.gnome.Terminal',
@@ -382,6 +425,7 @@ export const OPEN_IN_APP_CATALOG: readonly OpenInAppApp[] = [
   },
   {
     id: 'konsole',
+    directoryOnly: true,
     platforms: {
       linux: desktopSpec(
         'org.kde.konsole',

@@ -6,7 +6,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { OpenInAppAction, type OpenInAppActionProps } from '../src/client/OpenInAppAction.tsx'
-import { zh } from '../src/client/locales.ts'
+import { SIDEBAR_CHOICE, zh } from '../src/client/locales.ts'
 
 afterEach(() => {
   cleanup()
@@ -21,6 +21,7 @@ interface Bench {
   props: OpenInAppActionProps
   launch: ReturnType<typeof vi.fn>
   choose: ReturnType<typeof vi.fn>
+  openSidebar: ReturnType<typeof vi.fn>
 }
 
 function bench(over: {
@@ -42,6 +43,7 @@ function bench(over: {
   const choice = createSnapshotStore<string>(over.choice ?? '')
   const launch = vi.fn(over.launch ?? (async () => {}))
   const choose = vi.fn()
+  const openSidebar = vi.fn()
   function useSessions<T>(select: (snapshot: SessionListState) => T): T {
     return select(state)
   }
@@ -55,10 +57,11 @@ function bench(over: {
     useOpenInAppChoice: useSelector(choice),
     launch,
     choose,
+    openSidebar,
     iconUrl: (appId: string) => `/open-in-app/icon/${appId}`,
     t,
   } as unknown as OpenInAppActionProps
-  return { props, launch, choose }
+  return { props, launch, choose, openSidebar }
 }
 
 describe('OpenInAppAction visibility', () => {
@@ -173,6 +176,27 @@ describe('OpenInAppAction launching', () => {
     fireEvent.click(cursorItem)
     expect(b.choose).toHaveBeenCalledWith('cursor')
     expect(b.launch).toHaveBeenCalledWith('cursor', '/w/dir')
+  })
+
+  it('offers the Sidebar entry after the apps; picking it persists and opens the Sidebar, not a launch', async () => {
+    const b = bench({ apps: ['finder', 'cursor'], cwd: '/w/dir' })
+    render(<OpenInAppAction {...b.props} />)
+    fireEvent.click(screen.getByRole('button', { name: zh['menu.toggle'] }))
+    const items = await screen.findAllByRole('menuitem')
+    expect(items.map(item => item.textContent)).toEqual([zh['app.finder'], 'Cursor', zh['menu.sidebar']])
+    fireEvent.click(items[2]!)
+    expect(b.choose).toHaveBeenCalledWith(SIDEBAR_CHOICE)
+    expect(b.openSidebar).toHaveBeenCalledTimes(1)
+    expect(b.launch).not.toHaveBeenCalled()
+  })
+
+  it('with the Sidebar remembered, the main button opens the Sidebar file tree', () => {
+    const b = bench({ apps: ['finder', 'cursor'], choice: SIDEBAR_CHOICE, cwd: '/w/dir' })
+    render(<OpenInAppAction {...b.props} />)
+    const main = screen.getByRole('button', { name: zh['open.sidebar.title'] })
+    fireEvent.click(main)
+    expect(b.openSidebar).toHaveBeenCalledTimes(1)
+    expect(b.launch).not.toHaveBeenCalled()
   })
 
   it('ignores a menu pick while a launch is in flight', async () => {
