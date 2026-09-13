@@ -59,6 +59,28 @@ export interface ChatFileMentions {
   forClosing(owner: TurnTailOwnerProps): MarkdownFileMentions | undefined
 }
 
+/**
+ * Optional external file opener consumed by Chat: the user's chosen desktop
+ * application for file clicks. When present and `active()`, Chat hands every
+ * file click to `open` instead of the right Sidebar; when absent or inactive
+ * (the user picked the Sidebar), Chat opens the text preview tab itself.
+ */
+export interface ChatFileOpener {
+  /**
+   * Whether file clicks currently route to the external application.
+   * @returns true when `open` should receive the click.
+   */
+  active(): boolean
+  /**
+   * Open one file in the chosen application.
+   * @param path - absolute Host path of the file.
+   * @returns after the Host acknowledged the launch; rejects with a
+   *   user-facing message when the application is not installed or the
+   *   launch failed, which Chat shows in its open-failure dialog.
+   */
+  open(path: string): Promise<void>
+}
+
 /** Cross-surface request to reveal one Session question in its Chat transcript. */
 export interface ChatReveal {
   /**
@@ -118,6 +140,8 @@ declare module '@deepseek-ai/cordis' {
     chatFileMentions: ChatFileMentions
     /** Optional Session file-change provider; consumers resolve it with ctx.get. */
     chatFileDiffs: ChatFileDiffs
+    /** Optional external file opener; Chat resolves it with ctx.get on every click. */
+    chatFileOpener: ChatFileOpener
     /** Optional question-reveal provider owned by ui-chat. */
     chatReveal: ChatReveal
   }

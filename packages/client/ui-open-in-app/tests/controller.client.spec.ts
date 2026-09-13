@@ -1,7 +1,8 @@
 /** Controller wire behavior: host-base resolution, availability filtering, and launch errors. */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OpenInAppController } from '../src/client/controller.ts'
+import { OpenInAppController, OpenInAppLaunchError } from '../src/client/controller.ts'
+import { SIDEBAR_CHOICE } from '../src/client/locales.ts'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -80,5 +81,59 @@ describe('OpenInAppController launching', () => {
 
     const failing = new OpenInAppController(async () => jsonResponse({}, 404))
     await expect(failing.launch('cursor', '/w/dir')).rejects.toThrow('open failed: HTTP 404')
+  })
+
+  it('carries the host failure message and a stable code on a refused launch', async () => {
+    const refusing = new OpenInAppController(async () => jsonResponse({ code: 'launch-failed', message: 'failed to launch cursor' }, 502))
+    const error = await refusing.launch('cursor', '/w/file.ts').catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(OpenInAppLaunchError)
+    expect(error).toMatchObject({ code: 'launch-failed', appId: 'cursor', message: 'failed to launch cursor' })
+  })
+})
+
+describe('OpenInAppController file target', () => {
+  it('is pending until the host answered, then defaults to the first offered app', async () => {
+    const controller = new OpenInAppController(async () => jsonResponse({ apps: ['finder', 'cursor'] }))
+    expect(controller.fileTarget()).toEqual({ kind: 'pending' })
+    await controller.load()
+    expect(controller.fileTarget()).toEqual({ kind: 'app', appId: 'finder' })
+  })
+
+  it('follows the remembered app while the host offers it and reports it when it does not', async () => {
+    const controller = new OpenInAppController(async () => jsonResponse({ apps: ['finder', 'cursor'] }))
+    await controller.load()
+    controller.choose('cursor')
+    expect(controller.fileTarget()).toEqual({ kind: 'app', appId: 'cursor' })
+    controller.choose('zed')
+    expect(controller.fileTarget()).toEqual({ kind: 'not-installed', appId: 'zed' })
+  })
+
+  it('names the Sidebar and an empty host separately', async () => {
+    const controller = new OpenInAppController(async () => jsonResponse({ apps: [] }))
+    await controller.load()
+    expect(controller.fileTarget()).toEqual({ kind: 'unavailable' })
+    controller.choose(SIDEBAR_CHOICE)
+    expect(controller.fileTarget()).toEqual({ kind: 'sidebar' })
+  })
+
+  it('openFile waits for availability and launches the default app on the file', async () => {
+    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      void init
+      return String(input).includes('/open-in-app/apps') ? jsonResponse({ apps: ['explorer', 'vscode'] }) : jsonResponse({ ok: true })
+    })
+    const controller = new OpenInAppController(fetcher)
+    await controller.openFile('C:\\w\\a.ts')
+    const openCall = fetcher.mock.calls.find(call => String(call[0]).includes('/open-in-app/open'))
+    expect(openCall?.[1]).toMatchObject({ body: JSON.stringify({ app: 'explorer', path: 'C:\\w\\a.ts' }) })
+  })
+
+  it('openFile refuses a remembered app the host no longer offers, the Sidebar, and an empty host', async () => {
+    const controller = new OpenInAppController(async () => jsonResponse({ apps: ['finder'] }))
+    controller.choose('cursor')
+    await expect(controller.openFile('/w/a.ts')).rejects.toMatchObject({ code: 'not-installed', appId: 'cursor' })
+    controller.choose(SIDEBAR_CHOICE)
+    await expect(controller.openFile('/w/a.ts')).rejects.toMatchObject({ code: 'unavailable' })
+    const empty = new OpenInAppController(async () => jsonResponse({ apps: [] }))
+    await expect(empty.openFile('/w/a.ts')).rejects.toMatchObject({ code: 'unavailable' })
   })
 })

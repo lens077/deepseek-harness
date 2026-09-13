@@ -588,6 +588,26 @@ describe('launchResolved', () => {
     ])
   })
 
+  it('reveals a file target in its folder through the shell-open channel, and hands argv launchers the file itself', async () => {
+    const commands: string[][] = []
+    const spawns: unknown[][] = []
+    const facts = bare({
+      platform: 'darwin',
+      launch: launcher(spawns),
+      run: async (command, args) => {
+        commands.push([command, ...args])
+        return { stdout: '', stderr: '' }
+      },
+    })
+    await expect(launchResolved({ launch: { kind: 'shell-open' } }, '/w/src/a.ts', TIMEOUT_MS, facts, 'file'))
+      .resolves.toBe('launched')
+    await expect(launchResolved(
+      { launch: { kind: 'argv', command: 'code', args: [] } }, '/w/src/a.ts', TIMEOUT_MS, facts, 'file',
+    )).resolves.toBe('launched')
+    expect(commands).toEqual([['open', '-R', '/w/src/a.ts']])
+    expect(spawns).toEqual([['code', '/w/src/a.ts', { watchMs: TIMEOUT_MS }]])
+  })
+
   it('counts a shell-open opener that outlives the watch window as launched, and a fast failure as failed', async () => {
     // A cold powershell start can outlive the window: still-running counts launched.
     await expect(launchResolved(

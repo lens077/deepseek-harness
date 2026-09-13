@@ -3,8 +3,9 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
   OPEN_IN_APP_APPS_ROUTE, OPEN_IN_APP_OPEN_ROUTE,
-  type OpenInAppAppsPayload, type OpenInAppOpenPayload,
+  type OpenInAppAppsPayload, type OpenInAppOpenFailure, type OpenInAppOpenPayload,
 } from '@deepseek-ai/dsh-host-open-in-app/shared'
+import { SIDEBAR_CHOICE } from './locales.ts'
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 
@@ -15,6 +16,42 @@ function hostBase(): string {
 }
 
 /**
+ * Why a launch was refused, for the caller to word: the app was never
+ * offered by this host (`not-installed`), the host has no launcher at all
+ * (`unavailable`), or the host tried and failed (`launch-failed`).
+ */
+export type OpenInAppLaunchErrorCode = 'not-installed' | 'unavailable' | 'launch-failed'
+
+/** Launch refusal carrying its stable reason and the app it concerned. */
+export class OpenInAppLaunchError extends Error {
+  /**
+   * @param code - stable refusal reason.
+   * @param appId - catalog id the launch concerned (empty for `unavailable`).
+   * @param detail - host diagnostic, when one arrived.
+   */
+  constructor(readonly code: OpenInAppLaunchErrorCode, readonly appId: string, detail?: string) {
+    super(detail ?? `open-in-app: ${code}`)
+    this.name = 'OpenInAppLaunchError'
+  }
+}
+
+/**
+ * Where a file click goes: an installed catalog id, or the Sidebar. The
+ * remembered choice wins when the host still offers it; a remembered app the
+ * host no longer offers is reported as such (never silently replaced, so an
+ * uninstalled editor produces a warning instead of a surprise); no choice
+ * means the first offered app, which the catalog orders as the platform file
+ * manager (Finder, File Explorer) — present on every desktop host.
+ */
+export type OpenInAppFileTarget =
+  | { readonly kind: 'sidebar' }
+  | { readonly kind: 'app'; readonly appId: string }
+  | { readonly kind: 'not-installed'; readonly appId: string }
+  | { readonly kind: 'unavailable' }
+  /** The host has not answered the availability read yet. */
+  | { readonly kind: 'pending' }
+
+/**
  * Owns the once-per-page availability read, the persisted last choice, and
  * the launch POST. Availability and choice publish through uSES-safe sources
  * so every Session header shares one truth.
@@ -22,8 +59,11 @@ function hostBase(): string {
 export class OpenInAppController {
   /** Installed app ids in host menu order; null until the host answered. */
   readonly apps: SnapshotStore<readonly string[] | null> = createSnapshotStore<readonly string[] | null>(null)
-  /** Last chosen app id, or empty before the first choice, shared across sessions and browser restarts. */
-  readonly choice: SnapshotStore<string> = createSnapshotStore<string>('finder', {
+  /**
+   * Last chosen entry — a catalog id or {@link SIDEBAR_CHOICE} — or empty
+   * before the first choice, shared across sessions and browser restarts.
+   */
+  readonly choice: SnapshotStore<string> = createSnapshotStore<string>('', {
     persist: { name: 'dsh.open-in-app.choice' },
   })
 
@@ -45,18 +85,60 @@ export class OpenInAppController {
   }
 
   /**
-   * Remember one picked app id.
-   * @param appId - catalog id from the availability list.
+   * Remember one picked entry.
+   * @param choice - catalog id from the availability list, or {@link SIDEBAR_CHOICE}.
    */
-  choose(appId: string): void {
-    this.choice.set(appId)
+  choose(choice: string): void {
+    this.choice.set(choice)
   }
 
   /**
-   * Launch one installed app on a workspace directory.
+   * Resolve where a file click goes right now, from the published
+   * availability and choice (see {@link OpenInAppFileTarget}). Before the
+   * host answered the target is `pending`; {@link openFile} waits for the
+   * answer itself, so a caller may hand it the click regardless.
+   * @returns the current file target.
+   */
+  fileTarget(): OpenInAppFileTarget {
+    const choice = this.choice.getSnapshot()
+    if (choice === SIDEBAR_CHOICE) return { kind: 'sidebar' }
+    const apps = this.apps.getSnapshot()
+    if (apps === null) return { kind: 'pending' }
+    if (choice !== '') {
+      return apps.includes(choice) ? { kind: 'app', appId: choice } : { kind: 'not-installed', appId: choice }
+    }
+    const first = apps[0]
+    return first === undefined ? { kind: 'unavailable' } : { kind: 'app', appId: first }
+  }
+
+  /**
+   * Open one file in the current file target's application.
+   * @param path - absolute Host path of the file.
+   * @returns after the host acknowledged the launch.
+   * @throws {OpenInAppLaunchError} when the target is not an installed app
+   *   or the host could not launch it; a Sidebar target is the caller's to
+   *   handle and is refused as `unavailable`.
+   */
+  async openFile(path: string): Promise<void> {
+    await this.load()
+    const target = this.fileTarget()
+    switch (target.kind) {
+      case 'app': return this.launch(target.appId, path)
+      case 'not-installed': throw new OpenInAppLaunchError('not-installed', target.appId)
+      case 'sidebar':
+      case 'unavailable': throw new OpenInAppLaunchError('unavailable', '')
+      /* v8 ignore next 2 -- `load()` settled above, so availability is published. */
+      case 'pending': throw new OpenInAppLaunchError('unavailable', '')
+    }
+  }
+
+  /**
+   * Launch one installed app on a workspace directory or file.
    * @param appId - catalog id from the availability list.
-   * @param path - the session's absolute workspace directory.
-   * @returns after the host acknowledged the launch; rejects on any failure.
+   * @param path - absolute directory or file path.
+   * @returns after the host acknowledged the launch.
+   * @throws {OpenInAppLaunchError} `launch-failed` with the host's diagnostic
+   *   when the host refused or the launch failed.
    */
   async launch(appId: string, path: string): Promise<void> {
     const body: OpenInAppOpenPayload = { app: appId, path }
@@ -65,7 +147,15 @@ export class OpenInAppController {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!response.ok) throw new Error(`open failed: HTTP ${String(response.status)}`)
+    if (response.ok) return
+    let detail = `open failed: HTTP ${String(response.status)}`
+    try {
+      const failure = await response.json() as Partial<OpenInAppOpenFailure>
+      if (typeof failure.message === 'string' && failure.message !== '') detail = failure.message
+    } catch {
+      // Swallows a non-JSON failure body: the status line above is the detail.
+    }
+    throw new OpenInAppLaunchError('launch-failed', appId, detail)
   }
 
   private async run(): Promise<void> {

@@ -12,7 +12,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply, inject, type OpenInAppActionInjected } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
 import { OpenInAppAction } from '../src/client/OpenInAppAction.tsx'
-import { en, NS, zh } from '../src/client/locales.ts'
+import { en, NS, SIDEBAR_CHOICE, zh } from '../src/client/locales.ts'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -33,6 +33,15 @@ async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugi
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   return { ctx, fiber }
+}
+
+/** Fetch double answering the apps route with `apps` and every launch with `launch`. */
+function hostWith(apps: readonly string[], launch: () => Response = () => new Response(JSON.stringify({ ok: true }), { status: 200 })) {
+  return vi.fn(async (input: string | URL, init?: RequestInit) => {
+    void init
+    if (String(input).includes('/open-in-app/apps')) return new Response(JSON.stringify({ apps }), { status: 200 })
+    return launch()
+  })
 }
 
 function headerEntryIds(ctx: Context): (string | undefined)[] {
@@ -98,6 +107,76 @@ describe('open-in-app browser half', () => {
       expect(injected.hooks.openInAppApps.getSnapshot()).toEqual([])
     })
     await expect(injected.launch('finder', '/w/dir')).rejects.toThrow('open failed: HTTP 502')
+    await fiber.dispose()
+  })
+
+  it('provides the Chat file opener: default app takes the click, the Sidebar leaves it to Chat', async () => {
+    const fetcher = hostWith(['finder', 'cursor'])
+    vi.stubGlobal('fetch', fetcher)
+    const { ctx, fiber } = await bench()
+    const opener = ctx.get('chatFileOpener')
+    expect(opener).toBeDefined()
+    // Before the host answered, the click is still ours: `open` waits.
+    expect(opener?.active()).toBe(true)
+    await opener?.open('/w/a.ts')
+    const openCall = fetcher.mock.calls.find(call => String(call[0]).includes('/open-in-app/open'))
+    expect(openCall?.[1]).toMatchObject({ body: JSON.stringify({ app: 'finder', path: '/w/a.ts' }) })
+
+    const entry = ctx.slots.entries('conversation.session.header.utilities')[0]
+    const injected = (entry?.inject as unknown as () => OpenInAppActionInjected)()
+    injected.choose(SIDEBAR_CHOICE)
+    expect(opener?.active()).toBe(false)
+    await fiber.dispose()
+    expect(ctx.get('chatFileOpener')).toBeUndefined()
+  })
+
+  it('words a remembered-but-uninstalled app and a host launch failure for the Chat dialog', async () => {
+    vi.stubGlobal('fetch', hostWith(['finder'], () => new Response(JSON.stringify({ code: 'launch-failed', message: 'failed to launch finder' }), { status: 502 })))
+    const { ctx, fiber } = await bench()
+    ctx.locale.setLocale('zh')
+    const opener = ctx.get('chatFileOpener')
+    const entry = ctx.slots.entries('conversation.session.header.utilities')[0]
+    const injected = (entry?.inject as unknown as () => OpenInAppActionInjected)()
+    injected.choose('cursor')
+    expect(opener?.active()).toBe(true)
+    await expect(opener?.open('/w/a.ts')).rejects.toThrow('Cursor 未安装')
+    injected.choose('')
+    await expect(opener?.open('/w/a.ts')).rejects.toThrow('无法用 访达 打开文件')
+    // A remembered id outside the label table is named as-is rather than hidden.
+    injected.choose('someday-an-app')
+    await expect(opener?.open('/w/a.ts')).rejects.toThrow('someday-an-app 未安装')
+    await fiber.dispose()
+  })
+
+  it('passes a transport failure through the Chat opener unworded', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+      if (String(input).includes('/open-in-app/apps')) return new Response(JSON.stringify({ apps: ['finder'] }), { status: 200 })
+      throw new TypeError('network down')
+    }))
+    const { ctx, fiber } = await bench()
+    await expect(ctx.get('chatFileOpener')?.open('/w/a.ts')).rejects.toThrow('network down')
+    await fiber.dispose()
+  })
+
+  it('leaves file clicks to Chat when the host offers no application at all', async () => {
+    vi.stubGlobal('fetch', hostWith([]))
+    const { ctx, fiber } = await bench()
+    const opener = ctx.get('chatFileOpener')
+    await vi.waitFor(() => { expect(opener?.active()).toBe(false) })
+    ctx.locale.setLocale('en')
+    await expect(opener?.open('/w/a.ts')).rejects.toThrow(en['file.unavailable'])
+    await fiber.dispose()
+  })
+
+  it('opens the Sidebar file tree from the header when the Sidebar entry is remembered', async () => {
+    vi.stubGlobal('fetch', hostWith(['finder']))
+    const { ctx, fiber } = await bench()
+    const openTab = vi.fn()
+    ctx.provide('sidebarRight', { openTab } as never)
+    const entry = ctx.slots.entries('conversation.session.header.utilities')[0]
+    const injected = (entry?.inject as unknown as () => OpenInAppActionInjected)()
+    injected.openSidebar()
+    expect(openTab).toHaveBeenCalledWith('files')
     await fiber.dispose()
   })
 

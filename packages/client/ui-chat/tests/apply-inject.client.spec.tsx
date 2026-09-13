@@ -149,6 +149,29 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('hands file clicks to an active chatFileOpener with the absolute path, and to the Sidebar when it is inactive', async () => {
+    const b = await bench()
+    const open = vi.fn(async (path: string) => { void path })
+    let active = true
+    b.runtime.ctx.provide('chatFileOpener', { active: () => active, open } as never)
+    const { injected } = b.chatViewApi(ROOT)
+    await injected.openFile('src/a.ts', { line: 7 })
+    expect(open).toHaveBeenCalledWith('/proj/src/a.ts')
+    expect(b.sidebarRight.openResource).not.toHaveBeenCalled()
+    await injected.openFile('/abs/a.ts')
+    expect(open).toHaveBeenLastCalledWith('/abs/a.ts')
+
+    // The opener's refusal is the click's failure: the dialog wording comes from it.
+    open.mockRejectedValueOnce(new Error('Cursor 未安装'))
+    await expect(injected.openFile('src/a.ts')).rejects.toThrow('Cursor 未安装')
+
+    active = false
+    await injected.openFile('src/a.ts')
+    expect(b.sidebarRight.openResource).toHaveBeenCalledWith('dsh-resource://file/session/root-1/src/a.ts')
+    expect(open).toHaveBeenCalledTimes(3)
+    await b.runtime.dispose()
+  })
+
   it('keeps a relative path under the Session without a cwd, and addresses a path outside the workspace absolutely', async () => {
     const b = await bench()
     const NO_CWD = 'root-2' as SessionId

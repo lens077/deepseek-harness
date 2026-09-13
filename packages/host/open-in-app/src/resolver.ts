@@ -17,7 +17,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir, platform as osPlatform } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import {
-  canOpenNativePath, openNativePath, runNativeCommand, type NativeCommandRunner,
+  canOpenNativePath, openNativePath, revealNativePath, runNativeCommand, type NativeCommandRunner,
 } from '@deepseek-ai/dsh-native-command'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import {
@@ -691,18 +691,21 @@ function isMissingExecutable(error: unknown): boolean {
 }
 
 /**
- * Open one directory through the OS shell's open verb under the launch watch
- * window: the opener command completing inside the window decides the
- * outcome, and an opener still running when it closes counts as launched and
- * keeps running (a cold `powershell.exe` start can outlive the window; its
- * late settlement is swallowed because the request already answered).
+ * Open one directory, or reveal one file, through the OS shell under the
+ * launch watch window: the opener command completing inside the window
+ * decides the outcome, and an opener still running when it closes counts as
+ * launched and keeps running (a cold `powershell.exe` start can outlive the
+ * window; its late settlement is swallowed because the request already
+ * answered). A directory opens in the file manager; a file is selected in
+ * its folder rather than handed to its associated application.
  */
 function runShellOpen(
-  path: string, watchMs: number, internals: ResolvedInternals,
+  path: string, target: OpenInAppTarget, watchMs: number, internals: ResolvedInternals,
 ): Promise<OpenInAppLaunchOutcome> {
-  const opening = openNativePath(path, new AbortController().signal, {
-    platform: internals.platform, run: internals.run, env: internals.env,
-  })
+  const platformInternals = { platform: internals.platform, run: internals.run, env: internals.env }
+  const opening = target === 'file'
+    ? revealNativePath(path, new AbortController().signal, platformInternals)
+    : openNativePath(path, new AbortController().signal, platformInternals)
   return new Promise((resolve) => {
     const watch = setTimeout(() => {
       opening.catch(() => {
@@ -725,11 +728,11 @@ function runShellOpen(
 
 /** Run one launcher and classify how the attempt ended. */
 async function runLaunch(
-  launch: OpenInAppLaunch, path: string, watchMs: number, internals: ResolvedInternals,
+  launch: OpenInAppLaunch, path: string, target: OpenInAppTarget, watchMs: number, internals: ResolvedInternals,
 ): Promise<OpenInAppLaunchOutcome> {
   switch (launch.kind) {
     case 'shell-open':
-      return runShellOpen(path, watchMs, internals)
+      return runShellOpen(path, target, watchMs, internals)
     case 'argv':
       try {
         await internals.launch(launch.command, launchArgs(launch.args, path), {
@@ -750,24 +753,29 @@ async function runLaunch(
   }
 }
 
+/** What a launch path names; `argv` launchers take either verbatim, `shell-open` reveals a file. */
+export type OpenInAppTarget = 'directory' | 'file'
+
 /**
- * Launch one resolved application on a directory: the primary launcher, then
- * the fallback when the primary fails inside the watch window.
+ * Launch one resolved application on a directory or file: the primary
+ * launcher, then the fallback when the primary fails inside the watch window.
  * @param resolved - the entry's verified launchers.
- * @param path - absolute workspace directory (already validated by the route).
+ * @param path - absolute workspace directory or file (already validated by the route).
  * @param watchMs - early-failure watch window per launcher (a child still
  * running when it closes counts as launched and keeps running).
  * @param internals - launcher hook for deterministic tests.
+ * @param target - whether `path` names a directory or a file.
  * @returns how the attempt ended; `missing` when a tried launcher's
  *   executable is gone, which tells the caller to re-resolve once.
  */
 export async function launchResolved(
   resolved: OpenInAppResolvedLaunch, path: string, watchMs: number, internals: OpenInAppInternals = {},
+  target: OpenInAppTarget = 'directory',
 ): Promise<OpenInAppLaunchOutcome> {
   const completed = resolveInternals(internals)
-  const primary = await runLaunch(resolved.launch, path, watchMs, completed)
+  const primary = await runLaunch(resolved.launch, path, target, watchMs, completed)
   if (primary === 'launched' || resolved.fallbackLaunch === undefined) return primary
-  const fallback = await runLaunch(resolved.fallbackLaunch, path, watchMs, completed)
+  const fallback = await runLaunch(resolved.fallbackLaunch, path, target, watchMs, completed)
   if (fallback === 'launched') return 'launched'
   // Either tried launcher having vanished is grounds to refresh the resolution.
   return primary === 'missing' || fallback === 'missing' ? 'missing' : 'failed'

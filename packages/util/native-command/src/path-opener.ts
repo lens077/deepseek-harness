@@ -5,12 +5,13 @@
  * The default intent prefers the default browser for documents it renders when
  * the platform can name one, then falls back to the default application. WSL
  * translates every path for the Windows desktop instead of assuming a Linux
- * GUI. The text-editor intent never consults the browser.
+ * GUI. The text-editor intent never consults the browser; the reveal intent
+ * selects the file in the platform file manager instead of opening it.
  * @module @deepseek-ai/dsh-native-command/path-opener
  */
 
 import { release as osRelease } from 'node:os'
-import { extname } from 'node:path'
+import { dirname, extname } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from './runner.ts'
 
 /** Testable command boundary; native implementations never invoke a shell. */
@@ -185,6 +186,55 @@ export function openNativePath(
   internals: PathOpenerInternals = {},
 ): Promise<void> {
   return openNativePathWithIntent(path, signal, 'default', internals)
+}
+
+/**
+ * Reveal one file in the platform file manager with the file selected:
+ * Finder's `open -R`, Explorer's `/select,` (through `Start-Process`, because
+ * `explorer.exe` exits non-zero even when it raised the window), and on
+ * desktop Linux the parent directory through `xdg-open`, since no portable
+ * select verb exists. WSL translates the path for the Windows desktop.
+ * @param path - absolute or host-resolvable file path (caller owns resolution).
+ * @param signal - caller/connection lifetime; abort terminates the native command.
+ * @param internals - Platform, environment, and runner hooks for deterministic tests.
+ */
+export async function revealNativePath(
+  path: string,
+  signal: AbortSignal,
+  internals: PathOpenerInternals = {},
+): Promise<void> {
+  const platform = internals.platform ?? process.platform
+  const run = internals.run ?? runNativeCommand
+  if (platform === 'darwin') {
+    await run('open', ['-R', path], signal)
+    return
+  }
+  if (platform === 'win32') {
+    await revealWindowsPath(path, signal, run)
+    return
+  }
+  if (platform === 'linux') {
+    if (isWsl(internals)) {
+      const translated = await run('wslpath', ['-w', path], signal)
+      signal.throwIfAborted()
+      const windowsPath = translated.stdout.replace(/[\r\n]+$/, '')
+      if (windowsPath === '') throw new Error('wslpath returned no Windows path')
+      await revealWindowsPath(windowsPath, signal, run)
+      return
+    }
+    await run('xdg-open', [dirname(path)], signal)
+    return
+  }
+  throw new Error(`native path reveal is unsupported on ${platform}`)
+}
+
+/** Select one Windows path in a new Explorer window. */
+async function revealWindowsPath(path: string, signal: AbortSignal, run: PathOpenerRunner): Promise<void> {
+  await run('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    `Start-Process -FilePath explorer.exe -ArgumentList ${powershellLiteral(`"/select,${path}"`)}`,
+  ], signal)
 }
 
 /**
