@@ -4,10 +4,22 @@
 }
 
 .label {
+  align-items: center;
+  background: none;
+  border: 0;
   color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  display: flex;
   font-size: 11px;
+  justify-content: space-between;
   line-height: 18px;
   padding: 0 8px;
+  width: 100%;
+}
+
+.chevron {
+  font-size: 16px;
+  line-height: 14px;
 }
 
 .list {
