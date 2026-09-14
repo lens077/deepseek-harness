@@ -249,7 +249,7 @@ describe('web e2e: persisted usage and cost governance', () => {
 
     await drawer.getByRole('button', { name: 'All sessions', exact: true }).click()
     await expect.poll(() => page.locator('[data-usage-panel][data-usage-scope="all"]').count()).toBe(1)
-    expect(await drawer.locator('[data-usage-cost]').textContent()).toContain('Total cost unavailable')
+    expect(await drawer.locator('[data-usage-cost]').textContent()).toContain('Observed cost (partial)')
     expect(await drawer.getByText(/1 requests have incomplete billing inputs/).count()).toBe(1)
     expect(await drawer.getByText(/1 requests lack complete prices/).count()).toBe(1)
     expect(await drawer.getByText(/3 reported requests/).count()).toBe(1)

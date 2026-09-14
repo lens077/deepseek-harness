@@ -31,6 +31,7 @@ export interface UsageRollup extends UsageBuckets {
   mixedCurrencies: boolean
   currency?: string
   estimatedCost?: number
+  observedCost?: number
 }
 
 const emptyActivity = (): UsageActivity => ({
@@ -103,6 +104,8 @@ export function rollupUsage(
   const tools = new Map<string, UsageLedgerToolRow>()
   const currencies = new Set<string>()
   let cost = 0
+  let observedCost = 0
+  let hasObservedCost = false
   let priced = true
   for (const id of selectedIds) {
     const ledger = id === currentId ? current : list.byId[id]?.projectionValues?.usageLedger
@@ -119,6 +122,10 @@ export function rollupUsage(
     totals.unreportedAttempts += ledger.unreportedAttempts
     const reported = ledger.models.reduce((sum, row) => sum + row.requests, 0)
     if (ledger.currency !== undefined) currencies.add(ledger.currency)
+    if (ledger.observedCost !== undefined && ledger.currency !== undefined) {
+      observedCost += ledger.observedCost
+      hasObservedCost = true
+    }
     if (reported > 0) {
       if (ledger.estimatedCost === undefined || ledger.currency === undefined) priced = false
       else cost += ledger.estimatedCost
@@ -157,6 +164,7 @@ export function rollupUsage(
   const [currency] = currencies
   if (currencies.size === 1 && currency !== undefined) totals.currency = currency
   if (totals.requests > 0 && priced && currencies.size === 1 && usageComplete(totals)) totals.estimatedCost = cost
+  if (hasObservedCost && currencies.size === 1) totals.observedCost = observedCost
   return totals
 }
 

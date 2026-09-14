@@ -116,6 +116,8 @@ export interface UsageLedgerProjection {
   currency?: string
   /** Present only when all observed attempts have complete priced billing buckets. */
   estimatedCost?: number
+  /** Sum of known priced requests, present even when unknown traffic suppresses the complete total. */
+  observedCost?: number
   governance?: UsageGovernancePolicy
 }
 

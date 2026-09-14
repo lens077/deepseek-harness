@@ -36,12 +36,14 @@ export function UsageLedgerPill(props: LedgerPillProps) {
   const read = ledger.models.reduce((sum, model) => sum + model.cacheReadTokens, 0)
   const steps = ledger.models.reduce((sum, model) => sum + model.steps, 0)
   const requests = ledger.models.reduce((sum, model) => sum + model.requests, 0)
-  const { estimatedCost, currency } = ledger
+  const { estimatedCost, observedCost, currency } = ledger
   const priced = requests > 0 && estimatedCost !== undefined && currency !== undefined
     && ledger.unreportedAttempts === 0 && ledger.models.every(model => model.incompleteRequests === 0)
   const headline = priced
     ? t('usage.estimateCompact', { cost: money(estimatedCost, currency, t) })
-    : requests > 0 ? t('message.turnUsage.count', { count: formatTokens(input + output, t) }) : t('usage.title')
+    : observedCost !== undefined && currency !== undefined
+      ? t('usage.observedCompact', { cost: money(observedCost, currency, t) })
+      : requests > 0 ? t('message.turnUsage.count', { count: formatTokens(input + output, t) }) : t('usage.title')
   const cache = formatCacheHitPercent(read, input)
   const cacheLabel = cache === null ? null : t('stats.cacheHit', { percent: cache })
   const average = steps > 0 ? t('usage.inputPerStep', { tokens: formatTokens(Math.round(input / steps), t) }) : null
@@ -95,6 +97,7 @@ function UsageLedgerDrawer({ ledger, sessionId, useSessions, t, setOpen, trigger
   const duration = (ms: number): string => formatDuration(ms, t)
   const input = usageInput(totals)
   const cache = formatCacheHitPercent(totals.cacheReadTokens, input)
+  const displayCost = totals.estimatedCost ?? totals.observedCost
   return (
     <Modal open headless title={t('usage.title')} onClose={() => { setOpen(false) }} className={css.drawer ?? ''}>
       <div ref={content} className={css.content} data-usage-panel data-usage-scope={scope}>
@@ -117,9 +120,9 @@ function UsageLedgerDrawer({ ledger, sessionId, useSessions, t, setOpen, trigger
           })}</p>
           {totals.requests > 0 && totals.currency !== undefined && (
             <div className={css.cost} data-usage-cost>
-              <span>{totals.estimatedCost === undefined ? t('usage.costUnavailable') : t('usage.estimate')}</span>
-              {totals.estimatedCost !== undefined && (
-                <strong>{money(totals.estimatedCost, totals.currency, t)}</strong>
+              <span>{totals.estimatedCost === undefined ? t('usage.observedEstimate') : t('usage.estimate')}</span>
+              {displayCost !== undefined && (
+                <strong>{money(displayCost, totals.currency, t)}</strong>
               )}
             </div>
           )}

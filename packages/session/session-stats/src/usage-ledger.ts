@@ -36,7 +36,7 @@ const cacheSchema = z.object({ total: count, systemChanged: count, toolsChanged:
 export const usageLedgerViewSchema = z.object({
   models: z.array(rowSchema), tools: z.array(toolSchema), activity: activitySchema,
   cacheBreaks: cacheSchema, unreportedAttempts: count,
-  currency: z.string().regex(/^[A-Z]{3}$/).optional(), estimatedCost: duration.optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(), estimatedCost: duration.optional(), observedCost: duration.optional(),
   governance: usageGovernanceSchema.optional(),
 }).strict().superRefine((view, ctx) => {
   const costs = view.models.some(row => row.estimatedCost !== undefined) || view.estimatedCost !== undefined
@@ -310,6 +310,8 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
             }),
           }
         })
+        const observedCost = models.reduce((sum, row) => sum + (row.estimatedCost ?? 0), 0)
+        const hasObservedCost = models.some(row => row.estimatedCost !== undefined)
         const total = models.reduce<number | undefined>((sum, row) =>
           sum === undefined || row.estimatedCost === undefined ? undefined : sum + row.estimatedCost, 0)
         const estimatedCost = config.pricing === undefined || data.unreportedAttempts > 0
@@ -319,6 +321,7 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
           unreportedAttempts: data.unreportedAttempts,
           ...(config.pricing === undefined ? {} : { currency: config.pricing.currency }),
           ...(estimatedCost === undefined ? {} : { estimatedCost }),
+          ...(config.pricing === undefined || !hasObservedCost ? {} : { observedCost }),
           ...(config.governance === undefined ? {} : { governance: config.governance }),
         }
         views.set(data, view)

@@ -129,23 +129,24 @@ describe('usage ledger drawer', () => {
     fireEvent.click(view.getByRole('button', { name: 'All sessions' }))
     const panel = view.getByRole('dialog')
     expect(panel.textContent).toContain('1 sessions have no usage snapshot')
-    expect(panel.textContent).toContain('Total cost unavailable')
+    expect(panel.textContent).toContain('Observed cost (partial)')
     expect(panel.textContent).toContain('Usage is incomplete')
     expect(panel.querySelector('[data-usage-budget]')).toBeNull()
     expect(panel.querySelector('[data-usage-cost] strong')).toBeNull()
   })
 
   it.each(['unreported', 'incomplete'] as const)('discloses %s accounting even when a stale price exists', (kind) => {
-    const ledger = usageLedger(kind === 'unreported' ? { unreportedAttempts: 1 }
-      : { models: [{ ...usageLedger().models[0]!, incompleteRequests: 1 }] })
+    const ledger = usageLedger(kind === 'unreported' ? { unreportedAttempts: 1, observedCost: 0.02 }
+      : { models: [{ ...usageLedger().models[0]!, incompleteRequests: 1 }], observedCost: 0.02 })
     const view = render(<StatsPills {...props(ledger)} />)
     const trigger = view.getByRole('button', { name: /^AI usage:/ })
-    expect(trigger.textContent).not.toContain('USD')
+    expect(trigger.textContent).toContain('Observed USD 0.02')
     fireEvent.click(trigger)
     const panel = view.getByRole('dialog')
     expect(panel.textContent).toContain(kind === 'unreported' ? 'did not report usable token usage' : 'incomplete billing inputs')
     expect(panel.querySelector('[data-usage-budget]')).toBeNull()
-    expect(panel.querySelector('[data-usage-cost] strong')).toBeNull()
+    expect(panel.querySelector('[data-usage-cost] strong')?.textContent).toContain('USD 0.02')
+    expect(panel.textContent).toContain('Observed cost (partial)')
   })
 
   it('shows observed usage without billing copy when no pricing is configured', () => {

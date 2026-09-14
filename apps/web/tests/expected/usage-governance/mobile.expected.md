@@ -7,7 +7,8 @@
   - button "Session tree"
   - button "All sessions" [pressed]
 - paragraph: 3/4 session snapshots · 3 reported requests
-- text: Total cost unavailable
+- text: Observed cost (partial)
+- strong: USD 0.00052
 - status:
   - paragraph: 1 sessions have no usage snapshot and are excluded from totals.
   - paragraph: 1 requests have incomplete billing inputs.
