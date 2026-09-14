@@ -35,14 +35,14 @@ function props(ledger: UsageLedgerProjection, list: SessionListState = usageList
 describe('usage ledger drawer', () => {
   it('prefers own ledger cost, steps, and activity to legacy projections', () => {
     const view = render(<StatsPills {...props(usageLedger())} />)
-    const trigger = view.getByRole('button', { name: /^Usage and cost:/ })
+    const trigger = view.getByRole('button', { name: /^AI usage:/ })
     expect(trigger.textContent).toContain('Est. USD 0.02')
     expect(trigger.textContent).toContain('Cache hit 80%')
     expect(trigger.textContent).toContain('1K input/step')
     expect(view.container.textContent).toContain('1 turns 1 steps')
     expect(view.container.textContent).not.toContain('99 turns')
     fireEvent.click(trigger)
-    const panel = view.getByRole('dialog', { name: 'Usage and cost' })
+    const panel = view.getByRole('dialog', { name: 'AI usage' })
     expect(panel.getAttribute('aria-modal')).toBe('true')
     expect(panel.textContent).toContain('1/1 session snapshots')
     expect(panel.textContent).toContain('fixture/model')
@@ -56,10 +56,10 @@ describe('usage ledger drawer', () => {
   it('isolates background content, wraps focus in both directions, and restores the trigger on Escape', () => {
     const view = render(<><button type="button">Outside</button><StatsPills {...props(usageLedger())} /></>)
     const outside = view.getByRole('button', { name: 'Outside' })
-    const trigger = view.getByRole('button', { name: /^Usage and cost:/ })
+    const trigger = view.getByRole('button', { name: /^AI usage:/ })
     trigger.focus()
     fireEvent.click(trigger)
-    const panel = view.getByRole('dialog', { name: 'Usage and cost' })
+    const panel = view.getByRole('dialog', { name: 'AI usage' })
     const close = view.getByRole('button', { name: 'Close usage panel' })
     const last = view.getByRole('button', { name: 'All sessions' })
     expect(document.activeElement).toBe(close)
@@ -88,7 +88,7 @@ describe('usage ledger drawer', () => {
     document.body.style.overflow = 'clip'
     try {
       const view = render(<StatsPills {...props(usageLedger())} />)
-      fireEvent.click(view.getByRole('button', { name: /^Usage and cost:/ }))
+      fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
       expect(background.getAttribute('aria-hidden')).toBe('true')
       view.unmount()
       expect(background.inert).toBe(true)
@@ -108,7 +108,7 @@ describe('usage ledger drawer', () => {
       { kind: 'child', id: CHILD, mode: 'continuable', label: 'child', activity: 'inactive', hasChildren: false },
     ] } }
     const view = render(<StatsPills {...props(ledger, list)} />)
-    fireEvent.click(view.getByRole('button', { name: /^Usage and cost:/ }))
+    fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
     const panel = view.getByRole('dialog')
     expect(panel.querySelector('[data-usage-cost]')?.textContent).toContain('USD 0.02')
     fireEvent.click(view.getByRole('button', { name: 'Session tree' }))
@@ -125,7 +125,7 @@ describe('usage ledger drawer', () => {
   it('discloses missing snapshots and suppresses total, budget, and clean diagnoses', () => {
     const ledger = usageLedger()
     const view = render(<StatsPills {...props(ledger, usageList({ root: ledger, cold: undefined }))} />)
-    fireEvent.click(view.getByRole('button', { name: /^Usage and cost:/ }))
+    fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
     fireEvent.click(view.getByRole('button', { name: 'All sessions' }))
     const panel = view.getByRole('dialog')
     expect(panel.textContent).toContain('1 sessions have no usage snapshot')
@@ -139,7 +139,7 @@ describe('usage ledger drawer', () => {
     const ledger = usageLedger(kind === 'unreported' ? { unreportedAttempts: 1 }
       : { models: [{ ...usageLedger().models[0]!, incompleteRequests: 1 }] })
     const view = render(<StatsPills {...props(ledger)} />)
-    const trigger = view.getByRole('button', { name: /^Usage and cost:/ })
+    const trigger = view.getByRole('button', { name: /^AI usage:/ })
     expect(trigger.textContent).not.toContain('USD')
     fireEvent.click(trigger)
     const panel = view.getByRole('dialog')
@@ -148,10 +148,27 @@ describe('usage ledger drawer', () => {
     expect(panel.querySelector('[data-usage-cost] strong')).toBeNull()
   })
 
+  it('shows observed usage without billing copy when no pricing is configured', () => {
+    const base = usageLedger()
+    const { currency: _currency, estimatedCost: _cost, ...ledger } = base
+    const model = ledger.models[0]
+    const withoutPrice = model === undefined ? ledger : {
+      ...ledger,
+      models: [{ ...model, estimatedCost: undefined }],
+    }
+    const view = render(<StatsPills {...props(withoutPrice)} />)
+    fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
+    const panel = view.getByRole('dialog', { name: 'AI usage' })
+    expect(panel.textContent).toContain('Observed tokens')
+    expect(panel.textContent).not.toContain('Total cost unavailable')
+    expect(panel.textContent).not.toContain('lack complete prices')
+    expect(panel.querySelector('[data-usage-budget]')).toBeNull()
+  })
+
   it('keeps zero-report activity inspectable without a cost or budget', () => {
     const ledger = usageLedger({ models: [], estimatedCost: 0, unreportedAttempts: 1 })
     const view = render(<StatsPills {...props(ledger)} />)
-    fireEvent.click(view.getByRole('button', { name: /^Usage and cost:/ }))
+    fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
     const panel = view.getByRole('dialog')
     expect(panel.textContent).toContain('No model requests have reported usage yet')
     expect(panel.querySelector('[data-usage-cost]')).toBeNull()
@@ -162,13 +179,13 @@ describe('usage ledger drawer', () => {
     const ledger = usageLedger({ estimatedCost: 0.00000001,
       models: [{ ...usageLedger().models[0]!, estimatedCost: 0.00000001 }] })
     const view = render(<StatsPills {...props(ledger)} />)
-    expect(view.getByRole('button', { name: /^Usage and cost:/ }).textContent).toContain('USD 1e-8')
+    expect(view.getByRole('button', { name: /^AI usage:/ }).textContent).toContain('USD 1e-8')
   })
 
   it('updates an open drawer without resetting focus and dismisses from its backdrop', () => {
     const ledger = usageLedger()
     const view = render(<StatsPills {...props(ledger)} />)
-    fireEvent.click(view.getByRole('button', { name: /^Usage and cost:/ }))
+    fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
     const scope = view.getByRole('button', { name: 'This session' })
     scope.focus()
     const updated = usageLedger({ estimatedCost: 0.04,
@@ -183,8 +200,8 @@ describe('usage ledger drawer', () => {
 
   it('uses the active Chinese dictionary for title, scopes, and disclosures', () => {
     const view = render(<StatsPills {...props(usageLedger())} t={makeTranslate(zh, commonZh)} />)
-    fireEvent.click(view.getByRole('button', { name: /^查看 AI 用量与费用/ }))
-    const panel = view.getByRole('dialog', { name: 'AI 用量与费用' })
+    fireEvent.click(view.getByRole('button', { name: /^查看 AI 用量/ }))
+    const panel = view.getByRole('dialog', { name: 'AI 用量' })
     expect(view.getByRole('button', { name: '本会话' })).toBeTruthy()
     expect(view.getByRole('button', { name: '会话树' })).toBeTruthy()
     expect(panel.textContent).toContain('已包含在输出中')

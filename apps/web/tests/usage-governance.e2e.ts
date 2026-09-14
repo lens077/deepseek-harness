@@ -139,12 +139,12 @@ async function openPersistedSession(page: Page, id: string): Promise<void> {
   const row = page.locator(`[data-session-id="${id}"]`)
   await row.waitFor({ timeout: 20_000 })
   await row.click()
-  await expect.poll(() => page.getByRole('button', { name: /^Usage and cost:/ }).count(), { timeout: 20_000 })
+  await expect.poll(() => page.getByRole('button', { name: /^AI usage:/ }).count(), { timeout: 20_000 })
     .toBe(1)
 }
 
 async function openUsageDrawer(page: Page): Promise<Locator> {
-  const trigger = page.getByRole('button', { name: /^Usage and cost:/ })
+  const trigger = page.getByRole('button', { name: /^AI usage:/ })
   await trigger.click()
   const dialog = page.locator('[data-usage-panel]')
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
@@ -234,7 +234,7 @@ describe('web e2e: persisted usage and cost governance', () => {
     await page.locator(`[data-session-id="${ROOT_ID}"]`).click()
     const drawer = await openUsageDrawer(page)
 
-    expect(await drawer.getByRole('heading', { name: 'Usage and cost', exact: true }).count()).toBe(1)
+    expect(await drawer.getByRole('heading', { name: 'AI usage', exact: true }).count()).toBe(1)
     expect(await page.locator('[data-usage-panel][data-usage-scope="session"]').count()).toBe(1)
     expect(await drawer.locator('[data-usage-cost]').textContent()).toContain('USD 0.00018')
     await page.screenshot({ path: DESKTOP_SCREENSHOT })
@@ -260,17 +260,19 @@ describe('web e2e: persisted usage and cost governance', () => {
 
   it('contains focus, restores the trigger, and keeps the drawer usable on mobile', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-usage-governance-mobile'))
+    await page.setViewportSize({ width: 1440, height: 900 })
     const openDrawer = page.locator('[data-usage-panel]')
     if (await openDrawer.count() > 0) {
       await page.getByRole('button', { name: 'Close usage panel', exact: true }).click()
       await expect.poll(() => page.locator('[data-usage-panel]').count()).toBe(0)
     }
-    await page.setViewportSize({ width: 390, height: 844 })
-    const trigger = page.getByRole('button', { name: /^Usage and cost:/ })
+    const trigger = page.getByRole('button', { name: /^AI usage:/ })
     await trigger.click()
     const drawer = page.locator('[data-usage-panel]')
     await drawer.waitFor({ state: 'visible', timeout: 10_000 })
-    expect(await page.getByRole('heading', { name: 'Usage and cost', exact: true }).count()).toBe(1)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await drawer.waitFor({ state: 'visible', timeout: 10_000 })
+    expect(await page.getByRole('heading', { name: 'AI usage', exact: true }).count()).toBe(1)
     expect(await page.evaluate(() => [...document.body.children]
       .filter(node => node.getAttribute('aria-hidden') === 'true').length)).toBeGreaterThan(0)
 
@@ -279,18 +281,17 @@ describe('web e2e: persisted usage and cost governance', () => {
       expect(await drawer.evaluate(node => node.contains(document.activeElement))).toBe(true)
     }
 
-    await page.getByRole('button', { name: 'Close usage panel', exact: true }).click()
-    await expect.poll(() => trigger.evaluate(node => document.activeElement === node)).toBe(true)
-    expect(await page.evaluate(() => [...document.body.children]
-      .filter(node => node.getAttribute('aria-hidden') === 'true').length)).toBe(0)
-
-    await trigger.click()
-    await drawer.waitFor({ state: 'visible', timeout: 10_000 })
     await drawer.getByRole('button', { name: 'All sessions', exact: true }).click()
     await expect.poll(() => page.locator('[data-usage-panel][data-usage-scope="all"]').count()).toBe(1)
     const snapshot = await captureStableAria(page, '[data-usage-panel]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(MOBILE_EXPECTED, snapshot, MODE)
     await page.screenshot({ path: MOBILE_SCREENSHOT })
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.getByRole('button', { name: 'Close usage panel', exact: true }).click()
+    await expect.poll(() => trigger.evaluate(node => document.activeElement === node)).toBe(true)
+    expect(await page.evaluate(() => [...document.body.children]
+      .filter(node => node.getAttribute('aria-hidden') === 'true').length)).toBe(0)
   }, 60_000)
 
   it('keeps the browser and fixture clean', async () => {

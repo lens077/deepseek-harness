@@ -115,10 +115,10 @@ function UsageLedgerDrawer({ ledger, sessionId, useSessions, t, setOpen, trigger
           <p className={css.note}>{t('usage.coverage', {
             known: totals.sessionIds.length - totals.missingSessions, total: totals.sessionIds.length, requests: totals.requests,
           })}</p>
-          {totals.requests > 0 && (
+          {totals.requests > 0 && totals.currency !== undefined && (
             <div className={css.cost} data-usage-cost>
               <span>{totals.estimatedCost === undefined ? t('usage.costUnavailable') : t('usage.estimate')}</span>
-              {totals.estimatedCost !== undefined && totals.currency !== undefined && (
+              {totals.estimatedCost !== undefined && (
                 <strong>{money(totals.estimatedCost, totals.currency, t)}</strong>
               )}
             </div>

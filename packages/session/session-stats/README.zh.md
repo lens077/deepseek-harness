@@ -44,7 +44,7 @@ kind: "package-reference"
       budgets: { session: 5, tree: 20, all: 100, warningRatio: 0.8 }
 ```
 
-路由键精确匹配 `provider/model`。每条路由声明未缓存输入、缓存读取、缓存写入和输出价格。可选 `tiers` 在互不重叠的 UTC 星期／小时窗口内对四项价格应用倍率，其余时间使用基础价格。[Web bundle 配置](../../bundle/web-app/cordis.patch.yml)提供 DeepSeek V4 价格和提醒式检测阈值，但不设置金额预算。[配置目录](../../../docs/config-catalog.zh.md)说明各字段。
+路由键精确匹配 `provider/model`。每条路由声明未缓存输入、缓存读取、缓存写入和输出价格。可选 `tiers` 在互不重叠的 UTC 星期／小时窗口内对四项价格应用倍率，其余时间使用基础价格。Web bundle 挂载此单元时不配置价格表或金额预算，因此默认界面只显示已观察 token。需要计费时，应通过 profile patch 添加部署自己的价格与提醒式检测阈值。[配置目录](../../../docs/config-catalog.zh.md)说明各字段。
 
 ### 理解数据
 

@@ -41,7 +41,7 @@ A completed Turn shows an expandable usage row only when the loaded window inclu
 <a id="session-usage-and-cost"></a>
 ## Session usage and cost
 
-The composer usage pill prefers the Host `usageLedger` projection: estimated cost first, then cache hit and input per reporting step. It opens a right-side drawer with `This session`, `Session tree`, and `All sessions` scopes. The tree follows subagent-only parent edges; ordinary forks remain outside it. Aggregation deduplicates durable Session ids and counts only their own requests, not inherited histories. The existing time pill and per-Turn usage dialog remain separate.
+The composer usage pill prefers the Host `usageLedger` projection: observed token usage first, followed by cache hit and input per reporting step. It opens a right-side drawer with `This session`, `Session tree`, and `All sessions` scopes. The tree follows subagent-only parent edges; ordinary forks remain outside it. Aggregation deduplicates durable Session ids and counts only their own requests, not inherited histories. The existing time pill and per-Turn usage dialog remain separate.
 
 The drawer shows reported prompt/output buckets, reasoning as an output subset, route and tool details, timing, scheduled retries, and prefix changes. Missing ledgers, incomplete reports, unpriced routes, or mixed currencies hide complete costs and budget evaluation; cold snapshots are explicitly diagnostic rather than provider invoices. The current session's configured soft budgets and sample-gated waste thresholds apply to each scope. These reminders never stop, downgrade, or reroute agents. The [session-stats README](../../session/session-stats/README.md) owns configuration and accounting limits.
 

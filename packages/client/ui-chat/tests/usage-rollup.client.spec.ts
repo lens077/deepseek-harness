@@ -115,7 +115,7 @@ describe('usage scope aggregation', () => {
     const { estimatedCost: _total, currency: _currency, ...unpriced } = base
     const ledger = { ...unpriced, models: [model] }
     const result = rollupUsage('session', ROOT, ledger, usageList({ root: ledger }))
-    expect(result.unpricedRequests).toBe(2)
+    expect(result.unpricedRequests).toBe(0)
     expect(result.estimatedCost).toBeUndefined()
     expect(result.currency).toBeUndefined()
   })

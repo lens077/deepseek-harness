@@ -127,7 +127,7 @@ export function rollupUsage(
       totals.requests += row.requests
       totals.steps += row.steps
       totals.incompleteRequests += row.incompleteRequests
-      if (row.estimatedCost === undefined) totals.unpricedRequests += row.requests
+      if (ledger.currency !== undefined && row.estimatedCost === undefined) totals.unpricedRequests += row.requests
       for (const key of ['uncachedInputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens'] as const) {
         totals[key] += row[key]
       }

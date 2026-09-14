@@ -1,5 +1,5 @@
 - banner:
-  - heading "Usage and cost" [level=2]
+  - heading "AI usage" [level=2]
   - button "Close usage panel":
     - img
 - group "Usage scope":
