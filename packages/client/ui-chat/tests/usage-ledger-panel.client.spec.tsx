@@ -152,10 +152,10 @@ describe('usage ledger drawer', () => {
     const base = usageLedger()
     const { currency: _currency, estimatedCost: _cost, ...ledger } = base
     const model = ledger.models[0]
-    const withoutPrice = model === undefined ? ledger : {
-      ...ledger,
-      models: [{ ...model, estimatedCost: undefined }],
-    }
+    const withoutPrice = model === undefined ? ledger : (() => {
+      const { estimatedCost: _modelCost, ...modelWithoutPrice } = model
+      return { ...ledger, models: [modelWithoutPrice] }
+    })()
     const view = render(<StatsPills {...props(withoutPrice)} />)
     fireEvent.click(view.getByRole('button', { name: /^AI usage:/ }))
     const panel = view.getByRole('dialog', { name: 'AI usage' })
