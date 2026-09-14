@@ -21,6 +21,7 @@ import { AppearanceRow } from './AppearanceRow.tsx'
 import type { FontSizeRowInjected } from './FontSizeRow.tsx'
 import { FontSizeRow } from './FontSizeRow.tsx'
 import { MobileAppearanceRows, type MobileAppearanceRowsInjected } from './MobileAppearanceRows.tsx'
+import { PureUiRow, type PureUiRowInjected } from './PureUiRow.tsx'
 import { MobileAppearancePolicy } from './mobile-appearance.ts'
 import { createAppearanceRowStore, createFontSizeRowStore } from './settings-store.ts'
 import { installThemeStyles } from './styles.ts'
@@ -33,6 +34,7 @@ import {
 
 export type { AppearanceRowComponentProps, AppearanceRowInjected } from './AppearanceRow.tsx'
 export type { FontSizeRowComponentProps, FontSizeRowInjected } from './FontSizeRow.tsx'
+export type { PureUiRowComponentProps, PureUiRowInjected } from './PureUiRow.tsx'
 export type { AppearanceRowState, FontSizeRowState } from './settings-store.ts'
 export type { ThemeKey } from './locales.ts'
 export type { ThemePreference, ThemeSettings, MobileLayout } from '../theme-settings.ts'
@@ -533,4 +535,15 @@ export function apply(ctx: ClientContext): void {
       setMobileLayout: (layout) => { theme.mobile.setLayout(layout) },
     }),
   }, MobileAppearanceRows))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'pure-ui',
+    order: 9,
+    locale: SETTINGS_NS,
+    inject: (): PureUiRowInjected => ({
+      hooks: { mobileAppearance: theme.mobile.appearance },
+      setPureUi: (enabled) => { theme.mobile.setPureUi(enabled) },
+    }),
+  }, PureUiRow))
 }

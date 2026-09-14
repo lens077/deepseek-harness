@@ -1,11 +1,14 @@
 /** Phone navigation chrome; business surfaces remain slot contributions. */
 import { useState } from 'react'
-import { IconNewChatOutline16, IconProjectAddOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEyeOutline16, IconNewChatOutline16, IconProjectAddOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import css from './MobileSidebar.module.css'
 
 /** Render fixed phone navigation around the full-width active surface. */
-export function MobileSidebar({ mobileView, navigateMobile, renderSlot, startUngrouped, t }: SidebarRootComponentProps) {
+export function MobileSidebar({
+  mobileView, navigateMobile, renderSlot, startUngrouped, useMobileAppearance, setPureUi, t,
+}: SidebarRootComponentProps) {
+  const pureUi = useMobileAppearance(value => value.pureUi)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const start = (): void => {
@@ -23,7 +26,19 @@ export function MobileSidebar({ mobileView, navigateMobile, renderSlot, startUng
     <>
       <header className={css.header}>
         <span className={css.title}>{t('brand.localBuild')}</span>
-        <div className={css.settings}>{renderSlot('sidebar.settings', { wide: false })}</div>
+        <div className={css.settings}>
+          <button
+            type="button"
+            className={css.pureUi}
+            aria-pressed={pureUi}
+            aria-label={t(pureUi ? 'pureUi.off' : 'pureUi.on')}
+            title={t(pureUi ? 'pureUi.off' : 'pureUi.on')}
+            onClick={() => { setPureUi(!pureUi) }}
+          >
+            <IconEyeOutline16 size={20} />
+          </button>
+          {renderSlot('sidebar.settings', { wide: false })}
+        </div>
       </header>
       <div className={css.workspaces} hidden={mobileView !== 'workspaces'}>
         {renderSlot('sidebar.workspaces', {

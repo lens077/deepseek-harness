@@ -82,6 +82,9 @@ describe('Chat apply wiring', () => {
       .toMatchObject({ kind: 'keyed', scope: 'session' })
     expect(b.runtime.slots.entries('conversation.composer.dock').map(row => row.options.id))
       .toEqual(['stats'])
+    // The phone tab strip carries the same pills; the stylesheet shows one seat per presentation.
+    expect(b.runtime.slots.entries('conversation.session.tabs.trailing').map(row => row.component))
+      .toEqual(b.runtime.slots.entries('conversation.composer.dock').map(row => row.component))
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
       .toEqual(['transcript-view', 'composer-enter', 'content-width', 'question-shortcuts'])
     await b.runtime.dispose()

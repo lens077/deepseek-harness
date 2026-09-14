@@ -85,6 +85,46 @@
   }
 }
 
+/* Phone: the chip shares the toolbar's one row with the three left controls
+   and the send button, so it takes whatever width is left and never wraps.
+   A long name keeps its END visible — the version suffix is what tells two
+   entries apart — by ellipsizing from the start: the box lays out
+   right-to-left so the ellipsis lands at its start edge. The icon-only
+   floor above does not apply; the name is the identification. */
+:global([data-mobile]) .root {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:global([data-mobile]) .trigger {
+  width: 100%;
+  max-width: none;
+  justify-content: flex-end;
+  padding-left: 4px;
+}
+
+:global([data-mobile]) .triggerIcon {
+  display: none;
+}
+
+:global([data-mobile]) .triggerLabel {
+  display: block;
+  flex: 0 1 auto;
+  direction: rtl;
+  text-align: right;
+}
+
+/* Left-to-right marks on both ends keep a name's leading or trailing
+   punctuation from migrating across the right-to-left box. */
+:global([data-mobile]) .triggerLabel::before,
+:global([data-mobile]) .triggerLabel::after {
+  content: '\200E';
+}
+
+:global([data-mobile]) .triggerEffort {
+  display: none;
+}
+
 .chevron {
   flex: 0 0 auto;
   color: var(--dsw-alias-label-caption);

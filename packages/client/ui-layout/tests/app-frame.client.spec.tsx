@@ -67,11 +67,11 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-type MobileAppearanceStub = { mobileFontSize: number; mobileLayout: 'large' | 'medium' | 'small' }
+type MobileAppearanceStub = { mobileFontSize: number; mobileLayout: 'large' | 'medium' | 'small'; pureUi: boolean }
 
 function mountFrame(
   windowWidth = frameWidth,
-  appearance: MobileAppearanceStub = { mobileFontSize: 16, mobileLayout: 'medium' },
+  appearance: MobileAppearanceStub = { mobileFontSize: 16, mobileLayout: 'medium', pureUi: false },
 ) {
   vi.stubGlobal('innerWidth', windowWidth)
   const instance = createLayoutStore().create()
@@ -543,7 +543,7 @@ describe('AppFrame pointer resizing', () => {
 describe('AppFrame phone presentation', () => {
   it('applies phone density and font only below the mobile breakpoint', () => {
     frameWidth = 390
-    const { frame, rerenderFrame, sidebarOwner } = mountFrame(390, { mobileFontSize: 20, mobileLayout: 'small' })
+    const { frame, rerenderFrame, sidebarOwner } = mountFrame(390, { mobileFontSize: 20, mobileLayout: 'small', pureUi: false })
     expect(frame.dataset.mobile).toBe('true')
     expect(frame.dataset.mobileLayout).toBe('small')
     expect(frame.dataset.mobileView).toBe('overview')
@@ -563,7 +563,7 @@ describe('AppFrame phone presentation', () => {
   })
 
   it('changes density without replacing the independently chosen phone font', () => {
-    const appearance: MobileAppearanceStub = { mobileFontSize: 18, mobileLayout: 'medium' }
+    const appearance: MobileAppearanceStub = { mobileFontSize: 18, mobileLayout: 'medium', pureUi: false }
     frameWidth = 390
     const { frame, rerenderFrame } = mountFrame(390, appearance)
     appearance.mobileLayout = 'large'
@@ -573,6 +573,22 @@ describe('AppFrame phone presentation', () => {
     rerenderFrame()
     expect(frame.dataset.mobileLayout).toBe('small')
     expect(frame.style.getPropertyValue('--dsh-mobile-font-size')).toBe('18px')
+  })
+
+  it('marks the pure-UI presentation on every viewport width', () => {
+    const appearance: MobileAppearanceStub = { mobileFontSize: 16, mobileLayout: 'medium', pureUi: true }
+    frameWidth = 1024
+    const { frame, rerenderFrame } = mountFrame(1024, appearance)
+    expect(frame.dataset.mobile).toBeUndefined()
+    expect(frame.dataset.pureUi).toBe('true')
+    appearance.pureUi = false
+    rerenderFrame()
+    expect(frame.dataset.pureUi).toBeUndefined()
+    resize(390)
+    appearance.pureUi = true
+    rerenderFrame()
+    expect(frame.dataset.mobile).toBe('true')
+    expect(frame.dataset.pureUi).toBe('true')
   })
 
   it('switches the phone surface to the conversation when another Session is selected', () => {

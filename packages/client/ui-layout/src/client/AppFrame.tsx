@@ -241,6 +241,7 @@ export function AppFrame({
       }}
       data-mobile={mobile || undefined}
       data-mobile-layout={mobile ? appearance.mobileLayout : undefined}
+      data-pure-ui={appearance.pureUi || undefined}
       data-mobile-view={mobile ? mobileView : undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}

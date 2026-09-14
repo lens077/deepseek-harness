@@ -485,6 +485,22 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
     expect(b.slotCalls).toContain('conversation.session.header.corner')
+    expect(b.slotCalls).toContain('conversation.session.tabs.trailing')
+  })
+
+  it('active phase carries the pure-UI composer button, which toggles the revealed mark on the root', () => {
+    const b = mount(sessionSnapshotOf())
+    const root = b.view.container.querySelector<HTMLElement>('[data-phase="active"]')!
+    const fab = b.view.getByRole('button', { name: '展开输入框' })
+    expect(root.hasAttribute('data-composer-revealed')).toBe(false)
+    fireEvent.click(fab)
+    expect(root.getAttribute('data-composer-revealed')).toBe('true')
+    expect(fab.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(b.view.getByRole('button', { name: '收起输入框' }))
+    expect(root.hasAttribute('data-composer-revealed')).toBe(false)
+    // The hero has no fold: its composer is the only surface.
+    const hero = mount(sessionSnapshotOf({ blank: true }))
+    expect(hero.view.container.querySelector('[data-composer-fab]')).toBeNull()
   })
 
   it('sticky composer seat wraps the whole overlay chain, not only the fallback stack', () => {

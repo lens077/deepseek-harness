@@ -47,6 +47,7 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
       useResource={useResource} useWorkspaces={neverHook}
       startUngrouped={async () => {}}
+      useMobileAppearance={neverHook} setPureUi={vi.fn()}
       startSession={startSession} toggleSidebar={toggleSidebar} t={t}
       renderSlot={((
         key: string,
@@ -119,6 +120,7 @@ describe('SidebarRoot shell', () => {
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
       useResource={useResource} useWorkspaces={neverHook}
       startUngrouped={async () => {}}
+      useMobileAppearance={neverHook} setPureUi={vi.fn()}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
@@ -139,6 +141,7 @@ describe('SidebarRoot shell', () => {
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
       useResource={useResource} useWorkspaces={neverHook}
       startUngrouped={async () => {}}
+      useMobileAppearance={neverHook} setPureUi={vi.fn()}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
@@ -154,6 +157,7 @@ describe('SidebarRoot shell', () => {
       useSessions={neverHook} useSessionPendingInteraction={useSessionPendingInteraction}
       useResource={useResource} useWorkspaces={neverHook}
       startUngrouped={async () => {}}
+      useMobileAppearance={neverHook} setPureUi={vi.fn()}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}

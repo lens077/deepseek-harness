@@ -386,8 +386,25 @@
   cursor: pointer;
 }
 
+/* Phone enlarge toggle: hidden on desktop, a small glyph in the card's top
+   right corner on a phone. */
+.expand {
+  display: none;
+}
+
+/* Phone composer: as short as the draft allows. One 24px line plus 2px of
+   top pad is the resting floor, the toolbar keeps every control on ONE row
+   (the model chip yields width instead of wrapping), and the controls stay
+   touchable at 36px rather than the frame's 44px. */
+:global([data-mobile]) .root {
+  padding-bottom: 4px;
+}
+
 :global([data-mobile]) .card {
-  gap: var(--dsh-mobile-row-gap);
+  --dsh-mobile-control-size: 36px;
+  gap: 2px;
+  padding-top: 4px;
+  border-radius: 18px;
 }
 
 :global([data-mobile]) .card button,
@@ -397,13 +414,97 @@
 }
 
 :global([data-mobile]) .input {
+  min-height: 30px;
+  padding: 2px 36px 0 12px;
   font-size: max(16px, var(--dsh-mobile-font-size));
+}
+
+:global([data-mobile]) .placeholder {
+  inset: 2px 36px auto 12px;
+}
+
+:global([data-mobile]) .hero .input {
+  min-height: 52px;
 }
 
 :global([data-mobile]) .notice,
 :global([data-mobile]) .select {
   font-size: var(--dsh-mobile-meta-size);
   line-height: 1.4;
+}
+
+:global([data-mobile]) .row {
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 0 6px 4px;
+}
+
+:global([data-mobile]) .tools {
+  flex: none;
+  gap: 6px;
+}
+
+:global([data-mobile]) .modes {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+:global([data-mobile]) .trailing {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: 0;
+}
+
+:global([data-mobile]) .add {
+  width: 32px;
+  height: 32px;
+}
+
+:global([data-mobile]) .primary {
+  width: 32px;
+  height: 32px;
+  transform: none;
+}
+
+:global([data-mobile]) .expand {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  corner-shape: round;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+:global([data-mobile]) .card button.expand {
+  min-width: 28px;
+  min-height: 28px;
+}
+
+:global([data-mobile]) .expand[aria-pressed='true'] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Enlarged: the draft scrollport takes about half of the phone viewport and
+   scrolls inside itself; the text surface fills it so a tap anywhere lands
+   in the draft. */
+:global([data-mobile]) .card[data-expanded] .scroll {
+  height: 45dvh;
+  max-height: 45dvh;
+}
+
+:global([data-mobile]) .card[data-expanded] .input {
+  min-height: 45dvh;
 }
 
 :global([data-mobile-layout='small']) .tools,

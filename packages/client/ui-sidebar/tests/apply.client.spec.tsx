@@ -12,11 +12,14 @@ async function bench(declare = true) {
   await ctx.plugin(SlotRegistry).await()
   const layout = { toggleSidebar: vi.fn() }
   const uiWorkspace = { startSession: vi.fn() }
+  const appearance = { getSnapshot: () => ({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false }), subscribe: () => () => {} }
+  const theme = { mobile: { appearance, setPureUi: vi.fn() } }
   const sessions = { create: vi.fn(async () => 'scratch'), open: vi.fn() }
   ctx.provide('sessions', sessions as never)
   ctx.provide('layout', layout)
   ctx.provide('uiWorkspace', uiWorkspace as never)
   ctx.provide('locale', new LocaleRuntime(ctx))
+  ctx.provide('theme', theme as never)
   const slots = ctx.get('slots') as SlotRegistry
   if (declare) {
     slots.register(
@@ -24,7 +27,7 @@ async function bench(declare = true) {
       () => null,
     )
   }
-  return { ctx, slots, layout, uiWorkspace, sessions }
+  return { ctx, slots, layout, uiWorkspace, sessions, theme }
 }
 
 describe('ui-sidebar apply', () => {
@@ -33,7 +36,7 @@ describe('ui-sidebar apply', () => {
   })
 
   it('declares only the services it uses', () => {
-    expect(inject).toEqual(['slots', 'layout', 'uiWorkspace', 'sessions', 'locale'])
+    expect(inject).toEqual(['slots', 'layout', 'uiWorkspace', 'sessions', 'locale', 'theme'])
   })
 
   it('registers the shell and declares its child seats', async () => {
@@ -48,7 +51,11 @@ describe('ui-sidebar apply', () => {
     // Copy rides the standard locale seat, not the inject face.
     expect(b.slots.entries('sidebar')[0]!.locale).toBe('sidebar')
     const injected = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)()
-    expect(Object.keys(injected)).toEqual(['startSession', 'startUngrouped', 'toggleSidebar'])
+    expect(Object.keys(injected)).toEqual(['hooks', 'startSession', 'startUngrouped', 'toggleSidebar', 'setPureUi'])
+    // The phone header echoes the theme's own observable; the switch writes through the theme.
+    expect(injected.hooks.mobileAppearance).toBe(b.theme.mobile.appearance)
+    injected.setPureUi(true)
+    expect(b.theme.mobile.setPureUi).toHaveBeenCalledWith(true)
     await injected.startUngrouped()
     expect(b.sessions.create).toHaveBeenCalledWith()
     expect(b.sessions.open).toHaveBeenCalledWith('scratch')

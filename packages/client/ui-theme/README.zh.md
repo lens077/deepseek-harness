@@ -33,7 +33,7 @@ kind: "package-reference"
 
 ### 手机外观
 
-通用设置还提供独立的手机偏好：`mobileLayout` 接受 `large`、`medium`（默认）或 `small`；`mobileFontSize` 接受 12 至 22 的整数 CSS 像素值，默认 16。改变密度会保留手机字号，两项偏好都不改变桌面 `fontSize`。主题持有的手机可观察状态提供根节点的 `data-mobile-layout` 与手机排版变量。
+通用设置还提供独立的手机偏好：`mobileLayout` 接受 `large`、`medium`（默认）或 `small`；`mobileFontSize` 接受 12 至 22 的整数 CSS 像素值，默认 16。改变密度会保留手机字号，两项偏好都不改变桌面 `fontSize`。主题持有的展示可观察状态提供根节点的 `data-mobile-layout`、手机排版变量以及跨设备生效的 `pureUi` 开关。纯净 UI 会隐藏会话顶部栏，把输入框收进右下角浮动按钮，同时在会话顶部保留当前提问，方便阅读。
 
 Host-backed scope 将这些值持久化到 `ui-theme`。使用 memory 模式的远程浏览器仅将手机偏好保存在同源浏览器存储的 `dsh.mobile.appearance` 中；无效存储值重置为 schema 默认值。这种浏览器本地持久化不改变远程桌面外观仅保留在进程内的策略。
 

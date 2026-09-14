@@ -147,6 +147,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /** Additive controls before the registered View tabs. */
     'conversation.session.tabs.leading': { kind: 'list'; scope: 'session' }
     /**
+     * Additive readings after the registered View tabs, on the same strip.
+     * The phone presentation shows this seat; desktop keeps the strip for tabs
+     * alone, so an occupant that also has a desktop seat hides itself here
+     * outside `[data-mobile]`.
+     */
+    'conversation.session.tabs.trailing': { kind: 'list'; scope: 'session' }
+    /**
      * The header's far-right corner, past the utilities' edge and into the
      * header's own padding, for one control that must keep its place whether or
      * not it currently shows anything. The corner reserves its width while an
@@ -437,6 +444,7 @@ export type ConversationSessionHeaderSlotProps =
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.tabs.leading'
+    | 'conversation.session.tabs.trailing'
     | 'conversation.session.header.corner'
   >
   & PropsStore<ConversationStore>

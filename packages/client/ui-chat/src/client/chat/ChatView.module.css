@@ -330,6 +330,37 @@
   overflow-wrap: anywhere;
 }
 
+/* Pure UI (frame data-pure-ui): the floating pill becomes one plain text line
+   pinned at the column's top-left — number and question, nothing else — on
+   the base fill so it stays legible over the transcript it overlays. The
+   full-text panel keeps working from the same toggle. */
+:global([data-pure-ui]) .questionBar {
+  top: 0;
+  left: 0;
+  max-width: none;
+  height: auto;
+  min-height: 24px;
+  padding: 2px 12px 2px 8px;
+  border-radius: 0;
+  --dsw-elevation-stroke-color: transparent;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: none;
+  transform: none;
+}
+
+:global([data-pure-ui]) .questionBarMeta,
+:global([data-pure-ui]) .questionBarFiles {
+  display: none;
+}
+
+:global([data-pure-ui]) .questionBarMain {
+  gap: 6px;
+}
+
+:global([data-pure-ui]) .questionBarText {
+  color: var(--dsw-alias-label-secondary);
+}
+
 /* A completed long Turn restates its opening question immediately before the tail. */
 .turnRecap {
   align-self: flex-start;
@@ -541,6 +572,13 @@
        tab bar (--mobile-nav-height, AppFrame) below that seat, so it has to
        be added back or the column's last entries sink into the input card. */
     bottom: calc(var(--dsh-composer-height, 152px) + var(--mobile-nav-height, 0px) + 16px);
+  }
+
+  /* Pure UI parks its 44px composer button in the same corner; the rail
+     stacks above it whether the composer is folded (button at the floor) or
+     revealed (button riding the composer's top edge). */
+  :global([data-pure-ui]) .questionNavigator {
+    bottom: calc(var(--dsh-composer-height, 0px) + var(--mobile-nav-height, 0px) + 76px);
   }
 
   .questionPanel {

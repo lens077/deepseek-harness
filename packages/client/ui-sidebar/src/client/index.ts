@@ -6,6 +6,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the Session root standard-props merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+// Type-only: pulls the theme service Context merge (ctx.theme) for the pure-UI switch.
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { SidebarRootInjected } from './contract/slots.ts'
 import { SidebarRoot } from './SidebarRoot.tsx'
 import { en, zh, type SidebarKey } from './locales.ts'
@@ -32,7 +34,7 @@ interface WorkspaceNavigation {
 }
 
 /** Services required by the sidebar plugin. */
-export const inject = ['slots', 'layout', 'uiWorkspace', 'sessions', 'locale']
+export const inject = ['slots', 'layout', 'uiWorkspace', 'sessions', 'locale', 'theme']
 
 /** Registers the sidebar shell and its service callbacks.
  * @param ctx - Client root context.
@@ -42,11 +44,13 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-sidebar: dictionaries')
 
   const injectProps = (): SidebarRootInjected => ({
+    hooks: { mobileAppearance: ctx.theme.mobile.appearance },
     // The shell's New Session button rides the Workspace UI's shared action
     // (current Session Workspace, then recent Workspace).
     startSession: (workspaceId) => { workspaceNavigation.startSession(workspaceId) },
     startUngrouped: async () => { ctx.sessions.open(await ctx.sessions.create()) },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
+    setPureUi: (enabled) => { ctx.theme.mobile.setPureUi(enabled) },
   })
   ctx.effect(
     () => ctx.slots.register({

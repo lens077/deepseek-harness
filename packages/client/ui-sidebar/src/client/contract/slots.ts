@@ -7,8 +7,11 @@
  * `sidebar.settings` registrant's (ui-settings), followed by optional footer
  * actions in `sidebar.footer.action`.
  */
-import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+// Type-only: the theme-owned presentation snapshot the phone header echoes.
+import type { MobileAppearance } from '@deepseek-ai/dsh-client-ui-theme/client'
 // Type-only: pulls ui-layout's SlotMap merge (the 'sidebar' entry) into every
 // program that sees this contract, so PropsRuntime<'sidebar'> resolves.
 import type { MobileNavigationOwnerProps } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -106,9 +109,16 @@ export interface SidebarNavEntryOwnerProps extends MobileNavigationOwnerProps {
 /**
  * Registrant-private injected share (arrives via the register inject
  * factory). The shell keeps only its own controls: starting a Session from
- * the New Session button and toggling the column.
+ * the New Session button, toggling the column, and the phone header's pure-UI
+ * switch (the theme feature owns the preference; the shell only echoes it).
  */
 export type SidebarRootInjected = {
+  /** Theme-owned presentation snapshot, bound as `useMobileAppearance` for the phone header switch. */
+  hooks: {
+    mobileAppearance: ObservableSnapshot<MobileAppearance>
+  }
+  /** Switch the theme-owned pure-UI presentation. */
+  setPureUi: (enabled: boolean) => void
   /**
    * Start a New Session: with a workspace, reuse-or-create its blank session
    * and open it; without one, inherit the current Session Workspace, then the
@@ -136,4 +146,4 @@ export type SidebarRootComponentProps =
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >
-  & SidebarRootInjected & PropsLocale<'sidebar'>
+  & InjectFace<SidebarRootInjected> & PropsLocale<'sidebar'>

@@ -66,3 +66,53 @@ button.pill[aria-expanded='true'] {
   color: var(--dsw-alias-separator-primary);
   margin: 0 6px;
 }
+
+/* Seat selection by presentation: desktop reads the pills under the
+   composer; a phone reads them on the tab strip, right-aligned and tighter,
+   and the dock copy leaves the composer so the card stays as short as it can. */
+:global([data-slot='conversation.session.tabs.trailing']) .root {
+  display: none;
+}
+
+:global([data-mobile]) :global([data-slot='conversation.composer.dock']) .root {
+  display: none;
+}
+
+:global([data-mobile]) :global([data-slot='conversation.session.tabs.trailing']) .root {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Each pill yields to the strip's room and ellipsizes its own reading; the
+   glyphs go so the numbers keep the width, and the timing pill absorbs the
+   deficit first so the token total stays whole. */
+:global([data-mobile]) :global([data-slot='conversation.session.tabs.trailing']) .anchor {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+:global([data-mobile]) :global([data-slot='conversation.session.tabs.trailing']) .anchor:first-child {
+  flex-shrink: 1000;
+}
+
+:global([data-mobile]) :global([data-slot='conversation.session.tabs.trailing']) .pill {
+  min-width: 0;
+  padding: 0 4px;
+  gap: 4px;
+}
+
+:global([data-mobile]) :global([data-slot='conversation.session.tabs.trailing']) .pill svg {
+  display: none;
+}
+
+:global([data-mobile]) :global([data-slot='conversation.session.tabs.trailing']) .sep {
+  margin: 0 3px;
+}

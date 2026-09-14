@@ -1160,15 +1160,31 @@ describe('running and lock semantics', () => {
     expect(empty.button.disabled).toBe(true)
   })
 
-  it('unlock refocuses the surface; mousedown on the button keeps focus', () => {
+  it('unlock leaves focus alone; mousedown on the button keeps focus', () => {
     const first = bench({ disabled: true, draft: 'x' })
     const textarea = first.view.container.querySelector<HTMLDivElement>('[data-composer-input]')!
     const focused: (boolean | undefined)[] = []
     textarea.focus = (options?: FocusOptions) => { focused.push(options?.preventScroll) }
     act(() => { first.session.set(snapshotOf({ removed: false })) })
-    expect(focused).toEqual([true])
+    expect(focused).toEqual([])
     fireEvent.mouseDown(first.view.container.querySelector('button[aria-label="发送消息"]')!)
-    expect(focused).toEqual([true, true])
+    expect(focused).toEqual([true])
+  })
+
+  it('the enlarge toggle marks the card expanded and back without touching the draft', () => {
+    const { view, shell } = bench({ draft: 'kept' })
+    const card = view.container.querySelector<HTMLElement>('[data-composer-card]')!
+    const toggle = view.getByRole('button', { name: '放大输入区' })
+    expect(card.hasAttribute('data-expanded')).toBe(false)
+    fireEvent.click(toggle)
+    expect(card.getAttribute('data-expanded')).toBe('true')
+    expect(view.getByRole('button', { name: '还原输入区' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(view.getByRole('button', { name: '还原输入区' }))
+    expect(card.hasAttribute('data-expanded')).toBe(false)
+    expect(shell.snapshot.draft).toBe('kept')
+    // The hero and the workspace-picking states carry no enlarge toggle.
+    expect(bench({ variant: 'hero' }).view.container.querySelector('[data-composer-expand]')).toBeNull()
+    expect(bench({ inert: true, onRequestWorkspace: vi.fn() }).view.container.querySelector('[data-composer-expand]')).toBeNull()
   })
 
   it('a programmatic draft write echoes back through the state and the editor DOM', () => {
@@ -1243,12 +1259,13 @@ describe('running and lock semantics', () => {
     expect(bench({ draft: 'a\nb' }).shell.snapshot.draft).toBe('a\nb')
   })
 
-  it('a session switch refocuses the editable surface with preventScroll', () => {
+  it('mount and a session switch never focus the editable surface', () => {
     const { view, textarea, props } = bench({ draft: 'line one' })
     const focused: (boolean | undefined)[] = []
     textarea.focus = (options?: FocusOptions) => { focused.push(options?.preventScroll) }
+    expect(document.activeElement).not.toBe(textarea)
     act(() => { view.rerender(<InputBar {...props} sessionId={'s2' as SessionId} />) })
-    expect(focused).toEqual([true])
+    expect(focused).toEqual([])
   })
 
   it('a persisted draft adopted after mount does not steal focus from another control', () => {

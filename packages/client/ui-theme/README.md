@@ -33,7 +33,7 @@ The plugin registers Appearance preference cubes and a font-size stepper in the 
 
 ### Phone appearance
 
-General settings also provides independent phone preferences: `mobileLayout` accepts `large`, `medium` (default), or `small`; `mobileFontSize` accepts integer CSS-pixel values from 12 through 22 and defaults to 16. Changing density preserves the phone font size, and neither preference changes desktop `fontSize`. The theme-owned mobile observable supplies the root's `data-mobile-layout` and phone typography variables.
+General settings also provides independent phone preferences: `mobileLayout` accepts `large`, `medium` (default), or `small`; `mobileFontSize` accepts integer CSS-pixel values from 12 through 22 and defaults to 16. Changing density preserves the phone font size, and neither preference changes desktop `fontSize`. The theme-owned presentation observable supplies the root's `data-mobile-layout`, phone typography variables, and the cross-viewport `pureUi` switch. Pure UI hides Session chrome and folds the composer behind a floating action button while keeping the current question readable at the top of the transcript.
 
 Host-backed scopes persist these values in `ui-theme`. Memory-mode remote browsers persist only the phone preferences in origin-local browser storage under `dsh.mobile.appearance`; invalid stored values reset to schema defaults. This browser-local persistence does not change the process-local policy for remote desktop appearance.
 

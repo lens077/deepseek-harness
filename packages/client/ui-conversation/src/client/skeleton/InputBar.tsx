@@ -17,7 +17,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconChevronDownOutline14, IconFullscreenOutline16, IconPaperclipOutline16, IconPlusOutline16,
+  IconWarningOutline16, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -113,6 +114,9 @@ export const InputBar = memo(function InputBar({
   }, [notice, showToast])
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  // Phone-only enlarge toggle (CSS keeps the control hidden elsewhere): the
+  // draft scrollport grows to roughly half the viewport with its own bar.
+  const [expanded, setExpanded] = useState(false)
 
   // The Access seat's data: the host-computed permissions projection
   // (undefined = capability absent → the chip renders nothing).
@@ -177,22 +181,14 @@ export const InputBar = memo(function InputBar({
     else if (rect.top < box.top) scrollEl.scrollTop -= box.top - rect.top
   }
 
-  // Unlock (mount / session switch) returns focus to the box, and owns the
-  // reveal that comes with it. Lexical's focus() suppresses the browser's
-  // scroll walk (preventScroll inside), so the reveal in our own scrollport
-  // is ours to perform — switching to a longer draft otherwise leaves the
-  // caret (restored at the draft's end) off screen.
-  useEffect(() => {
-    if (locked || editor === null) return
-    // Lexical's focus() restores the editor selection but never calls the DOM
-    // focus itself; preventScroll keeps the conversation scrollport still.
-    editor.getRootElement()?.focus({ preventScroll: true })
-    editor.focus(() => { revealSelection() })
-  }, [locked, sessionId, editor])
+  // Neither mount, unlock, nor a session switch focuses the box: opening a
+  // Session must not raise a phone keyboard or move desktop focus off the
+  // control the user was on. Focus arrives only from the user's own tap or
+  // the keep-focus mousedown below.
 
-  // A persisted draft arrives AFTER the unlock effect: ConversationSession
-  // adopts it in its own mount effect, and a parent's mount effect runs after
-  // its children's. Reveal when the draft becomes non-empty so a restored long
+  // A persisted draft arrives after mount: ConversationSession adopts it in
+  // its own mount effect, and a parent's mount effect runs after its
+  // children's. Reveal when the draft becomes non-empty so a restored long
   // draft does not stay at its head with the caret at its end. This effect does
   // not focus: send-clear, failed-send restore, and first-character transitions
   // must not steal focus from another control the user moved to.
@@ -432,11 +428,26 @@ export const InputBar = memo(function InputBar({
         ref={cardRef}
         className={clsx(css.card, workspaceTrigger && css.cardWorkspaceTrigger)}
         data-composer-card
+        data-expanded={expanded || undefined}
         onClick={workspaceTrigger ? onRequestWorkspace : undefined}
         onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
       >
         {sessionId !== undefined && (
           <div className={css.overlayAnchor}>{renderSlot('conversation.input.overlay', {})}</div>
+        )}
+        {variant === 'composer' && !workspaceTrigger && (
+          <button
+            type="button"
+            className={css.expand}
+            data-composer-expand=""
+            aria-pressed={expanded}
+            aria-label={t(expanded ? 'input.collapse' : 'input.expand')}
+            title={t(expanded ? 'input.collapse' : 'input.expand')}
+            onMouseDown={keepFocus}
+            onClick={() => { setExpanded(open => !open) }}
+          >
+            {expanded ? <IconChevronDownOutline14 /> : <IconFullscreenOutline16 size={14} />}
+          </button>
         )}
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
         {renderSlot('conversation.input.attachments', {

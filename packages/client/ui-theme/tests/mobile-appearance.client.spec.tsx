@@ -8,12 +8,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ThemeSettingsSchema, type ThemeSettings } from '../src/theme-settings.ts'
 import { MobileAppearancePolicy } from '../src/client/mobile-appearance.ts'
 import { MobileAppearanceRows } from '../src/client/MobileAppearanceRows.tsx'
+import { PureUiRow } from '../src/client/PureUiRow.tsx'
 import { ThemeRuntime } from '../src/client/index.ts'
 import { en } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup(); localStorage.clear() })
 
-const defaults = { preference: 'system', fontSize: 14, mobileFontSize: 16, mobileLayout: 'medium' }
+const defaults = { preference: 'system', fontSize: 14, mobileFontSize: 16, mobileLayout: 'medium', pureUi: false }
 
 describe('phone appearance preferences', () => {
   it('defaults phone settings independently of the existing desktop preference', () => {
@@ -25,6 +26,9 @@ describe('phone appearance preferences', () => {
     for (const mobileLayout of ['large', 'medium', 'small'] as const) expect(ThemeSettingsSchema({ mobileLayout }).mobileLayout).toBe(mobileLayout)
     // @ts-expect-error -- Serialized settings can contain an unsupported layout id.
     expect(() => ThemeSettingsSchema({ mobileLayout: 'compact' })).toThrow()
+    expect(ThemeSettingsSchema({ pureUi: true }).pureUi).toBe(true)
+    // @ts-expect-error -- Serialized settings can carry a non-boolean switch value.
+    expect(() => ThemeSettingsSchema({ pureUi: 'yes' })).toThrow()
   })
 
   it('persists font and layout separately without publishing a desktop theme change', () => {
@@ -36,16 +40,18 @@ describe('phone appearance preferences', () => {
     mobile.setFontSize(20)
     mobile.setLayout('large')
     mobile.setLayout('small')
-    expect(mobile.appearance.getSnapshot()).toEqual({ mobileFontSize: 20, mobileLayout: 'small' })
+    mobile.setPureUi(true)
+    expect(mobile.appearance.getSnapshot()).toEqual({ mobileFontSize: 20, mobileLayout: 'small', pureUi: true })
     expect(theme.getTheme()).toBe(desktop)
-    expect(host.set.mock.calls).toEqual([['mobileFontSize', 20], ['mobileLayout', 'large'], ['mobileLayout', 'small']])
+    expect(host.set.mock.calls).toEqual([['mobileFontSize', 20], ['mobileLayout', 'large'], ['mobileLayout', 'small'], ['pureUi', true]])
     mobile.setFontSize(20)
     mobile.setLayout('small')
-    expect(host.set).toHaveBeenCalledTimes(3)
+    mobile.setPureUi(true)
+    expect(host.set).toHaveBeenCalledTimes(4)
     host.publish({ value: ThemeSettingsSchema({ mobileFontSize: 18, mobileLayout: 'medium', fontSize: 17 }) })
-    expect(mobile.appearance.getSnapshot()).toEqual({ mobileFontSize: 18, mobileLayout: 'medium' })
+    expect(mobile.appearance.getSnapshot()).toEqual({ mobileFontSize: 18, mobileLayout: 'medium', pureUi: false })
     expect(theme.getTheme().fontSize).toBe(17)
-    expect(host.set).toHaveBeenCalledTimes(3)
+    expect(host.set).toHaveBeenCalledTimes(4)
     const accepted = mobile.appearance.getSnapshot()
     host.publish({ revision: 2 })
     expect(mobile.appearance.getSnapshot()).toBe(accepted)
@@ -57,18 +63,19 @@ describe('phone appearance preferences', () => {
     const first = new MobileAppearancePolicy(host.scope)
     first.setFontSize(19)
     first.setLayout('small')
-    expect(JSON.parse(localStorage.getItem('dsh.mobile.appearance')!)).toEqual({ mobileFontSize: 19, mobileLayout: 'small' })
-    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 19, mobileLayout: 'small' })
+    first.setPureUi(true)
+    expect(JSON.parse(localStorage.getItem('dsh.mobile.appearance')!)).toEqual({ mobileFontSize: 19, mobileLayout: 'small', pureUi: true })
+    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 19, mobileLayout: 'small', pureUi: true })
     expect(host.set).not.toHaveBeenCalled()
     const localHost = stubSettingsScope<ThemeSettings>()
-    expect(new MobileAppearancePolicy(localHost.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 16, mobileLayout: 'medium' })
+    expect(new MobileAppearancePolicy(localHost.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false })
   })
 
   it('validates browser-stored phone fields before using them', () => {
     const host = stubSettingsScope<ThemeSettings>()
     host.publish({ mode: 'memory', status: 'unavailable' })
     localStorage.setItem('dsh.mobile.appearance', JSON.stringify({ mobileFontSize: 100, mobileLayout: 'unknown' }))
-    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 16, mobileLayout: 'medium' })
+    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false })
   })
 
   it('shows three labeled layouts and preserves a chosen font while switching density', () => {
@@ -94,5 +101,26 @@ describe('phone appearance preferences', () => {
     expect((view.getByRole('button', { name: 'Increase mobile font size' }) as HTMLButtonElement).disabled).toBe(true)
     act(() => { policy.setFontSize(12) })
     expect((view.getByRole('button', { name: 'Decrease mobile font size' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('the pure-UI row echoes the persisted switch and writes through the policy', () => {
+    const host = stubSettingsScope<ThemeSettings>()
+    const policy = new MobileAppearancePolicy(host.scope)
+    const useMobileAppearance: ComponentProps<typeof PureUiRow>['useMobileAppearance'] = selector =>
+      selector(useSyncExternalStore(fn => policy.appearance.subscribe(fn), () => policy.appearance.getSnapshot()))
+    const props = {
+      useMobileAppearance,
+      setPureUi: (enabled: boolean) => { policy.setPureUi(enabled) },
+      t: makeTranslate(en),
+    } as ComponentProps<typeof PureUiRow>
+    const view = render(<PureUiRow {...props} />)
+    const toggle = view.getByRole('switch', { name: 'Pure UI' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    expect(policy.appearance.getSnapshot().pureUi).toBe(true)
+    expect(host.set).toHaveBeenCalledWith('pureUi', true)
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    act(() => { policy.setPureUi(false) })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 })

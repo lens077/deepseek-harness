@@ -32,6 +32,8 @@ export const zh = {
   'mobile.fontSize.increase': '增大手机字号',
   'mobile.fontSize.decrease': '减小手机字号',
   'mobile.fontSize.value': '{size} px',
+  'pureUi.title': '纯净 UI',
+  'pureUi.description': '隐藏会话顶部栏，提问以纯文字置顶，输入框收进右下角的圆形按钮，尽可能多地显示回答内容。',
 } satisfies Record<string, string>
 
 /** The settings.theme namespace key union. */
@@ -69,4 +71,6 @@ export const en = {
   'mobile.fontSize.increase': 'Increase mobile font size',
   'mobile.fontSize.decrease': 'Decrease mobile font size',
   'mobile.fontSize.value': '{size} px',
+  'pureUi.title': 'Pure UI',
+  'pureUi.description': 'Hide the Session header, pin the question as plain text, and fold the composer behind a round button so answers take the whole column.',
 } satisfies Record<ThemeKey, string>

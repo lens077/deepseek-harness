@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { IconCloseOutline16, IconEditOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import { conversationPhase } from '../contract/snapshot.ts'
@@ -156,6 +157,10 @@ export function ConversationRoot({
   const composerBlock = useComposerBlock(block => block)
 
   const [mobileRailOpen, setMobileRailOpen] = useState(false)
+  // Pure UI (frame data-pure-ui) folds the docked composer away; this local
+  // flag unfolds it behind the floating button. The attribute it publishes
+  // is inert outside pure UI, so the flag never needs to know the mode.
+  const [composerRevealed, setComposerRevealed] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
@@ -167,6 +172,7 @@ export function ConversationRoot({
   // seat leaves visible. Callback ref, not an effect; stable identity prevents
   // observer churn while the first blank session fills the resident body
   // outlet.
+  const rootEl = useRef<HTMLDivElement | null>(null)
   const seatObserver = useRef<ResizeObserver | null>(null)
   const seatResizeRef = useCallback((seat: HTMLDivElement | null): void => {
     seatObserver.current?.disconnect()
@@ -175,6 +181,9 @@ export function ConversationRoot({
     if (seat === null || scroller === null) return
     seatObserver.current = new ResizeObserver(() => {
       scroller.style.setProperty('--dsh-composer-height', `${seat.offsetHeight}px`)
+      // The pure-UI floating button is the scroller's sibling, so it reads
+      // the same measurement from the root.
+      rootEl.current?.style.setProperty('--dsh-composer-height', `${seat.offsetHeight}px`)
       scroller.style.setProperty(
         '--dsh-conversation-viewport-height',
         `${scroller.clientHeight}px`,
@@ -190,7 +199,6 @@ export function ConversationRoot({
   // column WITHOUT rewriting the stored preference — widening the window
   // restores it. In fill mode the callback ref detaches the observer and
   // clears both variables so the 100% axis applies untouched.
-  const rootEl = useRef<HTMLDivElement | null>(null)
   const rootObserver = useRef<ResizeObserver | null>(null)
   const publishWidths = useCallback((root: HTMLDivElement): void => {
     const column = root.offsetWidth
@@ -387,7 +395,13 @@ export function ConversationRoot({
   )
 
   return (
-    <div ref={rootResizeRef} className={css.root} data-phase={phase} data-width-mode={widthMode}>
+    <div
+      ref={rootResizeRef}
+      className={css.root}
+      data-phase={phase}
+      data-width-mode={widthMode}
+      data-composer-revealed={composerRevealed || undefined}
+    >
       {sessionId === undefined ? null : renderSlot('conversation.session.header', {})}
       <div className={css.body} data-mobile-rail-open={mobileRailOpen || undefined}>
         {railOccupied && sessionId !== undefined && <button type="button" className={css.mobileRailToggle}
@@ -402,6 +416,21 @@ export function ConversationRoot({
             </div>
           )
           : scrollBody}
+        {/* Pure UI only (CSS keeps it hidden otherwise): the round button that
+            unfolds and folds the docked composer over the transcript. */}
+        {phase === 'active' && (
+          <button
+            type="button"
+            className={css.composerFab}
+            data-composer-fab=""
+            aria-expanded={composerRevealed}
+            aria-label={t(composerRevealed ? 'pure.hideComposer' : 'pure.showComposer')}
+            title={t(composerRevealed ? 'pure.hideComposer' : 'pure.showComposer')}
+            onClick={() => { setComposerRevealed(open => !open) }}
+          >
+            {composerRevealed ? <IconCloseOutline16 size={18} /> : <IconEditOutline16 size={18} />}
+          </button>
+        )}
         {/* Width handles only in the adaptive Settings mode and only while a
             transcript is on screen; the fill mode and the hero have no
             draggable content column. */}

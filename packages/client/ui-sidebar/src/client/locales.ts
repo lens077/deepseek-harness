@@ -11,6 +11,8 @@ export const zh = {
   'mobile.navigation': '移动端主导航',
   'mobile.workspaces': '工作区',
   'mobile.newFailed': '无法创建未分组会话：{message}',
+  'pureUi.on': '开启纯净 UI',
+  'pureUi.off': '关闭纯净 UI',
 } satisfies Record<string, string>
 
 /** The sidebar namespace key union. */
@@ -27,4 +29,6 @@ export const en = {
   'mobile.navigation': 'Mobile navigation',
   'mobile.workspaces': 'Workspaces',
   'mobile.newFailed': 'Could not create an Ungrouped session: {message}',
+  'pureUi.on': 'Turn on pure UI',
+  'pureUi.off': 'Turn off pure UI',
 } satisfies Record<SidebarKey, string>

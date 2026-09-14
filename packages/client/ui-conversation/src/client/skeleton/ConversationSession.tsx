@@ -156,6 +156,9 @@ export function ConversationSessionHeader({
                   {viewTab.label}
                 </button>
               ))}
+              <div className={css.tabsTrailing}>
+                {renderSlot('conversation.session.tabs.trailing', {})}
+              </div>
             </div>
           )}
         </>

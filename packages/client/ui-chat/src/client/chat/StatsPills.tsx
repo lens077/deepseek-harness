@@ -2,7 +2,9 @@
 // without the ledger retain their token-usage dialog and durable stats fallback.
 // Settled-node identity prevents stream-delta updates from rerendering the row.
 // Mounted on 'conversation.composer.dock' so it sticks with the composer in the
-// active conversation scrollport (see ConversationRoot data-conversation-scroll).
+// active conversation scrollport (see ConversationRoot data-conversation-scroll),
+// and again on 'conversation.session.tabs.trailing' for the phone tab strip;
+// the stylesheet shows one seat per presentation.
 
 import { memo, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -118,9 +120,9 @@ export function billedInputTokens(usage: TokenUsageProjection): number {
   return usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
 }
 
-/** Framework seats supplied by the Session-scoped composer dock. */
+/** Framework seats shared by both Session-scoped seats (composer dock, phone tab strip). */
 export type StatsPillsProps = Pick<
-  PropsRuntime<'conversation.composer.dock'>,
+  PropsRuntime<'conversation.composer.dock'> & PropsRuntime<'conversation.session.tabs.trailing'>,
   'useChat' | 'useProjection' | 'useSessions' | 'sessionId'
 > & Pick<ChatViewSlotProps, 't'>
 

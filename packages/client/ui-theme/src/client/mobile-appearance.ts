@@ -1,17 +1,33 @@
-/** Phone appearance preferences, separate from the desktop theme snapshot. */
+/** Presentation preferences kept separate from the desktop theme snapshot: phone density, phone font size, and the pure-UI switch. */
 import { createSnapshotStore, type ObservableSnapshot, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  DEFAULT_MOBILE_FONT_SIZE, DEFAULT_MOBILE_LAYOUT, MOBILE_FONT_SIZE_FIELD, MOBILE_LAYOUT_FIELD,
-  ThemeSettingsSchema, type MobileLayout, type ThemeSettings,
+  DEFAULT_MOBILE_FONT_SIZE, DEFAULT_MOBILE_LAYOUT, DEFAULT_PURE_UI, MOBILE_FONT_SIZE_FIELD, MOBILE_LAYOUT_FIELD,
+  PURE_UI_FIELD, ThemeSettingsSchema, type MobileLayout, type ThemeSettings,
 } from '../theme-settings.ts'
 
-/** Phone presentation values consumed by the root and the mobile settings rows. */
-export type MobileAppearance = Pick<ThemeSettings, 'mobileFontSize' | 'mobileLayout'>
+/**
+ * Presentation values consumed by the root frame and the settings rows.
+ * `mobileFontSize` and `mobileLayout` apply below the phone breakpoint only;
+ * `pureUi` applies to every viewport.
+ */
+export type MobileAppearance = Pick<ThemeSettings, 'mobileFontSize' | 'mobileLayout' | 'pureUi'>
 
-const INITIAL: MobileAppearance = { mobileFontSize: DEFAULT_MOBILE_FONT_SIZE, mobileLayout: DEFAULT_MOBILE_LAYOUT }
+const INITIAL: MobileAppearance = {
+  mobileFontSize: DEFAULT_MOBILE_FONT_SIZE, mobileLayout: DEFAULT_MOBILE_LAYOUT, pureUi: DEFAULT_PURE_UI,
+}
 
-/** Theme-owned phone settings; remote browsers persist only these values locally. */
+function pick(section: ThemeSettings): MobileAppearance {
+  return { mobileFontSize: section.mobileFontSize, mobileLayout: section.mobileLayout, pureUi: section.pureUi }
+}
+
+function same(left: MobileAppearance, right: MobileAppearance): boolean {
+  return left.mobileFontSize === right.mobileFontSize
+    && left.mobileLayout === right.mobileLayout
+    && left.pureUi === right.pureUi
+}
+
+/** Theme-owned presentation settings; remote browsers persist only these values locally. */
 export class MobileAppearancePolicy {
   private readonly source: SnapshotStore<MobileAppearance>
   /** Stable observable consumed through framework-bound hooks. */
@@ -26,7 +42,7 @@ export class MobileAppearancePolicy {
       let stored: ThemeSettings
       try { stored = ThemeSettingsSchema(this.source.getSnapshot()) }
       catch { stored = ThemeSettingsSchema({}) } // Invalid browser-stored preferences reset to schema defaults.
-      this.source.set({ mobileFontSize: stored.mobileFontSize, mobileLayout: stored.mobileLayout })
+      this.source.set(pick(stored))
     }
     this.appearance = this.source
   }
@@ -54,13 +70,23 @@ export class MobileAppearancePolicy {
   }
 
   /**
+   * Switch the pure-UI presentation on every viewport.
+   * @param enabled - whether the Session header and composer fold away.
+   */
+  setPureUi(enabled: boolean): void {
+    const current = this.source.getSnapshot()
+    if (current.pureUi === enabled) return
+    this.source.set({ ...current, pureUi: enabled })
+    if (this.host.getSnapshot().mode === 'host') void this.host.set(PURE_UI_FIELD, enabled)
+  }
+
+  /**
    * Adopt the theme owner's accepted Host settings without writing them back.
    * @param value - schema-resolved theme section from the existing scope listener.
    */
   adopt(value: ThemeSettings): void {
-    const section = ThemeSettingsSchema(value)
-    const current = this.source.getSnapshot()
-    if (current.mobileFontSize === section.mobileFontSize && current.mobileLayout === section.mobileLayout) return
-    this.source.set({ mobileFontSize: section.mobileFontSize, mobileLayout: section.mobileLayout })
+    const next = pick(ThemeSettingsSchema(value))
+    if (same(this.source.getSnapshot(), next)) return
+    this.source.set(next)
   }
 }

@@ -36,6 +36,29 @@
   min-height: 44px;
 }
 
+/* Pure-UI switch left of the settings gear: a bare glyph button that reads
+   as pressed while the presentation is on. */
+.pureUi {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.pureUi[aria-pressed='true'] {
+  color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pureUi:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: -3px;
+}
+
 .navigation {
   position: absolute;
   inset: auto 0 0;

@@ -231,6 +231,24 @@
   background: var(--dsw-alias-state-business-primary);
 }
 
+/* Trailing readings on the tab strip (conversation.session.tabs.trailing):
+   laid out only in the phone presentation, where the strip is the one row
+   with room left of the edge; desktop keeps the strip for tabs alone. */
+.tabsTrailing {
+  display: none;
+}
+
+:global([data-mobile]) .tabsTrailing {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
+  padding-bottom: 6px;
+  overflow: hidden;
+}
+
 .viewArea {
   display: flex;
   flex: 1;
@@ -580,31 +598,69 @@
   --dsh-composer-side-clearance: var(--dsh-mobile-page-padding);
 }
 
+/* Phone header: two short rows (title cluster, then tabs + readings). The
+   phone control size stays touchable at 36px here rather than the frame's
+   44px so the strip above the transcript costs as little height as it can. */
 :global([data-mobile]) .header {
-  padding: var(--dsh-mobile-row-gap) var(--dsh-mobile-page-padding) 0;
+  --dsh-mobile-control-size: 36px;
+  padding: 2px var(--dsh-mobile-page-padding) 0;
+}
+
+:global([data-mobile]) .titleRow {
+  min-height: 32px;
 }
 
 :global([data-mobile]) .crumb {
-  min-height: var(--dsh-mobile-control-size);
-  font-size: var(--dsh-mobile-font-size);
-  line-height: 1.4;
-}
-
-:global([data-mobile]) .crumbCurrent {
-  font-size: var(--dsh-mobile-title-size);
-}
-
-:global([data-mobile]) .tab,
-:global([data-mobile]) .mobileRailToggle {
-  min-height: var(--dsh-mobile-control-size);
+  min-height: 32px;
+  padding-block: 2px;
   font-size: var(--dsh-mobile-meta-size);
   line-height: 1.4;
 }
 
-:global([data-mobile]) .headerActions button,
-:global([data-mobile]) .headerUtilities button {
-  min-width: var(--dsh-mobile-control-size);
-  min-height: var(--dsh-mobile-control-size);
+:global([data-mobile]) .crumbCurrent {
+  font-size: var(--dsh-mobile-meta-size);
+}
+
+:global([data-mobile]) .tab,
+:global([data-mobile]) .mobileRailToggle {
+  min-height: 32px;
+  font-size: var(--dsh-mobile-meta-size);
+  line-height: 1.4;
+}
+
+:global([data-mobile]) .tabs {
+  gap: 16px;
+  margin-top: 0;
+  overflow-x: visible;
+}
+
+/* Tabs and the leading controls keep their one-line width; only the trailing
+   readings yield to the strip's remaining room. */
+:global([data-mobile]) .tab,
+:global([data-mobile]) .tabs :global([data-slot='conversation.session.tabs.leading']) > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+:global([data-mobile]) .tab {
+  padding-bottom: 6px;
+}
+
+:global([data-mobile]) .tab::after {
+  bottom: 0;
+}
+
+:global([data-mobile]) .headerActions button {
+  min-height: 32px;
+}
+
+/* Phone: the open-in-app and Session-log utilities, the right-sidebar corner
+   control, and the files rail toggle stay out of the strip; the tabs and the
+   composer already reach their surfaces. */
+:global([data-mobile]) .headerUtilities,
+:global([data-mobile]) .headerCorner,
+:global([data-mobile]) .mobileRailToggle {
+  display: none;
 }
 
 :global([data-mobile-layout='small']) .tabs {
@@ -614,4 +670,59 @@
 
 :global([data-mobile-layout='small']) .composerStack {
   --dsh-composer-stack-gap: 3px;
+}
+
+/* Pure UI (frame data-pure-ui): the Session header leaves the column and the
+   docked composer folds behind the floating button below; only the elected
+   composer overlay (approval, questions) keeps its seat so an interaction
+   can never hide behind the fold. The hero and settling phases keep their
+   composer: there is nothing else to read. */
+.composerFab {
+  display: none;
+}
+
+:global([data-pure-ui]) .header {
+  display: none;
+}
+
+:global([data-pure-ui]) .root[data-phase='active']:not([data-composer-revealed]) .composerStack {
+  display: none;
+}
+
+:global([data-pure-ui]) .root[data-phase='active'] .composerFab {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-button-info-fill);
+  color: #fff;
+  box-shadow: var(--dsw-elevation-panel);
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+:global([data-pure-ui]) .root[data-phase='active'] .composerFab:hover {
+  background: var(--dsw-alias-button-info-hover);
+}
+
+:global([data-pure-ui]) .root[data-phase='active'] .composerFab:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+}
+
+/* Revealed: the composer sits above the button's corner, not under it. */
+:global([data-pure-ui]) .root[data-phase='active'][data-composer-revealed] .composerFab {
+  bottom: calc(var(--dsh-composer-height, 0px) + 8px);
+}
+
+:global([data-pure-ui]) .mobileRailToggle {
+  display: none;
 }

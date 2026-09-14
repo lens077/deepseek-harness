@@ -52,6 +52,10 @@ export const DEFAULT_MOBILE_FONT_SIZE = 16
 export const MOBILE_FONT_SIZE_FIELD = 'mobileFontSize'
 /** Field carrying the phone layout density. */
 export const MOBILE_LAYOUT_FIELD = 'mobileLayout'
+/** Field carrying the pure-UI (reading) presentation switch. */
+export const PURE_UI_FIELD = 'pureUi'
+/** Pure UI is off when the user-settings document has no override. */
+export const DEFAULT_PURE_UI = false
 
 /** Durable theme section shared by the Host schema and the browser scope. */
 export interface ThemeSettings {
@@ -63,6 +67,12 @@ export interface ThemeSettings {
   mobileFontSize: number
   /** Phone controls and information density; switching it preserves mobileFontSize. */
   mobileLayout: MobileLayout
+  /**
+   * Pure UI: every viewport hides the Session header, shows the current
+   * question as plain text, and folds the composer behind a floating button
+   * so the transcript takes the whole column.
+   */
+  pureUi: boolean
 }
 
 /** Durable theme schema; also the wire envelope the browser scope validates against. */
@@ -71,6 +81,7 @@ export const ThemeSettingsSchema: z<Partial<ThemeSettings>, ThemeSettings> = z.o
   [FONT_SIZE_FIELD]: z.number().step(1).min(FONT_SIZE_MIN).max(FONT_SIZE_MAX).default(DEFAULT_FONT_SIZE),
   [MOBILE_FONT_SIZE_FIELD]: z.number().step(1).min(MOBILE_FONT_SIZE_MIN).max(MOBILE_FONT_SIZE_MAX).default(DEFAULT_MOBILE_FONT_SIZE),
   [MOBILE_LAYOUT_FIELD]: z.union([...MOBILE_LAYOUTS]).default(DEFAULT_MOBILE_LAYOUT),
+  [PURE_UI_FIELD]: z.boolean().default(DEFAULT_PURE_UI),
 })
 
 /**

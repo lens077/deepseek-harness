@@ -9,14 +9,17 @@ const useResource = (() => ({ status: 'none' as const, value: undefined, failure
 
 afterEach(cleanup)
 
-function mount(startUngrouped = vi.fn(async () => {})) {
+function mount(startUngrouped = vi.fn(async () => {}), pureUi = false) {
   const navigateMobile = vi.fn()
   const startSession = vi.fn()
+  const setPureUi = vi.fn()
+  const useMobileAppearance = ((selector: (value: { mobileFontSize: number; mobileLayout: 'medium'; pureUi: boolean }) => unknown) =>
+    selector({ mobileFontSize: 16, mobileLayout: 'medium', pureUi })) as SidebarRootComponentProps['useMobileAppearance']
   const neverHook = (() => { throw new Error('mobile chrome does not read business snapshots') }) as never
   let owner: SidebarSectionOwnerProps | undefined
   const props: SidebarRootComponentProps = {
     collapsed: true, width: 390, mobileView: 'workspaces', navigateMobile,
-    startUngrouped, startSession, toggleSidebar: vi.fn(),
+    startUngrouped, startSession, toggleSidebar: vi.fn(), useMobileAppearance, setPureUi,
     useSessions: neverHook, useWorkspaces: neverHook, useSessionPendingInteraction: neverHook, useResource,
     t: key => (en as Record<string, string>)[key] ?? key,
     renderSlot: ((key: string, params: SidebarSectionOwnerProps) => {
@@ -30,7 +33,7 @@ function mount(startUngrouped = vi.fn(async () => {})) {
     }) as SidebarRootComponentProps['renderSlot'],
   }
   const view = render(<SidebarRoot {...props} />)
-  return { view, props, navigateMobile, startSession, startUngrouped, owner: () => owner }
+  return { view, props, navigateMobile, startSession, startUngrouped, setPureUi, owner: () => owner }
 }
 
 describe('phone sidebar', () => {
@@ -65,5 +68,19 @@ describe('phone sidebar', () => {
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(b.navigateMobile).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'New Session' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('offers the pure-UI switch beside Settings and writes the opposite state', () => {
+    const b = mount()
+    const header = screen.getByRole('button', { name: 'Settings' }).parentElement!
+    const toggle = within(header).getByRole('button', { name: 'Turn on pure UI' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
+    expect(b.setPureUi).toHaveBeenCalledWith(true)
+    const on = mount(undefined, true)
+    const off = screen.getAllByRole('button', { name: 'Turn off pure UI' }).at(-1)!
+    expect(off.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(off)
+    expect(on.setPureUi).toHaveBeenCalledWith(false)
   })
 })

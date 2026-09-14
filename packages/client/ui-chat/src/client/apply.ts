@@ -202,6 +202,14 @@ export function apply(ctx: Context): void {
       name: 'conversation.composer.dock', id: 'stats', order: 0, locale: NS,
     }, StatsPills))
 
+  // The phone presentation reads the same pills on the tab strip instead of
+  // under the composer; StatsPills.module.css shows exactly one of the two
+  // seats per presentation.
+  ctx.slots.inject('conversation.session.tabs.trailing', () =>
+    ctx.slots.register({
+      name: 'conversation.session.tabs.trailing', id: 'stats', order: 0, locale: NS,
+    }, StatsPills))
+
   ctx.slots.inject('conversation.approval.detail', () =>
     ctx.slots.register({ name: 'conversation.approval.detail' }, ApprovalCommand))
 

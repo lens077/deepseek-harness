@@ -31,6 +31,12 @@
     },
     {
       "path": "../locale"
+    },
+    {
+      "path": "../ui-theme"
+    },
+    {
+      "path": "../store"
     }
   ]
 }
