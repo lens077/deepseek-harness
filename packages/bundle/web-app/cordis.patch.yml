@@ -114,7 +114,7 @@
               cacheWrite: 1.32
               output: 3.96
 
-    # Newest question, closing answer, and Turn outcome for cold Session rows., closing answer, and Turn outcome for cold Session rows.
+    # Newest question, closing answer, and Turn outcome for cold Session rows.
     - id: session-digest
       name: '@deepseek-ai/dsh-session-digest'
 
