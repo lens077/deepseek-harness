@@ -44,7 +44,7 @@ This tested configuration uses example prices per million tokens and example cum
       budgets: { session: 5, tree: 20, all: 100, warningRatio: 0.8 }
 ```
 
-Route keys match `provider/model` exactly. Each route declares uncached input, cache-read, cache-write, and output prices. Optional `tiers` multiply all four rates during non-overlapping UTC weekday/hour windows; the base rate applies otherwise. The Web bundle mounts this unit without a price table or monetary budget, so the default UI shows observed tokens only. Add deployment-specific pricing and advisory thresholds through the profile patch. The [config catalog](../../../docs/config-catalog.md) describes the fields.
+Route keys match `provider/model` exactly. Each route declares uncached input, cache-read, cache-write, and output prices. Optional `tiers` multiply all four rates during non-overlapping UTC weekday/hour windows; the base rate applies otherwise. The Web bundle includes a small explicit USD seed for the current Claude, GPT, and DeepSeek routes and no monetary budget. Unknown routes remain unpriced instead of being guessed. The seed follows the [TokenTracker curated pricing approach](https://github.com/xiufengsun/TokenTracker/tree/main/src/lib/pricing): curated exact entries take precedence, while unresolved models remain unpriced. Replace or extend the table through the profile patch. The [config catalog](../../../docs/config-catalog.md) describes the fields.
 
 ### Interpret the figures
 
