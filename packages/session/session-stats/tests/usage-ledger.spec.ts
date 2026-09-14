@@ -5,7 +5,7 @@ import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import { createUsageLedgerProjection, usageLedgerViewSchema } from '../src/usage-ledger.ts'
-import { priceUsage, usageConfigSchema } from '../src/usage-config.ts'
+import { priceUsage, resolveRoutePrice, usageConfigSchema } from '../src/usage-config.ts'
 import type { UsageStatsConfig } from '../src/types.ts'
 
 const TIME = Date.UTC(2026, 8, 7, 12)
@@ -296,6 +296,25 @@ describe('usage price and governance configuration', () => {
     { typo: true },
   ])('rejects invalid deployment input %#', (config) => {
     expect(usageConfigSchema.safeParse(config).success).toBe(false)
+  })
+
+  it('resolves exact model routes before uniquely matching tracker-style effort suffixes', () => {
+    const pricing = { currency: 'USD', routes: {
+      'anthropic/claude-fable-5-1': { input: 10, cacheRead: 1, cacheWrite: 12.5, output: 50 },
+      'openai/gpt-5.6-sol': { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 20 },
+    } }
+    expect(resolveRoutePrice(pricing, 'anthropic', 'claude-fable-5-1')).toBe(pricing.routes['anthropic/claude-fable-5-1'])
+    expect(resolveRoutePrice(pricing, 'openai', 'gpt-5.6-sol-high')).toBe(pricing.routes['openai/gpt-5.6-sol'])
+    expect(resolveRoutePrice(pricing, 'other', 'gpt-5.6-sol-high')).toBe(pricing.routes['openai/gpt-5.6-sol'])
+    expect(resolveRoutePrice(pricing, 'other', 'unknown-model')).toBeUndefined()
+    expect(resolveRoutePrice(undefined, 'openai', 'gpt-5.6-sol')).toBeUndefined()
+  })
+
+  it('can treat absent optional cache buckets as zero for tracker-style pricing', () => {
+    const pricing: UsageStatsConfig = { pricing: { ...CONFIG.pricing!, assumeMissingCacheBucketsZero: true } }
+    const { view } = run([start(), message(2, { inputTokens: 10, outputTokens: 5 })], pricing)
+    expect(view.models[0]?.incompleteRequests).toBe(0)
+    expect(view.estimatedCost).toBeDefined()
   })
 
   it('accepts explicit cumulative budgets and configurable diagnostic floors', () => {

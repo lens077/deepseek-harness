@@ -44,7 +44,7 @@ kind: "package-reference"
       budgets: { session: 5, tree: 20, all: 100, warningRatio: 0.8 }
 ```
 
-路由键精确匹配 `provider/model`。每条路由声明未缓存输入、缓存读取、缓存写入和输出价格。可选 `tiers` 在互不重叠的 UTC 星期／小时窗口内对四项价格应用倍率，其余时间使用基础价格。Web bundle 包含当前 Claude、GPT 和 DeepSeek 路由的一组显式 USD 初始价格，但不设置金额预算。未知路由保持未定价，不会被猜测。初始价格参考 [TokenTracker 的 curated pricing 方案](https://github.com/xiufengsun/TokenTracker/tree/main/src/lib/pricing)：显式匹配优先，无法解析的模型保持未定价。可通过 profile patch 替换或扩展价格表。[配置目录](../../../docs/config-catalog.zh.md)说明各字段。
+路由键精确匹配 `provider/model`。精确路由优先；唯一的模型名匹配可以覆盖 `-high`、`-thinking` 等提供方后缀，存在歧义或未知模型时保持未定价。每条路由声明未缓存输入、缓存读取、缓存写入和输出价格。可选 `tiers` 在互不重叠的 UTC 星期／小时窗口内对四项价格应用倍率，其余时间使用基础价格。Web bundle 包含当前 Claude、GPT 和 DeepSeek 路由的一组显式 USD 初始价格，但不设置金额预算。同时启用 `assumeMissingCacheBucketsZero`，按 TokenTracker 的方式将缺失的可选缓存价格视为零。未知路由保持未定价，不会被猜测。初始价格参考 [TokenTracker 的 curated pricing 方案](https://github.com/xiufengsun/TokenTracker/tree/main/src/lib/pricing)：显式匹配优先，无法解析的模型保持未定价。可通过 profile patch 替换或扩展价格表。[配置目录](../../../docs/config-catalog.zh.md)说明各字段。
 
 ### 理解数据
 

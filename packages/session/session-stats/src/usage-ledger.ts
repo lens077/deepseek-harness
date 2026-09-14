@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type {} from '@deepseek-ai/dsh-compaction/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import { priceUsage, usageGovernanceSchema } from './usage-config.ts'
+import { priceUsage, resolveRoutePrice, usageGovernanceSchema } from './usage-config.ts'
 import type { UsageActivity, UsageBuckets, UsageLedgerProjection, UsageStatsConfig } from './types.ts'
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -103,7 +103,10 @@ function addBuckets(left: UsageBuckets, right: UsageBuckets): UsageBuckets {
   }
 }
 
-function normalizeUsage(usage: TokenUsage | undefined): { buckets: UsageBuckets; complete: boolean } | null {
+function normalizeUsage(
+  usage: TokenUsage | undefined,
+  assumeMissingCacheBucketsZero = false,
+): { buckets: UsageBuckets; complete: boolean } | null {
   if (usage === undefined) return null
   const buckets: UsageBuckets = {
     uncachedInputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
@@ -116,7 +119,7 @@ function normalizeUsage(usage: TokenUsage | undefined): { buckets: UsageBuckets;
   if (usage.totalTokens !== undefined && (!isCount(usage.totalTokens) || usage.totalTokens < knownTotal)) return null
   // An exact total can prove that omitted cache buckets are zero; absence alone cannot.
   const complete = usage.totalTokens === undefined
-    ? usage.cacheReadTokens !== undefined && usage.cacheWriteTokens !== undefined
+    ? assumeMissingCacheBucketsZero || usage.cacheReadTokens !== undefined && usage.cacheWriteTokens !== undefined
     : usage.totalTokens === knownTotal
   return { buckets, complete }
 }
@@ -159,7 +162,11 @@ function recordUsage(
   } } }
 }
 
-function settle(state: LedgerState, event: SessionEvent<'assistant/message' | 'assistant/attempt'>): LedgerState {
+function settle(
+  state: LedgerState,
+  event: SessionEvent<'assistant/message' | 'assistant/attempt'>,
+  assumeMissingCacheBucketsZero: boolean,
+): LedgerState {
   const { turn, step } = event.data
   const matching = state.step?.turn === turn && state.step.step === step ? state.step : null
   const provider = event.type === 'assistant/message' ? event.data.message.source.provider : state.route?.provider ?? ''
@@ -182,7 +189,7 @@ function settle(state: LedgerState, event: SessionEvent<'assistant/message' | 'a
   const usage = event.type === 'assistant/message'
     ? event.data.usage ?? lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
     : lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
-  const normalized = normalizeUsage(usage)
+  const normalized = normalizeUsage(usage, assumeMissingCacheBucketsZero)
   data = recordUsage(data, normalized, provider, model, event.time, matching?.countedUsage !== true)
   // Direct recovery retries have no recorded start; do not reuse a prior attempt's timing interval.
   if (matching !== null && !matching.settled) {
@@ -225,13 +232,16 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
         const { config: route, tools } = event.data.header
         return { ...state, route: { provider: route.provider, model: route.model, tools: hash(tools ?? []) } }
       }
-      if (event.type === 'assistant/message' || event.type === 'assistant/attempt') return settle(state, event)
+      if (event.type === 'assistant/message' || event.type === 'assistant/attempt') {
+        return settle(state, event, config.pricing?.assumeMissingCacheBucketsZero === true)
+      }
       if (event.seq < state.inheritedEventCount) return state
       const data = state.data
       switch (event.type) {
         case 'compaction/summary':
           return event.data.usage === undefined && event.data.llmStreamCall !== true ? state : { ...state,
-            data: recordUsage(data, normalizeUsage(event.data.usage), event.data.provider, event.data.model, event.time, false),
+            data: recordUsage(data, normalizeUsage(event.data.usage,
+              config.pricing?.assumeMissingCacheBucketsZero === true), event.data.provider, event.data.model, event.time, false),
           }
         case 'turn/start':
           return { ...state, turnStart: { turn: event.data.turn, time: event.time } }
@@ -292,7 +302,7 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
         if (cached !== undefined) return cached
         const { data } = state
         const models = Object.values(data.models).map(({ hours, reasoningTokens, ...row }) => {
-          const price = config.pricing?.routes[`${row.provider}/${row.model}`]
+          const price = resolveRoutePrice(config.pricing, row.provider, row.model)
           return { ...row,
             ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
             ...(price === undefined || row.incompleteRequests > 0 ? {} : {

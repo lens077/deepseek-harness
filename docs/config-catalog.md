@@ -2217,6 +2217,8 @@ export interface UsagePricingTable {
   currency: string
   /** Exact provider/model route keys; missing entries suppress complete cost totals. */
   routes: Record<string, UsageRoutePrice>
+  /** Treat absent optional cache buckets as zero, matching local tracker semantics. */
+  assumeMissingCacheBucketsZero?: boolean
 }
 
 /** Read-only advice; never interrupts, downgrades, or reroutes an agent. */
