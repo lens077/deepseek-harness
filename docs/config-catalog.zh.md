@@ -657,6 +657,30 @@ export interface Config {
 
 来源：[`packages/experimental/code-runtime-python/src/index.ts:42`](../packages/experimental/code-runtime-python/src/index.ts)
 
+<a id="deepseek-aidsh-experimental-computer-use-cua-driver-mcp"></a>
+
+## `@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp`
+
+需要：`computerUse` · `tools`
+
+```ts config-catalog
+/** Installed executable and MCP connection overrides. */
+export interface Config {
+  /** Executable path or PATH command; defaults to `cua-driver`. */
+  command: string
+  /** Arguments passed without a shell; defaults to `['mcp']`. */
+  args: string[]
+  /** Per-call timeout in milliseconds; omission uses the MCP client's default. */
+  toolCallTimeoutMs?: number
+  /** Reconnection overrides; defaults to the MCP client's policy. */
+  reconnect: McpClient.ReconnectConfig
+}
+```
+
+依赖：[`McpClient`](../packages/mcp/mcp-client/src/index.ts)
+
+来源：[`packages/experimental/computer-use-cua-driver-mcp/src/index.ts:20`](../packages/experimental/computer-use-cua-driver-mcp/src/index.ts)
+
 <a id="deepseek-aidsh-experimental-inspector"></a>
 
 ## `@deepseek-ai/dsh-experimental-inspector`
@@ -2923,42 +2947,45 @@ export interface Config {
 需要：`tools` · `agents` · `fs` · `sessionProjections`
 
 ```ts config-catalog
-/** 完整的插件配置：用户可编辑的设置节加上工具规则。 */
+/** Complete plugin configuration: the user-editable section plus the tool rules. */
 export interface Config extends FileLockSettings {
-  /** 策略覆盖的工具；不在此列的工具永不加锁。 */
+  /** Tools the policy covers; a tool absent here is never locked. */
   readonly tools: ToolAccessRule[]
 }
 
-/** 存于 `file-lock` 设置命名空间下的用户可编辑设置节。 */
+/** The user-editable section stored under the `file-lock` settings namespace. */
 export interface FileLockSettings {
-  /** 外部读取在询问用户前静默等待的毫秒数。 */
+  /** Milliseconds a foreign read waits silently before the user is asked. */
   readonly readWaitMs: number
-  /** 外部写入在被拒绝前等待租约的毫秒数。 */
+  /** Milliseconds a foreign write waits for the lease before it is refused. */
   readonly writeWaitMs: number
-  /** 超过此毫秒数后即使 turn 未结束也释放租约。 */
+  /** Milliseconds after which a lease is released even though its turn has not ended. */
   readonly leaseTtlMs: number
-  /** 等待到期且无法询问人类时的读取行为。 */
+  /** Read behavior after the wait expires when no human can be asked. */
   readonly delegatedReadTimeout: DelegatedReadTimeoutPolicy
 }
 
-/** 某工具的哪个参数指明文件，以及该调用执行哪种访问。 */
+/** Which argument of one tool names the file and which access the call performs. */
 export interface ToolAccessRule {
-  /** 已注册的工具名。 */
+  /** Registered tool name. */
   readonly tool: string
-  /** 携带工具所解析路径的参数。 */
+  /** Argument carrying the path the tool resolves. */
   readonly pathArgument: string
-  /** 除非 `readWhenArgument` 取 `readWhenValues` 之一，否则调用执行的访问类型。 */
+  /** Access the call performs unless `readWhenArgument` carries one of `readWhenValues`. */
   readonly access: FileAccess
-  /** 其取值可在单次调用中把 `write` 规则转为读取的参数。 */
+  /** Argument whose value can turn a `write` rule into a read for one call. */
   readonly readWhenArgument?: string
-  /** `readWhenArgument` 取这些值时调用仅读取。 */
+  /** Values of `readWhenArgument` under which the call only reads. */
   readonly readWhenValues?: string[]
 }
 
-/** 等待到期且无法询问人类（调用方是受委托的 Agent，或未挂载 user-questions 服务）时读取的行为。 */
+/**
+ * What a read does when its wait expires and no human can be asked: the
+ * caller is a delegated agent, or no user-questions service is mounted.
+ */
 export type DelegatedReadTimeoutPolicy = 'wait' | 'read-now'
 
-/** 由参数决定的工具调用文件访问类型。 */
+/** Which file access a tool call performs, decided from its arguments. */
 export type FileAccess = 'read' | 'write'
 ```
 
@@ -3705,9 +3732,11 @@ export interface Config {
 - `@deepseek-ai/dsh-command-feedback` — 需要 `commands`（[`packages/feedback/command-feedback/src/index.ts`](../packages/feedback/command-feedback/src/index.ts)）
 - `@deepseek-ai/dsh-command-goal` — 需要 `commands` · `goals`（[`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts)）
 - `@deepseek-ai/dsh-commands`（[`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts)）
+- `@deepseek-ai/dsh-computer-use`（[`packages/computer-use/computer-use/src/index.ts`](../packages/computer-use/computer-use/src/index.ts)）
 - `@deepseek-ai/dsh-cordis-client-runner`（[`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts)）
 - `@deepseek-ai/dsh-deepseek-llm-api-extensions`（[`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../packages/llm/deepseek-llm-api-extensions/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-client-ui-agent-team`（[`packages/experimental/client-ui-agent-team/src/index.ts`](../packages/experimental/client-ui-agent-team/src/index.ts)）
+- `@deepseek-ai/dsh-experimental-computer-use-cua-driver-native` — 需要 `computerUse` · `tools` · `systemPrompt`（[`packages/experimental/computer-use-cua-driver-native/src/index.ts`](../packages/experimental/computer-use-cua-driver-native/src/index.ts)）
 - `@deepseek-ai/dsh-fs-e2b` — 需要 `e2b`（[`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts)）
 - `@deepseek-ai/dsh-fs-observation-policy`（[`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts)）
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）
