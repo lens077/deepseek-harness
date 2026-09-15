@@ -159,6 +159,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Rewrites oversized current tool results through replayable single-node surface replacements before summary compaction.',
   },
   {
+    key: 'contextRemoval',
+    pkg: 'context-remove',
+    title: 'Per-turn context removal',
+    mode: 'core',
+    consumers: ['api-session-controller'],
+    note: 'Replaces selected completed turns with empty checkpoint nodes on request so the model no longer sees them while the log keeps them.',
+  },
+  {
     key: 'sessions',
     pkg: 'session',
     title: 'In-memory session store',

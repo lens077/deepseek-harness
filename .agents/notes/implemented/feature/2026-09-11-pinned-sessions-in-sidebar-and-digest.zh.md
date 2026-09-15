@@ -14,11 +14,11 @@ Status: implemented
 
 ### 一个标记、一个提供方、一个消费座位
 
-置顶标记仍然存放在 `@deepseek-ai/dsh-session-inbox` 里；每个 Session 不新增任何存储。已经拥有收件箱控制器的 `ui-digest` 提供 `ui-workspace` 在其契约里声明的可选 `sessionPins` 座位：一个携带 `{ enabled, sidebarArea, sidebarRows, pinnedSessionIds }` 的 `view` 可观察源，以及一个 `setPinned(sessionIds, pinned)` 写入器。`ui-workspace` 在 `ctx.inject(['sessionPins'], …)` 下把该视图镜像进浏览器的 `hooks` 区间，因此没有 `ui-digest` 的组合完全不渲染置顶入口，与 `sessionTodos` 座位隐藏"加入待办"的方式一致。只有 id 列表或策略真正变化时视图才发布新快照，所以无关的收件箱推送不会让行重新渲染。
+置顶标记仍然存放在 `@deepseek-ai/dsh-session-inbox` 里；每个 Session 不新增任何存储。已经拥有收件箱控制器的 `ui-digest` 提供 `ui-workspace` 在其契约里声明的可选 `sessionPins` 座位：一个携带 `{ enabled, sidebarArea, sidebarRows, autoPinStatuses, pinnedSessionIds }` 的 `view` 可观察源，以及 `setPinned(sessionIds, pinned)`、`setSidebarRows` 和 `setAutoPinStatuses` 写入器。`ui-workspace` 在 `ctx.inject(['sessionPins'], …)` 下把该视图镜像进浏览器的 `hooks` 区间，因此没有 `ui-digest` 的组合完全不渲染置顶入口，与 `sessionTodos` 座位隐藏"加入待办"的方式一致。只有 id 列表或策略真正变化时视图才发布新快照，所以无关的收件箱推送不会让行重新渲染。
 
 ### 会话浏览器负责置顶与列出
 
-会话行的 ⋯ 菜单在 **重命名** 上方提供 **置顶** / **取消置顶**，多选右键菜单对所有选中行提供同一动作。浏览器在 **工作区** 标题上方渲染一个 **置顶** 区，高度固定为若干会话行（默认五行），置顶更多时在区内滚动；区内的行就是普通的 `SessionNodeItem`，因此状态点、悬浮卡、行菜单和感知选择的右键菜单与树中表现完全一致。置顶行按 Session 最近更新排序；已归档、空白、未知和子代理来源的 id 由 `deriveFlat` 旁边的纯函数 `derivePinned` 丢弃。空的置顶区显示一行提示而不是塌缩，这样用户要求的这块区域保持在原位。
+会话行的 ⋯ 菜单在 **重命名** 上方提供 **置顶** / **取消置顶**，多选右键菜单对所有选中行提供同一动作。浏览器在 **工作区** 标题上方渲染一个 **置顶** 区，高度固定为若干会话行（默认五行；`auto` 按实际行数伸缩），置顶更多时在区内滚动，可从标题折叠并从其 ⋯ 菜单配置（[折叠、菜单与自动置顶](2026-09-21-pinned-area-fold-menu-and-auto-pin.zh.md)）；区内的行就是普通的 `SessionNodeItem`，因此状态点、悬浮卡、行菜单和感知选择的右键菜单与树中表现完全一致。置顶行连同处于自动置顶状态的 Session 按 Session 最近更新排序；已归档、空白、未知和子代理来源的 id 由 `deriveFlat` 旁边的纯函数 `derivePinned` 丢弃。空的置顶区显示一行提示而不是塌缩，这样用户要求的这块区域保持在原位。
 
 ### 汇总把置顶行排在最前
 
@@ -26,7 +26,7 @@ Status: implemented
 
 ### 一个设置页、三个开关和一个尺寸
 
-一个 **置顶** 设置页（`settings.section` id `session-pins`，紧跟在 **项目待办** 之后）拥有持久化的 `session-pins` 命名空间：`enabled`（默认开）、`sidebarArea`（默认开）、`sidebarRows`（默认 5，范围 1–20）和 `digestSection`（默认开）。总开关隐藏所有置顶入口——菜单项、侧栏置顶区、卡片动作及其 `p` 键、汇总分组；两个细粒度开关各自移除一个界面，而标记本身保持持久化，因此重新启用后恢复同一置顶集合。
+一个 **置顶** 设置页（`settings.section` id `session-pins`，紧跟在 **项目待办** 之后）拥有持久化的 `session-pins` 命名空间：`enabled`（默认开）、`sidebarArea`（默认开）、`sidebarRows`（默认 5，范围 1–20 或 `auto`）、`autoPinStatuses`（默认进行中和已完成）和 `digestSection`（默认开）。总开关隐藏所有置顶入口——菜单项、侧栏置顶区、卡片动作及其 `p` 键、汇总分组；两个细粒度开关各自移除一个界面，而标记本身保持持久化，因此重新启用后恢复同一置顶集合。
 
 ## 备选方案
 
@@ -52,3 +52,5 @@ Status: implemented
 
 - [持久化会话收件箱](2026-09-17-durable-session-inbox.zh.md)拥有 `pinned` 标记以及本文扩展的 `sessionTodos` 座位先例。
 - [可配置的汇总面板开关快捷键](2026-09-20-configurable-digest-toggle-shortcut.zh.md)拥有置顶页所沿用的设置页模式（`NavSettingsPolicy`）。
+- [置顶区折叠、⋯ 菜单与自动置顶状态](2026-09-21-pinned-area-fold-menu-and-auto-pin.zh.md)为置顶区加入折叠、标题菜单、`auto` 尺寸与按状态的自动成员。
+- [置顶区位置快捷键](2026-09-22-pinned-area-position-shortcuts.zh.md)为前十行加入按键录制、仅限本标签页的键盘组合。

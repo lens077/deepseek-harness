@@ -23,10 +23,10 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { SessionAutoPinStatus, SessionPinsSidebarRows, WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from '../tree.ts'
 import {
-  deriveArchived, deriveFlat, deriveGroups, derivePinned, deriveSearchResults, locateSession,
+  autoPinStatusKey, deriveArchived, deriveFlat, deriveGroups, derivePinned, deriveSearchResults, locateSession,
   owningGroupKey, UNGROUPED_KEY,
 } from '../tree.ts'
 import {
@@ -34,6 +34,9 @@ import {
   type RowActivationEvent, type RowContextMenuEvent, type SessionRowContext,
 } from './Rows.tsx'
 import { PinnedArea } from './PinnedArea.tsx'
+import {
+  detectPinShortcutPlatform, hasPinShortcutCommandModifier, isEditableKeyTarget, matchesPinShortcut,
+} from '../pin-shortcuts.ts'
 import {
   FLAT_SESSION_ORDER_KEY, type CollapsedSessionCount, type SessionGroupBy, type SessionStatusIndicatorMode,
 } from '../stores.ts'
@@ -1336,6 +1339,8 @@ function DesktopWorkspaceBrowser({
   useSessionSelection,
   useSessionPins,
   setPinned,
+  setPinnedSidebarRows,
+  setPinnedAutoStatuses,
   setSessionSelection,
   clearSessionSelection,
   renderSlot,
@@ -1351,18 +1356,89 @@ function DesktopWorkspaceBrowser({
   // `enabled`; the area also follows `sidebarArea` and is sized by `sidebarRows`.
   const pins = useSessionPins(value => value)
   const pinnedIds = useMemo(() => new Set(pins.pinnedSessionIds), [pins.pinnedSessionIds])
-  const isPinned = useCallback((id: SessionId): boolean => pinnedIds.has(id), [pinnedIds])
-  const onPin = useCallback((id: SessionId, pinned: boolean): void => {
-    setPinned([id], pinned).catch((reason: unknown) => {
-      console.warn('session pin rejected:', reason)
-    })
-  }, [setPinned])
   const sessionList = useSessions(state => state)
   const pendingInteractions = useSessionPendingInteraction(state => state)
+  const pinnedAutoDismissed = useStore(s => s.pinnedAutoDismissed)
   const pinnedRows = useMemo(
-    () => derivePinned(sessionList, pins.pinnedSessionIds, archivedSessionIds, pendingInteractions),
-    [archivedSessionIds, sessionList, pendingInteractions, pins.pinnedSessionIds],
+    () => derivePinned(sessionList, pins, pinnedAutoDismissed, archivedSessionIds, pendingInteractions),
+    [archivedSessionIds, sessionList, pendingInteractions, pins, pinnedAutoDismissed],
   )
+  // A row reads as pinned while the area lists it, by mark or by status, so
+  // its menu offers the unpin verb either way.
+  const listedIds = useMemo(() => new Set(pinnedRows.map(row => row.id)), [pinnedRows])
+  const isPinned = useCallback((id: SessionId): boolean => listedIds.has(id), [listedIds])
+  // Pinning writes the durable mark and lifts any dismissal; unpinning clears
+  // the mark when there is one, otherwise it dismisses the auto-listed row
+  // until its statuses change.
+  const setPinnedRows = useCallback(async (sessionIds: readonly SessionId[], pinned: boolean): Promise<void> => {
+    if (pinned) {
+      for (const id of sessionIds) actions.clearAutoPinDismissal(id)
+      await setPinned(sessionIds, true)
+      return
+    }
+    const marked = sessionIds.filter(id => pinnedIds.has(id))
+    for (const id of sessionIds) {
+      const session = sessionList.byId[id]
+      if (pinnedIds.has(id) || session === undefined) continue
+      actions.dismissAutoPinned(id, autoPinStatusKey(session, pins))
+    }
+    if (marked.length > 0) await setPinned(marked, false)
+  }, [actions, pinnedIds, pins, sessionList.byId, setPinned])
+  const onPin = useCallback((id: SessionId, pinned: boolean): void => {
+    setPinnedRows([id], pinned).catch((reason: unknown) => {
+      console.warn('session pin rejected:', reason)
+    })
+  }, [setPinnedRows])
+  // Opening from the pinned area keeps a pinned mark: the user put it there
+  // to come back to. A row listed by status alone is handled by the open, so
+  // it is dismissed until its statuses change.
+  const openPinnedRow = useCallback((id: SessionId): void => {
+    open(id)
+    if (!pinnedIds.has(id)) onPin(id, false)
+  }, [onPin, open, pinnedIds])
+  const pinnedCollapsed = useStore(s => s.pinnedCollapsed)
+  const pinnedShortcuts = useStore(s => s.pinnedShortcuts)
+  const pinnedShortcutsEnabled = useStore(s => s.pinnedShortcutsEnabled)
+  // Platform detection is a render-stable environment fact, not reactive state.
+  const shortcutPlatform = useMemo(
+    () => detectPinShortcutPlatform(typeof navigator === 'undefined' ? undefined : navigator),
+    [],
+  )
+  // The chords answer this tab's keydown events while the area is composed
+  // in, folded or not: the bindings are positions in `pinnedRows`, the same
+  // rows the area draws. A chord typing could spell stays silent inside
+  // editable fields; one with a command modifier fires everywhere. A press
+  // something closer to the target already consumed (the recorder, a menu)
+  // arrives default-prevented and is left alone.
+  const shortcutsLive = pins.enabled && pins.sidebarArea && pinnedShortcutsEnabled
+  useEffect(() => {
+    if (!shortcutsLive) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return
+      const slot = pinnedShortcuts.findIndex(chord => chord !== null && matchesPinShortcut(chord, event))
+      if (slot < 0) return
+      const chord = pinnedShortcuts[slot] as string
+      if (!hasPinShortcutCommandModifier(chord) && isEditableKeyTarget(event.target)) return
+      const row = pinnedRows[slot]
+      if (row === undefined) return
+      event.preventDefault()
+      openPinnedRow(row.id)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [openPinnedRow, pinnedRows, pinnedShortcuts, shortcutsLive])
+  const onPinnedCountPick = useCallback((rows: SessionPinsSidebarRows): void => {
+    setPinnedSidebarRows(rows).catch((reason: unknown) => {
+      console.warn('pinned area rows rejected:', reason)
+    })
+  }, [setPinnedSidebarRows])
+  const onPinnedStatusToggle = useCallback((status: SessionAutoPinStatus): void => {
+    const current = pins.autoPinStatuses
+    const next = current.includes(status) ? current.filter(item => item !== status) : [...current, status]
+    setPinnedAutoStatuses(next).catch((reason: unknown) => {
+      console.warn('pinned area statuses rejected:', reason)
+    })
+  }, [pins.autoPinStatuses, setPinnedAutoStatuses])
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
@@ -1753,8 +1829,8 @@ function DesktopWorkspaceBrowser({
     runSessionAction(sessionIds, async () => { await archiveSessions(sessionIds) })
   }
   const pinSelectedSessions = (sessionIds: readonly SessionId[]) => {
-    const pinned = sessionIds.every(id => pinnedIds.has(id))
-    runSessionAction(sessionIds, async () => { await setPinned(sessionIds, !pinned) })
+    const pinned = sessionIds.every(id => listedIds.has(id))
+    runSessionAction(sessionIds, async () => { await setPinnedRows(sessionIds, !pinned) })
   }
   const removeSessions = (workspaceId: WorkspaceId, sessionIds: readonly SessionId[]) => {
     runSessionAction(sessionIds, async () => {
@@ -1892,7 +1968,7 @@ function DesktopWorkspaceBrowser({
       ...pins.enabled
         ? [{
           id: 'pin',
-          label: contextMenu.sessionIds.every(id => pinnedIds.has(id)) ? t('menu.unpin') : t('menu.pin'),
+          label: contextMenu.sessionIds.every(id => listedIds.has(id)) ? t('menu.unpin') : t('menu.pin'),
           icon: <IconPinOutline16 />,
         }]
         : [],
@@ -1928,7 +2004,7 @@ function DesktopWorkspaceBrowser({
   const pinnedRowContext: SessionRowContext = {
     currentId: currentSessionId,
     now: Date.now(),
-    onOpen: (id) => { open(id) },
+    onOpen: openPinnedRow,
     onContextMenu: onSessionContextMenu,
     onRename: onSessionRename,
     onFork: (id, placement) => { void forkSessionRow(id, placement) },
@@ -1976,6 +2052,17 @@ function DesktopWorkspaceBrowser({
           rows={pinnedRows}
           row={pinnedRowContext}
           count={pins.sidebarRows}
+          autoStatuses={pins.autoPinStatuses}
+          collapsed={pinnedCollapsed}
+          onCollapse={(collapsed) => { actions.setPinnedCollapsed(collapsed) }}
+          onCountPick={onPinnedCountPick}
+          onStatusToggle={onPinnedStatusToggle}
+          shortcuts={pinnedShortcuts}
+          shortcutsEnabled={pinnedShortcutsEnabled}
+          platform={shortcutPlatform}
+          onShortcutsEnabled={(enabled) => { actions.setPinnedShortcutsEnabled(enabled) }}
+          onShortcutChange={(slot, chord) => { actions.setPinnedShortcut(slot, chord) }}
+          onShortcutsReplace={(chords) => { actions.setPinnedShortcuts(chords) }}
           emptyLabel={t('pinned.empty')}
           ariaLabel={t('pinned.aria')}
         />

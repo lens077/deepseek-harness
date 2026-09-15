@@ -94,6 +94,42 @@ export function questionEntries(
   return entries
 }
 
+/**
+ * Turns a landed context removal already took out of model history, read off
+ * the removal marker Nodes in the loaded window.
+ * @param order - the Chat snapshot's node order.
+ * @param nodeStore - the Chat snapshot's keyed Node reader.
+ * @returns every turn named by a loaded removal marker.
+ */
+export function removedTurns(
+  order: readonly string[],
+  nodeStore: { get: (key: string) => unknown },
+): ReadonlySet<number> {
+  const removed = new Set<number>()
+  for (const key of order) {
+    const candidate = nodeStore.get(key) as { kind?: string; data?: { turns?: readonly number[] } } | undefined
+    if (candidate?.kind !== 'context-removal') continue
+    for (const turn of candidate.data?.turns ?? []) removed.add(turn)
+  }
+  return removed
+}
+
+/**
+ * Turns whose complete span may be removed from model history now: answered
+ * by a completed turn whose opener is loaded, and not already removed.
+ * @param index - the question/turn join over the current snapshot.
+ * @param removed - turns already removed.
+ * @returns the removable turn numbers.
+ */
+export function removableTurns(index: QuestionTurnIndex, removed: ReadonlySet<number>): ReadonlySet<number> {
+  const removable = new Set<number>()
+  for (const summary of index.turns) {
+    if (summary.questionKey === null || summary.outcome === 'running' || removed.has(summary.turn)) continue
+    removable.add(summary.turn)
+  }
+  return removable
+}
+
 /** Reduce one turn's recorded end to the outcome a summary shows. */
 function outcomeOf(turn: TurnLocation): TurnOutcome {
   if (turn.end === undefined) return turn.status === 'closed' ? 'other' : 'running'

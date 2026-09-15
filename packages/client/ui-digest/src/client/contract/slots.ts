@@ -13,6 +13,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: pulls ui-settings' SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionAutoPinStatus, SessionPinsSidebarRows } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { InboxAddTodoRequest, InboxTodoId, InboxTodoStatus } from '@deepseek-ai/dsh-session-inbox/types'
 import type { InboxActionResult, InboxView } from '../controller.ts'
 import type { ProjectDocumentResult, ProjectTodosView } from '../projects-controller.ts'
@@ -139,8 +140,10 @@ export interface PinsSettingsInjected {
   setEnabled: (enabled: boolean) => Promise<void>
   /** Show or hide the sidebar pinned area. */
   setSidebarArea: (enabled: boolean) => Promise<void>
-  /** Size the sidebar pinned area in session rows. */
-  setSidebarRows: (rows: number) => Promise<void>
+  /** Size the sidebar pinned area in session rows, or let it fit its rows with `auto`. */
+  setSidebarRows: (rows: SessionPinsSidebarRows) => Promise<void>
+  /** Replace the statuses the sidebar pinned area lists automatically. */
+  setAutoPinStatuses: (statuses: readonly SessionAutoPinStatus[]) => Promise<void>
   /** Show or hide the inbox's pinned section. */
   setDigestSection: (enabled: boolean) => Promise<void>
 }

@@ -358,6 +358,8 @@ export interface ComposerBarInjected {
   toggleCommandMenu: ((selection: EditSelection) => void) | undefined
   stop: (() => void) | undefined
   command: ((line: string) => Promise<boolean>) | undefined
+  /** Persist the busy-state delivery mode used by the composer submit action. */
+  setBusyEnter: (behavior: BusyEnterBehavior) => void
   hooks: {
     /**
      * Live busy-state submission preference: the delivery mode plain Enter

@@ -6,8 +6,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  dayKey, questionSeqOf, renderBrief, selectInbox, selectTimeline, selectTodos, startOfDay, windowSince,
-  type BriefLabels, type InboxSelectOptions,
+  dayKey, questionSeqOf, renderBrief, selectColumns, selectFinishedUnhandled, selectInbox, selectTimeline, selectTodos,
+  startOfDay, windowSince, type BriefLabels, type InboxSelectOptions,
 } from '../src/client/select.ts'
 import { DAY, HOUR, NOW, digest, inbox, mark, row, todo, workspace } from './fixtures.client.ts'
 
@@ -104,6 +104,81 @@ describe('selectInbox classification', () => {
     const demoted = selectInbox(rows, [], marks, options({ window: 'today', pinnedSection: false }))
     expect(sectionKeys(demoted)).toEqual(['unread:fresh'])
     expect(demoted.sections[0]?.items[0]).toMatchObject({ pinned: true })
+  })
+})
+
+describe('selectColumns', () => {
+  it('regroups the sections into four fixed columns, newest first within each, pinned and handled rows by state', () => {
+    const rows = [
+      row('seenOld', { updatedAt: NOW - 5 * HOUR }),
+      row('unreadNew', { updatedAt: NOW }),
+      row('seenNew', { updatedAt: NOW - HOUR }),
+      row('pinnedFailed', { updatedAt: NOW - 2 * HOUR, projectionValues: { sessionDigest: digest({ outcome: 'error' }) } }),
+      row('failedNew', { updatedAt: NOW - HOUR, projectionValues: { sessionDigest: digest({ outcome: 'aborted' }) } }),
+      row('handledDone', { updatedAt: NOW - 3 * HOUR }),
+      row('handledFailed', { updatedAt: NOW - 4 * HOUR, projectionValues: { sessionDigest: digest({ outcome: 'interrupted' }) } }),
+      row('waiting', { pendingInteraction: { kind: 'question' } }),
+    ]
+    const marks = inbox({ sessions: [
+      mark('seenOld', { lastSeenSeq: 3 }), mark('seenNew', { lastSeenSeq: 3 }),
+      mark('pinnedFailed', { pinned: true }),
+      mark('handledDone', { handledAt: 1 }), mark('handledFailed', { handledAt: 1 }),
+    ] })
+    const selection = selectInbox(rows, [], marks, options({
+      showHandled: true, pendingSessionIds: new Set(['waiting' as SessionId]),
+    }))
+    expect(sectionKeys(selection)[0]).toBe('pinned:pinnedFailed')
+    const columns = selectColumns(selection.sections)
+    expect(columns.map(column => `${column.key}:${column.items.map(item => item.sessionId).join(',')}`)).toEqual([
+      'needsYou:waiting',
+      'finished:unreadNew,seenNew,handledDone,seenOld',
+      'running:',
+      'failed:failedNew,pinnedFailed,handledFailed',
+    ])
+    expect(columns[3]?.items[1]).toMatchObject({ pinned: true, category: 'failed' })
+  })
+
+  it('keeps the finished, running, and failed columns when empty but lists the waiting column only with rows', () => {
+    expect(selectColumns([]).map(column => [column.key, column.items.length])).toEqual([
+      ['finished', 0], ['running', 0], ['failed', 0],
+    ])
+    const waiting = selectInbox([row('ask', { pendingInteraction: { kind: 'question' } })], [], inbox(), options({
+      pendingSessionIds: new Set(['ask' as SessionId]),
+    }))
+    expect(selectColumns(waiting.sections).map(column => column.key)).toEqual(['needsYou', 'finished', 'running', 'failed'])
+  })
+})
+
+describe('selectFinishedUnhandled', () => {
+  it('lists unread and seen finished rows since the last review, newest first, and nothing else', () => {
+    const rows = [
+      row('seen', { updatedAt: NOW - 2 * HOUR }),
+      row('unread', { updatedAt: NOW - HOUR }),
+      row('old-seen', { updatedAt: NOW - 3 * DAY }),
+      row('old-unread', { updatedAt: NOW - 3 * DAY }),
+      row('running', { running: true }),
+      row('waiting'),
+      row('failed', { projectionValues: { sessionDigest: digest({ outcome: 'error' }) } }),
+      row('handled'),
+      row('snoozed'),
+      row('blank', { blank: true }),
+      row('sub', { origin: 'subagent' }),
+      row('nodigest', { projectionValues: {} }),
+    ]
+    const marks = inbox({ reviewedAt: NOW - DAY, sessions: [
+      mark('seen', { lastSeenSeq: 3 }),
+      mark('old-seen', { lastSeenSeq: 3 }),
+      mark('handled', { handledAt: NOW - HOUR }),
+      mark('snoozed', { snoozedUntil: NOW + HOUR }),
+    ] })
+    const pending = new Set(['waiting' as SessionId])
+    // Unread rows ignore the window; seen rows must be updated since the review.
+    expect(selectFinishedUnhandled(rows, marks, NOW, pending)).toEqual(['unread', 'old-unread', 'seen'])
+    // A lapsed snooze returns the row; a pin mark does not change the set.
+    const later = inbox({ ...marks, sessions: [...marks.sessions, mark('unread', { pinned: true })] })
+    expect(selectFinishedUnhandled(rows, later, NOW + 2 * HOUR, pending)).toEqual(['unread', 'snoozed', 'old-unread', 'seen'])
+    // Never reviewed: the last day stands in for the review mark.
+    expect(selectFinishedUnhandled(rows, inbox({ ...marks, reviewedAt: null }), NOW, pending)).toEqual(['unread', 'old-unread', 'seen'])
   })
 })
 

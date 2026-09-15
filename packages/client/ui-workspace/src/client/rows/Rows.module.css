@@ -315,6 +315,34 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* The chord that opens a pinned row, drawn as a small keycap between the
+   title and the time. It stays through hover, where the time gives way to
+   the row actions, so the key is readable at the moment of reaching for it. */
+.keycap {
+  flex: none;
+  margin-right: 6px;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-tertiary);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sessionRow.selected .keycap {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .scheduleIndicator {
   display: inline-flex;
   flex: none;

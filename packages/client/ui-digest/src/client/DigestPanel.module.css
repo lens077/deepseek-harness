@@ -63,6 +63,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -138,6 +139,99 @@
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
   align-items: start;
+}
+
+/* The board: one column per state, left to right in decision order (the
+   agent waiting on the user first, only while it is). Columns are equal
+   width and share the whole row, three or four of them. The board fills the
+   body's height and each column scrolls on its own, so a long finished
+   column never pushes the failed column off screen. */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.column > .sectionLabel {
+  flex: none;
+}
+
+/* Inset padding leaves room for the focused card's outline, which the
+   column's own overflow would otherwise clip. It scrolls on the base
+   surface, so the default thumb tokens apply. */
+.columnList {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 3px 3px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A card clips its own overflow, which lets a flex column shrink it below
+   its content; the list scrolls instead, so every card keeps its height. */
+.columnList > .card {
+  flex: none;
+}
+
+/* The count badge takes the column's state tone so the four headers read
+   as the four card edges do. */
+.column[data-column="needsYou"] .sectionCount {
+  color: var(--dsw-alias-state-warn-primary);
+  border-color: currentcolor;
+}
+
+.column[data-column="finished"] .sectionCount {
+  color: var(--dsw-alias-state-success-primary);
+  border-color: currentcolor;
+}
+
+.column[data-column="running"] .sectionCount {
+  color: var(--dsw-static-deepseek-450);
+  border-color: currentcolor;
+}
+
+.column[data-column="failed"] .sectionCount {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: currentcolor;
+}
+
+/* An empty column keeps a dashed slot rather than collapsing: the place a
+   state's rows will land is part of what the board tells the user. */
+.columnEmpty {
+  margin: 0;
+  padding: 18px 12px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+/* Narrow center column: two columns side by side and the body scrolls as a
+   whole, since four 180px columns would wrap every action row. */
+@container (max-width: 920px) {
+  .board {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+  }
+
+  .columnList {
+    overflow-y: visible;
+  }
 }
 
 /* The top edge carries the status colour — green once the turn completed.
@@ -238,6 +332,22 @@
   color: var(--dsw-alias-label-primary);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* With results hidden the question is the whole body: two lines, the rest
+   on hover, so a card is head, question, files, and actions — about a third
+   of its full height. */
+.cardBodyBrief {
+  max-height: none;
+  overflow: hidden;
+}
+
+.questionBrief {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .reply {
@@ -376,13 +486,16 @@
   color: var(--dsw-alias-state-success-primary);
 }
 
-/* Second header row: the time window, the counts it produced, and the
-   handled toggle. Kept off the title row so the title row stays one line. */
+/* Second header row: the time window, the counts it produced, the reply
+   and handled toggles, and the layout switch. Kept off the title row so the
+   title row stays one line; on a narrow center column the row wraps rather
+   than squeezing its controls into two-line labels. */
 .toolbar {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 8px 20px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
@@ -1135,7 +1248,7 @@
     display: none;
   }
 
-  .close, .tab, .groupButton, .chip, .cardTitleButton {
+  .close, .tab, .groupButton, .cardTitleButton {
     min-height: var(--dsh-mobile-control-size, 44px);
   }
 
@@ -1225,15 +1338,21 @@
     width: 100%;
   }
 
+  /* Workspace filter chips are labels, not chrome controls: each box hugs
+     its text with a 2px margin, so the strip stays one text line tall and
+     scrolls sideways instead of filling the viewport with 44px pills. */
   .chips {
-    padding-inline: var(--dsh-mobile-page-padding, 12px);
+    padding: 6px var(--dsh-mobile-page-padding, 12px);
+    gap: 0;
     flex-wrap: nowrap;
     overflow-x: auto;
-    min-height: calc(var(--dsh-mobile-control-size, 44px) + 8px);
   }
 
   .chip {
     flex-shrink: 0;
     white-space: nowrap;
+    margin: 2px;
+    padding: 2px 8px;
+    line-height: 1.4;
   }
 }

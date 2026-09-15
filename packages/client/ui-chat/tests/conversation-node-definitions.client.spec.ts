@@ -19,6 +19,7 @@ import { assistantDefinition } from '../src/client/conversation-nodes/assistant.
 import { chatViewDefinition } from '../src/client/conversation-nodes/chat-snapshot-builder.ts'
 import { commandDefinition } from '../src/client/conversation-nodes/command.ts'
 import { compactionDefinition } from '../src/client/conversation-nodes/compaction.ts'
+import { contextRemovalDefinition } from '../src/client/conversation-nodes/context-removal.ts'
 import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fallback.ts'
 import { nextStepInboxDefinition } from '../src/client/conversation-nodes/inbox.ts'
 import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
@@ -44,6 +45,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   toolDefinition,
   commandDefinition,
   compactionDefinition,
+  contextRemovalDefinition,
   retryDefinition,
   turnErrorDefinition,
   turnMaxTokensDefinition,
@@ -2196,6 +2198,40 @@ describe('built-in conversation node Definitions', () => {
       shadowedItemCount: 3,
       shadowedTokenCount: 42,
     })
+  })
+
+  it('marks a landed context removal without replacing the removed transcript rows', () => {
+    const value = assembler([
+      at(0, 'turn/start', { turn: 1 }),
+      at(1, 'user/message', textMessage('q1', 'first question'), { surfaceOp: 'append' }),
+      at(2, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      at(3, 'turn/start', { turn: 2 }),
+      at(4, 'user/message', textMessage('q2', 'second question'), { surfaceOp: 'append' }),
+      at(5, 'turn/end', { turn: 2, reason: { kind: 'completed' } }),
+      at(6, 'compaction/prune', { shadowedRange: { start: 1, end: 1 }, shadowedSeqs: [1], shadowedTokenCount: 3 }),
+      at(7, 'user/message', {
+        ...textMessage('removal-1', ''),
+        content: [],
+        source: { kind: 'plugin', plugin: 'context-remove', removalId: 'removal-1', turns: [1], promptSeqs: [1] },
+      }, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 }, sourceEventSeqs: [6, 1] }),
+    ])
+    const view = snapshot(value)
+    // Both questions stay in the transcript; the checkpoint is neither a
+    // question nor an injected context row.
+    expect(view.nodes.values().filter(candidate => candidate.kind === 'user')).toHaveLength(2)
+    expect(view.nodes.values().filter(candidate => candidate.kind === 'context')).toHaveLength(0)
+    expect(node(view, 'context-removal')?.data).toMatchObject({
+      seq: 7, turns: [1], promptSeqs: [1], shadowedItemCount: 1,
+    })
+    // A malformed removal source (missing turn data) is not a removal marker.
+    const malformed = assembler([
+      at(0, 'user/message', {
+        ...textMessage('broken', ''),
+        content: [],
+        source: { kind: 'plugin', plugin: 'context-remove' },
+      }, { surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 } }),
+    ])
+    expect(node(snapshot(malformed), 'context-removal')).toBeUndefined()
   })
 
   it('renders a historical compaction when its start remains outside the loaded window', () => {

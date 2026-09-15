@@ -47,6 +47,20 @@
   border-bottom: none;
 }
 
+/* A group of independent checkboxes reads as one field: the browser's
+   fieldset box and legend indent give way to the field rhythm. */
+fieldset.field {
+  margin: 0;
+  padding-inline: 0;
+  border-inline: none;
+  border-top: none;
+  min-width: 0;
+}
+
+fieldset.field legend {
+  padding: 0;
+}
+
 .label {
   display: block;
   font-size: 14px;

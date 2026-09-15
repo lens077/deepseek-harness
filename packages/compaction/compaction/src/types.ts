@@ -71,8 +71,9 @@ declare module '@deepseek-ai/dsh-session/types' {
      */
     'compaction/end': { compactionId: CompactionId; sourceCommandId?: CommandId; turn: number | null; error?: string }
     /**
-     * Shadow price of one model-free prune replacement — log-only, no
-     * surfaceOp. The shared shadow-price protocol: a surface `replace` event
+     * Shadow price of one model-free replacement (a pruned tool result or a
+     * context-removal checkpoint) — log-only, no surfaceOp. The shared
+     * shadow-price protocol: a surface `replace` event
      * is priced by the metering event immediately before it (`compaction/summary`
      * for a summarizing compaction, this event for a prune), which states the
      * heuristic token price of the exact replaced range so a pure consumer

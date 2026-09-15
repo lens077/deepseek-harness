@@ -211,14 +211,25 @@ describe('ui-workspace apply', () => {
     declare(b.slots, 'sidebar.workspaces')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
-    const disabled = { enabled: false, sidebarArea: false, sidebarRows: 5, pinnedSessionIds: [] }
+    const disabled = {
+      enabled: false,
+      sidebarArea: false,
+      sidebarRows: 5,
+      autoPinStatuses: [],
+      pinnedSessionIds: [],
+      completedSessionIds: [],
+    }
     expect(browser.hooks.sessionPins.getSnapshot()).toEqual(disabled)
     await expect(browser.setPinned(['s1' as never], true)).rejects.toThrow('unavailable')
+    await expect(browser.setPinnedSidebarRows('auto')).rejects.toThrow('unavailable')
+    await expect(browser.setPinnedAutoStatuses(['failed'])).rejects.toThrow('unavailable')
 
     // A provider composed in later takes over the view; its changes reach subscribers.
-    let view = { enabled: true, sidebarArea: true, sidebarRows: 4, pinnedSessionIds: ['s1' as never] }
+    let view = { enabled: true, sidebarArea: true, sidebarRows: 4, autoPinStatuses: ['running'], pinnedSessionIds: ['s1' as never] }
     const listeners = new Set<() => void>()
     const setPinned = vi.fn(async () => undefined)
+    const setSidebarRows = vi.fn(async () => undefined)
+    const setAutoPinStatuses = vi.fn(async () => undefined)
     const provider = b.ctx.plugin({
       apply: (providerCtx: Context) => {
         providerCtx.provide('sessionPins', {
@@ -230,6 +241,8 @@ describe('ui-workspace apply', () => {
             },
           },
           setPinned,
+          setSidebarRows,
+          setAutoPinStatuses,
         } as never)
       },
     })
@@ -243,6 +256,10 @@ describe('ui-workspace apply', () => {
     expect(seen).toHaveBeenCalledTimes(1)
     await browser.setPinned(['s2' as never], false)
     expect(setPinned).toHaveBeenCalledWith(['s2'], false)
+    await browser.setPinnedSidebarRows(7)
+    expect(setSidebarRows).toHaveBeenCalledWith(7)
+    await browser.setPinnedAutoStatuses(['running', 'failed'])
+    expect(setAutoPinStatuses).toHaveBeenCalledWith(['running', 'failed'])
 
     // Removing the provider detaches the mirror and restores the disabled view.
     await provider.dispose()

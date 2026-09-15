@@ -14,7 +14,10 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { TurnNavigator } from './TurnNavigator.tsx'
 import { QuestionBar, TurnRecapRow } from './QuestionBar.tsx'
 import { QuestionNavigator } from './QuestionNavigator.tsx'
-import { buildQuestionTurnIndex, buildTurnRecaps, questionEntries, type TurnRecap } from './turn-summary.ts'
+import {
+  buildQuestionTurnIndex, buildTurnRecaps, questionEntries, removableTurns, removedTurns, type TurnRecap,
+} from './turn-summary.ts'
+import type { QuestionRemovalProps } from './QuestionNavigator.tsx'
 import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
@@ -227,6 +230,8 @@ const ChatNodeList = memo(function ChatNodeList({ order, recaps, onSelectQuestio
   })
 })
 
+const EMPTY_TURNS: ReadonlySet<number> = new Set()
+
 /**
  * The chat view slot entry: pure component over the composed props; each
  * ordered business Node crosses the keyed renderer seat.
@@ -234,7 +239,7 @@ const ChatNodeList = memo(function ChatNodeList({ order, recaps, onSelectQuestio
 export function ChatView({
   useSession, useChat, useChatNode, useChatNodeProcess, useSessions, useStore, actions, renderSlot,
   sessionId, openFile, loadOlder, loadThrough, loadAll, searchQuestions, loadImage, openView,
-  chatScroll, forkAt, fileMentions, turnFiles, turnFilesAvailable,
+  chatScroll, forkAt, removeTurns, fileMentions, turnFiles, turnFilesAvailable,
   useTranscriptView, useQuestionNavigation, useProjection, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
@@ -263,6 +268,22 @@ export function ChatView({
     () => buildTurnRecaps(order, nodeStore, questionTurns),
     [nodeStore, order, questionTurns],
   )
+  // Removed turns keep one Set identity while their contents stand: the set
+  // rides every seat's props, and a streaming chunk must not re-render rows.
+  const removedRef = useRef<ReadonlySet<number>>(EMPTY_TURNS)
+  const removed = useMemo(() => {
+    const next = removedTurns(order, nodeStore)
+    const previous = removedRef.current
+    if (previous.size === next.size && [...next].every(turn => previous.has(turn))) return previous
+    removedRef.current = next
+    return next
+  }, [nodeStore, order])
+  const removal = useMemo<QuestionRemovalProps>(() => ({
+    turnOfQuestion: questionTurns.turnOfQuestion,
+    removableTurns: removableTurns(questionTurns, removed),
+    removedTurns: removed,
+    onRemoveTurns: removeTurns,
+  }), [questionTurns, removeTurns, removed])
   const inbox = useSession(s => s.queue)
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
@@ -943,6 +964,7 @@ export function ChatView({
           onSelectSeq={navigateToQuestionSeq}
           onLoadAll={loadAllQuestions}
           searchQuestions={searchQuestions}
+          removal={removal}
           atBottom={atBottom}
           onToBottom={() => {
             const local = listRef.current
@@ -988,6 +1010,7 @@ export function ChatView({
             useChatNodeProcess={useChatNodeProcess}
             historyIncomplete={hasMore}
             compactTranscript={compactTranscript}
+            removedTurns={removed}
             useStore={useStore}
             actions={actions}
             cwd={cwd}

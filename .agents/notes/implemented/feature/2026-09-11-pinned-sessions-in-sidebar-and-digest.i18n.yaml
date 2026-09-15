@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-11-pinned-sessions-in-sidebar-and-digest.md
-2026-09-11-pinned-sessions-in-sidebar-and-digest.md: cbdb3177831b08f9bad4472946ce78149c3e2ad5
-2026-09-11-pinned-sessions-in-sidebar-and-digest.zh.md: 13688dd2f288e960c86ae740db00ec9345efd29b
+2026-09-11-pinned-sessions-in-sidebar-and-digest.md: 67a8248ea93e4d834a631c82852f1f6774528e3c
+2026-09-11-pinned-sessions-in-sidebar-and-digest.zh.md: 4a85e8c3220ce542fca046e0e215b84e1301232e

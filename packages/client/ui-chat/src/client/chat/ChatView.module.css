@@ -57,6 +57,12 @@
   min-width: 0;
 }
 
+/* Rows of a turn a context removal took out of model history stay in the
+   transcript but read as absent from the model's view. */
+.flowItem[data-context-removed] {
+  opacity: 0.55;
+}
+
 /* A closed process reads as one summary immediately followed by its answer.
    Expanded process rows return to the ordinary 16px rhythm. */
 .flowItem[data-turn-process-answer] {
@@ -473,20 +479,150 @@
 
 .questionRow {
   display: flex;
-  gap: 10px;
+  align-items: stretch;
   width: 100%;
+  border-radius: 10px;
+}
+
+.questionRow:hover,
+.questionRow[data-current],
+.questionRow[data-selected] {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+/* A removed question stays listed so its number and answer are still
+   reachable, but reads as absent from the model's view. */
+.questionRow[data-removed] .questionCopy > span:first-child {
+  color: var(--dsw-alias-label-tertiary);
+  text-decoration: line-through;
+}
+
+.questionRowMain {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
   padding: 9px 8px;
   border: 0;
   border-radius: 10px;
   color: var(--dsw-alias-label-primary);
   background: transparent;
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.questionRow:hover,
-.questionRow[data-current] {
+.questionRowMain:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The per-row removal entry appears with the row it belongs to; it never
+   changes the row's width so the list does not jitter under the pointer. */
+.questionRowRemove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  margin: 4px 4px 4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.questionRow:hover .questionRowRemove,
+.questionRowRemove:focus-visible {
+  opacity: 1;
+}
+
+.questionRowRemove:not(:disabled):hover {
+  color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.questionCheck {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 1px 5px 0 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 5px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.questionRow[data-selected] .questionCheck {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.questionMeta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.questionRemovedBadge {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+.questionRemovalBar {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.questionRemovalAction {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  font: var(--dsw-font-xs-13);
+  cursor: pointer;
+}
+
+.questionRemovalAction:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.questionRemovalAction:not(:disabled):hover,
+.questionRemovalAction[data-active] {
   background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.questionRemovalPrimary:not(:disabled) {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.questionRemovalConfirm {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.questionRemovalConfirm > p {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
 }
 
 .questionNumber {

@@ -2,12 +2,15 @@
  * The inbox surface over the center column: what needs the user across every
  * workspace, sectioned by why — finished, seen but not dealt with, running,
  * waiting for a reply, failed — plus the todo, project todo, and timeline
- * tabs.
+ * tabs. On desktop the inbox is either stacked sections or the board, four
+ * state columns side by side; both can hide the cards' replies to fit more
+ * rows on screen.
  *
  * The session list supplies every card's content (the digest projection rides
  * each row) and the durable inbox supplies the user's marks; the panel joins
  * them per render and never fetches a session. The keyboard ring walks the
- * inbox cards in section order so a morning of triage never needs the mouse.
+ * inbox cards in section order, or column by column on the board, so a
+ * morning of triage never needs the mouse.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
@@ -17,8 +20,8 @@ import type { InboxTodoId } from '@deepseek-ai/dsh-session-inbox/types'
 import type { DigestPanelProps } from './contract/slots.ts'
 import { InboxCard, type InboxCardActions } from './InboxCard.tsx'
 import type { BriefLabels, InboxItem, InboxSectionKey, InboxWindow } from './select.ts'
-import { questionSeqOf, renderBrief, selectInbox, selectTimeline, selectTodos, startOfDay } from './select.ts'
-import type { InboxTab } from './stores.ts'
+import { questionSeqOf, renderBrief, selectColumns, selectInbox, selectTimeline, selectTodos, startOfDay } from './select.ts'
+import type { InboxLayout, InboxTab } from './stores.ts'
 import { ProjectTodos, type ProjectTodosActions } from './ProjectTodos.tsx'
 import { Timeline } from './Timeline.tsx'
 import { TodoList } from './TodoList.tsx'
@@ -36,6 +39,7 @@ const TODO_QUESTION_CHARS = 120
 const TAB_KEYS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
 const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
 const SECTION_KEYS: readonly InboxSectionKey[] = ['pinned', 'unread', 'seen', 'running', 'needsYou', 'failed', 'handled']
+const LAYOUTS: readonly InboxLayout[] = ['sections', 'columns']
 
 /**
  * Render the inbox panel, or nothing while it is closed.
@@ -64,6 +68,10 @@ export function DigestPanel(props: DigestPanelProps) {
   const window = useStore(s => s.window)
   const workspaceFilter = useStore(s => s.workspace)
   const showHandled = useStore(s => s.showHandled)
+  const layout = useStore(s => s.layout)
+  const showReply = useStore(s => s.showReply)
+  // The board is a desktop arrangement: phones list one column of rows anyway.
+  const board = mobileView === undefined && layout === 'columns'
   const rows = useSessions(s => s.ids.map(id => s.byId[id]).filter(row => row !== undefined))
   const currentSessionId = useSessions(s => s.current)
   const pending = useSessionPendingInteraction(value => value)
@@ -129,7 +137,13 @@ export function DigestPanel(props: DigestPanelProps) {
       key, items: items.filter(item => item.category === key),
     }))
   }, [selection, mobilePending, mobileView, runningOnly])
-  const ring = useMemo(() => sections.flatMap(section => section.items), [sections])
+  const columns = useMemo(() => selectColumns(sections), [sections])
+  // The ring walks whatever the user sees: sections top to bottom, or the
+  // board column by column, left to right.
+  const ring = useMemo(
+    () => (board ? columns : sections).flatMap(group => group.items),
+    [board, columns, sections],
+  )
   const todos = useMemo(() => selectTodos(inbox, visibleRows, workspaces, ungroupedLabel), [inbox, visibleRows, workspaces, ungroupedLabel])
   // Pinned rows keep their category, so the ring alone yields every failed row.
   const autoTodos = useMemo(() => ring.filter(item => item.category === 'failed'), [ring])
@@ -361,6 +375,10 @@ export function DigestPanel(props: DigestPanelProps) {
                 <input type="checkbox" checked={showHandled} onChange={() => { actions.toggleShowHandled() }} />
                 {t('panel.showHandled')}
               </label>
+              <label className={css.showHandled}>
+                <input type="checkbox" checked={showReply} onChange={() => { actions.toggleShowReply() }} />
+                {t('panel.showReply')}
+              </label>
               <button type="button" className={css.action} onClick={copyBrief}>{t('panel.copyBrief')}</button>
               <button type="button" className={css.action} title={t('panel.markReviewed.hint')}
                 onClick={() => { void markReviewed() }}>{t('panel.markReviewed')}</button>
@@ -409,9 +427,28 @@ export function DigestPanel(props: DigestPanelProps) {
         </span>
         <span className={css.spacer} />
         <label className={css.showHandled}>
+          <input type="checkbox" checked={showReply} onChange={() => { actions.toggleShowReply() }} />
+          {t('panel.showReply')}
+        </label>
+        <label className={css.showHandled}>
           <input type="checkbox" checked={showHandled} onChange={() => { actions.toggleShowHandled() }} />
           {t('panel.showHandled')}
         </label>
+        {mobileView === undefined && (
+          <span className={css.groupToggle} role="group" aria-label={t('panel.layout')}>
+            {LAYOUTS.map(key => (
+              <button
+                key={key}
+                type="button"
+                className={clsx(css.groupButton, layout === key && css.groupActive)}
+                aria-pressed={layout === key}
+                onClick={() => { actions.setLayout(key) }}
+              >
+                {t(`layout.${key}`)}
+              </button>
+            ))}
+          </span>
+        )}
       </div>}
 
       {!mobilePending && selection.workspaces.length > 1 && (
@@ -456,35 +493,64 @@ export function DigestPanel(props: DigestPanelProps) {
                 <p className={css.emptyBody}>{t('panel.empty.body')}</p>
               </div>
             )
-            : (
-              <>
-                {sections.map(section => (
-                  <section key={section.key} className={css.section} data-section={section.key} id={mobilePending ? `digest-pending-${section.key}` : undefined}>
-                    <h3 className={css.sectionLabel}>
-                      {t(`section.${section.key}`)}
-                      <span className={css.sectionCount}>{section.items.length}</span>
-                    </h3>
-                    <div className={css.grid}>
-                      {section.items.map(item => (
-                        <InboxCard
-                          key={item.sessionId}
-                          item={item}
-                          focused={ring[focus]?.sessionId === item.sessionId}
-                          t={t}
-                          actions={cardActions}
-                          pinning={pinning}
-                          disclosure={mobileView === undefined ? undefined : {
-                            expanded: expandedSession === item.sessionId,
-                            toggle: () => { setExpandedSession(value => value === item.sessionId ? null : item.sessionId) },
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                ))}
-                <p className={css.keys}>{t('panel.keys', { shortcut: toggleShortcut })}</p>
-              </>
-            )
+            : board
+              ? (
+                <div className={css.board} data-digest-board="">
+                  {columns.map(column => (
+                    <section key={column.key} className={css.column} data-column={column.key}>
+                      <h3 className={css.sectionLabel}>
+                        {t(`column.${column.key}`)}
+                        <span className={css.sectionCount}>{column.items.length}</span>
+                      </h3>
+                      <div className={css.columnList}>
+                        {column.items.length === 0
+                          ? <p className={css.columnEmpty}>{t('column.empty')}</p>
+                          : column.items.map(item => (
+                            <InboxCard
+                              key={item.sessionId}
+                              item={item}
+                              focused={ring[focus]?.sessionId === item.sessionId}
+                              t={t}
+                              actions={cardActions}
+                              pinning={pinning}
+                              showReply={showReply}
+                            />
+                          ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )
+              : (
+                <>
+                  {sections.map(section => (
+                    <section key={section.key} className={css.section} data-section={section.key} id={mobilePending ? `digest-pending-${section.key}` : undefined}>
+                      <h3 className={css.sectionLabel}>
+                        {t(`section.${section.key}`)}
+                        <span className={css.sectionCount}>{section.items.length}</span>
+                      </h3>
+                      <div className={css.grid}>
+                        {section.items.map(item => (
+                          <InboxCard
+                            key={item.sessionId}
+                            item={item}
+                            focused={ring[focus]?.sessionId === item.sessionId}
+                            t={t}
+                            actions={cardActions}
+                            pinning={pinning}
+                            showReply={showReply}
+                            disclosure={mobileView === undefined ? undefined : {
+                              expanded: expandedSession === item.sessionId,
+                              toggle: () => { setExpandedSession(value => value === item.sessionId ? null : item.sessionId) },
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                  <p className={css.keys}>{t('panel.keys', { shortcut: toggleShortcut })}</p>
+                </>
+              )
         )}
         {mobilePending && <h3 className={css.sectionLabel} id="digest-pending-todos">{t('mobile.todos')}</h3>}
         {(mobilePending || tab === 'todos') && (

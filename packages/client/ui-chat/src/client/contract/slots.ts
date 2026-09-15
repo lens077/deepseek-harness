@@ -235,6 +235,11 @@ export interface ChatViewInjected {
     read: () => ChatScrollPosition | null
   }
   forkAt: (seq: number) => void
+  /**
+   * Remove completed Turns from this Session's model-visible history.
+   * Rejects with a presentable message when the host refuses.
+   */
+  removeTurns: (turns: readonly number[]) => Promise<void>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
   /** Changed files for one Turn, empty when no provider is composed. */
   turnFiles: (turn: number) => readonly ChatTurnFileChange[]

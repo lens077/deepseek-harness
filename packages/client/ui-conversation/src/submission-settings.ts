@@ -19,7 +19,7 @@ export const BUSY_ENTER_BEHAVIORS = ['queue', 'steer'] as const
 export type BusyEnterBehavior = typeof BUSY_ENTER_BEHAVIORS[number]
 
 /** Default preserves Enter-as-Queue for running conversations. */
-export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'queue'
+export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'steer'
 
 /** Where a question-navigation shortcut is suppressed: editable regions, text inputs only, or nowhere. */
 export type QuestionShortcutFocusPolicy = 'editable' | 'text' | 'always'

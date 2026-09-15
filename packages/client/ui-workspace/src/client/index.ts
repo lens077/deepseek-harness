@@ -25,7 +25,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   DEFAULT_SESSION_PINS_VIEW,
-  type SessionPinsView, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
+  type SessionPins, type SessionPinsView, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
 } from './contract/slots.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
@@ -41,7 +41,7 @@ import { en, zh, type WorkspaceKey } from './locales.ts'
 export type { UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  SessionPins, SessionPinsView, SessionTodos,
+  SessionAutoPinStatus, SessionPins, SessionPinsSidebarRows, SessionPinsView, SessionTodos,
   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
@@ -128,6 +128,12 @@ export function apply(ctx: Context): void {
     getSnapshot: () => ctx.remote.$host,
     subscribe: listener => ctx.on('connection/reset', listener),
   }
+  // The pin seat resolved per call so composing the provider in or out takes effect live.
+  const pinProvider = (): SessionPins => {
+    const provider = ctx.get('sessionPins')
+    if (provider === undefined) throw new Error('session pinning is unavailable')
+    return provider
+  }
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
@@ -177,9 +183,13 @@ export function apply(ctx: Context): void {
     addTodos: (sessionIds) => { ctx.get('sessionTodos')?.add(sessionIds) },
     todosAvailable: () => ctx.get('sessionTodos') !== undefined,
     setPinned: async (sessionIds, pinned) => {
-      const provider = ctx.get('sessionPins')
-      if (provider === undefined) throw new Error('session pinning is unavailable')
-      await provider.setPinned(sessionIds, pinned)
+      await pinProvider().setPinned(sessionIds, pinned)
+    },
+    setPinnedSidebarRows: async (rows) => {
+      await pinProvider().setSidebarRows(rows)
+    },
+    setPinnedAutoStatuses: async (statuses) => {
+      await pinProvider().setAutoPinStatuses(statuses)
     },
     setSessionMembership: (workspaceId, sessionIds, member) =>
       ctx.workspaces.setSessionMembership(workspaceId, sessionIds, member),

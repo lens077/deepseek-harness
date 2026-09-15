@@ -19,7 +19,8 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  IconChevronDownOutline14, IconChevronUpOutline14, IconDownloadOutline16, IconLoadingOutline16, IconSearchOutline16,
+  IconCheckOutline14, IconChevronDownOutline14, IconChevronUpOutline14, IconDownloadOutline16,
+  IconLoadingOutline16, IconSearchOutline16, IconTrashOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { SearchQuestions } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -39,9 +40,35 @@ function formatTime(time: number): string {
 /** Typing pause before one whole-session search is issued. */
 const SEARCH_DEBOUNCE_MS = 200
 
+/** Context-removal facts the panel needs about the loaded questions. */
+export interface QuestionRemovalProps {
+  /** Turn that answered each loaded question, by question key; absent when the window holds no boundary for it. */
+  readonly turnOfQuestion: ReadonlyMap<string, number>
+  /** Turns whose complete span may be removed now: completed, loaded, and not yet removed. */
+  readonly removableTurns: ReadonlySet<number>
+  /** Turns a landed removal already took out of model history. */
+  readonly removedTurns: ReadonlySet<number>
+  /** Remove the given completed turns from model history; rejects with a presentable message. */
+  readonly onRemoveTurns: (turns: readonly number[]) => Promise<void>
+}
+
+/** One removal request the panel is confirming or running. */
+type RemovalState =
+  | { kind: 'idle' }
+  | { kind: 'confirm'; turns: readonly number[] }
+  | { kind: 'running'; turns: readonly number[] }
+  | { kind: 'failed'; message: string }
+
+const NO_REMOVAL: QuestionRemovalProps = {
+  turnOfQuestion: new Map(),
+  removableTurns: new Set(),
+  removedTurns: new Set(),
+  onRemoveTurns: () => Promise.resolve(),
+}
+
 export function QuestionNavigator({
   questions, current, hasMore, loadingAll, onPrevious, onNext, onSelect, onSelectSeq, onLoadAll, searchQuestions,
-  atBottom = false, onToBottom, t,
+  removal = NO_REMOVAL, atBottom = false, onToBottom, t,
 }: {
   questions: readonly QuestionEntry[]
   current: number
@@ -60,6 +87,8 @@ export function QuestionNavigator({
    * which is what forces the panel to admit it filtered only the window.
    */
   searchQuestions?: SearchQuestions | undefined
+  /** Context-removal facts and command; absent when the view offers no removal (bare tests). */
+  removal?: QuestionRemovalProps
   /** Whether the transcript already sits at its bottom: the entry then greys out instead of leaving. */
   atBottom?: boolean
   /** Scroll the transcript to its bottom. Absent when the rail has no scroller to drive (bare tests). */
@@ -69,9 +98,14 @@ export function QuestionNavigator({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [remote, setRemote] = useState<QuestionSearchState>({ kind: 'idle' })
+  // Multi-select lives only while the panel is open; a closed panel forgets it.
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set())
+  const [removalState, setRemovalState] = useState<RemovalState>({ kind: 'idle' })
   const panelRef = useRef<HTMLDivElement | null>(null)
   const panelId = useId()
   const trimmed = query.trim()
+  const { turnOfQuestion, removableTurns, removedTurns, onRemoveTurns } = removal
 
   // The loaded window is a suffix of the session, so filtering it is only ever
   // a partial answer. It stays the immediate feedback while a host search runs,
@@ -86,6 +120,21 @@ export function QuestionNavigator({
     document.addEventListener('pointerdown', onPointer)
     return () => { document.removeEventListener('pointerdown', onPointer) }
   }, [open])
+
+  useEffect(() => {
+    if (open) return
+    setSelecting(false)
+    setSelected(new Set())
+    setRemovalState({ kind: 'idle' })
+  }, [open])
+
+  // A turn removed elsewhere, or one whose window moved, leaves the selection.
+  useEffect(() => {
+    setSelected((value) => {
+      const kept = [...value].filter(turn => removableTurns.has(turn))
+      return kept.length === value.size ? value : new Set(kept)
+    })
+  }, [removableTurns])
 
   useEffect(() => {
     if (!open || trimmed === '') {
@@ -116,6 +165,30 @@ export function QuestionNavigator({
   }, [open, questions, searchQuestions, trimmed])
 
   const hasQuestions = questions.length > 0
+  const removing = removalState.kind === 'running'
+  const toggleSelected = (turn: number): void => {
+    setSelected((value) => {
+      const next = new Set(value)
+      if (next.has(turn)) next.delete(turn)
+      else next.add(turn)
+      return next
+    })
+  }
+  const requestRemoval = (turns: readonly number[]): void => {
+    if (turns.length === 0 || removing) return
+    setRemovalState({ kind: 'confirm', turns })
+  }
+  const confirmRemoval = (turns: readonly number[]): void => {
+    setRemovalState({ kind: 'running', turns })
+    onRemoveTurns(turns).then(() => {
+      setRemovalState({ kind: 'idle' })
+      setSelected(new Set())
+      setSelecting(false)
+    }, (error: unknown) => {
+      setRemovalState({ kind: 'failed', message: error instanceof Error ? error.message : String(error) })
+    })
+  }
+  const pendingTurns = removalState.kind === 'confirm' || removalState.kind === 'running' ? removalState.turns : null
 
   // A complete lone question has nowhere to step or search, so the question
   // controls leave. An incomplete window keeps them mounted even before its
@@ -164,26 +237,140 @@ export function QuestionNavigator({
           {notice !== null && (
             <p className={css.questionSearchNotice} role="status" aria-live="polite">{notice}</p>
           )}
-          <div className={css.questionList} aria-busy={searching || undefined}>
-            {rows.map(row => (
+          {/* Removal controls: the multi-select toggle, and while a request is
+              pending, the inline confirmation that names how many turns leave.
+              Confirmation stays inside the panel so the outside-pointer close
+              rule cannot dismiss it under the pointer. */}
+          {removableTurns.size > 0 && pendingTurns === null && removalState.kind !== 'failed' && (
+            <div className={css.questionRemovalBar}>
               <button
-                key={row.seq}
                 type="button"
-                className={css.questionRow}
-                data-current={row.index === current || undefined}
-                title={row.text}
+                className={css.questionRemovalAction}
+                data-active={selecting || undefined}
+                aria-pressed={selecting}
                 onClick={() => {
-                  if (row.index === undefined) onSelectSeq(row.seq)
-                  else onSelect(row.index)
+                  setSelecting(value => !value)
+                  setSelected(new Set())
                 }}
               >
-                <span className={css.questionNumber}>{row.index === undefined ? '·' : row.index + 1}</span>
-                <span className={css.questionCopy}>
-                  <span>{row.text}</span>
-                  <time dateTime={new Date(row.time).toISOString()}>{formatTime(row.time)}</time>
-                </span>
+                {selecting ? t('chat.questions.selectCancel') : t('chat.questions.select')}
               </button>
-            ))}
+              {selecting && (
+                <button
+                  type="button"
+                  className={`${css.questionRemovalAction} ${css.questionRemovalPrimary}`}
+                  disabled={selected.size === 0}
+                  onClick={() => { requestRemoval([...selected].sort((left, right) => left - right)) }}
+                >
+                  <IconTrashOutline16 aria-hidden="true" />
+                  {t('chat.questions.removeSelected', { count: selected.size })}
+                </button>
+              )}
+            </div>
+          )}
+          {pendingTurns !== null && (
+            <div className={css.questionRemovalConfirm} role="alertdialog" aria-live="assertive">
+              <p>{t('chat.questions.removeConfirm', { count: pendingTurns.length })}</p>
+              <div className={css.questionRemovalBar}>
+                <button
+                  type="button"
+                  className={`${css.questionRemovalAction} ${css.questionRemovalPrimary}`}
+                  disabled={removing}
+                  aria-busy={removing || undefined}
+                  onClick={() => { confirmRemoval(pendingTurns) }}
+                >
+                  {removing ? t('chat.questions.removing') : t('chat.questions.removeConfirmYes')}
+                </button>
+                <button
+                  type="button"
+                  className={css.questionRemovalAction}
+                  disabled={removing}
+                  onClick={() => { setRemovalState({ kind: 'idle' }) }}
+                >
+                  {t('chat.questions.removeConfirmNo')}
+                </button>
+              </div>
+            </div>
+          )}
+          {removalState.kind === 'failed' && (
+            <div className={css.questionRemovalConfirm} role="alert">
+              <p>{t('chat.questions.removeFailed', { message: removalState.message })}</p>
+              <div className={css.questionRemovalBar}>
+                <button
+                  type="button"
+                  className={css.questionRemovalAction}
+                  onClick={() => { setRemovalState({ kind: 'idle' }) }}
+                >
+                  {t('chat.questions.removeConfirmNo')}
+                </button>
+              </div>
+            </div>
+          )}
+          <div className={css.questionList} aria-busy={searching || undefined}>
+            {rows.map((row) => {
+              const entry = row.index === undefined ? undefined : questions[row.index]
+              const turn = entry === undefined ? undefined : turnOfQuestion.get(entry.key)
+              const removed = turn !== undefined && removedTurns.has(turn)
+              const removableTurn = turn !== undefined && removableTurns.has(turn) ? turn : undefined
+              const removable = removableTurn !== undefined
+              const checked = turn !== undefined && selected.has(turn)
+              const navigate = (): void => {
+                if (row.index === undefined) onSelectSeq(row.seq)
+                else onSelect(row.index)
+              }
+              return (
+                <div
+                  key={row.seq}
+                  className={css.questionRow}
+                  data-current={row.index === current || undefined}
+                  data-removed={removed || undefined}
+                  data-selected={checked || undefined}
+                >
+                  <button
+                    type="button"
+                    className={css.questionRowMain}
+                    role={selecting ? 'checkbox' : undefined}
+                    aria-checked={selecting ? checked : undefined}
+                    disabled={selecting && !removable}
+                    title={selecting && !removable && !removed ? t('chat.questions.notRemovable') : row.text}
+                    onClick={() => {
+                      if (selecting) {
+                        if (turn !== undefined) toggleSelected(turn)
+                        return
+                      }
+                      navigate()
+                    }}
+                  >
+                    {selecting
+                      ? (
+                        <span className={css.questionCheck} aria-hidden="true">
+                          {checked && <IconCheckOutline14 />}
+                        </span>
+                      )
+                      : <span className={css.questionNumber}>{row.index === undefined ? '·' : row.index + 1}</span>}
+                    <span className={css.questionCopy}>
+                      <span>{row.text}</span>
+                      <span className={css.questionMeta}>
+                        <time dateTime={new Date(row.time).toISOString()}>{formatTime(row.time)}</time>
+                        {removed && <span className={css.questionRemovedBadge}>{t('chat.questions.removed')}</span>}
+                      </span>
+                    </span>
+                  </button>
+                  {!selecting && removableTurn !== undefined && (
+                    <button
+                      type="button"
+                      className={css.questionRowRemove}
+                      disabled={removing}
+                      aria-label={t('chat.questions.removeOne')}
+                      title={t('chat.questions.removeOne')}
+                      onClick={() => { requestRemoval([removableTurn]) }}
+                    >
+                      <IconTrashOutline16 />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

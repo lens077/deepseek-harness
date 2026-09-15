@@ -216,6 +216,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/steer-unavailable': { readonly itemId: MessageId }
     'session/title-invalid': { readonly sessionId: SessionId }
     'session/fork-unavailable': { readonly sessionId: SessionId }
+    /** One requested turn cannot be removed from model history; `turn` names the first refused one when known. */
+    'session/turn-remove-unavailable': { readonly sessionId: SessionId; readonly turn?: number }
     'subagent/not-found': {
       readonly parentSessionId: SessionId
       readonly childSessionId: SessionId
@@ -372,6 +374,21 @@ export interface SessionForkRequest {
 /** Identity of a newly forked Session. */
 export interface SessionForkValue {
   readonly sessionId: SessionId
+}
+
+/** Remove completed turns from one Session's model-visible history. */
+export interface SessionRemoveTurnsRequest {
+  readonly sessionId: SessionId
+  /** Completed turn numbers to remove; at least one, duplicates ignored. */
+  readonly turns: readonly number[]
+}
+
+/** Landed removal: the turns removed and the replacement checkpoint positions. */
+export interface SessionRemoveTurnsValue {
+  /** Every removed turn, ascending. */
+  readonly turns: readonly number[]
+  /** Durable seq of each empty checkpoint replacement, in surface order. */
+  readonly checkpointSeqs: readonly number[]
 }
 
 /** Session prompt request. */

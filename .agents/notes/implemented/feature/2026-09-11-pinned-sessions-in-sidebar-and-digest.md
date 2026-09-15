@@ -14,11 +14,11 @@ Pinning becomes a first-class session-browser verb with one durable source and o
 
 ### One mark, one provider, one consumer seat
 
-The pin mark stays in `@deepseek-ai/dsh-session-inbox`; nothing new is stored per Session. `ui-digest`, which already owns the inbox controller, provides the optional `sessionPins` seat that `ui-workspace` declares in its contract: a `view` observable carrying `{ enabled, sidebarArea, sidebarRows, pinnedSessionIds }` and a `setPinned(sessionIds, pinned)` writer. `ui-workspace` mirrors the view into its browser's `hooks` compartment under `ctx.inject(['sessionPins'], …)`, so a composition without `ui-digest` renders no pin affordance at all, exactly as the `sessionTodos` seat hides "add to todos". The view publishes a new snapshot only when the id list or the policy actually changed, so rows do not re-render on unrelated inbox pushes.
+The pin mark stays in `@deepseek-ai/dsh-session-inbox`; nothing new is stored per Session. `ui-digest`, which already owns the inbox controller, provides the optional `sessionPins` seat that `ui-workspace` declares in its contract: a `view` observable carrying `{ enabled, sidebarArea, sidebarRows, autoPinStatuses, pinnedSessionIds }` and the `setPinned(sessionIds, pinned)`, `setSidebarRows`, and `setAutoPinStatuses` writers. `ui-workspace` mirrors the view into its browser's `hooks` compartment under `ctx.inject(['sessionPins'], …)`, so a composition without `ui-digest` renders no pin affordance at all, exactly as the `sessionTodos` seat hides "add to todos". The view publishes a new snapshot only when the id list or the policy actually changed, so rows do not re-render on unrelated inbox pushes.
 
 ### The session browser pins and lists
 
-The session row's ⋯ menu offers **置顶** / **取消置顶** above **重命名**, and the multi-selection context menu offers the same verb for every selected row. Above the **工作区** header the browser renders a **置顶** area sized to a fixed number of session rows (five by default) that scrolls when more are pinned; its rows are the ordinary `SessionNodeItem`, so status dots, hover cards, the row menu, and the selection-aware context menu behave exactly as in the tree. Pinned rows are ordered by Session recency; archived, blank, unknown, and subagent-origin ids are dropped by a pure `derivePinned` next to `deriveFlat`. An empty area shows one hint line instead of collapsing, so the region the user asked for keeps its place.
+The session row's ⋯ menu offers **置顶** / **取消置顶** above **重命名**, and the multi-selection context menu offers the same verb for every selected row. Above the **工作区** header the browser renders a **置顶** area sized to a fixed number of session rows (five by default; `auto` fits the rows) that scrolls when more are pinned, foldable from its header and configurable from its ⋯ menu ([fold, menu, and auto-pin](2026-09-21-pinned-area-fold-menu-and-auto-pin.md)); its rows are the ordinary `SessionNodeItem`, so status dots, hover cards, the row menu, and the selection-aware context menu behave exactly as in the tree. Pinned rows, joined by the Sessions in the auto-pin statuses, are ordered by Session recency; archived, blank, unknown, and subagent-origin ids are dropped by a pure `derivePinned` next to `deriveFlat`. An empty area shows one hint line instead of collapsing, so the region the user asked for keeps its place.
 
 ### The digest lists pinned rows first
 
@@ -26,7 +26,7 @@ In the inbox, the **置顶** section moves to the front: a pinned Session is the
 
 ### One settings page, three switches and a size
 
-A **置顶** settings page (`settings.section` id `session-pins`, right after **项目待办**) owns the durable `session-pins` namespace: `enabled` (default on), `sidebarArea` (default on), `sidebarRows` (default 5, 1–20), and `digestSection` (default on). The master switch hides every pin affordance — the menu items, the sidebar area, the card action and its `p` key, and the digest section; the two finer switches remove one surface each while the mark itself stays durable, so re-enabling restores the same pinned set.
+A **置顶** settings page (`settings.section` id `session-pins`, right after **项目待办**) owns the durable `session-pins` namespace: `enabled` (default on), `sidebarArea` (default on), `sidebarRows` (default 5, 1–20 or `auto`), `autoPinStatuses` (default running and completed), and `digestSection` (default on). The master switch hides every pin affordance — the menu items, the sidebar area, the card action and its `p` key, and the digest section; the two finer switches remove one surface each while the mark itself stays durable, so re-enabling restores the same pinned set.
 
 ## Alternatives considered
 
@@ -52,3 +52,5 @@ Pinning is reachable from the row the user is looking at, and the pinned set is 
 
 - [Durable session inbox](2026-09-17-durable-session-inbox.md) owns the `pinned` mark and the `sessionTodos` seat precedent this note extends.
 - [Configurable digest panel toggle shortcut](2026-09-20-configurable-digest-toggle-shortcut.md) owns the settings-page pattern (`NavSettingsPolicy`) the pins page copies.
+- [Pinned area fold, ⋯ menu, and auto-pin statuses](2026-09-21-pinned-area-fold-menu-and-auto-pin.md) extends the area with a fold, a header menu, `auto` sizing, and status-based membership.
+- [Pinned area position shortcuts](2026-09-22-pinned-area-position-shortcuts.md) gives the first ten rows tab-local keyboard chords recorded by keypress.

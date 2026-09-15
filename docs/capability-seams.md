@@ -33,6 +33,8 @@ flowchart LR
   svc_tokenMeter["ctx.tokenMeter<br/>Replay token measurement"]
   pkg_compaction_tool_result_pruner["compaction-tool-result-pruner"]
   svc_toolResultPruner["ctx.toolResultPruner<br/>Model-free tool-result pruning"]
+  pkg_context_remove["context-remove"]
+  svc_contextRemoval["ctx.contextRemoval<br/>Per-turn context removal"]
   pkg_session["session"]
   svc_sessions["ctx.sessions<br/>In-memory session store"]
   pkg_agent["agent"]
@@ -256,6 +258,7 @@ flowchart LR
   pkg_compaction --> svc_compaction
   pkg_compaction_basic --> svc_compaction
   pkg_compaction_tool_result_pruner --> svc_toolResultPruner
+  pkg_context_remove --> svc_contextRemoval
   pkg_cordis_host_runner --> svc_cordisInspect
   pkg_cordis_host_runner --> svc_dynamicCordisRunner
   pkg_credentials --> svc_credentials
@@ -373,6 +376,7 @@ flowchart LR
   svc_clientModules --> pkg_client_hmr
   svc_codeRuntime --> pkg_tools
   svc_compaction --> pkg_compaction_basic
+  svc_contextRemoval --> pkg_api_session_controller
   svc_cordisInspect --> pkg_tool_cordis
   svc_credentials --> pkg_api_settings_controller
   svc_credentials --> pkg_llm_deepseek
@@ -493,6 +497,7 @@ flowchart LR
 | `ctx.modelRouter` | `seam` | [`model-router`](../packages/llm/model-router) | [`model-router-rules`](../packages/llm/model-router-rules), [`model-router-llm`](../packages/llm/model-router-llm) | [`api-session-controller`](../packages/api/session-controller) | - | A provider proposes a route for one human prompt; the Web prompt path enforces effort-only application and records the durable decision. |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements. |
 | `ctx.toolResultPruner` | `core` | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Rewrites oversized current tool results through replayable single-node surface replacements before summary compaction. |
+| `ctx.contextRemoval` | `core` | [`context-remove`](../packages/compaction/context-remove) | - | [`api-session-controller`](../packages/api/session-controller) | - | Replaces selected completed turns with empty checkpoint nodes on request so the model no longer sees them while the log keeps them. |
 | `ctx.sessions` | `core` | [`session`](../packages/core/session) | - | [`agent-loop`](../packages/core/agent-loop), [`agent`](../packages/core/agent), [`session-persistence`](../packages/session/session-persistence), [`session-query`](../packages/session-query/session-query), [`session-query-sqlite`](../packages/session-query/session-query-sqlite), [`subagent-in-process-driver`](../packages/subagent/subagent-in-process-driver), [`invariants`](../packages/runtime-diagnostics/invariants), [`message-feedback`](../packages/feedback/message-feedback) | - | Owns append-only Session instances and emits the durable session event feed. |
 | `ctx.sessionController` | `core` | [`api-session-controller`](../packages/api/session-controller) | - | - | - | Owns Session commands, cold reads, durable-event following, live control state, model catalogs, workspace opening, and Agent activation policy. |
 | `ctx.sessionFileReferences` | `core` | [`api-session-controller`](../packages/api/session-controller) | - | - | - | Delegates file-reference discovery through the Session Controller's established Agent lookup policy. |

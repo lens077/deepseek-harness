@@ -110,6 +110,12 @@ describe('client bundle purity gate', () => {
     expect(() => resolveId('@deepseek-ai/dsh-spill-policy/notice/internal')).toThrow(/purity/)
   })
 
+  it('admits only the pure compaction checkpoint leaf, not the compaction seam', () => {
+    expect(resolveId('@deepseek-ai/dsh-compaction/checkpoint')).toBeNull()
+    expect(() => resolveId('@deepseek-ai/dsh-compaction')).toThrow(/purity/)
+    expect(() => resolveId('@deepseek-ai/dsh-compaction/invariant')).toThrow(/purity/)
+  })
+
   it('lets exact generated Remote contributions inline without admitting their package implementation', () => {
     expect(resolveId('@deepseek-ai/dsh-goal/remote')).toBeNull()
     expect(() => resolveId('@deepseek-ai/dsh-goal')).toThrow(/purity/)

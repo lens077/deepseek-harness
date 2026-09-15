@@ -105,7 +105,7 @@ Every append uses the shared iterative `snapshotJsonValue()` pass, which reads, 
 
 ### Derived history
 
-`deriveMessages()` caches each surface node's projection once and returns a fresh array per call over shared, deep-frozen messages; each of the four surface event types (`system/message`, `user/message`, `assistant/message`, `tool/result`) projects its own message kind — the system-role prompt (an empty-content system node projects to no message), user content verbatim, the assembled assistant message with its provider and model, or a user-role tool result. Embedded Assistant streams and `assistant/attempt` events remain replay and diagnostic data only. A surface rewrite rebuilds the projection — there is no raw-log fallback, so the surface is the single source of derived history.
+`deriveMessages()` caches each surface node's projection once and returns a fresh array per call over shared, deep-frozen messages; each of the four surface event types (`system/message`, `user/message`, `assistant/message`, `tool/result`) projects its own message kind — the system-role prompt (an empty-content system node projects to no message), user content verbatim (an empty-content user node, the checkpoint a surface-replacing producer appends to remove a range from model history, projects to no message), the assembled assistant message with its provider and model, or a user-role tool result. Embedded Assistant streams and `assistant/attempt` events remain replay and diagnostic data only. A surface rewrite rebuilds the projection — there is no raw-log fallback, so the surface is the single source of derived history.
 
 ### The request header
 

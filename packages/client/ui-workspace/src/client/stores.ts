@@ -6,6 +6,7 @@
  * share from the return type.
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
+import { PIN_SHORTCUT_DIGIT_PRESET, PIN_SHORTCUT_SLOTS, assignPinShortcut, type PinShortcutChord } from './pin-shortcuts.ts'
 
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
@@ -49,6 +50,25 @@ type WorkspaceViewState = {
   multiSelect: boolean
   /** Presentation of the running/completed/error perimeter on Session rows. */
   sessionStatusIndicatorMode: SessionStatusIndicatorMode
+  /** Whether the sidebar pinned area shows only its header. */
+  pinnedCollapsed: boolean
+  /**
+   * Sessions the user removed from the pinned area while they were listed
+   * only by status (Session id → the auto-pin status key at removal). The
+   * removal holds while the Session's matched statuses stay the same and
+   * lapses once they change or the user pins it.
+   */
+  pinnedAutoDismissed: Record<string, string>
+  /**
+   * Whether the pinned-area shortcuts answer keydown events in this tab.
+   * Off keeps the bindings for later.
+   */
+  pinnedShortcutsEnabled: boolean
+  /**
+   * One chord per pinned-area position, first row first; `null` leaves the
+   * position without a key. Browser-local: the bindings never reach the Host.
+   */
+  pinnedShortcuts: (PinShortcutChord | null)[]
 }
 
 /**
@@ -56,11 +76,17 @@ type WorkspaceViewState = {
  * return type); drift fails assignability at the defineStore call.
  */
 type WorkspaceViewActions = {
+  setPinnedShortcutsEnabled: (draft: WorkspaceViewState, enabled: boolean) => void
+  setPinnedShortcut: (draft: WorkspaceViewState, slot: number, chord: PinShortcutChord | null) => void
+  setPinnedShortcuts: (draft: WorkspaceViewState, chords: readonly (PinShortcutChord | null)[]) => void
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
   setCollapsedSessionCount: (draft: WorkspaceViewState, count: CollapsedSessionCount) => void
   setMultiSelect: (draft: WorkspaceViewState, enabled: boolean) => void
   setSessionStatusIndicatorMode: (draft: WorkspaceViewState, mode: SessionStatusIndicatorMode) => void
+  setPinnedCollapsed: (draft: WorkspaceViewState, collapsed: boolean) => void
+  dismissAutoPinned: (draft: WorkspaceViewState, sessionId: string, statusKey: string) => void
+  clearAutoPinDismissal: (draft: WorkspaceViewState, sessionId: string) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
   retainAccountKeys: (draft: WorkspaceViewState, workspaceKeys: readonly string[]) => void
   syncSessionOrderAccount: (
@@ -89,17 +115,35 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       ungroupedNestedUnder: {},
       multiSelect: true,
       sessionStatusIndicatorMode: 'animated',
+      pinnedCollapsed: false,
+      pinnedAutoDismissed: {},
+      pinnedShortcutsEnabled: true,
+      pinnedShortcuts: [...PIN_SHORTCUT_DIGIT_PRESET],
     }),
     // Persistence restores the whole value, so a state field addition bumps
     // the key: an older value could not supply the required field.
-    persist: 'dsh.workspace.view.v9',
+    persist: 'dsh.workspace.view.v12',
     actions: {
+      setPinnedShortcutsEnabled: (d, enabled: boolean) => { d.pinnedShortcutsEnabled = enabled },
+      setPinnedShortcut: (d, slot: number, chord: PinShortcutChord | null) => {
+        d.pinnedShortcuts = assignPinShortcut(d.pinnedShortcuts, slot, chord)
+      },
+      setPinnedShortcuts: (d, chords: readonly (PinShortcutChord | null)[]) => {
+        d.pinnedShortcuts = Array.from({ length: PIN_SHORTCUT_SLOTS }, (_, slot) => chords[slot] ?? null)
+      },
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
       setCollapsedSessionCount: (d, count: CollapsedSessionCount) => { d.collapsedSessionCount = count },
       setMultiSelect: (d, enabled: boolean) => { d.multiSelect = enabled },
       setSessionStatusIndicatorMode: (d, mode: SessionStatusIndicatorMode) => {
         d.sessionStatusIndicatorMode = mode
+      },
+      setPinnedCollapsed: (d, collapsed: boolean) => { d.pinnedCollapsed = collapsed },
+      dismissAutoPinned: (d, sessionId: string, statusKey: string) => { d.pinnedAutoDismissed[sessionId] = statusKey },
+      clearAutoPinDismissal: (d, sessionId: string) => {
+        d.pinnedAutoDismissed = Object.fromEntries(
+          Object.entries(d.pinnedAutoDismissed).filter(([key]) => key !== sessionId),
+        )
       },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
       retainAccountKeys: (d, workspaceKeys: readonly string[]) => {

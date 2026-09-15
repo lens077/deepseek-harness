@@ -3,8 +3,8 @@
  * The pinned-sessions settings: the policy standing on defaults until a scope
  * binds it, mirroring the scope while bound, and routing writes; and the
  * settings page over direct props — the master switch, the two surface
- * switches following it, the row count clamped into the schema range, and the
- * disabled and failure states.
+ * switches following it, the row count and auto-pin statuses under the
+ * sidebar switch, and the disabled and failure states.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -22,7 +22,8 @@ afterEach(() => {
 })
 
 const DEFAULTS: PinsSettingsView = {
-  status: 'unavailable', writable: false, enabled: true, sidebarArea: true, sidebarRows: 5, digestSection: true,
+  status: 'unavailable', writable: false, enabled: true, sidebarArea: true, sidebarRows: 5,
+  autoPinStatuses: ['running', 'completed'], digestSection: true,
 }
 
 describe('PinsSettingsPolicy', () => {
@@ -32,9 +33,9 @@ describe('PinsSettingsPolicy', () => {
     const stub = stubSettingsScope<SessionPinsSettings>()
     const detach = policy.bind(stub.scope)
     expect(policy.view.getSnapshot()).toMatchObject({ status: 'loading', enabled: true })
-    stub.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: false, sidebarRows: 8, digestSection: false } })
+    stub.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: false, sidebarRows: 8, autoPinStatuses: ['failed'], digestSection: false } })
     expect(policy.view.getSnapshot()).toEqual({
-      status: 'ready', writable: true, enabled: false, sidebarArea: false, sidebarRows: 8, digestSection: false,
+      status: 'ready', writable: true, enabled: false, sidebarArea: false, sidebarRows: 8, autoPinStatuses: ['failed'], digestSection: false,
     })
     // A scope that turns unavailable keeps the last document in view.
     stub.publish({ status: 'unavailable', value: undefined, writable: false })
@@ -52,9 +53,12 @@ describe('PinsSettingsPolicy', () => {
     await policy.setEnabled(false)
     await policy.setSidebarArea(false)
     await policy.setSidebarRows(7)
+    await policy.setSidebarRows('auto')
+    await policy.setAutoPinStatuses(['running', 'failed'])
     await policy.setDigestSection(false)
     expect(stub.set.mock.calls).toEqual([
-      ['enabled', false], ['sidebarArea', false], ['sidebarRows', 7], ['digestSection', false],
+      ['enabled', false], ['sidebarArea', false], ['sidebarRows', 7], ['sidebarRows', 'auto'],
+      ['autoPinStatuses', ['running', 'failed']], ['digestSection', false],
     ])
   })
 })
@@ -62,7 +66,8 @@ describe('PinsSettingsPolicy', () => {
 type SectionCalls = {
   setEnabled: ReturnType<typeof vi.fn<(enabled: boolean) => Promise<void>>>
   setSidebarArea: ReturnType<typeof vi.fn<(enabled: boolean) => Promise<void>>>
-  setSidebarRows: ReturnType<typeof vi.fn<(rows: number) => Promise<void>>>
+  setSidebarRows: ReturnType<typeof vi.fn<(rows: number | 'auto') => Promise<void>>>
+  setAutoPinStatuses: ReturnType<typeof vi.fn<(statuses: readonly string[]) => Promise<void>>>
   setDigestSection: ReturnType<typeof vi.fn<(enabled: boolean) => Promise<void>>>
 }
 
@@ -71,7 +76,8 @@ function mount(view: Partial<PinsSettingsView> = {}, over: Partial<SectionCalls>
   const calls: SectionCalls = {
     setEnabled: vi.fn<(enabled: boolean) => Promise<void>>(async () => undefined),
     setSidebarArea: vi.fn<(enabled: boolean) => Promise<void>>(async () => undefined),
-    setSidebarRows: vi.fn<(rows: number) => Promise<void>>(async () => undefined),
+    setSidebarRows: vi.fn<(rows: number | 'auto') => Promise<void>>(async () => undefined),
+    setAutoPinStatuses: vi.fn<(statuses: readonly string[]) => Promise<void>>(async () => undefined),
     setDigestSection: vi.fn<(enabled: boolean) => Promise<void>>(async () => undefined),
     ...over,
   }
@@ -92,7 +98,7 @@ function checkboxes(): HTMLInputElement[] {
 describe('PinsSettingsSection', () => {
   it('writes the three switches, and the surface switches follow the master switch', () => {
     const c = mount()
-    const [enabled, sidebar, digest] = checkboxes()
+    const [enabled, sidebar, , , , digest] = checkboxes()
     fireEvent.click(enabled!)
     expect(c.setEnabled).toHaveBeenCalledWith(false)
     fireEvent.click(sidebar!)
@@ -101,27 +107,44 @@ describe('PinsSettingsSection', () => {
     expect(c.setDigestSection).toHaveBeenCalledWith(false)
     cleanup()
     mount({ enabled: false })
-    const [, sidebarOff, digestOff] = checkboxes()
+    const [, sidebarOff, ...rest] = checkboxes()
     expect(sidebarOff!.disabled).toBe(true)
-    expect(digestOff!.disabled).toBe(true)
-    expect(screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.sidebarRows']).disabled).toBe(true)
+    expect(rest.every(box => box.disabled)).toBe(true)
+    expect(screen.getByLabelText<HTMLSelectElement>(zh['pinsSettings.sidebarRows']).disabled).toBe(true)
   })
 
-  it('clamps the row count into the schema range and ignores an empty or unparsable field', () => {
+  it('offers the row count as adaptive or 1–20 and follows the sidebar switch', () => {
     const c = mount()
-    const rows = screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.sidebarRows'])
+    const rows = screen.getByLabelText<HTMLSelectElement>(zh['pinsSettings.sidebarRows'])
     expect(rows.value).toBe('5')
+    expect([...rows.options].map(option => option.value)).toEqual(['auto', ...Array.from({ length: 20 }, (_, i) => String(i + 1))])
+    expect(rows.options[0]?.textContent).toBe(zh['pinsSettings.sidebarRows.auto'])
     fireEvent.change(rows, { target: { value: '8' } })
     expect(c.setSidebarRows).toHaveBeenLastCalledWith(8)
-    fireEvent.change(rows, { target: { value: '99' } })
-    expect(c.setSidebarRows).toHaveBeenLastCalledWith(20)
-    fireEvent.change(rows, { target: { value: '0' } })
-    expect(c.setSidebarRows).toHaveBeenLastCalledWith(1)
-    fireEvent.change(rows, { target: { value: '' } })
-    expect(c.setSidebarRows).toHaveBeenCalledTimes(3)
+    fireEvent.change(rows, { target: { value: 'auto' } })
+    expect(c.setSidebarRows).toHaveBeenLastCalledWith('auto')
+    cleanup()
+    mount({ sidebarArea: false, sidebarRows: 'auto' })
+    const off = screen.getByLabelText<HTMLSelectElement>(zh['pinsSettings.sidebarRows'])
+    expect(off.disabled).toBe(true)
+    expect(off.value).toBe('auto')
+  })
+
+  it('writes the complete auto-pin selection in canonical order from any checkbox', () => {
+    const c = mount({ autoPinStatuses: ['completed'] })
+    const running = screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.autoPin.running'])
+    const completed = screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.autoPin.completed'])
+    const failed = screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.autoPin.failed'])
+    expect([running.checked, completed.checked, failed.checked]).toEqual([false, true, false])
+    fireEvent.click(failed)
+    expect(c.setAutoPinStatuses).toHaveBeenLastCalledWith(['completed', 'failed'])
+    fireEvent.click(running)
+    expect(c.setAutoPinStatuses).toHaveBeenLastCalledWith(['running', 'completed'])
+    fireEvent.click(completed)
+    expect(c.setAutoPinStatuses).toHaveBeenLastCalledWith([])
     cleanup()
     mount({ sidebarArea: false })
-    expect(screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.sidebarRows']).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.autoPin.running']).disabled).toBe(true)
   })
 
   it('disables every control while loading or read-only, and surfaces a failed write briefly', async () => {
@@ -143,7 +166,7 @@ describe('PinsSettingsSection', () => {
     cleanup()
     // A non-Error rejection is shown as text.
     mount({}, { setSidebarRows: vi.fn(async () => { throw 'offline' }) })
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(zh['pinsSettings.sidebarRows']), { target: { value: '6' } })
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(zh['pinsSettings.sidebarRows']), { target: { value: '6' } })
     await act(async () => { await Promise.resolve() })
     expect(screen.getByRole('alert').textContent).toBe('保存失败：offline')
   })

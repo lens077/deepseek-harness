@@ -88,7 +88,7 @@ function mountPanel({
     navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut,
   }
   const pinsSettings: PinsSettingsView = {
-    status: 'ready', writable: true, enabled: true, sidebarArea: true, sidebarRows: 5, digestSection: true, ...pins,
+    status: 'ready', writable: true, enabled: true, sidebarArea: true, sidebarRows: 5, autoPinStatuses: ['running', 'completed'], digestSection: true, ...pins,
   }
   const calls = {
     navigateMobile: vi.fn(),
@@ -569,6 +569,95 @@ describe('DigestPanel keyboard ring', () => {
     fireEvent.keyDown(document.body, { key: 'j' })
     smaller.rerender()
     expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('only')
+  })
+})
+
+describe('DigestPanel board layout and reply visibility', () => {
+  function column(key: string): HTMLElement {
+    const element = document.querySelector<HTMLElement>(`[data-column="${key}"]`)
+    if (element === null) throw new Error(`no column ${key}`)
+    return element
+  }
+  const boardRows = () => [
+    row('done', { updatedAt: NOW }),
+    row('seen', { updatedAt: NOW - 2 * HOUR }),
+    row('broken', { projectionValues: { sessionDigest: digest({ outcome: 'error' }) } }),
+    row('ask', { pendingInteraction: { kind: 'question' } }),
+  ]
+
+  it('lays the state columns side by side, newest first, with an empty slot for a state without rows', () => {
+    const m = mountPanel({ rows: boardRows(), snapshot: inbox({ sessions: [mark('seen', { lastSeenSeq: 3 })] }) })
+    expect(screen.getByRole('button', { name: zh['layout.sections'] }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: zh['layout.columns'] }))
+    m.rerender()
+    expect(m.store.getSnapshot().layout).toBe('columns')
+    expect(document.querySelector('[data-section]')).toBeNull()
+    expect([...document.querySelectorAll<HTMLElement>('[data-column]')].map(el => el.dataset['column']))
+      .toEqual(['needsYou', 'finished', 'running', 'failed'])
+    expect(column('needsYou').textContent).toContain('title-ask')
+    expect([...column('finished').querySelectorAll<HTMLElement>('[data-session-id]')].map(el => el.dataset['sessionId'])).toEqual(['done', 'seen'])
+    expect(column('finished').querySelector('h3')?.textContent).toBe(`${zh['column.finished']}2`)
+    expect(column('running').textContent).toContain(zh['column.empty'])
+    expect(column('failed').textContent).toContain('title-broken')
+    // The ring starts on the leftmost column and walks column by column.
+    expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('ask')
+    fireEvent.keyDown(document.body, { key: 'j' })
+    m.rerender()
+    expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('done')
+    fireEvent.click(within(column('failed')).getByRole('button', { name: zh['card.open'] }))
+    expect(m.openSession).toHaveBeenCalledWith('broken')
+    m.store.actions.open()
+    m.rerender()
+    fireEvent.click(screen.getByRole('button', { name: zh['layout.sections'] }))
+    m.rerender()
+    expect(document.querySelector('[data-column]')).toBeNull()
+    expect(section('needsYou').textContent).toContain('title-ask')
+  })
+
+  it('hides the reply on request in both layouts while keeping the question and the actions', () => {
+    const m = mountPanel({ rows: [row('cut', { projectionValues: { sessionDigest: digest({ replyTruncated: true }) } })] })
+    expect(section('unread').textContent).toContain('已修复：token 刷新和跳转有竞态。…')
+    fireEvent.click(screen.getByRole('checkbox', { name: zh['panel.showReply'] }))
+    m.rerender()
+    expect(m.store.getSnapshot().showReply).toBe(false)
+    const card = section('unread')
+    expect(card.textContent).not.toContain('已修复')
+    expect(card.textContent).not.toContain(zh['card.truncated'])
+    expect(card.textContent).toContain('修一下登录的 bug')
+    expect(screen.getByTitle('修一下登录的 bug')).toBeTruthy()
+    expect(within(card).getByRole('button', { name: zh['card.open'] })).toBeTruthy()
+    expect(within(card).getByRole('button', { name: zh['card.handled'] })).toBeTruthy()
+    m.store.actions.setLayout('columns')
+    m.rerender()
+    // Nothing waits on the user, so the board opens on the three standing columns.
+    expect([...document.querySelectorAll<HTMLElement>('[data-column]')].map(el => el.dataset['column']))
+      .toEqual(['finished', 'running', 'failed'])
+    expect(column('finished').textContent).not.toContain('已修复')
+    expect(within(column('finished')).getByRole('button', { name: zh['card.open'] })).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: zh['panel.showReply'] }))
+    m.rerender()
+    expect(column('finished').textContent).toContain('已修复')
+  })
+
+  it('offers the reply toggle but not the board on phones, where a stored board preference lists sections', () => {
+    const m = mountPanel({
+      mobileView: 'overview', rows: [row('a'), row('z')],
+      snapshot: inbox({ sessions: [mark('z', { snoozedUntil: NOW + HOUR })] }),
+    })
+    m.store.actions.setLayout('columns')
+    m.rerender()
+    expect(document.querySelector('[data-column]')).toBeNull()
+    expect(section('unread').textContent).toContain('title-a')
+    expect(screen.queryByRole('button', { name: zh['layout.columns'] })).toBeNull()
+    const more = m.view.container.querySelector<HTMLElement>('[data-digest-compact-toolbar] details')!
+    more.open = true
+    expect(within(more).getByText('已延后 1')).toBeTruthy()
+    fireEvent.click(within(more).getByRole('checkbox', { name: zh['panel.showReply'] }))
+    expect(m.store.getSnapshot().showReply).toBe(false)
+    m.rerender()
+    fireEvent.click(screen.getByRole('button', { name: /title-a/ }))
+    expect(screen.queryByText('已修复：token 刷新和跳转有竞态。')).toBeNull()
+    expect(screen.getByText('修一下登录的 bug')).toBeTruthy()
   })
 })
 

@@ -30,6 +30,7 @@ kind: "package-group"
 | [`compaction-basic/`](compaction-basic/README.zh.md) | 随 token 压力上升自动把较早历史压缩为摘要 | 注册 `ctx.compaction` |
 | [`compaction-tool-result-pruner/`](compaction-tool-result-pruner/README.zh.md) | 修剪超大工具输出，减少需要压缩的历史 | `ctx.toolResultPruner` |
 | [`command-compact/`](command-compact/README.zh.md) | 按需压缩历史的 `/compact` 命令 | 注册到 `ctx.commands` |
+| [`context-remove/`](context-remove/README.zh.md) | 按请求把选中的已完成回合移出模型可见历史；日志与 transcript 仍保留它们 | `ctx.contextRemoval` |
 
 -----
 

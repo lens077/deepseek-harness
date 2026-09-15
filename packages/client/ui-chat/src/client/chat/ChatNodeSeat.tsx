@@ -14,6 +14,8 @@ interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly useChatNodeProcess: ChatViewSlotProps['useChatNodeProcess']
   readonly historyIncomplete: boolean
   readonly compactTranscript: boolean
+  /** Turns a landed context removal took out of model history; their rows render dimmed. */
+  readonly removedTurns: ReadonlySet<number>
   readonly useStore: ChatViewSlotProps['useStore']
   readonly actions: ChatViewSlotProps['actions']
   readonly renderSlot: ChatViewSlotProps['renderSlot']
@@ -36,7 +38,7 @@ function turnOf(node: ChatNode | undefined): number | undefined {
 
 /** Subscribe, apply Turn-process visibility, and dispatch one stable Context key. */
 export const ChatNodeSeat = memo(function ChatNodeSeat({
-  nodeKey, useChatNode, useChatNodeProcess, historyIncomplete, compactTranscript,
+  nodeKey, useChatNode, useChatNodeProcess, historyIncomplete, compactTranscript, removedTurns,
   cwd, openFile, inspectCall, forkAt,
   loadImage, renderMessageImages, fileMentions, useStore, actions, renderSlot, t,
 }: ChatNodeSeatProps) {
@@ -129,6 +131,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       data-chat-flow-key={routedNode.key}
       data-chat-flow-kind={routedNode.kind}
       data-chat-turn={turn}
+      data-context-removed={(turn !== undefined && removedTurns.has(turn)) || undefined}
       data-turn-process-member={processMember || undefined}
       data-turn-process-hidden={processHidden || undefined}
       data-turn-process-answer={compactAnswer || undefined}

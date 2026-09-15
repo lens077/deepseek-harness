@@ -2,7 +2,9 @@ import { Fragment, memo, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { DocumentFileIcon, fileSizeText, JsonBlock, projectUserText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  DocumentFileIcon, fileSizeText, IconTrashOutline16, JsonBlock, projectUserText, StateDot,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
@@ -358,6 +360,31 @@ export const ContextMessageNodeView = memo(function ContextMessageNodeView({ nod
 /** Automatic compaction keyed Chat renderer. */
 export const CompactionNodeView = memo(function CompactionNodeView({ node, t }: ChatNodeViewProps<'compaction'>) {
   return <CompactionItem node={node.data} t={t} />
+})
+
+/**
+ * Context-removal checkpoint keyed Chat renderer: a marker row where the
+ * removal landed. The removed rows stay above it, dimmed by their turn.
+ */
+export const ContextRemovalNodeView = memo(function ContextRemovalNodeView({ node, t }: ChatNodeViewProps<'context-removal'>) {
+  const data = node.data
+  const summary = data.shadowedItemCount === null
+    ? t('message.contextRemoval.summaryTurns', { turns: data.turns.length })
+    : t('message.contextRemoval.summary', { turns: data.turns.length, items: data.shadowedItemCount })
+  return (
+    <div className={css.compactionRow} data-context-removal-turns={data.turns.join(',')}>
+      <div className={css.compactionButton}>
+        <span className={css.compactionLeading} aria-hidden>
+          <span className={css.compactionContextIcon}>
+            <IconTrashOutline16 />
+          </span>
+        </span>
+        <span className={css.compactionTitle}>{t('message.contextRemoval')}</span>
+        <span className={css.compactionSep} aria-hidden />
+        <span className={css.compactionSummary}>{summary}</span>
+      </div>
+    </div>
+  )
 })
 
 /** Correlated retry-chain keyed Chat renderer. */

@@ -50,6 +50,8 @@ import type {
   SessionPageRequest,
   SessionPromptRequest,
   SessionPromptValue,
+  SessionRemoveTurnsRequest,
+  SessionRemoveTurnsValue,
   SessionReplaceDirectoriesRequest,
   SessionRenameRequest,
   SessionRenameValue,
@@ -469,6 +471,17 @@ export class SessionController extends TypertRemoteService {
   @Remote('fork')
   fork(request: SessionForkRequest): Promise<SessionForkValue> {
     return this.commands.fork(request)
+  }
+
+  /**
+   * Remove completed turns from one Session's model-visible history after explicitly resuming it.
+   * @param request - Session identity and completed turn numbers.
+   * @param signal - caller cancellation before the replacements land.
+   * @returns the removed turns and their checkpoint positions.
+   */
+  @Remote('removeTurns')
+  removeTurns(request: SessionRemoveTurnsRequest, signal: AbortSignal): Promise<SessionRemoveTurnsValue> {
+    return this.commands.removeTurns(request, signal)
   }
 
   /**

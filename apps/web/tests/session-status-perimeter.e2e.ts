@@ -20,7 +20,7 @@ const HOLD_PROVIDER = 'web-test-status-hold'
 const HOLD_MODEL = 'hold'
 const SESSION_ID = SessionId('session-status-perimeter-owner')
 const WORKSPACE_NAME = 'status-workspace'
-const PERSIST_KEY = 'dsh.workspace.view.v9'
+const PERSIST_KEY = 'dsh.workspace.view.v11'
 
 /** Model stub that holds the first call open until the test releases it, then finishes. */
 class HoldingAdapter extends LlmAdapter {

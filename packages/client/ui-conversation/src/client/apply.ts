@@ -377,6 +377,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
+          setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
           hooks: {
             busyEnter: submissionPolicy.busyEnter,
             sendShortcut: submissionPolicy.sendShortcut,
@@ -430,6 +431,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
             // Stop failure is published through Session promptError.
           })
         },
+        setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
         command: async (line) => {
           const session = sessions.binding(sessionId)?.session
           if (session === undefined) return false

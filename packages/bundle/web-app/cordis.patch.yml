@@ -177,6 +177,13 @@
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
+    # Removes selected completed turns from model-visible history on request;
+    # the session controller's `removeTurns` command and the Chat question
+    # panel's single/multi-select removal ride it. Host plane like the token
+    # meter it prices removed spans with.
+    - id: context-remove
+      name: '@deepseek-ai/dsh-context-remove'
+
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'

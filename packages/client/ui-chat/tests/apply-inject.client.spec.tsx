@@ -5,7 +5,7 @@ import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import {
-  SlotTestRuntime, TestRemote, stubSettingsScope, usePinnedBrowserLanguages,
+  RemoteError, SlotTestRuntime, TestRemote, stubSettingsScope, usePinnedBrowserLanguages,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionBehaviorOverrides } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
@@ -55,7 +55,10 @@ async function bench() {
   const openWorkspacePath = vi.fn<ClientRemote['session']['openWorkspacePath']>(
     () => Promise.resolve({ ok: true, value: { opened: true } }),
   )
-  new TestRemote(runtime.ctx, { session: { openWorkspacePath } })
+  const removeTurns = vi.fn<ClientRemote['session']['removeTurns']>(
+    () => Promise.resolve({ ok: true, value: { turns: [2], checkpointSeqs: [40] } }),
+  )
+  new TestRemote(runtime.ctx, { session: { openWorkspacePath, removeTurns } })
   runtime.ctx.provide('uiWorkspace', {
     connectWorkspace: vi.fn(async () => ROOT),
   } as never)
@@ -84,7 +87,7 @@ async function bench() {
     ) => ChatViewInjected)(id, instance.actions)
     return { instance, injected }
   }
-  return { runtime, layout, openWorkspacePath, sidebarRight, session, chatViewApi }
+  return { runtime, layout, openWorkspacePath, removeTurns, sidebarRight, session, chatViewApi }
 }
 
 describe('Chat inject API', () => {
@@ -123,6 +126,20 @@ describe('Chat inject API', () => {
     await vi.waitFor(() => {
       expect(fork).toHaveBeenCalledWith({ sessionId: ROOT, atSeq: 18, increaseTitle: true })
     })
+    await b.runtime.dispose()
+  })
+
+  it('removes turns through the Session Controller and surfaces a refusal as an Error', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(ROOT)
+    await expect(injected.removeTurns([2])).resolves.toBeUndefined()
+    expect(b.removeTurns).toHaveBeenCalledWith({ sessionId: ROOT, turns: [2] })
+
+    b.removeTurns.mockResolvedValueOnce({
+      ok: false,
+      error: new RemoteError('session/turn-remove-unavailable', 'turn 2 has not completed', { sessionId: ROOT, turn: 2 }),
+    })
+    await expect(injected.removeTurns([2])).rejects.toThrow('turn 2 has not completed')
     await b.runtime.dispose()
   })
 

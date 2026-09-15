@@ -62,7 +62,7 @@ import { SESSION_PINS_SETTINGS_NAMESPACE, SessionPinsSettingsSchema, type Sessio
 import { DigestNavEntry } from './DigestNavEntry.tsx'
 import { DigestPanel } from './DigestPanel.tsx'
 import { createDigestStore } from './stores.ts'
-import { questionSeqOf, selectInbox } from './select.ts'
+import { questionSeqOf, selectFinishedUnhandled, selectInbox } from './select.ts'
 import { en, NS, zh, type DigestKey } from './locales.ts'
 
 export type { DigestKey } from './locales.ts'
@@ -233,38 +233,57 @@ export function apply(ctx: ClientContext): void {
         setEnabled: enabled => pinsSettings.setEnabled(enabled),
         setSidebarArea: enabled => pinsSettings.setSidebarArea(enabled),
         setSidebarRows: rows => pinsSettings.setSidebarRows(rows),
+        setAutoPinStatuses: statuses => pinsSettings.setAutoPinStatuses(statuses),
         setDigestSection: enabled => pinsSettings.setDigestSection(enabled),
       }),
     }, PinsSettingsSection))
   })
 
-  // The session browser's pin seat: the pinned ids and the pin policy as one
-  // view, republished only when either actually changed so rows do not
-  // re-render on unrelated inbox pushes.
+  // The session browser's pin seat: the pinned ids, the finished unhandled
+  // ids (the inbox's 已完成 and 已读未处理 rows, the durable form of the
+  // sidebar's completed reminder), and the pin policy as one view,
+  // republished only when one actually changed so rows do not re-render on
+  // unrelated inbox or list pushes.
   const NO_PINS: readonly SessionId[] = Object.freeze([])
+  function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
+    return a.length === b.length && a.every((item, index) => item === b[index])
+  }
   const pinsView = createSnapshotStore<SessionPinsView>(Object.freeze({
     enabled: pinsSettings.view.getSnapshot().enabled,
     sidebarArea: pinsSettings.view.getSnapshot().sidebarArea,
     sidebarRows: pinsSettings.view.getSnapshot().sidebarRows,
+    autoPinStatuses: pinsSettings.view.getSnapshot().autoPinStatuses,
     pinnedSessionIds: NO_PINS,
+    completedSessionIds: NO_PINS,
   }))
   const republishPins = (): void => {
     const settings = pinsSettings.view.getSnapshot()
-    const ids = controller.getSnapshot().snapshot.sessions.filter(row => row.pinned).map(row => row.sessionId)
+    const inboxSnapshot = controller.getSnapshot().snapshot
+    const ids = inboxSnapshot.sessions.filter(row => row.pinned).map(row => row.sessionId)
+    const list = ctx.sessions.list.getSnapshot()
+    const completed = selectFinishedUnhandled(
+      list.ids.map(id => list.byId[id]).filter(row => row !== undefined), inboxSnapshot, Date.now(),
+      new Set(ctx.uiSession.pendingInteractions.getSnapshot().keys()),
+    )
     const current = pinsView.getSnapshot()
     if (current.enabled === settings.enabled && current.sidebarArea === settings.sidebarArea
       && current.sidebarRows === settings.sidebarRows
-      && current.pinnedSessionIds.length === ids.length
-      && current.pinnedSessionIds.every((id, index) => id === ids[index])) return
+      && sameList(current.autoPinStatuses, settings.autoPinStatuses)
+      && sameList(current.pinnedSessionIds, ids)
+      && sameList(current.completedSessionIds, completed)) return
     pinsView.set(Object.freeze({
       enabled: settings.enabled,
       sidebarArea: settings.sidebarArea,
       sidebarRows: settings.sidebarRows,
+      autoPinStatuses: settings.autoPinStatuses,
       pinnedSessionIds: Object.freeze(ids),
+      completedSessionIds: Object.freeze(completed),
     }))
   }
   ctx.effect(() => controller.subscribe(republishPins), 'ui-digest: pins from inbox')
   ctx.effect(() => pinsSettings.view.subscribe(republishPins), 'ui-digest: pins from settings')
+  ctx.effect(() => ctx.sessions.list.subscribe(republishPins), 'ui-digest: pins from sessions')
+  ctx.effect(() => ctx.uiSession.pendingInteractions.subscribe(republishPins), 'ui-digest: pins from pending interactions')
   republishPins()
   ctx.provide('sessionPins', {
     view: pinsView,
@@ -276,6 +295,8 @@ export function apply(ctx: ClientContext): void {
         if (!result.ok) throw new Error(result.error.message)
       }
     },
+    setSidebarRows: rows => pinsSettings.setSidebarRows(rows),
+    setAutoPinStatuses: statuses => pinsSettings.setAutoPinStatuses(statuses),
   } satisfies SessionPins)
 
   // Seen mark: the current session's newest landed seq is what the user has

@@ -12,7 +12,7 @@ import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { QuestionEntry } from '../src/client/chat/turn-summary.ts'
-import { QuestionNavigator } from '../src/client/chat/QuestionNavigator.tsx'
+import { QuestionNavigator, type QuestionRemovalProps } from '../src/client/chat/QuestionNavigator.tsx'
 import { zh } from '../src/client/locale.ts'
 
 const t = makeTranslate(zh, commonZh) as Parameters<typeof QuestionNavigator>[0]['t']
@@ -253,5 +253,146 @@ describe('question search honesty', () => {
     searchFor('  提问  ')
     await screen.findByText(zh['chat.questions.searchEmpty'])
     expect(searchQuestions).toHaveBeenCalledWith('提问', expect.anything())
+  })
+})
+
+describe('question context removal', () => {
+  function removalProps(overrides: Partial<QuestionRemovalProps> = {}): QuestionRemovalProps {
+    return {
+      turnOfQuestion: new Map([['q1', 1], ['q2', 2], ['q3', 3]]),
+      removableTurns: new Set([1, 2]),
+      removedTurns: new Set(),
+      onRemoveTurns: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    }
+  }
+
+  function rowOf(text: string): HTMLElement {
+    const row = screen.getByText(text).closest('[data-current], div:has(> button[title])')
+    if (!(row instanceof HTMLElement)) throw new Error(`no row for ${text}`)
+    return row
+  }
+
+  it('offers no removal control until the view composes removal facts', () => {
+    renderNavigator()
+    fireEvent.click(searchEntry())
+    expect(screen.queryByRole('button', { name: zh['chat.questions.select'] })).toBeNull()
+    expect(screen.queryByRole('button', { name: zh['chat.questions.removeOne'] })).toBeNull()
+  })
+
+  it('removes one question through its row entry after an inline confirmation', async () => {
+    const removal = removalProps()
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    // Only removable rows carry the entry: the running third turn has none.
+    const entries = screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })
+    expect(entries).toHaveLength(2)
+    fireEvent.click(entries[1]!)
+    expect(screen.getByRole('alertdialog').textContent).toContain(
+      zh['chat.questions.removeConfirm'].replace('{count}', '1'),
+    )
+    expect(removal.onRemoveTurns).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    expect(removal.onRemoveTurns).toHaveBeenCalledWith([2])
+    await screen.findByRole('button', { name: zh['chat.questions.select'] })
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('cancels a pending confirmation without calling the host', () => {
+    const removal = removalProps()
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmNo'] }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(removal.onRemoveTurns).not.toHaveBeenCalled()
+  })
+
+  it('multi-selects removable rows as checkboxes and removes them together', async () => {
+    const removal = removalProps()
+    const { props } = renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    const boxes = screen.getAllByRole('checkbox') as HTMLButtonElement[]
+    expect(boxes).toHaveLength(3)
+    // The running turn cannot be picked; a click there navigates nowhere either.
+    expect(boxes[2]!.disabled).toBe(true)
+    const remove = screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '0') }) as HTMLButtonElement
+    expect(remove.disabled).toBe(true)
+    fireEvent.click(boxes[1]!)
+    fireEvent.click(boxes[0]!)
+    expect(props.onSelect).not.toHaveBeenCalled()
+    expect(boxes[0]!.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(boxes[1]!)
+    expect(boxes[1]!.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(boxes[1]!)
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '2') }))
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    expect(removal.onRemoveTurns).toHaveBeenCalledWith([1, 2])
+    // Success leaves selection mode.
+    await screen.findByRole('button', { name: zh['chat.questions.select'] })
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
+  it('leaves selection mode with its picks when cancelled, and forgets it when the panel closes', () => {
+    renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    fireEvent.click(screen.getAllByRole('checkbox')[0]!)
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.selectCancel'] }))
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    expect(screen.getAllByRole('checkbox')[0]!.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(searchEntry())
+    fireEvent.click(searchEntry())
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
+  it('reports a refused removal and keeps the rows', async () => {
+    const removal = removalProps({ onRemoveTurns: vi.fn().mockRejectedValue(new Error('turn 2 has not completed')) })
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[1]!)
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    expect((await screen.findByRole('alert')).textContent).toContain('turn 2 has not completed')
+    expect(screen.getAllByText(/提问$/)).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmNo'] }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('marks an already-removed question and never offers it again', () => {
+    renderNavigator({ removal: removalProps({ removableTurns: new Set([1]), removedTurns: new Set([2]) }) })
+    fireEvent.click(searchEntry())
+    expect(screen.getByText(zh['chat.questions.removed'])).toBeTruthy()
+    expect(rowOf('第二个提问').getAttribute('data-removed')).toBe('true')
+    expect(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    const boxes = screen.getAllByRole('checkbox') as HTMLButtonElement[]
+    expect(boxes[1]!.disabled).toBe(true)
+    expect(boxes[2]!.getAttribute('title')).toBe(zh['chat.questions.notRemovable'])
+  })
+
+  it('drops a pick whose turn stops being removable', () => {
+    const { rerender, props } = renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    fireEvent.click(screen.getAllByRole('checkbox')[0]!)
+    rerender(<QuestionNavigator {...props} removal={removalProps({ removableTurns: new Set([2]), removedTurns: new Set([1]) })} />)
+    expect(screen.getAllByRole('checkbox')[0]!.getAttribute('aria-checked')).toBe('false')
+    const remove = screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '0') })
+    expect(remove.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('keeps navigation for out-of-window hits and offers them no removal', async () => {
+    const searchQuestions = vi.fn().mockResolvedValue({
+      hits: [{ seq: 99, time: 99_000, snippet: '很早以前的提问' }],
+      complete: true,
+    })
+    const { props } = renderNavigator({ hasMore: true, searchQuestions, removal: removalProps() })
+    searchFor('很早')
+    const hit = await screen.findByText('很早以前的提问')
+    expect(screen.queryByRole('button', { name: zh['chat.questions.removeOne'] })).toBeNull()
+    fireEvent.click(hit)
+    expect(props.onSelectSeq).toHaveBeenCalledWith(99)
   })
 })

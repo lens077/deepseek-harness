@@ -11,3 +11,15 @@ export type CompactionId = Branded<'CompactionId'>
 export function CompactionId(id: string): CompactionId {
   return id as CompactionId
 }
+
+/** Stable identity shared by every replacement one context-removal request landed. */
+export type ContextRemovalId = Branded<'ContextRemovalId'>
+
+/**
+ * Brand an implementation-minted context-removal identity.
+ * @param id - opaque removal identity.
+ * @returns the same string, branded; no validation is performed.
+ */
+export function ContextRemovalId(id: string): ContextRemovalId {
+  return id as ContextRemovalId
+}

@@ -10,7 +10,7 @@ import type {
 import type { SessionPendingInteractionSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import type { WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
+import type { SessionPinsView, WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
@@ -78,7 +78,14 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     expandSidebar: vi.fn(),
     useSessions: hook(sessionState([])),
     useSessionPendingInteraction: hook(noPendingInteraction),
-    useSessionPins: hook({ enabled: false, sidebarArea: false, sidebarRows: 5, pinnedSessionIds: [] }),
+    useSessionPins: hook({
+      enabled: false,
+      sidebarArea: false,
+      sidebarRows: 5,
+      autoPinStatuses: [],
+      pinnedSessionIds: [],
+      completedSessionIds: [],
+    }),
     useResource,
     useWorkspaces: hook(workspaceState([])),
     useStore: bindSnapshotSelector(store),
@@ -103,6 +110,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     addTodos: vi.fn(),
     todosAvailable: () => false,
     setPinned: vi.fn(async () => undefined),
+    setPinnedSidebarRows: vi.fn(async () => undefined),
+    setPinnedAutoStatuses: vi.fn(async () => undefined),
     setSessionMembership: vi.fn(async (_workspaceId, sessionIds) => workspace('moved', [...sessionIds])),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
@@ -543,7 +552,7 @@ describe('WorkspaceBrowser', () => {
   it('renders pinned sessions in recency order with pin actions', async () => {
     const setPinned = vi.fn(async () => undefined)
     const items = [summary('older', 1), summary('newer', 3), { ...summary('blank', 4), blank: true }, summary('gone', 5)]
-    const pins = { enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [sid('older'), sid('gone'), sid('newer'), sid('blank'), sid('unknown')] }
+    const pins = { enabled: true, sidebarArea: true, sidebarRows: 3, autoPinStatuses: [], completedSessionIds: [], pinnedSessionIds: [sid('older'), sid('gone'), sid('newer'), sid('blank'), sid('unknown')] }
     const b = mount({
       useSessions: hook(sessionState(items)),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer', 'blank', 'gone'])], [sid('gone')])),
@@ -563,7 +572,7 @@ describe('WorkspaceBrowser', () => {
   })
 
   it('shows the pinned empty hint only in the enabled wide pinned area', () => {
-    const base = { enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [] }
+    const base = { enabled: true, sidebarArea: true, sidebarRows: 3, autoPinStatuses: [], pinnedSessionIds: [], completedSessionIds: [] }
     const b = mount({ useSessionPins: hook(base) })
     expect(screen.getByText('右键会话或使用 ⋯ 菜单可置顶')).toBeTruthy()
     b.view.rerender(<WorkspaceBrowser {...b.props} wide={false} useSessionPins={hook(base)} />)
@@ -1677,8 +1686,16 @@ describe('WorkspaceBrowser', () => {
 })
 
 describe('pinned sessions', () => {
-  const pinsView = (over: Partial<{ enabled: boolean; sidebarArea: boolean; sidebarRows: number; pinnedSessionIds: SessionId[] }> = {}) =>
-    hook({ enabled: true, sidebarArea: true, sidebarRows: 3, pinnedSessionIds: [] as SessionId[], ...over })
+  const pinsView = (over: Partial<SessionPinsView> = {}) =>
+    hook({
+      enabled: true,
+      sidebarArea: true,
+      sidebarRows: 3,
+      autoPinStatuses: [],
+      pinnedSessionIds: [] as SessionId[],
+      completedSessionIds: [] as SessionId[],
+      ...over,
+    })
   const sessions = () => sessionState([summary('old-s', 1), summary('new-s', 3), summary('other-s', 2), summary('gone-s', 4)])
   const workspaces = () => workspaceState([workspace('alpha', ['old-s', 'new-s', 'other-s', 'gone-s'])], [sid('gone-s')])
   const pinnedArea = () => screen.getByRole('region', { name: '置顶会话' })
@@ -1748,5 +1765,320 @@ describe('pinned sessions', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
     await waitFor(() => { expect(warn).toHaveBeenCalledWith('session pin rejected:', expect.any(Error)) })
     warn.mockRestore()
+  })
+
+  it('lists auto-pin statuses beside the pin marks, each row once, and sizes the area to its rows on auto', () => {
+    const failed = { projectionValues: { sessionDigest: { outcome: 'error' } } } as unknown as Partial<SessionSummary>
+    const b = mount({
+      useSessions: hook(sessionState([
+        summary('old-s', 1),
+        summary('run-s', 2, { running: true }),
+        summary('done-s', 3, { completed: true }),
+        summary('fail-s', 4, failed),
+        summary('gone-s', 5, { running: true }),
+      ])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['old-s', 'run-s', 'done-s', 'fail-s', 'gone-s'])], [sid('gone-s')])),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('run-s'), sid('old-s')], autoPinStatuses: ['running', 'completed'] }),
+    })
+    expect(pinnedTitles()).toEqual(['done-s', 'run-s', 'old-s'])
+    rerender(b, { useSessionPins: pinsView({ pinnedSessionIds: [], autoPinStatuses: ['failed'], sidebarRows: 'auto' }) })
+    expect(pinnedTitles()).toEqual(['fail-s'])
+    const list = pinnedArea().querySelector<HTMLElement>('[role="tree"]')
+    expect(list?.style.getPropertyValue('--pinned-rows')).toBe('')
+    rerender(b, { useSessionPins: pinsView({ pinnedSessionIds: [], autoPinStatuses: [] }) })
+    expect(within(pinnedArea()).getByText(zh['pinned.empty'])).toBeTruthy()
+  })
+
+  it('offers unpin on an auto-listed row: dismissing it until its statuses change, while a pin lifts the dismissal', async () => {
+    const setPinned = vi.fn(async () => undefined)
+    const running = summary('run-s', 2, { running: true })
+    const state = () => sessionState([summary('old-s', 1), running])
+    const b = mount({
+      useSessions: hook(state()),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['old-s', 'run-s'])])),
+      useSessionPins: pinsView({ pinnedSessionIds: [], autoPinStatuses: ['running', 'completed'] }),
+      setPinned,
+    })
+    expect(pinnedTitles()).toEqual(['run-s'])
+    // The auto-listed row reads as pinned: its menu leads with unpin, and the
+    // tree row for the same Session agrees.
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: '会话“run-s”的操作' }))
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('取消置顶')
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(pinnedTitles()).toEqual([]) })
+    expect(setPinned).not.toHaveBeenCalled()
+    expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({ 'run-s': 'running' })
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“run-s”的操作' }))
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('置顶')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // Finishing changes the key: the row is back as a completed reminder.
+    rerender(b, { useSessions: hook(sessionState([summary('old-s', 1), summary('run-s', 3, { running: false, completed: true })])) })
+    expect(pinnedTitles()).toEqual(['run-s'])
+    // Pinning lifts the dismissal and writes the mark.
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: '会话“run-s”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({ 'run-s': 'completed' }) })
+    fireEvent.click(screen.getAllByRole('button', { name: '会话“run-s”的操作' }).at(-1)!)
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶' }))
+    await waitFor(() => { expect(setPinned).toHaveBeenCalledWith([sid('run-s')], true) })
+    expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({})
+    // A mixed multi-selection: the marked row unpins through the provider, the auto-listed one is dismissed.
+    rerender(b, {
+      useSessions: hook(sessionState([summary('old-s', 1, { running: true }), summary('run-s', 3, { completed: true })])),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('run-s')], autoPinStatuses: ['running', 'completed'] }),
+      useSessionSelection: selector => selector({ selected: [sid('old-s'), sid('run-s')], anchor: sid('old-s'), lead: sid('run-s') }),
+    })
+    fireEvent.contextMenu(screen.getAllByText('run-s').at(-1)!)
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    await waitFor(() => { expect(setPinned).toHaveBeenCalledWith([sid('run-s')], false) })
+    expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({ 'old-s': 'running' })
+  })
+
+  it('folds the area from its header, remembering the fold in the viewing store, and shows the hidden row count', () => {
+    const b = mount({
+      useSessions: hook(sessions()),
+      useWorkspaces: hook(workspaces()),
+      useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }),
+    })
+    expect(pinnedTitles()).toEqual(['new-s', 'old-s'])
+    fireEvent.click(within(pinnedArea()).getByRole('button', { name: zh['pinned.collapse'] }))
+    expect(pinnedArea().querySelector('[role="tree"]')).toBeNull()
+    expect(b.store.getSnapshot().pinnedCollapsed).toBe(true)
+    const expand = within(pinnedArea()).getByRole('button', { name: zh['pinned.expand'] })
+    expect(expand.getAttribute('aria-expanded')).toBe('false')
+    expect(expand.textContent).toContain('2')
+    fireEvent.click(expand)
+    expect(pinnedTitles()).toEqual(['new-s', 'old-s'])
+    expect(b.store.getSnapshot().pinnedCollapsed).toBe(false)
+  })
+
+  it('writes the row count and toggles auto-pin statuses from the header menu, warning when the provider refuses', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const setPinnedSidebarRows = vi.fn(async () => undefined)
+    const setPinnedAutoStatuses = vi.fn(async () => undefined)
+    const b = mount({
+      useSessions: hook(sessions()),
+      useWorkspaces: hook(workspaces()),
+      useSessionPins: pinsView({ sidebarRows: 5, autoPinStatuses: ['running'] }),
+      setPinnedSidebarRows,
+      setPinnedAutoStatuses,
+    })
+    const openMenu = () => { fireEvent.click(within(pinnedArea()).getByRole('button', { name: zh['pinned.options'] })) }
+    openMenu()
+    // A selected row carries the trailing check icon (its only svg).
+    const checked = () => screen.getAllByRole('menuitem').filter(item => item.querySelector('svg') !== null)
+      .map(item => item.textContent)
+    expect(checked()).toEqual(['5', zh['pinned.auto.running'], zh['pinned.shortcuts.enabled']])
+    // Escape closes the list without writing.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menuitem', { name: zh['pinned.rows.auto'] })).toBeNull()
+    expect(setPinnedSidebarRows).not.toHaveBeenCalled()
+    openMenu()
+    // A count pick closes the list.
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['pinned.rows.auto'] }))
+    expect(setPinnedSidebarRows).toHaveBeenCalledWith('auto')
+    expect(screen.queryByRole('menuitem', { name: zh['pinned.rows.auto'] })).toBeNull()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: '8' }))
+    expect(setPinnedSidebarRows).toHaveBeenCalledWith(8)
+    // Status toggles keep the list open and send the complete selection.
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['pinned.auto.failed'] }))
+    expect(setPinnedAutoStatuses).toHaveBeenCalledWith(['running', 'failed'])
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['pinned.auto.running'] }))
+    expect(setPinnedAutoStatuses).toHaveBeenCalledWith([])
+    rerender(b, { useSessionPins: pinsView({ sidebarRows: 'auto', autoPinStatuses: ['running', 'failed'] }) })
+    expect(checked()).toEqual([zh['pinned.rows.auto'], zh['pinned.auto.running'], zh['pinned.auto.failed'], zh['pinned.shortcuts.enabled']])
+    setPinnedAutoStatuses.mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['pinned.auto.completed'] }))
+    await waitFor(() => { expect(warn).toHaveBeenCalledWith('pinned area statuses rejected:', expect.any(Error)) })
+    setPinnedSidebarRows.mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(screen.getByRole('menuitem', { name: '6' }))
+    await waitFor(() => { expect(warn).toHaveBeenCalledWith('pinned area rows rejected:', expect.any(Error)) })
+    warn.mockRestore()
+  })
+
+  describe('shortcuts', () => {
+    const keycapOf = (id: string) => pinnedArea().querySelector(`[data-session-id="${id}"] kbd`)?.textContent ?? null
+    const press = (init: KeyboardEventInit, target: Element | Document = document.body) => fireEvent.keyDown(target, init)
+    const openMenu = () => { fireEvent.click(within(pinnedArea()).getByRole('button', { name: zh['pinned.options'] })) }
+    const openEditor = () => {
+      openMenu()
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['pinned.shortcuts.edit'] }))
+      return screen.getByRole('group', { name: zh['pinned.shortcuts.title'] })
+    }
+    const slotButton = (n: number, key = zh['pinned.shortcuts.unbound']) =>
+      screen.getByRole('button', { name: `第 ${n} 位置顶会话的快捷键：${key}` })
+
+    it('opens the pinned row at the pressed digit, showing each row its keycap, silent inside editable fields', () => {
+      const b = mount({
+        useSessions: hook(sessions()),
+        useWorkspaces: hook(workspaces()),
+        useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }),
+      })
+      expect(pinnedTitles()).toEqual(['new-s', 'old-s'])
+      expect([keycapOf('new-s'), keycapOf('old-s')]).toEqual(['1', '2'])
+      // Typing a digit into the search field is typing, not a shortcut.
+      press({ key: '2', code: 'Digit2' }, screen.getByPlaceholderText('搜索会话…'))
+      expect(b.props.open).not.toHaveBeenCalled()
+      // A press something closer already answered is left alone.
+      const consumed = createEvent.keyDown(document.body, { key: '2', code: 'Digit2' })
+      consumed.preventDefault()
+      fireEvent(document.body, consumed)
+      expect(b.props.open).not.toHaveBeenCalled()
+      // The second position opens like a click on its row; a pinned mark stays.
+      const second = createEvent.keyDown(document.body, { key: '2', code: 'Digit2' })
+      fireEvent(document.body, second)
+      expect(b.props.open).toHaveBeenCalledWith(sid('old-s'))
+      expect(b.props.setPinned).not.toHaveBeenCalled()
+      expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({})
+      expect(second.defaultPrevented).toBe(true)
+      // A position without a row, a chord with an extra modifier, and a repeat do nothing.
+      press({ key: '3', code: 'Digit3' })
+      press({ key: '1', code: 'Digit1', ctrlKey: true })
+      press({ key: '1', code: 'Digit1', repeat: true })
+      expect(b.props.open).toHaveBeenCalledTimes(1)
+      // Switching the chords off from the menu stops the listener and hides the keycaps; on restores both.
+      openMenu()
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['pinned.shortcuts.enabled'] }))
+      expect(b.store.getSnapshot().pinnedShortcutsEnabled).toBe(false)
+      expect(screen.getByRole('menuitem', { name: zh['pinned.shortcuts.enabled'] }).querySelector('svg')).toBeNull()
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(keycapOf('new-s')).toBeNull()
+      press({ key: '1', code: 'Digit1' })
+      expect(b.props.open).toHaveBeenCalledTimes(1)
+      act(() => { b.store.actions.setPinnedShortcutsEnabled(true) })
+      expect(keycapOf('new-s')).toBe('1')
+      press({ key: '1', code: 'Digit1' })
+      expect(b.props.open).toHaveBeenCalledWith(sid('new-s'))
+      // The listener follows the area: hiding it from the settings silences the chords too.
+      rerender(b, { useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')], sidebarArea: false }) })
+      press({ key: '1', code: 'Digit1' })
+      expect(b.props.open).toHaveBeenCalledTimes(2)
+    })
+
+    it('dismisses a status-listed row it opens, until its statuses change', () => {
+      const b = mount({
+        useSessions: hook(sessionState([summary('old-s', 1), summary('run-s', 2, { running: true })])),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['old-s', 'run-s'])])),
+        useSessionPins: pinsView({ pinnedSessionIds: [], autoPinStatuses: ['running'] }),
+      })
+      expect(pinnedTitles()).toEqual(['run-s'])
+      press({ key: '1', code: 'Digit1' })
+      expect(b.props.open).toHaveBeenCalledWith(sid('run-s'))
+      expect(b.props.setPinned).not.toHaveBeenCalled()
+      expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({ 'run-s': 'running' })
+      expect(pinnedTitles()).toEqual([])
+    })
+
+    it('keeps a chord with a command modifier live inside editable fields', () => {
+      const b = mount({
+        useSessions: hook(sessions()),
+        useWorkspaces: hook(workspaces()),
+        useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }),
+      })
+      act(() => { b.store.actions.setPinnedShortcut(0, 'Alt+1') })
+      expect(keycapOf('new-s')).toBe('Alt+1')
+      press({ key: '¡', code: 'Digit1', altKey: true }, screen.getByPlaceholderText('搜索会话…'))
+      expect(b.props.open).toHaveBeenCalledWith(sid('new-s'))
+    })
+
+    it('records a chord by pressing it on a position, refusing editing keys and waiting past modifiers', () => {
+      const b = mount({
+        useSessions: hook(sessions()),
+        useWorkspaces: hook(workspaces()),
+        useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }),
+      })
+      const editor = openEditor()
+      expect(within(editor).getByText(zh['pinned.shortcuts.hint'])).toBeTruthy()
+      expect(within(editor).getByText(zh['pinned.shortcuts.plain'])).toBeTruthy()
+      // Idle keycaps keep their key: a press without recording is not captured.
+      press({ key: 'Escape' }, slotButton(3, '3'))
+      expect(b.store.getSnapshot().pinnedShortcuts[2]).toBe('3')
+      fireEvent.click(slotButton(3, '3'))
+      const third = slotButton(3, '3')
+      expect(third.getAttribute('aria-pressed')).toBe('true')
+      expect(document.activeElement).toBe(third)
+      expect(within(editor).getByText('正在录制第 3 位：按下按键…')).toBeTruthy()
+      press({ key: 'Shift', shiftKey: true }, third)
+      expect(third.getAttribute('aria-pressed')).toBe('true')
+      press({ key: 'Tab' }, third)
+      expect(within(editor).getByText(zh['pinned.shortcuts.refused'])).toBeTruthy()
+      expect(third.getAttribute('aria-pressed')).toBe('true')
+      // The chord lands on the position and its row; the digit it displaces is released from the other position.
+      const captured = createEvent.keyDown(third, { key: '1', code: 'Digit1', altKey: true })
+      fireEvent(third, captured)
+      expect(captured.defaultPrevented).toBe(true)
+      expect(b.store.getSnapshot().pinnedShortcuts.slice(0, 3)).toEqual(['1', '2', 'Alt+1'])
+      expect(slotButton(3, 'Alt+1').getAttribute('aria-pressed')).toBe('false')
+      expect(within(editor).getByText(zh['pinned.shortcuts.hint'])).toBeTruthy()
+      expect(b.props.open).not.toHaveBeenCalled()
+      fireEvent.click(slotButton(1, '1'))
+      press({ key: '2', code: 'Digit2' }, slotButton(1, '1'))
+      expect(b.store.getSnapshot().pinnedShortcuts.slice(0, 3)).toEqual(['2', null, 'Alt+1'])
+      expect([keycapOf('new-s'), keycapOf('old-s')]).toEqual(['2', null])
+      // Escape cancels; losing focus cancels; Backspace clears.
+      fireEvent.click(slotButton(2))
+      press({ key: 'Escape' }, slotButton(2))
+      expect(slotButton(2).getAttribute('aria-pressed')).toBe('false')
+      fireEvent.click(slotButton(2))
+      fireEvent.blur(slotButton(2))
+      expect(slotButton(2).getAttribute('aria-pressed')).toBe('false')
+      fireEvent.click(slotButton(1, '2'))
+      press({ key: 'Backspace' }, slotButton(1, '2'))
+      expect(b.store.getSnapshot().pinnedShortcuts[0]).toBeNull()
+      // Whole-list actions: clear, then the digit preset; the plain-key note follows the bindings.
+      fireEvent.click(within(editor).getByRole('button', { name: zh['pinned.shortcuts.clear'] }))
+      expect(b.store.getSnapshot().pinnedShortcuts).toEqual(Array.from({ length: 10 }, () => null))
+      expect(within(editor).queryByText(zh['pinned.shortcuts.plain'])).toBeNull()
+      fireEvent.click(within(editor).getByRole('button', { name: zh['pinned.shortcuts.preset'] }))
+      expect(b.store.getSnapshot().pinnedShortcuts).toEqual('1234567890'.split(''))
+      fireEvent.click(within(editor).getByRole('button', { name: zh['pinned.shortcuts.close'] }))
+      expect(screen.queryByRole('group', { name: zh['pinned.shortcuts.title'] })).toBeNull()
+    })
+
+    it('warns before binding a chord the browser or the system answers, binding on request or recording again', () => {
+      const b = mount({
+        useSessions: hook(sessions()),
+        useWorkspaces: hook(workspaces()),
+        useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')] }),
+      })
+      // Off and folded: editing switches the chords on and unfolds the rows so the keycaps show.
+      act(() => {
+        b.store.actions.setPinnedShortcutsEnabled(false)
+        b.store.actions.setPinnedCollapsed(true)
+      })
+      const editor = openEditor()
+      expect(b.store.getSnapshot().pinnedShortcutsEnabled).toBe(true)
+      expect(b.store.getSnapshot().pinnedCollapsed).toBe(false)
+      // jsdom reports no platform, which reads as Linux: Ctrl+1 is the browser's tab switch.
+      fireEvent.click(slotButton(1, '1'))
+      press({ key: '1', code: 'Digit1', ctrlKey: true }, slotButton(1, '1'))
+      expect(within(editor).getByRole('alert').textContent).toContain('Ctrl+1 是浏览器快捷键')
+      expect(b.store.getSnapshot().pinnedShortcuts[0]).toBe('1')
+      // The keycap previews the chord in question until the user decides.
+      expect(slotButton(1, 'Ctrl+1').getAttribute('aria-pressed')).toBe('false')
+      fireEvent.click(within(editor).getByRole('button', { name: zh['pinned.shortcuts.conflict.keep'] }))
+      expect(b.store.getSnapshot().pinnedShortcuts[0]).toBe('Ctrl+1')
+      expect(within(editor).queryByRole('alert')).toBeNull()
+      // A system chord: recording again drops the captured chord and reopens the position.
+      fireEvent.click(slotButton(2, '2'))
+      press({ key: '2', code: 'Digit2', metaKey: true }, slotButton(2, '2'))
+      expect(within(editor).getByRole('alert').textContent).toContain('Super+2 是系统快捷键')
+      fireEvent.click(within(editor).getByRole('button', { name: zh['pinned.shortcuts.conflict.retry'] }))
+      expect(within(editor).queryByRole('alert')).toBeNull()
+      const second = slotButton(2, '2')
+      expect(second.getAttribute('aria-pressed')).toBe('true')
+      expect(document.activeElement).toBe(second)
+      press({ key: 'Escape' }, second)
+      expect(b.store.getSnapshot().pinnedShortcuts[1]).toBe('2')
+      // Starting another recording drops a pending conflict as well.
+      fireEvent.click(slotButton(3, '3'))
+      press({ key: '3', code: 'Digit3', metaKey: true }, slotButton(3, '3'))
+      expect(within(editor).getByRole('alert')).toBeTruthy()
+      fireEvent.click(slotButton(4, '4'))
+      expect(within(editor).queryByRole('alert')).toBeNull()
+    })
   })
 })

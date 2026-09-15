@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-schedule/client'
 import type {} from '@deepseek-ai/dsh-session-digest/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
+import type { SessionAutoPinStatus, SessionPinsView } from './contract/slots.ts'
 import {
   indexSubagentDescendants, type SubagentDescendantSummary,
 } from './subagent-lineage.ts'
@@ -458,29 +459,87 @@ export function deriveFlat(
   return rows.map(session => sessionNode(session, descendants, pendingInteractions))
 }
 
+/* v8 ignore next 3 -- closed-union backstop; only reached if the status is forged */
+function assertNever(value: never): never {
+  throw new Error(`unknown auto-pin status: ${String(value)}`)
+}
+
+/** The pin provider facts the pinned-area derivation reads. */
+export type PinCriteria = Pick<SessionPinsView, 'pinnedSessionIds' | 'autoPinStatuses' | 'completedSessionIds'>
+
+/** Whether one Session currently carries the given auto-pin status. */
+function hasAutoPinStatus(session: SessionSummary, status: SessionAutoPinStatus, completed: ReadonlySet<SessionId>): boolean {
+  switch (status) {
+    case 'running':
+      return session.running
+    case 'completed':
+      // Finished and not yet handled: the list row's transient reminder bit,
+      // or the provider's durable finished ids so the area survives a restart.
+      return session.completed === true || completed.has(session.id)
+    case 'failed':
+      return hasFailedOutcome(session)
+    default:
+      return assertNever(status)
+  }
+}
+
 /**
- * Derive the pinned sidebar rows in recency order. Pinned ids that are absent,
- * archived, blank, or subagent-origin are omitted using the same visibility rule
- * as the active browser tree.
+ * The auto-pin statuses one Session currently matches, as a stable key: the
+ * matched statuses in `autoPinStatuses` order joined by `,`, or the empty
+ * string when it matches none. A dismissal recorded under this key holds
+ * until the key changes.
+ * @param session - the Session summary.
+ * @param pins - the statuses the pinned area lists automatically and the durable unread finished ids.
+ * @returns the matched-status key.
+ */
+export function autoPinStatusKey(session: SessionSummary, pins: PinCriteria): string {
+  const completed = new Set(pins.completedSessionIds)
+  return pins.autoPinStatuses.filter(status => hasAutoPinStatus(session, status, completed)).join(',')
+}
+
+/**
+ * Derive the pinned sidebar rows in recency order: every explicitly pinned
+ * Session plus every Session carrying one of the auto-pin statuses, each
+ * listed once. A Session listed only by status stays out while its dismissal
+ * key still matches. Ids that are absent, archived, blank, or subagent-origin
+ * are omitted using the same visibility rule as the active browser tree.
  * @param list - sessions list snapshot.
- * @param pinnedSessionIds - provider-owned pinned ids.
+ * @param pins - provider-owned pinned ids, the auto-pin statuses, and the durable unread finished ids.
+ * @param dismissed - auto-listed Sessions the user removed, keyed by id with their {@link autoPinStatusKey} at removal.
  * @param archivedSessionIds - registry-global archive set.
  * @param pendingInteractions - pending UI interactions by Session.
  * @returns visible pinned rows in newest-first order.
  */
 export function derivePinned(
   list: SessionListState,
-  pinnedSessionIds: readonly SessionId[],
+  pins: PinCriteria,
+  dismissed: Readonly<Record<string, string>>,
   archivedSessionIds: readonly SessionId[],
   pendingInteractions: SessionPendingInteractions,
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
-  const rows = pinnedSessionIds
-    .map(id => list.byId[id])
-    .filter((s): s is SessionSummary => s !== undefined && sessionVisible(s, list.current, archived) && !s.blank)
-  rows.sort(byRecency)
-  return rows.map(session => sessionNode(session, descendants, pendingInteractions))
+  const listed = (s: SessionSummary | undefined): s is SessionSummary =>
+    s !== undefined && sessionVisible(s, list.current, archived) && !s.blank
+  const rows = new Map<SessionId, SessionSummary>()
+  for (const session of pins.pinnedSessionIds.map(id => list.byId[id]).filter(listed)) rows.set(session.id, session)
+  if (pins.autoPinStatuses.length > 0) {
+    for (const id of list.ids) {
+      const session = list.byId[id]
+      if (!listed(session) || rows.has(id)) continue
+      const key = autoPinStatusKey(session, pins)
+      if (key !== '' && dismissed[id] !== key) rows.set(id, session)
+    }
+  }
+  // A Session listed on the provider's durable completed ids shows the
+  // completed perimeter like one carrying the transient reminder bit, so a
+  // row that survived a Host restart is not the one bare row in the area.
+  const durable = pins.autoPinStatuses.includes('completed') ? new Set(pins.completedSessionIds) : new Set<SessionId>()
+  const sorted = [...rows.values()].sort(byRecency)
+  return sorted.map((session) => {
+    const node = sessionNode(session, descendants, pendingInteractions)
+    return !node.running && durable.has(session.id) ? { ...node, completed: true } : node
+  })
 }
 
 /**

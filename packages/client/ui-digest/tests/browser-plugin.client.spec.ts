@@ -336,19 +336,22 @@ describe('ui-digest browser half', () => {
     const b = await bench()
     await b.runtime.flush()
     const binding = b.bound.find(spec => spec.namespace === 'session-pins')
-    expect(binding?.decode?.({ sidebarRows: 3 })).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 3, digestSection: true })
+    expect(binding?.decode?.({ sidebarRows: 3 })).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 3, autoPinStatuses: ['running', 'completed'], digestSection: true })
     const face = b.pinsSettings()
     expect(face.hooks.pinsSettings).toBe(b.panel().hooks.pinsSettings)
     expect(face.hooks.pinsSettings.getSnapshot()).toMatchObject({ status: 'loading', enabled: true, sidebarRows: 5, writable: false })
-    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: true, sidebarArea: false, sidebarRows: 9, digestSection: false } })
+    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: true, sidebarArea: false, sidebarRows: 9, autoPinStatuses: ['failed'], digestSection: false } })
     expect(face.hooks.pinsSettings.getSnapshot()).toEqual({
-      status: 'ready', writable: true, enabled: true, sidebarArea: false, sidebarRows: 9, digestSection: false,
+      status: 'ready', writable: true, enabled: true, sidebarArea: false, sidebarRows: 9, autoPinStatuses: ['failed'], digestSection: false,
     })
     await face.setEnabled(false)
     await face.setSidebarArea(true)
     await face.setSidebarRows(4)
+    await face.setAutoPinStatuses(['running'])
     await face.setDigestSection(true)
-    expect(b.pinsScope.set.mock.calls).toEqual([['enabled', false], ['sidebarArea', true], ['sidebarRows', 4], ['digestSection', true]])
+    expect(b.pinsScope.set.mock.calls).toEqual([
+      ['enabled', false], ['sidebarArea', true], ['sidebarRows', 4], ['autoPinStatuses', ['running']], ['digestSection', true],
+    ])
     const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'session-pins')
     expect(entry?.options.order).toBe(46)
     b.ctx.locale.setLocale('zh')
@@ -366,7 +369,7 @@ describe('ui-digest browser half', () => {
     const seat = b.ctx.get('sessionPins')
     if (seat === undefined) throw new Error('sessionPins not provided')
     const first = seat.view.getSnapshot()
-    expect(first).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 5, pinnedSessionIds: ['s2', 's1'] })
+    expect(first).toEqual({ enabled: true, sidebarArea: true, sidebarRows: 5, autoPinStatuses: ['running', 'completed'], pinnedSessionIds: ['s2', 's1'], completedSessionIds: [] })
     // A push that changes nothing pin-related keeps the snapshot identity.
     const listener = vi.fn()
     seat.view.subscribe(listener)
@@ -377,10 +380,25 @@ describe('ui-digest browser half', () => {
     expect(seat.view.getSnapshot()).toMatchObject({ pinnedSessionIds: ['s1'] })
     expect(listener).toHaveBeenCalledTimes(1)
     // The policy rides the same view.
-    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: true, sidebarRows: 7, digestSection: true } })
-    expect(seat.view.getSnapshot()).toEqual({ enabled: false, sidebarArea: true, sidebarRows: 7, pinnedSessionIds: ['s1'] })
-    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: true, sidebarRows: 7, digestSection: false } })
+    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: true, sidebarRows: 7, autoPinStatuses: ['failed'], digestSection: true } })
+    expect(seat.view.getSnapshot()).toEqual({ enabled: false, sidebarArea: true, sidebarRows: 7, autoPinStatuses: ['failed'], pinnedSessionIds: ['s1'], completedSessionIds: [] })
+    b.pinsScope.publish({ status: 'ready', writable: true, value: { enabled: false, sidebarArea: true, sidebarRows: 7, autoPinStatuses: ['failed'], digestSection: false } })
     expect(listener).toHaveBeenCalledTimes(2)
+    // Finished replies the user has not handled ride the seat as the durable
+    // completed ids: the list row feeds them, the seen mark keeps them (the
+    // row stays 已读未处理 inside the review window), the handled mark clears them.
+    await b.runtime.sessions.add({
+      id: 's6', summary: { title: 'Six', updatedAt: Date.now(), projectionValues: { sessionDigest: digest({ replySeq: 9 }) } },
+    }, { current: false })
+    expect(seat.view.getSnapshot().completedSessionIds).toEqual(['s6'])
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { pinned: true }), mark('s6', { lastSeenSeq: 9 })] })])
+    expect(seat.view.getSnapshot().completedSessionIds).toEqual(['s6'])
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { pinned: true }), mark('s6', { lastSeenSeq: 9, handledAt: 1 })] })])
+    expect(seat.view.getSnapshot().completedSessionIds).toEqual([])
+    // The seat's settings writers reach the same scope as the settings page.
+    await seat.setSidebarRows('auto')
+    await seat.setAutoPinStatuses(['running', 'failed'])
+    expect(b.pinsScope.set.mock.calls.slice(-2)).toEqual([['sidebarRows', 'auto'], ['autoPinStatuses', ['running', 'failed']]])
     // Pinning writes one mark per Session and resolves once every reply landed.
     await seat.setPinned(['s4' as SessionId, 's5' as SessionId], true)
     expect(b.calls.filter(call => call.method === 'setPinned').map(call => call.request)).toEqual([

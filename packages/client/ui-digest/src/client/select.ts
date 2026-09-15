@@ -65,6 +65,18 @@ export interface InboxSection {
   items: InboxItem[]
 }
 
+/**
+ * The board layout's columns, left to right: the agent waiting on the user,
+ * finished work (unread and seen alike), in-flight work, and failures.
+ */
+export type InboxColumnKey = 'needsYou' | 'finished' | 'running' | 'failed'
+
+/** One board column: every admitted item of its states, newest first. */
+export interface InboxColumn {
+  key: InboxColumnKey
+  items: InboxItem[]
+}
+
 /** Per-workspace attention counts feeding the filter chips. */
 export interface InboxWorkspaceCount {
   /** Workspace id, or `null` for ungrouped sessions. */
@@ -269,6 +281,33 @@ function classify(
   return { category: unread ? 'unread' : 'seen', unread }
 }
 
+/**
+ * The finished Sessions the inbox lists as 已完成 or 已读未处理 under its
+ * default window: outcome completed, not handled, not snoozed, not waiting on
+ * the user, and updated since the last 标记已查看 (the last day when never
+ * reviewed) — unread rows regardless of the window. Every fact comes from the
+ * durable inbox marks or the digest projection, so the set survives a Host
+ * restart; 标记已处理 removes one row and 标记已查看 clears the seen ones.
+ * @param sessions - the list rows.
+ * @param inbox - the durable inbox snapshot.
+ * @param now - current time.
+ * @param pendingSessionIds - Sessions whose UI is waiting for a user response.
+ * @returns the finished unhandled Session ids, newest first.
+ */
+export function selectFinishedUnhandled(
+  sessions: readonly SessionSummary[],
+  inbox: InboxSnapshot,
+  now: number,
+  pendingSessionIds: ReadonlySet<SessionId>,
+): SessionId[] {
+  const selection = selectInbox(sessions, [], inbox, {
+    now, window: 'sinceReview', workspace: undefined, showHandled: false, ungroupedLabel: '', pendingSessionIds, pinnedSection: false,
+  })
+  return selection.sections
+    .filter(section => section.key === 'unread' || section.key === 'seen')
+    .flatMap(section => section.items.map(item => item.sessionId))
+}
+
 /** Build every item the list can describe, before any window or filter. */
 function buildItems(
   sessions: readonly SessionSummary[],
@@ -418,6 +457,47 @@ export function selectInbox(
     sections, workspaces: orderedCounts, attentionCount, waitingCount, failedCount, unreadCount, seenCount,
     runningCount, snoozedCount, since,
   }
+}
+
+const COLUMN_ORDER: readonly InboxColumnKey[] = ['needsYou', 'finished', 'running', 'failed']
+
+/**
+ * Which board column an admitted item belongs to. Pinned and handled rows keep
+ * no column of their own: a pinned row sits in its state's column, and a
+ * handled row (listed only on request) joins finished or failed by outcome.
+ * @param item - an admitted item.
+ * @returns the column key.
+ */
+function columnOf(item: InboxItem): InboxColumnKey {
+  switch (item.category) {
+    case 'needsYou': return 'needsYou'
+    case 'running': return 'running'
+    case 'unread': case 'seen': return 'finished'
+    case 'failed': return 'failed'
+    case 'handled': return item.outcome === 'completed' ? 'finished' : 'failed'
+    /* v8 ignore next -- selectInbox counts snoozed rows and never sections them, so no section item carries the category */
+    case 'snoozed': return 'finished'
+  }
+}
+
+/**
+ * Regroup the sections into the board columns. The finished, running, and
+ * failed columns are always present so each keeps a fixed place on the board;
+ * the waiting column leads only while the agent is actually waiting on the
+ * user, since an empty slot for an uncommon state would cost the others a
+ * quarter of the width. Within a column items are ordered by last activity,
+ * newest first, whatever section they came from.
+ * @param sections - the sections `selectInbox` produced.
+ * @returns the columns in board order.
+ */
+export function selectColumns(sections: readonly InboxSection[]): InboxColumn[] {
+  const buckets = new Map<InboxColumnKey, InboxItem[]>(COLUMN_ORDER.map(key => [key, []]))
+  for (const section of sections) {
+    for (const item of section.items) (buckets.get(columnOf(item)) as InboxItem[]).push(item)
+  }
+  return COLUMN_ORDER
+    .map(key => ({ key, items: (buckets.get(key) as InboxItem[]).sort((a, b) => b.updatedAt - a.updatedAt) }))
+    .filter(column => column.key !== 'needsYou' || column.items.length > 0)
 }
 
 /**

@@ -1,9 +1,16 @@
-/** Settings page for enabling Session pins and choosing their two UI locations. */
+/** Settings page for enabling Session pins, choosing their two UI locations, and sizing the sidebar area. */
 
 import { useEffect, useState } from 'react'
+import type { SessionAutoPinStatus } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { PinsSettingsSectionProps } from './contract/slots.ts'
-import { SIDEBAR_ROWS_MAX, SIDEBAR_ROWS_MIN } from '../pins-settings.ts'
+import { AUTO_PIN_STATUSES, SIDEBAR_ROWS_MAX, SIDEBAR_ROWS_MIN } from '../pins-settings.ts'
 import css from './ProjectSettingsSection.module.css'
+
+/** Select values: `auto` plus every integer in the schema range. */
+const ROW_CHOICES: readonly string[] = [
+  'auto',
+  ...Array.from({ length: SIDEBAR_ROWS_MAX - SIDEBAR_ROWS_MIN + 1 }, (_, index) => String(SIDEBAR_ROWS_MIN + index)),
+]
 
 /**
  * Render the Session pin settings page.
@@ -11,7 +18,7 @@ import css from './ProjectSettingsSection.module.css'
  * @returns the settings page element.
  */
 export function PinsSettingsSection(props: PinsSettingsSectionProps) {
-  const { usePinsSettings, setEnabled, setSidebarArea, setSidebarRows, setDigestSection, t } = props
+  const { usePinsSettings, setEnabled, setSidebarArea, setSidebarRows, setAutoPinStatuses, setDigestSection, t } = props
   const view = usePinsSettings(value => value)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -20,13 +27,17 @@ export function PinsSettingsSection(props: PinsSettingsSectionProps) {
     return () => { globalThis.clearTimeout(timer) }
   }, [error])
   const disabled = view.status !== 'ready' || !view.writable
+  const sidebarDisabled = disabled || !view.enabled || !view.sidebarArea
   const failed = (cause: unknown): void => {
     setError(t('settings.saveFailed', { message: cause instanceof Error ? cause.message : String(cause) }))
   }
-  const commitRows = (raw: string, valueAsNumber: number): void => {
-    if (raw.trim() === '' || !Number.isFinite(valueAsNumber)) return
-    const rows = Math.min(SIDEBAR_ROWS_MAX, Math.max(SIDEBAR_ROWS_MIN, Math.round(valueAsNumber)))
-    void setSidebarRows(rows).catch(failed)
+  const commitRows = (raw: string): void => {
+    void setSidebarRows(raw === 'auto' ? 'auto' : Number(raw)).catch(failed)
+  }
+  // The selection keeps the canonical status order whichever box was flipped.
+  const toggleStatus = (status: SessionAutoPinStatus, checked: boolean): void => {
+    const next = AUTO_PIN_STATUSES.filter(item => item === status ? checked : view.autoPinStatuses.includes(item))
+    void setAutoPinStatuses(next).catch(failed)
   }
 
   return (
@@ -70,19 +81,36 @@ export function PinsSettingsSection(props: PinsSettingsSectionProps) {
       <div className={css.field}>
         <label className={css.label} htmlFor="session-pins-sidebar-rows">{t('pinsSettings.sidebarRows')}</label>
         <p className={css.hint}>{t('pinsSettings.sidebarRows.hint')}</p>
-        <input
+        <select
           id="session-pins-sidebar-rows"
           className={css.input}
-          type="number"
-          min={SIDEBAR_ROWS_MIN}
-          max={SIDEBAR_ROWS_MAX}
-          step={1}
-          inputMode="numeric"
-          value={view.sidebarRows}
-          disabled={disabled || !view.enabled || !view.sidebarArea}
-          onChange={(event) => { commitRows(event.currentTarget.value, event.currentTarget.valueAsNumber) }}
-        />
+          value={String(view.sidebarRows)}
+          disabled={sidebarDisabled}
+          onChange={(event) => { commitRows(event.currentTarget.value) }}
+        >
+          {ROW_CHOICES.map(choice => (
+            <option key={choice} value={choice}>
+              {choice === 'auto' ? t('pinsSettings.sidebarRows.auto') : choice}
+            </option>
+          ))}
+        </select>
       </div>
+
+      <fieldset className={css.field}>
+        <legend className={css.label}>{t('pinsSettings.autoPin')}</legend>
+        <p className={css.hint}>{t('pinsSettings.autoPin.hint')}</p>
+        {AUTO_PIN_STATUSES.map(status => (
+          <label key={status} className={css.check}>
+            <input
+              type="checkbox"
+              checked={view.autoPinStatuses.includes(status)}
+              disabled={sidebarDisabled}
+              onChange={(event) => { toggleStatus(status, event.target.checked) }}
+            />
+            <span className={css.label}>{t(`pinsSettings.autoPin.${status}`)}</span>
+          </label>
+        ))}
+      </fieldset>
 
       <div className={css.field}>
         <label className={css.check}>

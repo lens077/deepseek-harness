@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest'
 import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
-  buildQuestionTurnIndex, buildTurnGroups, buildTurnRecaps, questionEntries, turnElapsedMs,
-  type QuestionEntry,
+  buildQuestionTurnIndex, buildTurnGroups, buildTurnRecaps, questionEntries, removableTurns, removedTurns,
+  turnElapsedMs, type QuestionEntry,
 } from '../src/client/chat/turn-summary.ts'
 
 /** A user Chat Node carrying prose, as the node store publishes it. */
@@ -275,5 +275,35 @@ describe('turnElapsedMs', () => {
     expect(turnElapsedMs(index.byTurn.get(2)!, 12_250)).toBe(2_250)
     // A clock behind the recorded start floors at zero rather than counting down.
     expect(turnElapsedMs(index.byTurn.get(2)!, 9_000)).toBe(0)
+  })
+})
+
+describe('context removal facts', () => {
+  it('collects removed turns from the loaded removal markers only', () => {
+    const nodes = store([
+      ['q1', { kind: 'user', data: userNode(1, 'one') }],
+      ['r1', { kind: 'context-removal', data: { turns: [1, 2] } }],
+      ['c1', { kind: 'compaction', data: { turns: [9] } }],
+      ['r2', { kind: 'context-removal', data: { turns: [4] } }],
+    ])
+    expect([...removedTurns(['q1', 'r1', 'c1', 'r2'], nodes)]).toEqual([1, 2, 4])
+    expect(removedTurns([], nodes).size).toBe(0)
+  })
+
+  it('offers only completed, loaded, not-yet-removed turns for removal', () => {
+    const questions: QuestionEntry[] = [
+      { key: 'q1', node: userNode(2, 'one'), text: 'one' },
+      { key: 'q2', node: userNode(6, 'two'), text: 'two' },
+      { key: 'q3', node: userNode(10, 'three'), text: 'three' },
+    ]
+    const index = buildQuestionTurnIndex(questions, timeline([
+      { turn: 1, startSeq: 1, endSeq: 4 },
+      { turn: 2, startSeq: 5, endSeq: 8, reason: 'aborted' },
+      { turn: 3, startSeq: 9 },
+      // A turn whose opener sits below the loaded window has no question to pick.
+      { turn: 4, startSeq: 12, endSeq: 14 },
+    ]))
+    expect([...removableTurns(index, new Set())]).toEqual([1, 2])
+    expect([...removableTurns(index, new Set([1]))]).toEqual([2])
   })
 })

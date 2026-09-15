@@ -7,6 +7,7 @@
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SessionAutoPinStatus, SessionPinsSidebarRows } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import {
   DEFAULT_SESSION_PINS_SETTINGS, type SessionPinsSettings,
 } from '../pins-settings.ts'
@@ -17,7 +18,8 @@ export interface PinsSettingsView {
   status: 'loading' | 'ready' | 'unavailable'
   enabled: boolean
   sidebarArea: boolean
-  sidebarRows: number
+  sidebarRows: SessionPinsSidebarRows
+  autoPinStatuses: readonly SessionAutoPinStatus[]
   digestSection: boolean
   /** Whether writes reach the Host settings document. */
   writable: boolean
@@ -28,6 +30,7 @@ const INITIAL: PinsSettingsView = Object.freeze({
   enabled: DEFAULT_SESSION_PINS_SETTINGS.enabled,
   sidebarArea: DEFAULT_SESSION_PINS_SETTINGS.sidebarArea,
   sidebarRows: DEFAULT_SESSION_PINS_SETTINGS.sidebarRows,
+  autoPinStatuses: Object.freeze([...DEFAULT_SESSION_PINS_SETTINGS.autoPinStatuses]),
   digestSection: DEFAULT_SESSION_PINS_SETTINGS.digestSection,
   writable: false,
 })
@@ -77,12 +80,21 @@ export class PinsSettingsPolicy {
   }
 
   /**
-   * Set the number of rows reserved for the sidebar pinned area.
-   * @param rows - an integer from the schema's accepted range.
+   * Set the sidebar pinned-area height.
+   * @param rows - an integer from the schema's accepted range, or `auto` to fit the rows.
    * @returns settlement of the durable write.
    */
-  setSidebarRows(rows: number): Promise<void> {
+  setSidebarRows(rows: SessionPinsSidebarRows): Promise<void> {
     return this.write('sidebarRows', rows)
+  }
+
+  /**
+   * Replace the statuses the sidebar pinned area lists automatically.
+   * @param statuses - the complete selection; an empty list keeps pin marks only.
+   * @returns settlement of the durable write.
+   */
+  setAutoPinStatuses(statuses: readonly SessionAutoPinStatus[]): Promise<void> {
+    return this.write('autoPinStatuses', [...statuses])
   }
 
   /**
@@ -109,6 +121,7 @@ export class PinsSettingsPolicy {
       enabled: section?.enabled ?? current.enabled,
       sidebarArea: section?.sidebarArea ?? current.sidebarArea,
       sidebarRows: section?.sidebarRows ?? current.sidebarRows,
+      autoPinStatuses: section === undefined ? current.autoPinStatuses : Object.freeze([...section.autoPinStatuses]),
       digestSection: section?.digestSection ?? current.digestSection,
       writable: snapshot.writable,
     }))

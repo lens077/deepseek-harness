@@ -5,7 +5,7 @@ import type { SessionPendingInteractionBase } from '@deepseek-ai/dsh-client-ui-s
 import type { ScheduleId, ScheduleRecord } from '@deepseek-ai/dsh-schedule/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  deriveFlat, deriveGroups, derivePinned, deriveSearchResults, owningGroupKey, workspaceLabel,
+  autoPinStatusKey, deriveFlat, deriveGroups, derivePinned, deriveSearchResults, owningGroupKey, workspaceLabel,
   UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -60,12 +60,59 @@ describe('derivePinned', () => {
     ]])
     const rows = derivePinned(
       list(newest, awaiting, archivedRow, blank, subagent),
-      [subagent.id, blank.id, archivedRow.id, awaiting.id, sid('unknown'), newest.id],
+      { pinnedSessionIds: [subagent.id, blank.id, archivedRow.id, awaiting.id, sid('unknown'), newest.id], autoPinStatuses: [], completedSessionIds: [] },
+      {},
       archived('archived'),
       attention,
     )
     expect(rows.map(row => row.id)).toEqual([sid('newest'), sid('awaiting')])
     expect(rows[1]).toMatchObject({ pendingInteraction: 'question', running: true })
+  })
+
+  it('adds sessions in the auto-pin statuses once each, under the same visibility rule', () => {
+    const pinnedRunning = { ...summary('pinned-running', 10), running: true }
+    const running = { ...summary('running', 20), running: true }
+    const completed = { ...summary('completed', 30), completed: true }
+    const failed = { ...summary('failed', 40), projectionValues: { sessionDigest: { outcome: 'error' } } } as SessionSummary
+    const aborted = { ...summary('aborted', 45), projectionValues: { sessionDigest: { outcome: 'aborted' } } } as SessionSummary
+    const archivedRunning = { ...summary('archived', 50), running: true }
+    const blankRunning = { ...summary('blank', 60), blank: true, running: true }
+    const idle = summary('idle', 70)
+    const all = list(pinnedRunning, running, completed, failed, aborted, archivedRunning, blankRunning, idle)
+    const ids = (statuses: readonly ('running' | 'completed' | 'failed')[]) =>
+      derivePinned(all, { pinnedSessionIds: [pinnedRunning.id], autoPinStatuses: statuses, completedSessionIds: [] }, {}, archived('archived'), new Map()).map(row => row.id)
+    expect(ids(['running', 'completed', 'failed'])).toEqual([sid('failed'), sid('completed'), sid('running'), sid('pinned-running')])
+    expect(ids(['failed'])).toEqual([sid('failed'), sid('pinned-running')])
+    expect(ids(['completed'])).toEqual([sid('completed'), sid('pinned-running')])
+    expect(ids([])).toEqual([sid('pinned-running')])
+  })
+
+  it('holds a dismissal while the matched-status key stands and ignores it for a pin mark', () => {
+    const statuses = ['running', 'completed', 'failed'] as const
+    const running = { ...summary('running', 20), running: true }
+    const done = { ...summary('running', 30), running: false, completed: true }
+    const pins = (pinned: readonly SessionId[], completed: readonly SessionId[] = []) =>
+      ({ pinnedSessionIds: pinned, autoPinStatuses: statuses, completedSessionIds: completed })
+    expect(autoPinStatusKey(running, pins([]))).toBe('running')
+    expect(autoPinStatusKey({ ...running, completed: true }, pins([]))).toBe('running,completed')
+    expect(autoPinStatusKey(summary('idle', 1), pins([]))).toBe('')
+    // The provider's durable unread finished ids count as completed too.
+    expect(autoPinStatusKey(summary('idle', 1), pins([], [sid('idle')]))).toBe('completed')
+    const ids = (session: SessionSummary, pinned: readonly SessionId[], dismissed: Record<string, string>) =>
+      derivePinned(list(session), pins(pinned), dismissed, [], new Map()).map(row => row.id)
+    expect(ids(running, [], { running: 'running' })).toEqual([])
+    // The Session finishing changes its key, so the dismissal lapses.
+    expect(ids(done, [], { running: 'running' })).toEqual([sid('running')])
+    // A stale or foreign dismissal does not hide the row.
+    expect(ids(running, [], { running: 'completed', other: 'running' })).toEqual([sid('running')])
+    // A pin mark lists the Session regardless.
+    expect(ids(running, [sid('running')], { running: 'running' })).toEqual([sid('running')])
+    // A finished Session the user has not handled is listed on the durable ids alone and shows as completed.
+    const durable = derivePinned(list(summary('idle', 1)), pins([], [sid('idle')]), {}, [], new Map())
+    expect(durable.map(row => [row.id, row.completed])).toEqual([[sid('idle'), true]])
+    // Running, failed, and pin-marked rows keep their own state; without the completed status the bit stays off.
+    const marked = derivePinned(list(running, summary('idle', 1)), { pinnedSessionIds: [sid('idle'), sid('running')], autoPinStatuses: [], completedSessionIds: [sid('idle'), sid('running')] }, {}, [], new Map())
+    expect(marked.map(row => [row.id, row.running, row.completed])).toEqual([[sid('running'), true, false], [sid('idle'), false, false]])
   })
 })
 

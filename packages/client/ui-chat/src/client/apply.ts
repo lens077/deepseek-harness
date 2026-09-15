@@ -184,6 +184,10 @@ export function apply(ctx: Context): void {
           },
           turnFiles: turn => ctx.get('chatFileDiffs')?.forTurn(sessionId, turn) ?? [],
           turnFilesAvailable: () => ctx.get('chatFileDiffs') !== undefined,
+          removeTurns: async (turns) => {
+            const result = await ctx.remote.session.removeTurns({ sessionId, turns })
+            if (!result.ok) throw new Error(result.error.message)
+          },
           forkAt: (seq) => {
             ctx.sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })
               .then((childId) => { ctx.sessions.open(childId) })

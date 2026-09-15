@@ -44,7 +44,7 @@ describe('SessionStatusSettingsRow', () => {
     expect(store.getSnapshot().sessionStatusIndicatorMode).toBe('animated')
   })
 
-  it('switches through static and hidden, persists under the v9 key, and returns to animated', () => {
+  it('switches through static and hidden, persists under the current key, and returns to animated', () => {
     const store = mount()
     fireEvent.click(screen.getByRole('button', { name: /打开（默认）/ }))
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['打开（默认）', '关闭动画', '完全关闭'])
@@ -54,7 +54,7 @@ describe('SessionStatusSettingsRow', () => {
     fireEvent.click(screen.getByRole('button', { name: /关闭动画/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: '完全关闭' }))
     expect(store.getSnapshot().sessionStatusIndicatorMode).toBe('hidden')
-    expect(localStorage.getItem('dsh.workspace.view.v9')).toContain('"sessionStatusIndicatorMode":"hidden"')
+    expect(localStorage.getItem('dsh.workspace.view.v12')).toContain('"sessionStatusIndicatorMode":"hidden"')
     expect(localStorage.getItem('dsh.workspace.view.v8')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /完全关闭/ }))

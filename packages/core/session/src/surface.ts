@@ -79,7 +79,8 @@ export function isReplacementSurfaceEvent(
 /**
  * Project a single event into the LLM message it derives to, or null when it
  * produces none — a non-surface event (attempt, boundary, log-only record) or an
- * empty-content assistant/message (which exists only to host usage). This is
+ * empty-content system, user, or assistant message (a cleared prompt, a logged
+ * range removal, or a usage-only step). This is
  * THE per-node projection rule: `Session.deriveMessages` folds it over the
  * live surface, external reconstructors and pure projections fold the same
  * function over a log prefix's surface to rebuild the exact messages any
@@ -102,14 +103,17 @@ export function deriveEventMessage(event: SessionEvent): Message | null {
     // renderer, keeping this projection a verbatim pass-through. See the
     // deferred design note in
     // ../../../../.agents/notes/implemented/simplification/2026-07-20-unwrap-injected-content-envelopes.md
-    case 'user/message': {
-      return event.data
-    }
-    // An empty-content message projects to no wire message. For
-    // system/message the node records "no system prompt" while keeping its
+    // An empty-content message projects to no wire message. For user/message
+    // the node is a logged removal of the surface range it replaced (a
+    // context-removal checkpoint) and must not inject a content-less user turn;
+    // for system/message the node records "no system prompt" while keeping its
     // surface position; for assistant/message the event exists only to host a
     // max-tokens step's usage and must not inject a content-less assistant
     // turn into the provider transcript.
+    case 'user/message': {
+      if (event.data.content.length === 0) return null
+      return event.data
+    }
     case 'system/message':
     case 'assistant/message': {
       if (event.data.message.content.length === 0) return null

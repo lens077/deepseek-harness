@@ -17,6 +17,9 @@ import type { MessageSource } from '@deepseek-ai/dsh-llm'
 import type { ModelRouteDecision, ModelRouter } from '@deepseek-ai/dsh-model-router'
 // Type-only: makes the optional token meter available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-token-meter'
+// Type-only: makes the optional context-removal service available to `ctx.get()`.
+import type {} from '@deepseek-ai/dsh-context-remove'
+import { ContextRemovalError } from '@deepseek-ai/dsh-context-remove'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -47,6 +50,8 @@ import type {
   SessionForkValue,
   SessionPromptRequest,
   SessionPromptValue,
+  SessionRemoveTurnsRequest,
+  SessionRemoveTurnsValue,
   SessionRenameRequest,
   SessionRenameValue,
   SessionSelectModelRequest,
@@ -193,6 +198,53 @@ export class SessionCommandController {
       throw new RemoteError(
         'gateway/internal',
         `failed to rename session "${request.sessionId}": ${String(error)}`,
+        {},
+      )
+    }
+  }
+
+  /**
+   * Remove completed turns from one live Session's model-visible history.
+   * @param request - Session identity and completed turn numbers.
+   * @param signal - caller cancellation before the replacements land.
+   * @returns the removed turns and their checkpoint positions.
+   */
+  async removeTurns(request: SessionRemoveTurnsRequest, signal: AbortSignal): Promise<SessionRemoveTurnsValue> {
+    if (request.turns.length === 0 || request.turns.some(turn => !Number.isSafeInteger(turn) || turn < 0)) {
+      throw new RemoteError('gateway/bad-request', 'turns must name at least one non-negative safe integer', {})
+    }
+    const agent = await this.resolveAgent(request.sessionId)
+    const removal = this.ctx.get('contextRemoval')
+    if (removal === undefined) {
+      throw new RemoteError('gateway/internal', 'turn removal is unavailable: this deployment mounts no context-removal service', {})
+    }
+    try {
+      const result = await removal.removeTurns(agent, request.turns, signal)
+      return {
+        turns: [...result.turns],
+        checkpointSeqs: result.groups.map(group => group.checkpointSeq),
+      }
+    } catch (error) {
+      if (error instanceof ContextRemovalError) {
+        switch (error.code) {
+          case 'busy':
+            throw new RemoteError('session/agent-busy', error.message, { reason: error.message })
+          case 'unavailable':
+            throw new RemoteError('session/turn-remove-unavailable', error.message, {
+              sessionId: request.sessionId,
+              ...(error.turn === undefined ? {} : { turn: error.turn }),
+            })
+          case 'cancelled':
+          case 'persistence':
+            throw new RemoteError('gateway/internal', error.message, {})
+          /* v8 ignore next 2 -- closed-union exhaustiveness guard */
+          default:
+            assertNever(error.code, 'context removal error')
+        }
+      }
+      throw new RemoteError(
+        'gateway/internal',
+        `failed to remove turns from session "${request.sessionId}": ${String(error)}`,
         {},
       )
     }

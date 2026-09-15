@@ -105,7 +105,7 @@ session.deriveMessages()         // the derived model history
 
 ### 派生历史
 
-`deriveMessages()` 把每个 surface 节点的投影缓存一次，每次调用都返回共享、深度冻结消息之上的新数组；四种 surface 事件类型（`system/message`、`user/message`、`assistant/message`、`tool/result`）各自投影自己的消息种类——system 角色的提示词（空内容的系统节点投影为无消息）、user 内容原样、带提供方与模型的组装 assistant 消息，或 user 角色的工具结果。嵌入式 Assistant stream 与 `assistant/attempt` 事件只保留重放和诊断数据。surface 重写会重建投影——不存在原始日志回退，因此 surface 是派生历史的唯一来源。
+`deriveMessages()` 把每个 surface 节点的投影缓存一次，每次调用都返回共享、深度冻结消息之上的新数组；四种 surface 事件类型（`system/message`、`user/message`、`assistant/message`、`tool/result`）各自投影自己的消息种类——system 角色的提示词（空内容的系统节点投影为无消息）、user 内容原样（空内容的 user 节点是 surface 替换生产者为了把一段范围移出模型历史而追加的检查点，投影为无消息）、带提供方与模型的组装 assistant 消息，或 user 角色的工具结果。嵌入式 Assistant stream 与 `assistant/attempt` 事件只保留重放和诊断数据。surface 重写会重建投影——不存在原始日志回退，因此 surface 是派生历史的唯一来源。
 
 ### 请求头
 

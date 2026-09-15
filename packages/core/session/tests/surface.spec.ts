@@ -750,6 +750,25 @@ describe('Session.append surface opts', () => {
     expect(s.deriveMessages()).toHaveLength(0)
   })
 
+  it('an empty-content user/message replacement removes the shadowed range from derived history', () => {
+    const s = surfaceSession()
+    expect(s.deriveMessages().map(message => message.role)).toEqual(['user', 'assistant'])
+    const removal = s.append('user/message', createUserMessage({
+      content: [],
+      source: { kind: 'plugin', plugin: 'context-remove' },
+    }), {
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(1), endSeq: SessionSeq(2) },
+      sourceEventSeqs: sourceSeqs(1, 2),
+    })
+    expect(s.surface.nodes).toEqual([removal.seq])
+    // The node keeps its surface position but projects to no wire message.
+    expect(s.deriveMessages()).toHaveLength(0)
+    expect(s.deriveEventMessage(removal)).toBeNull()
+    // The removed events stay in the append-only log.
+    expect(s.eventAt(SessionSeq(1))?.type).toBe('user/message')
+    expect(s.eventAt(SessionSeq(2))?.type).toBe('assistant/message')
+  })
+
   it('a non-surface event carries no surface fields', () => {
     const s = Session.create(SessionId('noopts'))
     s.append('turn/start', { turn: 1 })

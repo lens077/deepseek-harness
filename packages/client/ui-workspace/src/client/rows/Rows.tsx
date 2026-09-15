@@ -555,13 +555,15 @@ export function ArchivedSessionItem({ node, now, busy, onUnarchive, onDelete, st
  * @param props.multiLead - the row is the selection lead (arrow-key cursor).
  * @param props.pinned - whether the session is pinned.
  * @param props.onPin - pin or unpin the session.
+ * @param props.shortcut - the keyboard chord that opens this row, in the platform's notation, shown as a keycap.
  * @param props.statusIndicatorMode - status perimeter preference (default animated).
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
 export function SessionNodeItem({
   node, currentId, now, onOpen, onContextMenu, onRename, onFork, onDirectories, onArchive, onDelete,
-  onReveal, drag, flat = false, branch, multiSelected = false, multiLead = false, statusIndicatorMode = 'animated', pinned = false, onPin, t,
+  onReveal, drag, flat = false, branch, multiSelected = false, multiLead = false, statusIndicatorMode = 'animated', pinned = false, onPin,
+  shortcut, t,
 }: {
   node: SessionNode
   currentId: string | undefined
@@ -601,6 +603,8 @@ export function SessionNodeItem({
   pinned?: boolean | undefined
   /** Pin or unpin this session. */
   onPin?: ((id: SessionNode['id'], pinned: boolean) => void) | undefined
+  /** Keycap label of the chord that opens this row; absent on rows without one. */
+  shortcut?: string | undefined
   t: RowTranslate
 }) {
   const row = node
@@ -717,6 +721,9 @@ export function SessionNodeItem({
       {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {branch !== undefined && (
         <span className={css.branchCount}>{node.children?.length ?? 0}</span>
+      )}
+      {shortcut !== undefined && (
+        <kbd className={css.keycap} aria-label={t('pinned.shortcuts.key.aria', { key: shortcut })}>{shortcut}</kbd>
       )}
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the content verbs

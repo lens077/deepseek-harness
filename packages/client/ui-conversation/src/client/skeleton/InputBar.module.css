@@ -342,6 +342,23 @@
   cursor: default;
 }
 
+.modeSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.modeSelect:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.modeSelect:disabled { opacity: .55; cursor: default; }
+
 /* Primary send (figma IconButton 34:10465): 34px circle, #3964FE light /
    #679EFE dark — the info-fill pair (500→400), NOT button-primary (ink);
    white glyph; empty text = 0.4 opacity. */

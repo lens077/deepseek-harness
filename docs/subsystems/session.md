@@ -50,7 +50,10 @@ interface SessionEventMap {
    * (the queued message claimed for this turn), a synthetic `agent.inject()`
    * context (file-change notices, subdir AGENTS.md, skill content, cron
    * notifications, …), or an entered goal continuation round. All three
-   * project their `content` verbatim; `source` tells them apart.
+   * project their `content` verbatim; `source` tells them apart. An
+   * empty-content user node projects to no message: a surface-replacing
+   * producer uses it to remove the shadowed range from model history while
+   * the append-only log and its `sourceEventSeqs` keep the removed events.
    */
   'user/message': UserMessage
   /**

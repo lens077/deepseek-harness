@@ -13,13 +13,15 @@ import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 import type { CompactionResult } from './types.ts'
 
 export type { CompactionResult } from './types.ts'
-export { CompactionId } from './brand.ts'
+export { CompactionId, ContextRemovalId } from './brand.ts'
 export { toolPairingBalancedAfter, toolPairingBalancedBefore } from './tool-pairing.ts'
 // The checkpoint source constructor and predicate are declared on the cordis-free
 // `./checkpoint` leaf so client and wire programs can name them without this
 // root's Context merge; the root stays the host-side entry point for both.
-export { compactCheckpointSource, isCompactCheckpointSource } from './checkpoint.ts'
-export type { CompactionCheckpointSource } from './checkpoint.ts'
+export {
+  compactCheckpointSource, contextRemovalSource, isCompactCheckpointSource, isContextRemovalSource,
+} from './checkpoint.ts'
+export type { CompactionCheckpointSource, ContextRemovalSource } from './checkpoint.ts'
 
 /** Why automatic policy is asking a backend to consider compaction. */
 export type CompactionTrigger = 'pressure' | 'context-overflow'

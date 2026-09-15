@@ -83,7 +83,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:412`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:420`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:442`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:473`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:415`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:423`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:445`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:476`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -210,7 +210,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:33`](../packages/inter
 'assistant/attempt': { turn: number; step: number; stream: AssistantStreamRecord[] }
 ```
 
-Source: [`packages/core/session/src/types.ts:335`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:338`](../packages/core/session/src/types.ts)
 
 <a id="assistantmessage--surface"></a>
 
@@ -240,7 +240,7 @@ Source: [`packages/core/session/src/types.ts:335`](../packages/core/session/src/
 
 Types: [TokenUsage](subsystems/llm-streaming.md)
 
-Source: [`packages/core/session/src/types.ts:321`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:324`](../packages/core/session/src/types.ts)
 
 ### `command/*`
 
@@ -307,8 +307,9 @@ Source: [`packages/compaction/compaction/src/types.ts:72`](../packages/compactio
 
 ```ts persistence-catalog
 /**
- * Shadow price of one model-free prune replacement — log-only, no
- * surfaceOp. The shared shadow-price protocol: a surface `replace` event
+ * Shadow price of one model-free replacement (a pruned tool result or a
+ * context-removal checkpoint) — log-only, no surfaceOp. The shared
+ * shadow-price protocol: a surface `replace` event
  * is priced by the metering event immediately before it (`compaction/summary`
  * for a summarizing compaction, this event for a prune), which states the
  * heuristic token price of the exact replaced range so a pure consumer
@@ -325,7 +326,7 @@ Source: [`packages/compaction/compaction/src/types.ts:72`](../packages/compactio
 }
 ```
 
-Source: [`packages/compaction/compaction/src/types.ts:82`](../packages/compaction/compaction/src/types.ts)
+Source: [`packages/compaction/compaction/src/types.ts:83`](../packages/compaction/compaction/src/types.ts)
 
 <a id="compactionstart--log-only"></a>
 
@@ -686,7 +687,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:46`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:385`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:388`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -705,7 +706,7 @@ Source: [`packages/core/session/src/types.ts:385`](../packages/core/session/src/
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:373`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -765,7 +766,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/directories': { additionalDirectories: string[] }
 ```
 
-Source: [`packages/core/session/src/types.ts:368`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:371`](../packages/core/session/src/types.ts)
 
 <a id="sessionend-seed--log-only"></a>
 
@@ -797,7 +798,7 @@ Source: [`packages/core/session/src/types.ts:368`](../packages/core/session/src/
 'session/end-seed': { inherited?: true }
 ```
 
-Source: [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:411`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -932,7 +933,7 @@ Source: [`packages/subagent/tool-subagent/src/model-selection-state.ts:17`](../p
 'system/message': { turn: number; step: number; message: SystemMessage }
 ```
 
-Source: [`packages/core/session/src/types.ts:310`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
 
 ### `team/*`
 
@@ -1025,7 +1026,7 @@ Source: [`packages/todo/tool-todo/src/types.ts:31`](../packages/todo/tool-todo/s
 
 Types: [ToolCallId](subsystems/core.md)
 
-Source: [`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:344`](../packages/core/session/src/types.ts)
 
 <a id="toolptc-dispatch--log-only"></a>
 
@@ -1101,7 +1102,7 @@ Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:353`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:356`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 
@@ -1211,12 +1212,15 @@ Source: [`packages/core/session/src/types.ts:276`](../packages/core/session/src/
  * (the queued message claimed for this turn), a synthetic `agent.inject()`
  * context (file-change notices, subdir AGENTS.md, skill content, cron
  * notifications, …), or an entered goal continuation round. All three
- * project their `content` verbatim; `source` tells them apart.
+ * project their `content` verbatim; `source` tells them apart. An
+ * empty-content user node projects to no message: a surface-replacing
+ * producer uses it to remove the shadowed range from model history while
+ * the append-only log and its `sourceEventSeqs` keep the removed events.
  */
 'user/message': UserMessage
 ```
 
-Source: [`packages/core/session/src/types.ts:297`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:300`](../packages/core/session/src/types.ts)
 
 ### `web/*`
 

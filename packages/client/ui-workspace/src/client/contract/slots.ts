@@ -186,6 +186,10 @@ export type WorkspaceBrowserInjected = {
    * reports `enabled`; without a provider the promise rejects.
    */
   setPinned: (sessionIds: readonly SessionId[], pinned: boolean) => Promise<void>
+  /** Set the pinned-area height through the {@link SessionPins} seat; without a provider the promise rejects. */
+  setPinnedSidebarRows: (rows: SessionPinsSidebarRows) => Promise<void>
+  /** Replace the auto-listed statuses through the {@link SessionPins} seat; without a provider the promise rejects. */
+  setPinnedAutoStatuses: (statuses: readonly SessionAutoPinStatus[]) => Promise<void>
   /** Add or remove several Sessions from one Workspace account atomically. */
   setSessionMembership: (
     workspaceId: WorkspaceId,
@@ -254,6 +258,17 @@ export interface SessionTodos {
 }
 
 /**
+ * A Session status the sidebar pinned area can list automatically, beside the
+ * explicit pin marks: `running` Sessions, `completed` ones (finished and not
+ * yet handled, by the list row's reminder bit or the provider's durable
+ * marks), and `failed` ones (newest Turn ended in error).
+ */
+export type SessionAutoPinStatus = 'running' | 'completed' | 'failed'
+
+/** Sidebar pinned-area height: a fixed number of session rows, or `auto` to fit the listed rows. */
+export type SessionPinsSidebarRows = number | 'auto'
+
+/**
  * What the session browser reads from the pin provider: which Sessions are
  * pinned and how the sidebar presents them. Plain data so the browser can
  * mirror it into its hooks compartment without knowing the provider.
@@ -263,10 +278,20 @@ export interface SessionPinsView {
   enabled: boolean
   /** Whether the sidebar renders the pinned area above the browsing section; meaningful only while `enabled`. */
   sidebarArea: boolean
-  /** Number of session rows the pinned area is sized to hold; more rows scroll inside it. */
-  sidebarRows: number
+  /** Session rows the pinned area is sized to hold (more rows scroll inside it), or `auto` to fit its rows. */
+  sidebarRows: SessionPinsSidebarRows
+  /** Statuses whose Sessions the pinned area lists automatically, beside the explicit pin marks. */
+  autoPinStatuses: readonly SessionAutoPinStatus[]
   /** Every pinned Session id; the browser orders rows by Session recency and drops archived or unknown ids. */
   pinnedSessionIds: readonly SessionId[]
+  /**
+   * Finished Sessions the user has not handled yet, from the provider's
+   * durable marks (the digest's 已完成 and 已读未处理 rows). The `completed`
+   * auto-pin status reads these beside the list row's transient reminder bit,
+   * so a finished Session stays listed across a Host restart until the user
+   * handles it or marks the inbox reviewed.
+   */
+  completedSessionIds: readonly SessionId[]
 }
 
 /** The view the browser stands on while no pin provider is composed in. */
@@ -274,7 +299,9 @@ export const DEFAULT_SESSION_PINS_VIEW: SessionPinsView = Object.freeze({
   enabled: false,
   sidebarArea: false,
   sidebarRows: 5,
+  autoPinStatuses: Object.freeze([]),
   pinnedSessionIds: Object.freeze([]),
+  completedSessionIds: Object.freeze([]),
 })
 
 /**
@@ -294,6 +321,18 @@ export interface SessionPins {
    * @param pinned - the desired state for all of them.
    */
   setPinned(sessionIds: readonly SessionId[], pinned: boolean): Promise<void>
+  /**
+   * Set the sidebar pinned-area height; resolves once the durable setting is
+   * written and `view` has published it.
+   * @param rows - a fixed row count, or `auto` to fit the listed rows.
+   */
+  setSidebarRows(rows: SessionPinsSidebarRows): Promise<void>
+  /**
+   * Replace the statuses the sidebar pinned area lists automatically; resolves
+   * once the durable setting is written and `view` has published it.
+   * @param statuses - the complete status selection (empty lists pin marks only).
+   */
+  setAutoPinStatuses(statuses: readonly SessionAutoPinStatus[]): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {

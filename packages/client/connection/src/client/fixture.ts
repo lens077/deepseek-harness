@@ -299,6 +299,7 @@ interface FixtureSessionApi {
   }): Promise<ConnectionRpcResult<unknown>>
   rename(request: { readonly sessionId: SessionId; readonly title: string }): Promise<ConnectionRpcResult<unknown>>
   fork(request: { readonly sessionId: SessionId; readonly atSeq?: number }): Promise<ConnectionRpcResult<unknown>>
+  removeTurns(request: { readonly sessionId: SessionId; readonly turns: readonly number[] }): Promise<ConnectionRpcResult<unknown>>
   history(request: {
     readonly sessionId: SessionId
     readonly throughSeq?: number
@@ -3216,6 +3217,98 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       const appended = logOf(sessionId).at(-1) as SessionEvent
       return sessionOk({ title: normalized, seq: appended.seq })
     },
+    // Host ContextRemovalExecutor parallel: each contiguous group of completed
+    // turns becomes one `compaction/prune` shadow price plus one empty-content
+    // replacement user message carrying the removal source.
+    removeTurns: (request) => {
+      const missing = requireRemoteSession(request)
+      if (missing !== undefined) return missing
+      const { sessionId } = request
+      const log = logOf(sessionId)
+      if (summaryOf(sessionId)?.running === true) {
+        return sessionErr({
+          code: 'session/agent-busy',
+          message: 'context removal requires an idle agent',
+          details: { reason: 'running' },
+        })
+      }
+      const surface = foldSurface(log).nodes
+      const spans: Array<{ turn: number; startIdx: number; endIdx: number; promptSeqs: number[] }> = []
+      for (const turn of new Set(request.turns)) {
+        const start = log.find(e => e.type === 'turn/start' && e.data.turn === turn)
+        const end = log.find(e => e.type === 'turn/end' && e.data.turn === turn)
+        const indices: number[] = []
+        const promptSeqs: number[] = []
+        if (start !== undefined && end !== undefined) {
+          surface.forEach((seq, index) => {
+            const event = log[seq]
+            if (event === undefined || seq < start.seq || seq > end.seq) return
+            if (index === 0 && event.type === 'system/message') return
+            indices.push(index)
+            if (event.type === 'user/message' && event.data.source.kind === 'user') promptSeqs.push(seq)
+          })
+        }
+        const first = indices[0]
+        const last = indices.at(-1)
+        if (start === undefined || end === undefined || first === undefined || last === undefined) {
+          return sessionErr({
+            code: 'session/turn-remove-unavailable',
+            message: `turn ${String(turn)} cannot be removed`,
+            details: { sessionId, turn },
+          })
+        }
+        spans.push({ turn, startIdx: first, endIdx: last, promptSeqs })
+      }
+      spans.sort((left, right) => left.startIdx - right.startIdx)
+      const groups: Array<{ turns: number[]; startIdx: number; endIdx: number; promptSeqs: number[] }> = []
+      for (const span of spans) {
+        const previous = groups.at(-1)
+        if (previous !== undefined && previous.endIdx + 1 === span.startIdx) {
+          previous.turns.push(span.turn)
+          previous.promptSeqs.push(...span.promptSeqs)
+          previous.endIdx = span.endIdx
+        } else {
+          groups.push({ turns: [span.turn], startIdx: span.startIdx, endIdx: span.endIdx, promptSeqs: [...span.promptSeqs] })
+        }
+      }
+      const removalId = `removal-${randomUuid()}`
+      const checkpointSeqs: number[] = []
+      for (const group of groups) {
+        const shadowedSeqs = surface.slice(group.startIdx, group.endIdx + 1)
+        const shadowedTokenCount = shadowedSeqs.reduce((total, seq) => {
+          const event = log[seq]
+          const message = event === undefined ? null : deriveEventMessage(event)
+          return total + (message === null ? 0 : JSON.stringify(message.content).length >> 2)
+        }, 0)
+        const prune = append(sessionId, {
+          type: 'compaction/prune',
+          data: {
+            shadowedRange: { start: shadowedSeqs[0], end: shadowedSeqs.at(-1) },
+            shadowedSeqs,
+            shadowedTokenCount,
+          },
+        })
+        const checkpoint = append(sessionId, {
+          type: 'user/message',
+          data: {
+            id: brandString<MessageId>(`removal-${randomUuid()}`),
+            role: 'user',
+            content: [],
+            source: {
+              kind: 'plugin',
+              plugin: 'context-remove',
+              removalId,
+              turns: [...group.turns],
+              promptSeqs: [...group.promptSeqs],
+            },
+          },
+          surfaceOp: { op: 'replace', startSeq: shadowedSeqs[0], endSeq: shadowedSeqs.at(-1) },
+          sourceEventSeqs: [prune.seq, ...shadowedSeqs],
+        })
+        checkpointSeqs.push(checkpoint.seq)
+      }
+      return sessionOk({ turns: groups.flatMap(group => group.turns), checkpointSeqs })
+    },
     fork: (request) => {
       const { sessionId, atSeq } = request
       const source = summaryOf(sessionId)
@@ -3960,6 +4053,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         )
         case 'session/fork': return sessionApi.fork(
           request as Parameters<FixtureSessionApi['fork']>[0],
+        )
+        case 'session/removeTurns': return sessionApi.removeTurns(
+          request as Parameters<FixtureSessionApi['removeTurns']>[0],
         )
         case 'session/prompt': return sessionApi.prompt(
           request as Parameters<FixtureSessionApi['prompt']>[0],

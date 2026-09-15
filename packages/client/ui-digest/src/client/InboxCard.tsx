@@ -21,16 +21,22 @@ export interface InboxCardActions {
 
 /**
  * Render one inbox item, with optional controlled phone disclosure.
- * @param props - the item, keyboard focus, localized copy, actions, whether pinning is enabled, and phone expansion.
+ * @param props - the item, keyboard focus, localized copy, actions, pinning and reply visibility, and phone expansion.
  * @returns the card element.
  */
-export function InboxCard({ item, focused, t, actions, pinning, disclosure }: {
+export function InboxCard({ item, focused, t, actions, pinning, showReply, disclosure }: {
   item: InboxItem
   focused: boolean
   t: DigestPanelProps['t']
   actions: InboxCardActions
   /** Whether the pin action is offered; the pinned marker follows the mark regardless. */
   pinning: boolean
+  /**
+   * Whether the closing reply is shown. Off clamps the question to two lines
+   * and drops the reply and its truncation hint so a card is a few lines
+   * tall; the head, changed files, and actions stay.
+   */
+  showReply: boolean
   disclosure?: { expanded: boolean; toggle: () => void } | undefined
 }) {
   const detailsId = useId()
@@ -88,13 +94,16 @@ export function InboxCard({ item, focused, t, actions, pinning, disclosure }: {
             <span className={css.cardTitle} title={item.title}>{item.title}</span>
             <span className={css.cardWorkspace} title={item.workspaceTitle}>{item.workspaceTitle}</span>
           </span>
-          <div className={css.cardBody} data-card-body="">
+          <div className={clsx(css.cardBody, !showReply && css.cardBodyBrief)} data-card-body="">
             <span className={css.fieldLabel}>{t('card.question')}</span>
-            <span className={css.question}>
+            <span
+              className={clsx(css.question, !showReply && css.questionBrief)}
+              title={showReply || item.question === null ? undefined : item.question}
+            >
               {item.question === null ? t('card.noQuestion') : item.question}
               {item.questionTruncated ? '…' : ''}
             </span>
-            {!item.running && (
+            {!item.running && showReply && (
               <>
                 <span className={css.fieldLabel}>{t('card.reply')}</span>
                 {item.reply === null

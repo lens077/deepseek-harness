@@ -18,7 +18,7 @@ import type { ChangeEvent, CSSProperties, KeyboardEvent, MouseEvent, ReactNode }
 import clsx from 'clsx'
 import {
   IconChevronDownOutline14, IconFullscreenOutline16, IconPaperclipOutline16, IconPlusOutline16,
-  IconWarningOutline16, Toast, Tooltip,
+  IconWarningOutline16, Menu, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -44,7 +44,7 @@ export type InputBarProps = ComposerBarProps
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
   retryFileUpload,
-  toggleCommandMenu, stop, command, t,
+  setBusyEnter, toggleCommandMenu, stop, command, t,
   renderSlot, useBusyEnter, useSendShortcut, useFileUploads, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -54,6 +54,7 @@ export const InputBar = memo(function InputBar({
   const notice = useNotices(s => s)
   const busyEnter = useBusyEnter(s => s)
   const sendShortcut = useSendShortcut(s => s)
+  const [modeMenuOpen, setModeMenuOpen] = useState(false)
   void useLexicon // hook seat stays bound by the inject compartment; text-ref decoration rides the shell's editor transforms
   const commandMenuOpen = useMenuLauncher(source => source === 'command')
   const promptError = useSession(s => s.promptError) ?? null
@@ -542,6 +543,20 @@ export const InputBar = memo(function InputBar({
               ? null
               : renderSlot('conversation.input.right', {})}
             {sessionId === undefined ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+            {running && plainMessageDraft && <Menu
+              open={modeMenuOpen}
+              onClose={() => { setModeMenuOpen(false) }}
+              items={[{ id: 'steer', label: t('input.send.steer') }, { id: 'queue', label: t('input.send.queue') }]}
+              selectedId={busyEnter}
+              onSelect={(id) => { setModeMenuOpen(false); if (id === 'steer' || id === 'queue') setBusyEnter(id) }}
+              align="end"
+              portal
+              anchor={(
+                <button type="button" className={css.modeSelect} aria-label={`${t('input.send.steer')}/${t('input.send.queue')}`} aria-haspopup="menu" aria-expanded={modeMenuOpen} disabled={disabled || machineBusy} onMouseDown={keepFocus} onClick={() => { setModeMenuOpen(open => !open) }}>
+                  {t(busyEnter === 'steer' ? 'input.send.steer' : 'input.send.queue')} <IconChevronDownOutline14 />
+                </button>
+              )}
+            />}
             <ContextMeter useProjection={useProjection} t={t} />
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500} disabled={stop === undefined}>
