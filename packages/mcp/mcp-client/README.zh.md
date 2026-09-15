@@ -128,6 +128,8 @@ kind: "package-reference"
 
 工具调用会发送一次未缓存的 `tools/call` 请求，携带原始 MCP 名称、JSON 参数、中止信号与配置的超时；公开名称绝不会发给服务器，也绝不会被解析还原。规范成功值是 `{ content: JsonValue[], structuredContent? }`，为程序化调用方与 PTC mode 调用方保留完整的 MCP JSON 块。受支持且已声明的 `outputSchema` 会验证 `structuredContent`；不受支持的 schema 词汇回退为不受约束的 `JsonValue`。MCP 的 `isError` 结果会在任何图片持久化之前抛出，使注册表产生失败的工具结果。图片批次会先整体解码并校验，再保存任一成员；任何拒绝都会把每张图片投影为诊断文本。
 
+导出的 `createMcpToolDefinition(ctx, options)` 用一个上游工具加上调用方自有的 `call(args, execution)` 回调，构建同一个未注册的 `ToolDefinition`；于是那些只说 MCP 结果 JSON、不走本插件传输层的提供方——例如[原生 Cua Driver 提供方](../../experimental/computer-use-cua-driver-native/README.zh.md)——可以复用规范值、结构化输出与持久图片投影。注册、提供方生命周期、超时与传输仍归该调用方所有；回调返回的若不是 MCP 结果对象，该次工具调用即失败。
+
 ### 环境清洗（stdio）
 
 子进程环境以子进程 seam 的 `scrubbedParentEnv()` 为基座——删除匹配 `/KEY|PASSWORD|SECRET|TOKEN/i` 的环境名称与所有 `DSH_*` 名称——再在其上合并配置的 `env`，因此显式覆盖得以保留。实际 spawn 由 MCP SDK 负责；本包共享清洗定义，而非 spawn 路径。

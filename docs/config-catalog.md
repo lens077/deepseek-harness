@@ -655,6 +655,30 @@ export interface Config {
 
 Source: [`packages/experimental/code-runtime-python/src/index.ts:42`](../packages/experimental/code-runtime-python/src/index.ts)
 
+<a id="deepseek-aidsh-experimental-computer-use-cua-driver-mcp"></a>
+
+## `@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp`
+
+Requires: `computerUse` · `tools`
+
+```ts config-catalog
+/** Installed executable and MCP connection overrides. */
+export interface Config {
+  /** Executable path or PATH command; defaults to `cua-driver`. */
+  command: string
+  /** Arguments passed without a shell; defaults to `['mcp']`. */
+  args: string[]
+  /** Per-call timeout in milliseconds; omission uses the MCP client's default. */
+  toolCallTimeoutMs?: number
+  /** Reconnection overrides; defaults to the MCP client's policy. */
+  reconnect: McpClient.ReconnectConfig
+}
+```
+
+Depends on: [`McpClient`](../packages/mcp/mcp-client/src/index.ts)
+
+Source: [`packages/experimental/computer-use-cua-driver-mcp/src/index.ts:20`](../packages/experimental/computer-use-cua-driver-mcp/src/index.ts)
+
 <a id="deepseek-aidsh-experimental-inspector"></a>
 
 ## `@deepseek-ai/dsh-experimental-inspector`
@@ -3805,10 +3829,12 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-command-feedback` — requires `commands` ([`packages/feedback/command-feedback/src/index.ts`](../packages/feedback/command-feedback/src/index.ts))
 - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
 - `@deepseek-ai/dsh-commands` ([`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts))
+- `@deepseek-ai/dsh-computer-use` ([`packages/computer-use/computer-use/src/index.ts`](../packages/computer-use/computer-use/src/index.ts))
 - `@deepseek-ai/dsh-context-remove` — requires `tokenMeter` · `sessions` ([`packages/compaction/context-remove/src/index.ts`](../packages/compaction/context-remove/src/index.ts))
 - `@deepseek-ai/dsh-cordis-client-runner` ([`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts))
 - `@deepseek-ai/dsh-deepseek-llm-api-extensions` ([`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../packages/llm/deepseek-llm-api-extensions/src/index.ts))
 - `@deepseek-ai/dsh-experimental-client-ui-agent-team` ([`packages/experimental/client-ui-agent-team/src/index.ts`](../packages/experimental/client-ui-agent-team/src/index.ts))
+- `@deepseek-ai/dsh-experimental-computer-use-cua-driver-native` — requires `computerUse` · `tools` · `systemPrompt` ([`packages/experimental/computer-use-cua-driver-native/src/index.ts`](../packages/experimental/computer-use-cua-driver-native/src/index.ts))
 - `@deepseek-ai/dsh-fs-e2b` — requires `e2b` ([`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts))
 - `@deepseek-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@deepseek-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))

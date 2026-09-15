@@ -66,6 +66,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   codeRuntime: 'code-runtime.md',
   commands: 'commands.md',
   compaction: 'compaction.md',
+  computerUse: 'computer-use.md',
   cordisInspect: 'extensions.md',
   authorization: 'credentials.md',
   credentials: 'credentials.md',
@@ -256,6 +257,7 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  ComputerUseProviderName: 'computer-use.md',
   Agent: 'core.md',
   AgentCancelCause: 'core.md',
   AgentFactory: 'core.md',

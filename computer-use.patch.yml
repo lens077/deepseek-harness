@@ -1,0 +1,30 @@
+# Opt-in computer-use overlay for local runs from this checkout:
+#
+#   pnpm dsh web --patch computer-use.patch.yml
+#   pnpm dsh --profile headless --patch computer-use.patch.yml "task"
+#
+# No shipped profile mounts a computer-use provider, so this overlay stays out
+# of the machine-local profile layer ($DSH_HOME/profiles/*/cordis.patch.yml),
+# which every dsh checkout on this machine shares and which cannot resolve
+# these packages from an installation that does not carry them.
+#
+# The native provider runs the Cua Driver SDK inside the dsh process and
+# inherits the launching application's macOS Accessibility and Screen Recording
+# grants; screenshots stay unavailable until Screen Recording is granted to the
+# terminal or app that starts dsh. Swap the second row for the installed-driver
+# provider when a separate Cua Driver application should own those grants:
+#
+#     - id: computer-use-cua-driver
+#       name: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
+#       config:
+#         command: cua-driver
+#         args: [mcp]
+#
+# Screenshots reach the model only through an attachment store on an
+# image-capable model route; the base bundle mounts the local store.
+- insert:
+    - id: computer-use
+      name: '@deepseek-ai/dsh-computer-use'
+
+    - id: computer-use-cua-driver
+      name: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-native'
