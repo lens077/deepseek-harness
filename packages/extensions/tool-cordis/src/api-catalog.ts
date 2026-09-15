@@ -749,6 +749,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'contextRemoval',
+    summary: 'Remove complete turns from one idle agent\'s model-visible history.',
+    description: 'Remove complete turns from one idle agent\'s model-visible history. Load one instance per context as `ctx.contextRemoval`.',
+    methods: [
+      {
+        signature: 'removeTurns( agent: ContextRemovalAgentContext, turns: readonly number[], signal: AbortSignal, ): Promise<ContextRemovalResult>',
+        description: 'Remove the complete surface span of each requested completed turn from model history, one replacement per contiguous group of selected turns. Validation and every append run synchronously inside the agent\'s idle maintenance phase, so either all groups land or none does; the durability checkpoint follows.\n\nEach replacement is an empty-content user message carrying contextRemovalSource with a `replace` surface operation over the group\'s span, immediately preceded by a `compaction/prune` shadow-price event pricing that span through the token meter. The first system-prompt node is never part of a span; later system nodes inside a removed turn are shadowed with it, and the loop\'s normalization restores the prompt on the next request.',
+        parameters: [{ name: 'agent', description: 'idle agent whose session is rewritten.' }, { name: 'turns', description: 'completed turn numbers to remove; duplicates are ignored.' }, { name: 'signal', description: 'cancellation scoped to this request.' }],
+        returns: 'the landed replacements.',
+        throws: ['{@link ContextRemovalError} for busy, unavailable, cancelled, or persistence failures.'],
+      },
+    ],
+  },
+  {
     key: 'credentials',
     summary: 'Abstract credential service over two key spaces that answer two questions.',
     description: 'Abstract credential service over two key spaces that answer two questions.\n\nA CredentialRef answers "what is behind this environment-variable name", layered over the process environment, the provider-managed store, and `.env` files. One seam-wide rule binds that half: an empty stored value is absent everywhere — `resolve` skips it, `describe` reports it unconfigured — so a blank never masquerades as a configured secret.\n\nA CredentialKey answers "what credential does this plugin hold for this id". Nothing can layer here — an authorization grant has no environment to be read from — so presence of the record is the whole fact, and modifyRecord is the only write path because a correct write depends on the current value (a token refresh is read-decide-replace under one lock).',
@@ -1611,6 +1625,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Fork one cold-readable completed-turn prefix into a new Session.',
         parameters: [{ name: 'request', description: 'source Session and optional event anchor.' }],
         returns: 'the new Session identity.',
+      },
+      {
+        signature: '@Remote(\'removeTurns\') removeTurns(request: SessionRemoveTurnsRequest, signal: AbortSignal): Promise<SessionRemoveTurnsValue>',
+        description: 'Remove completed turns from one Session\'s model-visible history after explicitly resuming it.',
+        parameters: [{ name: 'request', description: 'Session identity and completed turn numbers.' }, { name: 'signal', description: 'caller cancellation before the replacements land.' }],
+        returns: 'the removed turns and their checkpoint positions.',
       },
       {
         signature: '@Remote(\'prompt\') prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>',
@@ -4116,6 +4136,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ContextFormed = {\n    readonly form?: never;\n} | {\n    readonly form: \'instructions\';\n} | {\n    readonly form: \'catalog\';\n} | {\n    readonly form: \'snapshot\';\n    readonly sections: readonly ContextSnapshotSection[];\n} | {\n    readonly form: \'notice\';\n    readonly summary: string;\n} | {\n    readonly form: \'relay\';\n} | {\n    readonly form: \'recall\';\n};',
   },
   {
+    name: 'ContextRemovalAgentContext',
+    declaration: 'export interface ContextRemovalAgentContext {\n    readonly session: Session;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
+  },
+  {
+    name: 'ContextRemovalGroup',
+    declaration: 'export interface ContextRemovalGroup {\n    readonly turns: readonly number[];\n    readonly pruneSeq: SessionSeq;\n    readonly checkpointSeq: SessionSeq;\n    readonly shadowedSeqs: readonly SessionSeq[];\n    readonly shadowedTokenCount: number;\n}',
+  },
+  {
+    name: 'ContextRemovalId',
+    declaration: 'export type ContextRemovalId = Branded<\'ContextRemovalId\'>;',
+  },
+  {
+    name: 'ContextRemovalResult',
+    declaration: 'export interface ContextRemovalResult {\n    readonly removalId: ContextRemovalId;\n    readonly turns: readonly number[];\n    readonly groups: readonly ContextRemovalGroup[];\n}',
+  },
+  {
     name: 'ContextSnapshotSection',
     declaration: 'export interface ContextSnapshotSection {\n    readonly name: string;\n    readonly text: string;\n}',
   },
@@ -5734,6 +5770,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionReferenceMentionCandidate',
     declaration: 'export interface SessionReferenceMentionCandidate extends SessionReferenceCandidate {\n    mention: string;\n}',
+  },
+  {
+    name: 'SessionRemoveTurnsRequest',
+    declaration: 'export interface SessionRemoveTurnsRequest {\n    readonly sessionId: SessionId;\n    readonly turns: readonly number[];\n}',
+  },
+  {
+    name: 'SessionRemoveTurnsValue',
+    declaration: 'export interface SessionRemoveTurnsValue {\n    readonly turns: readonly number[];\n    readonly checkpointSeqs: readonly number[];\n}',
   },
   {
     name: 'SessionRenameRequest',

@@ -818,6 +818,14 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('fork') fork(request: SessionForkRequest): Promise<SessionForkValue>
 
 /**
+ * Remove completed turns from one Session's model-visible history after explicitly resuming it.
+ * @param request - Session identity and completed turn numbers.
+ * @param signal - caller cancellation before the replacements land.
+ * @returns the removed turns and their checkpoint positions.
+ */
+@Remote('removeTurns') removeTurns(request: SessionRemoveTurnsRequest, signal: AbortSignal): Promise<SessionRemoveTurnsValue>
+
+/**
  * Admit one prompt after explicitly resuming its Session.
  * @param request - Session identity, prompt content, source metadata, and delivery mode.
  * @param signal - caller cancellation before prompt admission begins.

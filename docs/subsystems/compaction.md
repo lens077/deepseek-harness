@@ -194,6 +194,38 @@ Types: [CommandId](commands.md) · [SessionSeq](session.md)
 
 Source: [`packages/compaction/compaction/src/index.ts`](../../packages/compaction/compaction/src/index.ts)
 
+<a id="ctxcontextremoval--contextremovalexecutor"></a>
+
+### `ctx.contextRemoval` — `ContextRemovalExecutor`
+
+Remove complete turns from one idle agent's model-visible history. Load one instance per context as `ctx.contextRemoval`.
+
+```ts cordis-catalog
+/**
+ * Remove the complete surface span of each requested completed turn from
+ * model history, one replacement per contiguous group of selected turns.
+ * Validation and every append run synchronously inside the agent's idle
+ * maintenance phase, so either all groups land or none does; the durability
+ * checkpoint follows.
+ *
+ * Each replacement is an empty-content user message carrying
+ * {@link contextRemovalSource} with a `replace` surface operation over the
+ * group's span, immediately preceded by a `compaction/prune` shadow-price
+ * event pricing that span through the token meter. The first system-prompt
+ * node is never part of a span; later system nodes inside a removed turn are
+ * shadowed with it, and the loop's normalization restores the prompt on the
+ * next request.
+ * @param agent - idle agent whose session is rewritten.
+ * @param turns - completed turn numbers to remove; duplicates are ignored.
+ * @param signal - cancellation scoped to this request.
+ * @returns the landed replacements.
+ * @throws {@link ContextRemovalError} for busy, unavailable, cancelled, or persistence failures.
+ */
+removeTurns( agent: ContextRemovalAgentContext, turns: readonly number[], signal: AbortSignal, ): Promise<ContextRemovalResult>
+```
+
+Source: [`packages/compaction/context-remove/src/index.ts`](../../packages/compaction/context-remove/src/index.ts)
+
 <a id="ctxtoolresultpruner--toolresultpruner"></a>
 
 ### `ctx.toolResultPruner` — `ToolResultPruner`
