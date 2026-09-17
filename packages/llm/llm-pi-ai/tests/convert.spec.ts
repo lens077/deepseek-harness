@@ -120,7 +120,7 @@ describe('toPiContext', () => {
 
     expect(readImageRequest).toHaveBeenCalledWith(
       attachment,
-      { maxPixels: 2048 * 2048, maxBytes: 1024 * 1024 },
+      { maxPixels: 2048 * 2048, maxDimension: 2000, maxBytes: 1024 * 1024 },
       undefined,
     )
     expect(context.messages[0]).toEqual({
@@ -923,6 +923,38 @@ describe('mapStopReason / mapUsage', () => {
       stopReason: 'error',
       errorMessage: 'vector length limit exceeded',
     }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
+  })
+
+  it('maps status-less in-stream provider errors to retryable or terminal codes', () => {
+    // The OpenAI SDK surfaces a mid-stream `error` event as a status-less
+    // APIError carrying only the provider's sentence.
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'Our servers are currently overloaded. Please try again later.',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    // A gateway relaying Anthropic's error body verbatim names only its `type`.
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: '{"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_1"}',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: '{"type":"error","error":{"details":null,"type":"api_error","message":"Internal server error"},"request_id":"req_2"}',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    // A gateway wrapping the upstream status keeps the status routable.
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: '{"error":"Claude API error","status":400,"details":"{\\"type\\":\\"error\\",\\"error\\":{\\"type\\":\\"invalid_request_error\\",\\"message\\":\\"messages.0.content.2.image.source.base64.data: At least one of the image dimensions exceed max allowed size for many-image requests: 2000 pixels\\"}}"}',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    // A status outranks the phrase: the gateway said the request was invalid.
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'OpenAI API error (400): {"message":"Internal server error"}',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
   })
 
   it.each([

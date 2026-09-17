@@ -136,6 +136,12 @@ export interface StoredImageAttachment {
 export interface ImageRequestPolicy {
   /** Maximum width multiplied by height after aspect-preserving projection. */
   maxPixels: number
+  /**
+   * Maximum width and maximum height after aspect-preserving projection.
+   * Omission caps neither edge; a route whose provider bounds each edge
+   * (Anthropic: 2000 pixels once a request carries more than 20 images) sets it.
+   */
+  maxDimension?: number
   /** Encoded-byte target before base64 expansion or Files API upload; the smallest quality-ladder output is kept when no quality fits. */
   maxBytes: number
 }

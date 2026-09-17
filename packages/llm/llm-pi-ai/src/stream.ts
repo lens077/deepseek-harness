@@ -43,7 +43,12 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 // wrapper a bare `terminated`, so we are left pattern-matching terse words here.
 // If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
 // us capture the cause ourselves), classify on `code`/`cause` instead of text.
-function classifyPiAiError(message: string): string {
+/**
+ * Route a pi-ai failure text to a stable Harness failure code.
+ * @param message - the flattened provider or transport error text.
+ * @returns a routing code; `PI_AI_ERROR` when no pattern recognizes the text.
+ */
+export function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
@@ -52,6 +57,13 @@ function classifyPiAiError(message: string): string {
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
+  // An in-stream `error` event carries no HTTP status: the SDK forwards the
+  // provider's own message (`Our servers are currently overloaded…`) or, from a
+  // gateway that relays Anthropic's error body verbatim, its error `type`
+  // (`overloaded_error`, `api_error`). Both name a transient provider-side
+  // condition, so they retry like a 5xx.
+  if (/\boverloaded\b|overloaded_error|\bapi_error\b|internal server error/i.test(message)) return 'SERVER'
+  if (/authentication_error|permission_error/i.test(message)) return 'AUTH'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
   // throws its own wording when the wire closes mid-response without a terminal

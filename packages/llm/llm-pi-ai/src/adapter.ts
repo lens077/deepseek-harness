@@ -60,6 +60,7 @@ import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attac
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { toPiContext } from './context.ts'
+import { annotateTruncatedFinish, createResponseProbe } from './response-probe.ts'
 import { toStreamChunks } from './stream.ts'
 
 /** One resolution's frozen view: the profiles and the collection built from them. */
@@ -369,15 +370,20 @@ export class PiAiAdapter extends LlmAdapter {
           maxRequestImageBytes: profile.maxRequestImageBytes,
           requestImagePolicy: {
             maxPixels: profile.requestImagePixelBudget,
+            maxDimension: profile.requestImageMaxDimension,
             maxBytes: profile.requestImageMaxBytes,
           },
         }, onReplayDegrade)
+      // One probe per request: pi-ai discards the HTTP response once the body
+      // ends, so the facts that explain a truncated stream are recorded here.
+      const probe = createResponseProbe(profile.responseProbeHeadBytes)
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
+        fetch: probe.fetch,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
@@ -393,7 +399,7 @@ export class PiAiAdapter extends LlmAdapter {
             exhausted = true
             return
           }
-          yield result.value
+          yield annotateTruncatedFinish(result.value, probe.response)
         }
       } finally {
         if (!exhausted) {

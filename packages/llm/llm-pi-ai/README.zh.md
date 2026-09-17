@@ -44,6 +44,7 @@ kind: "package-reference"
         baseURL: https://proxy.example.com:8443
         reasoning: high
         requestImagePixelBudget: 4194304 # total pixels; 2048 by 2048 default
+        requestImageMaxDimension: 2000     # per-edge cap; Anthropic's many-image limit
         requestImageMaxBytes: 1048576    # raw bytes before base64 expansion
         maxRequestImageBytes: 20971520   # accumulated base64 payload
         retryPolicy:
@@ -82,8 +83,10 @@ kind: "package-reference"
 | `defaultContextWindow` | `262,144` | 未描述模型的容量回退 |
 | `defaultMaxTokens` | `32,768` | 未描述模型的输出上限回退 |
 | `requestImagePixelBudget` | `4,194,304` | 每张确定性请求图片的总像素预算 |
+| `requestImageMaxDimension` | `2,000` | 每张确定性请求图片的单边上限；请求携带超过 20 张图片时，Anthropic 拒绝任何一边超过 2000 px 的图片 |
 | `requestImageMaxBytes` | `1 MiB` | 每张请求图片在 base64 扩展前的编码字节目标 |
 | `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |
+| `responseProbeHeadBytes` | `512` | 流在终止事件前结束时保留并报告的响应体字节数，用于指出以 HTTP 200 返回错误体的网关 |
 | `retryPolicy` | normal，5 次重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
