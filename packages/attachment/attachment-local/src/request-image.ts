@@ -48,14 +48,18 @@ function checkedInteger(value: number, name: string): number {
 
 function validatePolicy(policy: ImageRequestPolicy): void {
   checkedInteger(policy.maxPixels, 'Image request maxPixels')
+  if (policy.maxDimension !== undefined) checkedInteger(policy.maxDimension, 'Image request maxDimension')
   checkedInteger(policy.maxBytes, 'Image request maxBytes')
 }
 
 function descriptor(attachment: ImageAttachmentRef, policy: ImageRequestPolicy): string {
+  // An absent edge cap is omitted from the identity so versions produced
+  // before the cap existed stay addressable under their original ids.
   return JSON.stringify({
     transformVersion: REQUEST_IMAGE_TRANSFORM_VERSION,
     attachmentId: attachment.attachmentId,
     routePixelBudget: policy.maxPixels,
+    ...policy.maxDimension === undefined ? {} : { routeEdgeBudget: policy.maxDimension },
     encodedByteBudget: policy.maxBytes,
     encoding: {
       webpQualities: IMAGE_ENCODING_QUALITIES,
@@ -94,7 +98,7 @@ async function createRequestImage(
   policy: ImageRequestPolicy,
   hasAlpha: boolean,
 ): Promise<EncodedRequestImage> {
-  const dimensions = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels)
+  const dimensions = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels, policy.maxDimension)
   if (dimensions.width === attachment.ref.width
     && dimensions.height === attachment.ref.height
     && attachment.data.byteLength <= policy.maxBytes) {
@@ -126,7 +130,7 @@ async function readCached(
   try {
     const data = new Uint8Array(await readFile(path, { signal }))
     const detected = await probeImage(data)
-    const maximum = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels)
+    const maximum = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels, policy.maxDimension)
     if (detected.depth !== 'uchar' || detected.space !== 'srgb'
       || detected.width > maximum.width || detected.height > maximum.height
       || !encodedAlphaIsCompatible(expectedAlpha, detected)) return undefined

@@ -89,6 +89,40 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
+  it('names the upstream response when a stream ends without its terminal event', async () => {
+    const server = await mockServer([{ events: [] }])
+    const ctx = await harness(server.url)
+
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'TRANSPORT',
+        status: 200,
+        message: 'Stream ended without finish_reason (upstream response: HTTP 200 text/event-stream, empty body)',
+      },
+    })
+  })
+
+  it('re-classifies a truncated stream from a bare JSON error body a gateway sent as HTTP 200', async () => {
+    const body = '{"error":"Claude API error","status":400,"details":"invalid_request_error: image dimensions exceed 2000 pixels"}'
+    const server = await mockServer([{ body }])
+    const ctx = await harness(server.url, { responseProbeHeadBytes: 64 })
+
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'INVALID_REQUEST',
+        status: 200,
+        message: `Stream ended without finish_reason (upstream response: HTTP 200 application/json, ${body.length} body bytes, starting: ${JSON.stringify(body.slice(0, 64))})`,
+      },
+    })
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+
   it('keeps prepared model metadata and dispatch on one profile snapshot', async () => {
     const first = await mockServer([{ events: textEvents }])
     const second = await mockServer([])
@@ -326,6 +360,7 @@ describe('PiAiAdapter provider routing', () => {
     expect(result.finish.kind).toBe('error')
     expect(readImageRequest).toHaveBeenCalledWith(ref, {
       maxPixels: 2048 * 2048,
+      maxDimension: 2000,
       maxBytes: 1024 * 1024,
     }, expect.any(AbortSignal))
     expect(JSON.stringify(server.requests[0])).toContain(MODEL_IMAGE_PATH)

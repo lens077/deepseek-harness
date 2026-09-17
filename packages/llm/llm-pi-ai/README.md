@@ -44,6 +44,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
         baseURL: https://proxy.example.com:8443
         reasoning: high
         requestImagePixelBudget: 4194304 # total pixels; 2048 by 2048 default
+        requestImageMaxDimension: 2000     # per-edge cap; Anthropic's many-image limit
         requestImageMaxBytes: 1048576    # raw bytes before base64 expansion
         maxRequestImageBytes: 20971520   # accumulated base64 payload
         retryPolicy:
@@ -82,8 +83,10 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `defaultContextWindow` | `262,144` | Capacity fallback for undescribed models |
 | `defaultMaxTokens` | `32,768` | Output-cap fallback for undescribed models |
 | `requestImagePixelBudget` | `4,194,304` | Total-pixel budget for each deterministic request image |
+| `requestImageMaxDimension` | `2,000` | Per-edge cap for each deterministic request image; Anthropic rejects an edge above 2000 px once a request carries more than 20 images |
 | `requestImageMaxBytes` | `1 MiB` | Encoded-byte target for each request image before base64 expansion |
 | `maxRequestImageBytes` | `20 MiB` | Aggregate base64 image-payload bound with oldest-first offload |
+| `responseProbeHeadBytes` | `512` | Response-body bytes retained and reported when a stream ends without its terminal event, naming a gateway that answered HTTP 200 with an error body |
 | `retryPolicy` | normal, 5 retries | Provider-owned retry policy executed by `dsh-llm-retry` |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-llm-pi-ai) is the exhaustive source for every accepted field and its JSDoc.

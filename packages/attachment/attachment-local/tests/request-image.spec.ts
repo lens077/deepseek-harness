@@ -67,6 +67,24 @@ describe('local request-image cache', () => {
       .rejects.toThrow('Image request maxPixels must be a positive integer')
     await expect(attachments.readImageRequest(attachment, { maxPixels: 100, maxBytes: 0 }))
       .rejects.toThrow('Image request maxBytes must be a positive integer')
+    await expect(attachments.readImageRequest(attachment, { maxPixels: 100, maxDimension: 0, maxBytes: 100 }))
+      .rejects.toThrow('Image request maxDimension must be a positive integer')
+  })
+
+  it('caps each edge under a route edge budget the pixel budget alone would not bind', async () => {
+    const attachments = await store()
+    const attachment = await attachments.saveImage({ data: await image(240, 170), mediaType: 'image/png' })
+    const budgetOnly = { maxPixels: 240 * 170, maxBytes: 1024 * 1024 }
+    const withEdgeCap = { ...budgetOnly, maxDimension: 200 }
+
+    const uncapped = await attachments.readImageRequest(attachment, budgetOnly)
+    const capped = await attachments.readImageRequest(attachment, withEdgeCap)
+    const cachedCapped = await attachments.readImageRequest(attachment, withEdgeCap)
+
+    expect(uncapped).toMatchObject({ width: 240, height: 170 })
+    expect(capped).toMatchObject({ width: 200, height: 142 })
+    expect(capped.variantId).not.toBe(uncapped.variantId)
+    expect(cachedCapped).toEqual(capped)
   })
 
   it('keeps the smallest ladder output when the encoded-byte target is unreachable', async () => {
