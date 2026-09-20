@@ -20,7 +20,7 @@ The control size was a hardcoded constant, so a reader who needs larger pointer 
 
 `ChatView` republishes the value as `--dsh-chat-action-size` on its root. The control column, the rail width, the tick geometry (`--turn-tick`, scaled at 0.48/0.7/1.4/1.6 of the size), the search panel's offset, and the transcript gutter all read it, so the column moves as one object.
 
-**The gutter is symmetric and reserved.** `.scroll` padding becomes `max(composer clearance + 16px, size + 32px)` on both sides. Both sides widen together because a one-sided reserve shifts the centred message column off the composer's axis; the phone breakpoint restores the plain padding, where the column parks above the composer instead of beside the transcript. Measured live, the transcript's content box holds a constant 28px gap from the controls at 34px and at 50px.
+**Only the trailing gutter is reserved.** The transcript's leading padding stays at `composer clearance + 16px`; the trailing padding takes `max(that, size + 32px)`, and a rail in its own column raises the reserve to a second control width. Nothing stands on the leading side, and the reading width is already the content-width setting's decision, so widening both sides would spend space the reader asked to keep. The phone breakpoint drops the reserve entirely, where the column parks above the composer instead of beside the transcript. Measured live, the transcript's content box holds a constant 28px gap from the controls at 34px and at 50px.
 
 **The rail fills the column above the controls.** `QuestionNavigator` observes its own rendered height and reports it; `ChatView` writes it to `--dsh-chat-action-column` directly on the root element rather than into React state, because that value only CSS reads and a render per resize would ride every streaming commit. The rail derives `--turn-rail-free` from the band minus that column and its offsets, drops the 420px cap, and centres inside the free span — a rail that grows tall can no longer reach the controls. `RAIL_INSET_PX` moves from 6 to 12, half a mark's hit area, so a rail at rest reports no phantom scroll.
 
@@ -36,7 +36,7 @@ The control size was a hardcoded constant, so a reader who needs larger pointer 
 
 ## Alternatives considered
 
-**A one-sided right gutter.** Reserves less space, but the message column is centred in the padded box, so an asymmetric reserve visibly slides the transcript off the composer's axis.
+**Reserving both sides equally.** Keeps the message column centred on the composer's axis, but spends an unused column of reading width on the side no control stands on. The content-width setting already owns how wide the transcript reads, so the reserve stays on the side that needs it.
 
 **Deriving the control-column height in CSS from its entry count.** The column's entries change (load-all arrives and leaves), and the rail is its sibling, not its descendant; measuring the rendered column is the only answer that stays correct without duplicating the entry rules in two places.
 

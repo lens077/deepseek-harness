@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-18-chat-action-column-size-and-full-turn-rail.md
-2026-09-18-chat-action-column-size-and-full-turn-rail.md: ce27836c0f9bcdc026a44a2f56276495268d8c74
-2026-09-18-chat-action-column-size-and-full-turn-rail.zh.md: 8cba7eea22a119c63a4dff4697d6a759d9d2ed94
+2026-09-18-chat-action-column-size-and-full-turn-rail.md: 148da111841d5826adf9d3c295663cb291a58aa3
+2026-09-18-chat-action-column-size-and-full-turn-rail.zh.md: 6b25178f6171b28e6563909fa7497428e0022892

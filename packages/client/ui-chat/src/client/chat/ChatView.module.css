@@ -13,10 +13,13 @@
      the controls' column and costs nothing extra; its own column adds a
      second width, and the rule below widens the reserve for it. */
   --dsh-chat-action-gutter: calc(var(--dsh-chat-action-size) + 32px);
-  /* The side padding the transcript actually gets. The turn rail positions
-     itself against this same value, so both stay one decision. */
-  --dsh-chat-scroll-pad: max(
-    calc(var(--dsh-composer-side-clearance) + 16px),
+  /* Side padding the transcript actually gets. Only the trailing side widens:
+     the floating controls stand there, and the leading side has nothing to
+     give way to — the reading width itself is the content-width setting's
+     decision, not this reserve's. */
+  --dsh-chat-scroll-pad-inline-start: calc(var(--dsh-composer-side-clearance) + 16px);
+  --dsh-chat-scroll-pad-inline-end: max(
+    var(--dsh-chat-scroll-pad-inline-start),
     var(--dsh-chat-action-gutter)
   );
 
@@ -37,11 +40,11 @@
   overflow-y: auto;
   /* Sides = composer clearance + 16px: on narrow viewports the transcript
      stays exactly 32px narrower than the input card (the shared width rule).
-     Both sides then widen together to whatever the floating control column
+     The trailing side then widens to whatever the floating control column
      needs, so enlarging the controls never lets a long line, a wide table, or
-     a right-aligned number slide underneath them — and the message column
-     stays centred, which a one-sided reserve would break. */
-  padding: 16px var(--dsh-chat-scroll-pad);
+     a right-aligned number slide underneath them. */
+  padding-block: 16px;
+  padding-inline: var(--dsh-chat-scroll-pad-inline-start) var(--dsh-chat-scroll-pad-inline-end);
   /* Inline-size query container: wide markdown tables size their breakout
      against this box's content width (100cqw in AssistantMarkdown's
      md-table-wide rule) — the CSS stand-in for deepsuite chat's JS-measured
@@ -742,7 +745,7 @@
   /* The column parks above the composer instead of beside the transcript, so
      a phone keeps its full reading width and reserves no side gutter. */
   .root {
-    --dsh-chat-scroll-pad: calc(var(--dsh-composer-side-clearance) + 16px);
+    --dsh-chat-scroll-pad-inline-end: var(--dsh-chat-scroll-pad-inline-start);
   }
 
   .questionNavigator {
