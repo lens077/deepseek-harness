@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-18-workspace-fold-persistence.md
+2026-09-18-workspace-fold-persistence.md: c2c2dd197698384709b6b3365943615a7c2cb056
+2026-09-18-workspace-fold-persistence.zh.md: a6e29bb0e48b80bb2535dd628d790e2d30927137

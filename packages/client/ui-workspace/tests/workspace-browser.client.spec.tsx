@@ -735,6 +735,46 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByText('b')).toBeNull()
   })
 
+  it('shows the group holding the current session without writing a persisted fold', () => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('a', 2), summary('c', 1)], { current: sid('a') })),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['a']), workspace('gamma', ['c'])])),
+    })
+    expect(screen.getByText('a')).toBeTruthy()
+    expect(screen.queryByText('c')).toBeNull()
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
+    // Folding the header is the user's own decision and persists as such.
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.queryByText('a')).toBeNull()
+    expect(b.store.getSnapshot().groupExpansion).toEqual({ alpha: false })
+  })
+
+  it('a fold outlives a session opened inside it from outside the tree', () => {
+    const first = sessionState([summary('a', 2), summary('c', 1)], { current: sid('c') })
+    const workspacesHook = hook(workspaceState([workspace('alpha', ['a']), workspace('gamma', ['c'])]))
+    const b = mount({ useSessions: hook(first), useWorkspaces: workspacesHook })
+    act(() => { b.store.actions.setGroupExpanded('alpha', false) })
+    expect(screen.queryByText('a')).toBeNull()
+    // Opening `a` from the pinned area or digest reveals it for this visit only.
+    rerender(b, { useSessions: hook({ ...first, current: sid('a') }) })
+    expect(screen.getByText('a')).toBeTruthy()
+    expect(b.store.getSnapshot().groupExpansion).toEqual({ alpha: false })
+    // Folding it again hides the row even though it holds the current session.
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.queryByText('a')).toBeNull()
+    expect(b.store.getSnapshot().groupExpansion).toEqual({ alpha: false })
+    // The next mount (a page load) starts from the persisted fold alone.
+    b.view.unmount()
+    mount({
+      useSessions: hook({ ...first, current: sid('a') }),
+      useWorkspaces: workspacesHook,
+      useStore: b.props.useStore,
+      actions: b.props.actions,
+    })
+    expect(screen.queryByText('a')).toBeNull()
+    expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
   it('shows only the current blank session as the localized New Session, excluded from search', () => {
     const currentBlank = summary('alpha-blank', 9, { blank: true })
     const staleBlank = summary('beta-blank', 8, { blank: true })
@@ -929,7 +969,9 @@ describe('WorkspaceBrowser', () => {
       expect(input.value).toBe('')
       expect(screen.queryByRole('tree', { name: '搜索结果' })).toBeNull()
       expect(screen.getByRole('tree', { name: '会话' })).toBeTruthy()
-      expect(b.store.getSnapshot().groupExpansion).toEqual({ research: true })
+      // The reveal unfolds the group for this session only: nothing is persisted.
+      expect(screen.getByText('Research Workspace').closest('[role="treeitem"]')?.getAttribute('aria-expanded')).toBe('true')
+      expect(b.store.getSnapshot().groupExpansion).toEqual({})
       const targetRow = screen.getByText('Research notes').closest('[role="treeitem"]')
       expect(targetRow).toBeTruthy()
       expect(screen.getByRole('button', { name: '收起' })).toBeTruthy()
@@ -964,9 +1006,9 @@ describe('WorkspaceBrowser', () => {
       ])])),
     })
     await waitFor(() => {
-      expect(b.store.getSnapshot().groupExpansion).toEqual({ research: true })
       expect(screen.getByText('Needle session')).toBeTruthy()
     })
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
     const targetRow = screen.getByText('Needle session').closest('[role="treeitem"]')
     expect(scrollIntoView.mock.instances.at(-1)).toBe(targetRow)
     expect(screen.getByRole('button', { name: '收起' })).toBeTruthy()
@@ -997,9 +1039,9 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('current', [...sessions.ids])])),
     })
     await waitFor(() => {
-      expect(b.store.getSnapshot().groupExpansion).toEqual({ current: true })
       expect(screen.getByText('Needle session')).toBeTruthy()
     })
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
     const targetRow = screen.getByText('Needle session').closest('[role="treeitem"]')
     expect(scrollIntoView.mock.instances.at(-1)).toBe(targetRow)
     expect(b.store.getSnapshot().groupExpansion).not.toHaveProperty('stale')

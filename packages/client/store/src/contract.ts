@@ -55,6 +55,11 @@ export type BakedActions<T, A extends ActionsDecl<T>> = {
  */
 export interface StoreSpec<T, A extends ActionsDecl<T>> {
   init: () => T
+  /**
+   * localStorage key. A stored plain-object value merges over `init()`, so
+   * adding a field keeps the key; changing an existing field's meaning or
+   * type needs a new key because the stored value is taken as is.
+   */
   persist?: string
   actions: A
 }

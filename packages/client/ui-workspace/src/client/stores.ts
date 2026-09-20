@@ -29,7 +29,12 @@ type WorkspaceViewState = {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
   collapsedSessionCount: CollapsedSessionCount
-  /** Explicit collapsed-or-expanded state keyed by Workspace group identity. */
+  /**
+   * Fold state the user set by toggling a group header (or expanded by
+   * starting a Session from its ＋), keyed by Workspace group identity. A
+   * group without an entry follows the current Session; reveals never write
+   * here, so a fold outlives Sessions opened inside it from other surfaces.
+   */
   groupExpansion: Record<string, boolean>
   /** Shared editable order per Workspace group plus the browser-local flat-list account. */
   sessionOrderByAccount: Record<string, string[]>
@@ -120,8 +125,9 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       pinnedShortcutsEnabled: true,
       pinnedShortcuts: [...PIN_SHORTCUT_DIGIT_PRESET],
     }),
-    // Persistence restores the whole value, so a state field addition bumps
-    // the key: an older value could not supply the required field.
+    // A stored value merges over init(), so a field addition keeps the key;
+    // only a change to an existing field's meaning or type bumps it, because
+    // every bump discards the user's folds, orders, and preferences.
     persist: 'dsh.workspace.view.v12',
     actions: {
       setPinnedShortcutsEnabled: (d, enabled: boolean) => { d.pinnedShortcutsEnabled = enabled },

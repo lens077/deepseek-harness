@@ -16,7 +16,7 @@ Status: implemented
 
 **卡片上限。** `DigestPanel.module.css` 中的 `.body` 是尺寸查询容器（`container-type: size`；这个盒子的尺寸由 flex 列而非内容决定）。`.card` 采用 `box-sizing: border-box`，`max-height: calc(100cqh - 36px)`——主体可见内容高度减去网格上方的分区标签。`InboxCard` 渲染三个 flex 子元素：固定的头部（`.cardHead`，`flex: none`）、滚动的中部（`.cardBody`，`flex: 1 1 auto; min-height: 0; overflow-y: auto`，带 `data-card-body` 与 l2 滚动条令牌，因为它在 layer-1 卡片表面上滚动）、固定的操作行（`.cardActions`，`flex: none`）。网格行里被拉伸的卡片仍把操作行留在底部，因为中部吸收了多余高度。
 
-**侧栏揭示。** `WorkspaceBrowser.tsx` 中的 `SessionTree` 把列表 `ready` 之后 `current` 的变化视为一次导航并记录为 `pendingReveal`；加载时恢复的会话只用来初始化引用，不触发揭示。第二个 effect 每次渲染只解开一层，因为折叠的分组不派生任何行，截断与分支只有在分组展开后才能读到：它把分组的显式展开状态置为 true，当 `locateSession`（`tree.ts`）把该行定位到 `collapsedLimit` 或之后时把分组加入临时的全部展开列表，从 `collapsedBranches` 中移除该行的祖先，最后用 `block: 'nearest'` 把该行（每个会话行都带 `data-session-id`）滚动到可见区域。每一步展开都有守卫，树无法显示的行会静止下来而不会循环。
+**侧栏揭示。** `WorkspaceBrowser.tsx` 中的 `SessionTree` 把列表 `ready` 之后 `current` 的变化视为一次导航并记录为 `pendingReveal`；加载时恢复的会话只用来初始化引用，不触发揭示。第二个 effect 每次渲染只解开一层，因为折叠的分组不派生任何行，截断与分支只有在分组展开后才能读到：它把分组加入临时的 `revealedGroups` 列表（[折叠持久化](2026-09-18-workspace-fold-persistence.zh.md)），当 `locateSession`（`tree.ts`）把该行定位到 `collapsedLimit` 或之后时把分组加入临时的全部展开列表，从 `collapsedBranches` 中移除该行的祖先，最后用 `block: 'nearest'` 把该行（每个会话行都带 `data-session-id`）滚动到可见区域。每一步展开都有守卫，树无法显示的行会静止下来而不会循环。
 
 **选区跟随导航。** `WorkspaceBrowser` 根组件把同一次 `current` 变化——`ready` 之后、多选开启、非归档视图——当作普通单击那样的选择手势，把选区替换为 `{ selected: [current], anchor: current, lead: current }`，除非选区已经恰好是该行（普通单击路径在同一批次里设置选区并打开，因此在那里是空操作）。切换与范围手势从不改变 `current`，因此不受影响。
 
@@ -24,7 +24,7 @@ Status: implemented
 
 - 每张卡片的操作行都在屏幕上；长回答在卡片内部滚动，主体在分区之间滚动。
 - 从汇总、待办、搜索结果或分叉打开的会话在树中可见且被高亮，之前点击的行失去强调色。
-- 揭示会写入分组的持久化展开状态（`setGroupExpanded(key, true)`），因此打开某个分组内的会话会撤销用户对该分组的折叠；临时的全部展开与分支状态只在本次会话内有效。
+- 揭示只临时展开分组；持久化展开记录、全部展开列表与分支状态均不被触碰，因此用户的折叠在打开分组内的会话后仍然保留（[折叠持久化](2026-09-18-workspace-fold-persistence.zh.md)）。
 - `packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx` 固定了重新展开折叠并滚动、撤销截断、展开分支、加载时不动折叠、选区移动这些行为；`tree.client.spec.ts` 固定了 `locateSession`；`packages/client/ui-digest/tests/panel.client.spec.tsx` 固定了头部 / 主体 / 操作行的拆分。
 
 ## 考虑过的替代方案

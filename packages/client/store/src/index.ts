@@ -96,7 +96,8 @@ function rafBatch(notify: () => void): () => void {
  * fresh state while existing subscribers hear it next flush — transient
  * frame-level skew, same nature as the object layer's microtask batching.
  *
- * @param init - initial state.
+ * @param init - initial state; a persisted plain-object value merges its
+ * stored fields over it, so a later field addition starts at its initial value.
  * @param opts - flush mode and opt-in persistence (localStorage, keyed by name).
  * @returns the store.
  */
@@ -106,7 +107,7 @@ export function createSnapshotStore<T>(
   // the immer middleware without its setState-signature mutator generics).
   const withSelector = subscribeWithSelector(() => init)
   const api: StoreApi<T> = createStore<T>()(withSelector)
-  if (opts?.persist) attachPersistence(api, opts.persist.name)
+  if (opts?.persist) attachPersistence(api, opts.persist.name, init)
 
   let subscribe = (fn: () => void) => api.subscribe(() => {
     notifySubscribers([fn], '[client-store]')
@@ -135,15 +136,34 @@ export function createSnapshotStore<T>(
   }
 }
 
+/** A JSON object value: the only state form whose stored fields merge over the initial value. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /**
- * Whole-value JSON persistence to localStorage. Hand-rolled instead of the
- * zustand persist middleware: its write path spreads state into an object
+ * Resolve the state a persisted store starts from. Plain-object state takes
+ * the stored fields over the initial value, so a field added after the value
+ * was written starts at its initial value instead of `undefined` and the
+ * persist key survives the addition; every other state (primitives, arrays)
+ * rehydrates whole. A field whose meaning or type changes still needs a new
+ * persist key: the stored value is used as is.
+ */
+function rehydrate<T>(init: T, stored: unknown): T {
+  if (!isPlainObject(init) || !isPlainObject(stored)) return stored as T
+  const merged: unknown = { ...init, ...stored }
+  return merged as T
+}
+
+/**
+ * JSON persistence to localStorage. Hand-rolled instead of the zustand
+ * persist middleware: its write path spreads state into an object
  * (`partialize({ ...get() })`), exploding primitive state (a persisted string
  * draft becomes {0:'h',1:'e',...}) — not fixable via merge/deserialize options
  * because the corruption happens before serialization. Storage failures
  * (quota, private mode) only disable persistence, never break the store.
  */
-function attachPersistence<T>(api: StoreApi<T>, name: string): void {
+function attachPersistence<T>(api: StoreApi<T>, name: string, init: T): void {
   // Non-browser runs (node e2e booting the client tree) have no localStorage:
   // persistence silently disables — same contract as a storage failure, minus
   // the per-store console noise a ReferenceError would produce.
@@ -151,7 +171,7 @@ function attachPersistence<T>(api: StoreApi<T>, name: string): void {
   try {
     const raw = localStorage.getItem(name)
     if (raw !== null) {
-      api.setState(devFreeze(JSON.parse(raw) as T), true)
+      api.setState(devFreeze(rehydrate(init, JSON.parse(raw))), true)
     }
   } catch (error) {
     console.error(`snapshot store '${name}' rehydration failed:`, error)

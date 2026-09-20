@@ -35,7 +35,7 @@ kind: "package-reference"
 
 ### 搜索
 
-折叠搜索是视图和添加操作旁的一枚区头按钮：激活后输入框会扩展并占据区头。非空白查询会以单一扁平结果列表替代任一浏览模式——不区分大小写的标题和 Workspace 子串匹配项会立即显示，经 250 ms 防抖的 Host 请求则会加入经过排序的当前对话内容匹配项及其摘要片段。每次新查询都会中止前一个请求；内容搜索失败时，元数据匹配项仍会显示，同时给出警告。列表最多显示 20 条结果。选择结果会清空并收起搜索、打开 Session，并在当前浏览模式中将其行滚动到可见区域；分组浏览还会按需展开所属 Workspace 和完整 Session 列表。
+折叠搜索是视图和添加操作旁的一枚区头按钮：激活后输入框会扩展并占据区头。非空白查询会以单一扁平结果列表替代任一浏览模式——不区分大小写的标题和 Workspace 子串匹配项会立即显示，经 250 ms 防抖的 Host 请求则会加入经过排序的当前对话内容匹配项及其摘要片段。每次新查询都会中止前一个请求；内容搜索失败时，元数据匹配项仍会显示，同时给出警告。列表最多显示 20 条结果。选择结果会清空并收起搜索、打开 Session，并在当前浏览模式中将其行滚动到可见区域；分组浏览还会按需展开所属 Workspace 和完整 Session 列表，且仅在本次访问内有效。
 
 ### 管理会话
 
@@ -79,7 +79,7 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 ### 视图状态
 
-Workspace 列表基线就绪后，浏览器持久化的展开状态与 Session 顺序记录只保留当前 Workspace id、Ungrouped 与单列表记账。真实 Workspace 从 `WorkspaceView.sessionIds` 初始化，Ungrouped 与跨 Workspace 单列表从最近更新时间顺序初始化。共享侧边栏投影会隐藏持久化 Session 摘要中带有 `origin: 'subagent'` 的行；经不间断的 subagent 谱系可达的任一后代运行时，每个可见普通行都会保留蓝色活动状态点；只有后代在运行时不会显示属主的运行边框。同一份纯派生还会为分组、平铺、归档与搜索节点读取列表 projection value 中的 Schedule 和 `sessionDigest`；本包只使用纯类型依赖 `@deepseek-ai/dsh-schedule/client` 与 `@deepseek-ai/dsh-session-digest/types`，不会导入任一功能的运行时。
+Workspace 列表基线就绪后，浏览器持久化的展开状态与 Session 顺序记录只保留当前 Workspace id、Ungrouped 与单列表记账。只有点击区头切换或从 Workspace 的 ＋ 新建 Session 才会写入该展开记录；没有记录的 Workspace 在持有当前 Session 时显示为展开，从置顶区、摘要或搜索打开的 Session 只在下次页面加载前展开其 Workspace，因此折叠的 Workspace 在多次加载间保持折叠。真实 Workspace 从 `WorkspaceView.sessionIds` 初始化，Ungrouped 与跨 Workspace 单列表从最近更新时间顺序初始化。共享侧边栏投影会隐藏持久化 Session 摘要中带有 `origin: 'subagent'` 的行；经不间断的 subagent 谱系可达的任一后代运行时，每个可见普通行都会保留蓝色活动状态点；只有后代在运行时不会显示属主的运行边框。同一份纯派生还会为分组、平铺、归档与搜索节点读取列表 projection value 中的 Schedule 和 `sessionDigest`；本包只使用纯类型依赖 `@deepseek-ai/dsh-schedule/client` 与 `@deepseek-ai/dsh-session-digest/types`，不会导入任一功能的运行时。
 
 ### 悬浮卡片
 

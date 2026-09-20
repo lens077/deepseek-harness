@@ -506,6 +506,15 @@ function SessionTree({
   // Folded nested-fork branches; default-open so a fresh nested child is
   // visible the moment it lands (transient, like group expand-all state).
   const [collapsedBranches, setCollapsedBranches] = useState<string[]>([])
+  // Groups unfolded for the current session rather than by the user: the
+  // group holding `current` while it has no explicit fold, and every reveal.
+  // Transient like the two states above, so a fold the user made outlives a
+  // session opened inside it from the pinned area, digest, or search, and
+  // the next load starts from the persisted folds alone.
+  const [revealedGroups, setRevealedGroups] = useState<string[]>([])
+  const revealGroupKey = useCallback((key: string) => {
+    setRevealedGroups(keys => keys.includes(key) ? keys : [...keys, key])
+  }, [])
   const treeRef = useRef<HTMLDivElement | null>(null)
   const [treeHeight, setTreeHeight] = useState(0)
   // Transient drag marker state; the selected mode owns the resulting order.
@@ -523,9 +532,9 @@ function SessionTree({
     ? undefined
     : owningGroupKey(workspaces, revealSessionId)
   useEffect(() => {
-    if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
-    setGroupExpanded(currentGroup, true)
-  }, [current, currentGroup, setGroupExpanded, groupExpansion])
+    if (currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
+    revealGroupKey(currentGroup)
+  }, [currentGroup, revealGroupKey, groupExpansion])
   useEffect(() => {
     const element = treeRef.current
     if (element === null || typeof ResizeObserver === 'undefined') return
@@ -534,8 +543,11 @@ function SessionTree({
     return () => { observer.disconnect() }
   }, [])
   const expandedGroups = useMemo(
-    () => Object.entries(groupExpansion).filter(([, expanded]) => expanded).map(([key]) => key),
-    [groupExpansion],
+    () => [
+      ...Object.entries(groupExpansion).filter(([, expanded]) => expanded).map(([key]) => key),
+      ...revealedGroups,
+    ],
+    [groupExpansion, revealedGroups],
   )
   const ungroupedSessionIds = useMemo(() => {
     const accounted = new Set(workspaces.flatMap(workspace => workspace.sessionIds))
@@ -640,7 +652,7 @@ function SessionTree({
     const group = groups.find(candidate => candidate.key === activeRevealGroup)
     if (group === undefined) return
     if (!group.expanded) {
-      setGroupExpanded(activeRevealGroup, true)
+      revealGroupKey(activeRevealGroup)
       return
     }
     const place = locateSession(group.sessions, activeReveal)
@@ -654,7 +666,7 @@ function SessionTree({
     }
   }, [
     activeReveal, activeRevealGroup, revealSessionId, current, groups,
-    collapsedLimit, collapsedBranches, setGroupExpanded,
+    collapsedLimit, collapsedBranches, revealGroupKey,
   ])
   const acknowledgeReveal = (sessionId: SessionId): void => {
     if (revealSessionId === sessionId) onSessionRevealed(sessionId)
@@ -824,6 +836,7 @@ function SessionTree({
                 onToggle={() => {
                   if (group.expanded) {
                     setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
+                    setRevealedGroups(keys => keys.filter(key => key !== group.key))
                   }
                   setGroupExpanded(group.key, !group.expanded)
                 }}

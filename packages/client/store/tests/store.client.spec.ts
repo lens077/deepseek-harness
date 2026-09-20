@@ -150,6 +150,35 @@ describe('createSnapshotStore', () => {
     expect(revived.getSnapshot().a.n).toBe(42)
   })
 
+  it('merges a stored object over the initial value so an added field starts at its default', () => {
+    const backing = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => backing.get(k) ?? null,
+      setItem: (k: string, v: string) => { backing.set(k, v) },
+      removeItem: (k: string) => { backing.delete(k) },
+    })
+    // A value written by an older build that knew only `a`.
+    backing.set('spec-merge', JSON.stringify({ a: { n: 42 }, retired: true }))
+    const revived = createSnapshotStore({ ...init(), added: 'default' }, { persist: { name: 'spec-merge' } })
+    expect(revived.getSnapshot()).toEqual({ a: { n: 42 }, b: { list: ['x'] }, added: 'default', retired: true })
+    // Optional fields absent from the initial value still rehydrate.
+    backing.set('spec-optional', JSON.stringify({ sessionId: 's1' }))
+    const optional = createSnapshotStore<{ sessionId?: string }>({}, { persist: { name: 'spec-optional' } })
+    expect(optional.getSnapshot()).toEqual({ sessionId: 's1' })
+  })
+
+  it('rehydrates array state whole rather than merging it', () => {
+    const backing = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => backing.get(k) ?? null,
+      setItem: (k: string, v: string) => { backing.set(k, v) },
+      removeItem: (k: string) => { backing.delete(k) },
+    })
+    backing.set('spec-array', JSON.stringify(['x']))
+    const revived = createSnapshotStore<string[]>(['a', 'b'], { persist: { name: 'spec-array' } })
+    expect(revived.getSnapshot()).toEqual(['x'])
+  })
+
   it('reports rehydration failures without preventing store creation', () => {
     const failure = new Error('storage read failed')
     vi.stubGlobal('localStorage', {

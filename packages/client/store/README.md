@@ -31,7 +31,7 @@ None; the stores neither assemble nor send model requests.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Persistence is browser-local** — persisted stores use JSON in `localStorage`; non-browser runtimes disable persistence, and the package provides no cross-device synchronization.
+- **Persistence is browser-local** — persisted stores use JSON in `localStorage`; non-browser runtimes disable persistence, and the package provides no cross-device synchronization. A stored plain-object value merges over the initial value, so adding a field keeps the persist key; changing an existing field's meaning or type needs a new key.
 
 
 <a id="dev-note"></a>
