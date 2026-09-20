@@ -649,7 +649,7 @@ describe('DigestPanel board layout and reply visibility', () => {
     expect(document.querySelector('[data-column]')).toBeNull()
     expect(section('unread').textContent).toContain('title-a')
     expect(screen.queryByRole('button', { name: zh['layout.columns'] })).toBeNull()
-    const more = m.view.container.querySelector<HTMLElement>('[data-digest-compact-toolbar] details')!
+    const more = m.view.container.querySelector<HTMLDetailsElement>('[data-digest-compact-toolbar] details')!
     more.open = true
     expect(within(more).getByText('已延后 1')).toBeTruthy()
     fireEvent.click(within(more).getByRole('checkbox', { name: zh['panel.showReply'] }))
