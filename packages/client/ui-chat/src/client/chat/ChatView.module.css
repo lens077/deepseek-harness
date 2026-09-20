@@ -13,13 +13,14 @@
      the controls' column and costs nothing extra; its own column adds a
      second width, and the rule below widens the reserve for it. */
   --dsh-chat-action-gutter: calc(var(--dsh-chat-action-size) + 32px);
-  /* Side padding the transcript actually gets. Only the trailing side widens:
-     the floating controls stand there, and the leading side has nothing to
-     give way to — the reading width itself is the content-width setting's
-     decision, not this reserve's. */
-  --dsh-chat-scroll-pad-inline-start: calc(var(--dsh-composer-side-clearance) + 16px);
+  /* Leading gutter of the transcript: the reader's own setting, republished by
+     ChatView. Nothing floats on that side, so it reserves nothing on its own. */
+  --dsh-chat-leading-pad: 5px;
+  --dsh-chat-scroll-pad-inline-start: var(--dsh-chat-leading-pad);
+  /* Trailing gutter: never narrower than the shared width rule, and wide
+     enough for whatever floating furniture stands there. */
   --dsh-chat-scroll-pad-inline-end: max(
-    var(--dsh-chat-scroll-pad-inline-start),
+    calc(var(--dsh-composer-side-clearance) + 16px),
     var(--dsh-chat-action-gutter)
   );
 
@@ -38,11 +39,10 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  /* Sides = composer clearance + 16px: on narrow viewports the transcript
-     stays exactly 32px narrower than the input card (the shared width rule).
-     The trailing side then widens to whatever the floating control column
-     needs, so enlarging the controls never lets a long line, a wide table, or
-     a right-aligned number slide underneath them. */
+  /* The leading gutter is the reader's setting; the trailing one holds the
+     shared width rule as its floor and widens to whatever the floating control
+     column needs, so enlarging the controls never lets a long line, a wide
+     table, or a right-aligned number slide underneath them. */
   padding-block: 16px;
   padding-inline: var(--dsh-chat-scroll-pad-inline-start) var(--dsh-chat-scroll-pad-inline-end);
   /* Inline-size query container: wide markdown tables size their breakout

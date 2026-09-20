@@ -29,14 +29,19 @@ import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { en, NS, zh } from './locale.ts'
-import { ActionControlSizeRow, type ActionControlSizeRowInjected } from './settings/ActionControlSizeRow.tsx'
+import {
+  PixelStepperRow, type PixelPreferenceDescriptor, type PixelStepperRowInjected,
+} from './settings/PixelStepperRow.tsx'
 import { TranscriptViewRow, type TranscriptViewRowInjected } from './settings/TranscriptViewRow.tsx'
 import { TurnRailLayoutRow, type TurnRailLayoutRowInjected } from './settings/TurnRailLayoutRow.tsx'
 import { createChatStore } from './stores.ts'
-import { ActionControlSizePolicy } from './action-control-size.ts'
+import { PixelPreferencePolicy } from './pixel-preference.ts'
 import { TranscriptViewPolicy } from './transcript-view.ts'
 import { TurnRailLayoutPolicy } from './turn-rail-layout.ts'
-import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../chat-settings.ts'
+import {
+  ACTION_CONTROL_SIZE_FIELD, ACTION_CONTROL_SIZE_RANGE, CHAT_SETTINGS_NAMESPACE,
+  TRANSCRIPT_LEADING_PAD_FIELD, TRANSCRIPT_LEADING_PAD_RANGE, type ChatSettings,
+} from '../chat-settings.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
 
 const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
@@ -93,7 +98,12 @@ export function apply(ctx: Context): void {
   const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
   const chatSettingsScope = ctx.settingsScope.bind<ChatSettings>({ namespace: CHAT_SETTINGS_NAMESPACE })
   const transcriptView = new TranscriptViewPolicy(chatSettingsScope)
-  const actionControlSize = new ActionControlSizePolicy(chatSettingsScope)
+  const actionControlSize = new PixelPreferencePolicy(
+    chatSettingsScope, ACTION_CONTROL_SIZE_FIELD, ACTION_CONTROL_SIZE_RANGE,
+  )
+  const leadingPad = new PixelPreferencePolicy(
+    chatSettingsScope, TRANSCRIPT_LEADING_PAD_FIELD, TRANSCRIPT_LEADING_PAD_RANGE,
+  )
   const turnRailLayout = new TurnRailLayoutPolicy(chatSettingsScope)
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
@@ -107,16 +117,42 @@ export function apply(ctx: Context): void {
     }),
   }, TranscriptViewRow))
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
-    id: 'action-control-size',
-    order: 13,
-    locale: NS,
-    inject: (): ActionControlSizeRowInjected => ({
-      hooks: { actionControlSize: actionControlSize.size },
-      zoomActionControls: (steps) => { actionControlSize.zoom(steps) },
-    }),
-  }, ActionControlSizeRow))
+  const pixelRow = (
+    id: string,
+    order: number,
+    policy: PixelPreferencePolicy,
+    preference: PixelPreferenceDescriptor,
+  ): void => {
+    ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item',
+      id,
+      order,
+      locale: NS,
+      inject: (): PixelStepperRowInjected => ({
+        hooks: { pixelValue: policy.value },
+        zoomPixels: (steps) => { policy.zoom(steps) },
+        preference,
+      }),
+    }, PixelStepperRow))
+  }
+
+  pixelRow('action-control-size', 13, actionControlSize, {
+    title: 'settings.actionSize.title',
+    description: 'settings.actionSize.description',
+    shrink: 'settings.actionSize.shrink',
+    enlarge: 'settings.actionSize.enlarge',
+    min: ACTION_CONTROL_SIZE_RANGE.min,
+    max: ACTION_CONTROL_SIZE_RANGE.max,
+  })
+
+  pixelRow('transcript-leading-pad', 15, leadingPad, {
+    title: 'settings.leadingPad.title',
+    description: 'settings.leadingPad.description',
+    shrink: 'settings.leadingPad.shrink',
+    enlarge: 'settings.leadingPad.enlarge',
+    min: TRANSCRIPT_LEADING_PAD_RANGE.min,
+    max: TRANSCRIPT_LEADING_PAD_RANGE.max,
+  })
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -155,7 +191,8 @@ export function apply(ctx: Context): void {
         return {
           hooks: {
             transcriptView: transcriptView.mode,
-            actionControlSize: actionControlSize.size,
+            actionControlSize: actionControlSize.value,
+            transcriptLeadingPad: leadingPad.value,
             turnRailLayout: turnRailLayout.layout,
             questionNavigation: ctx.questionNavigation.settings,
           },

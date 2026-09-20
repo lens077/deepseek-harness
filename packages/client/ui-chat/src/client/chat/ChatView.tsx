@@ -10,7 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DEFAULT_ACTION_CONTROL_SIZE } from '../../chat-settings.ts'
+import { DEFAULT_ACTION_CONTROL_SIZE, DEFAULT_TRANSCRIPT_LEADING_PAD } from '../../chat-settings.ts'
 import type { ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
@@ -237,15 +237,26 @@ const ChatNodeList = memo(function ChatNodeList({ order, recaps, onSelectQuestio
 
 const EMPTY_TURNS: ReadonlySet<number> = new Set()
 
-/** Root style carrying the user's action-control edge length to every consumer below it. */
-type ActionSizeStyle = CSSProperties & { readonly '--dsh-chat-action-size': string }
+/** Root style carrying the user's pixel preferences to every consumer below it. */
+type ChatPixelStyle = CSSProperties & {
+  readonly '--dsh-chat-action-size': string
+  readonly '--dsh-chat-leading-pad': string
+}
 
-function actionSizeStyle(size: number): ActionSizeStyle {
-  // A custom property's declared fallback does not rescue an invalid value, so
-  // a non-finite size would take the column's width to zero rather than to the
-  // shipped default.
-  const resolved = Number.isFinite(size) ? size : DEFAULT_ACTION_CONTROL_SIZE
-  return { '--dsh-chat-action-size': `${String(resolved)}px` }
+/**
+ * A custom property's declared fallback does not rescue an invalid value, so a
+ * non-finite preference would take whatever it sizes to zero rather than to
+ * the value it shipped with.
+ */
+function pixels(value: number, fallback: number): string {
+  return `${String(Number.isFinite(value) ? value : fallback)}px`
+}
+
+function chatPixelStyle(actionSize: number, leadingPad: number): ChatPixelStyle {
+  return {
+    '--dsh-chat-action-size': pixels(actionSize, DEFAULT_ACTION_CONTROL_SIZE),
+    '--dsh-chat-leading-pad': pixels(leadingPad, DEFAULT_TRANSCRIPT_LEADING_PAD),
+  }
 }
 
 /**
@@ -256,7 +267,8 @@ export function ChatView({
   useSession, useChat, useChatNode, useChatNodeProcess, useSessions, useStore, actions, renderSlot,
   sessionId, openFile, loadOlder, loadThrough, loadAll, searchQuestions, loadImage, openView,
   chatScroll, forkAt, removeTurns, fileMentions, turnFiles, turnFilesAvailable,
-  useTranscriptView, useActionControlSize, useTurnRailLayout, useQuestionNavigation, useProjection, t,
+  useTranscriptView, useActionControlSize, useTranscriptLeadingPad, useTurnRailLayout,
+  useQuestionNavigation, useProjection, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
   const nodeStore = useChat(s => s.nodes)
@@ -314,6 +326,7 @@ export function ChatView({
   // column, the turn rail beside it, and the transcript gutter that keeps
   // content clear of both, so it is published once as a custom property.
   const actionControlSize = useActionControlSize(value => value)
+  const leadingPad = useTranscriptLeadingPad(value => value)
   // Placement decides both how the rail positions itself and how much side
   // room the transcript must give back: its own column costs a second width.
   const railPlacement = useTurnRailLayout(value => value.placement)
@@ -978,7 +991,7 @@ export function ChatView({
       className={css.root}
       ref={rootRef}
       data-rail-placement={railPlacement}
-      style={actionSizeStyle(actionControlSize)}
+      style={chatPixelStyle(actionControlSize, leadingPad)}
     >
       <div ref={listRef} className={css.scroll}>
         <TurnNavigator

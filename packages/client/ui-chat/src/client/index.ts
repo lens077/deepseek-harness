@@ -28,7 +28,9 @@ export type {
   TurnProcessChatData, TurnTailChatData,
 } from './contract/chat-nodes.ts'
 export type { ChatStoreState, ToolCallId, TurnProcessViewEntry } from './contract/store.ts'
-export type { ActionControlSizeRowInjected, ActionControlSizeRowProps } from './settings/ActionControlSizeRow.tsx'
+export type {
+  PixelPreferenceDescriptor, PixelStepperRowInjected, PixelStepperRowProps,
+} from './settings/PixelStepperRow.tsx'
 export type { TranscriptViewRowInjected, TranscriptViewRowProps } from './settings/TranscriptViewRow.tsx'
 export type { TurnRailLayoutRowInjected, TurnRailLayoutRowProps } from './settings/TurnRailLayoutRow.tsx'
 export type { TurnRailLayout } from './turn-rail-layout.ts'

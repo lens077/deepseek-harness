@@ -25,7 +25,7 @@ import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-tes
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { EMPTY_CONVERSATION_SNAPSHOT } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import { DEFAULT_ACTION_CONTROL_SIZE } from '../src/chat-settings.ts'
+import { DEFAULT_ACTION_CONTROL_SIZE, DEFAULT_TRANSCRIPT_LEADING_PAD } from '../src/chat-settings.ts'
 import { DEFAULT_TURN_RAIL_LAYOUT } from '../src/client/turn-rail-layout.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
@@ -403,6 +403,7 @@ function makeHarness(
     actions: chat.actions,
     useTranscriptView: bindSnapshotSelector(transcriptView),
     useActionControlSize: bindSnapshotSelector(createSnapshotStore(DEFAULT_ACTION_CONTROL_SIZE)),
+    useTranscriptLeadingPad: bindSnapshotSelector(createSnapshotStore(DEFAULT_TRANSCRIPT_LEADING_PAD)),
     useTurnRailLayout: bindSnapshotSelector(createSnapshotStore(DEFAULT_TURN_RAIL_LAYOUT)),
     useQuestionNavigation: bindSnapshotSelector(createSnapshotStore({
       previousShortcut: 'Ctrl+ArrowUp',

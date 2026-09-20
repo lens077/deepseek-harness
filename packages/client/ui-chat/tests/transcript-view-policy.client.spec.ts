@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import { DEFAULT_ACTION_CONTROL_SIZE, type ChatSettings } from '../src/chat-settings.ts'
+import {
+  DEFAULT_ACTION_CONTROL_SIZE, DEFAULT_TRANSCRIPT_LEADING_PAD, type ChatSettings,
+} from '../src/chat-settings.ts'
 import { TranscriptViewPolicy } from '../src/client/transcript-view.ts'
 
 describe('TranscriptViewPolicy', () => {
@@ -30,18 +32,18 @@ describe('TranscriptViewPolicy', () => {
     const host = stubSettingsScope<ChatSettings>()
     const policy = new TranscriptViewPolicy(host.scope)
 
-    host.publish({ status: 'ready', value: { transcriptView: 'normal', actionControlSize: DEFAULT_ACTION_CONTROL_SIZE, turnRailPlacement: 'stacked' as const, turnRailAlignment: 'top' as const }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { transcriptView: 'normal', actionControlSize: DEFAULT_ACTION_CONTROL_SIZE, turnRailPlacement: 'stacked' as const, turnRailAlignment: 'top' as const, transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD }, revision: 1, writable: true })
     expect(policy.mode.getSnapshot()).toBe('normal')
     policy.setMode('normal')
     expect(host.set).not.toHaveBeenCalled()
 
-    host.publish({ value: { transcriptView: 'compact', actionControlSize: DEFAULT_ACTION_CONTROL_SIZE, turnRailPlacement: 'stacked' as const, turnRailAlignment: 'top' as const }, revision: 2 })
+    host.publish({ value: { transcriptView: 'compact', actionControlSize: DEFAULT_ACTION_CONTROL_SIZE, turnRailPlacement: 'stacked' as const, turnRailAlignment: 'top' as const, transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD }, revision: 2 })
     expect(policy.mode.getSnapshot()).toBe('compact')
   })
 
   it('adopts an accepted section standing at construction', () => {
     const host = stubSettingsScope<ChatSettings>()
-    host.publish({ status: 'ready', value: { transcriptView: 'normal', actionControlSize: DEFAULT_ACTION_CONTROL_SIZE, turnRailPlacement: 'stacked' as const, turnRailAlignment: 'top' as const }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { transcriptView: 'normal', actionControlSize: DEFAULT_ACTION_CONTROL_SIZE, turnRailPlacement: 'stacked' as const, turnRailAlignment: 'top' as const, transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD }, revision: 1, writable: true })
     expect(new TranscriptViewPolicy(host.scope).mode.getSnapshot()).toBe('normal')
   })
 })

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
   ACTION_CONTROL_SIZE_MAX, CHAT_SETTINGS_NAMESPACE, DEFAULT_ACTION_CONTROL_SIZE,
-  DEFAULT_TRANSCRIPT_VIEW_MODE, DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT, apply,
+  DEFAULT_TRANSCRIPT_LEADING_PAD, DEFAULT_TRANSCRIPT_VIEW_MODE,
+  DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT, apply,
 } from '../src/index.ts'
 
 class MemorySettings extends SettingsProvider {
@@ -27,6 +28,7 @@ describe('ui-chat Host settings', () => {
       actionControlSize: DEFAULT_ACTION_CONTROL_SIZE,
       turnRailPlacement: DEFAULT_TURN_RAIL_PLACEMENT,
       turnRailAlignment: DEFAULT_TURN_RAIL_ALIGNMENT,
+      transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD,
     }
     expect(ctx.settings.get(ns)).toEqual(defaults)
     await ctx.settings.update(ns, { transcriptView: 'normal' })
@@ -50,6 +52,17 @@ describe('ui-chat Host settings', () => {
     })
     await expect(ctx.settings.update(ns, { turnRailPlacement: 'floating' })).rejects.toThrow()
     await expect(ctx.settings.update(ns, { turnRailAlignment: 'middle' })).rejects.toThrow()
+
+    await ctx.settings.update(ns, { transcriptLeadingPad: 0 })
+    expect(ctx.settings.get(ns)).toEqual({
+      ...defaults,
+      transcriptView: 'normal',
+      actionControlSize: ACTION_CONTROL_SIZE_MAX,
+      turnRailPlacement: 'column',
+      turnRailAlignment: 'bottom',
+      transcriptLeadingPad: 0,
+    })
+    await expect(ctx.settings.update(ns, { transcriptLeadingPad: -1 })).rejects.toThrow()
 
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)

@@ -19,12 +19,12 @@ import {
   apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
-  ActionControlSizeRowInjected, ChatNodeTurnDataInjected, ChatSnapshot,
+  ChatNodeTurnDataInjected, ChatSnapshot, PixelStepperRowInjected,
   TranscriptViewRowInjected, TurnRailLayoutRowInjected, UseChatNodeTurnData,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
   ACTION_CONTROL_SIZE_STEP, CHAT_SETTINGS_NAMESPACE, DEFAULT_ACTION_CONTROL_SIZE,
-  DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT,
+  DEFAULT_TRANSCRIPT_LEADING_PAD, DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT,
   type ChatSettings,
 } from '../src/chat-settings.ts'
 
@@ -93,7 +93,7 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
       .toEqual([
         'transcript-view', 'action-control-size', 'turn-rail-layout',
-        'composer-enter', 'content-width', 'question-shortcuts',
+        'transcript-leading-pad', 'composer-enter', 'content-width', 'question-shortcuts',
       ])
     await b.runtime.dispose()
   })
@@ -116,6 +116,7 @@ describe('Chat apply wiring', () => {
         actionControlSize: DEFAULT_ACTION_CONTROL_SIZE,
         turnRailPlacement: DEFAULT_TURN_RAIL_PLACEMENT,
         turnRailAlignment: DEFAULT_TURN_RAIL_ALIGNMENT,
+        transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD,
       },
       revision: 1,
       writable: true,
@@ -128,12 +129,13 @@ describe('Chat apply wiring', () => {
     const b = await bench()
     const row = b.runtime.slots.entries('settings.general.item')
       .find(entry => entry.options.id === 'action-control-size')!
-    const face = (row.inject as unknown as () => ActionControlSizeRowInjected)()
+    const face = (row.inject as unknown as () => PixelStepperRowInjected)()
 
-    expect(face.hooks.actionControlSize.getSnapshot()).toBe(DEFAULT_ACTION_CONTROL_SIZE)
-    face.zoomActionControls(1)
+    expect(face.hooks.pixelValue.getSnapshot()).toBe(DEFAULT_ACTION_CONTROL_SIZE)
+    expect(face.preference.title).toBe('settings.actionSize.title')
+    face.zoomPixels(1)
     const enlarged = DEFAULT_ACTION_CONTROL_SIZE + ACTION_CONTROL_SIZE_STEP
-    expect(face.hooks.actionControlSize.getSnapshot()).toBe(enlarged)
+    expect(face.hooks.pixelValue.getSnapshot()).toBe(enlarged)
     expect(b.chatSettings.set).toHaveBeenCalledWith('actionControlSize', enlarged)
 
     b.chatSettings.publish({
@@ -143,11 +145,12 @@ describe('Chat apply wiring', () => {
         actionControlSize: DEFAULT_ACTION_CONTROL_SIZE,
         turnRailPlacement: DEFAULT_TURN_RAIL_PLACEMENT,
         turnRailAlignment: DEFAULT_TURN_RAIL_ALIGNMENT,
+        transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD,
       },
       revision: 1,
       writable: true,
     })
-    expect(face.hooks.actionControlSize.getSnapshot()).toBe(DEFAULT_ACTION_CONTROL_SIZE)
+    expect(face.hooks.pixelValue.getSnapshot()).toBe(DEFAULT_ACTION_CONTROL_SIZE)
     await b.runtime.dispose()
   })
 

@@ -1,4 +1,4 @@
-/* Right-hand action control size row: label plus a zoom stepper reading px. */
+/* Pixel-preference row: label plus a zoom stepper reading px. */
 
 .row {
   display: flex;

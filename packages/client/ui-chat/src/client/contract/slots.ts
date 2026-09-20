@@ -215,6 +215,8 @@ export interface ChatViewInjected {
     transcriptView: SnapshotStore<TranscriptViewMode>
     /** Persisted edge length in CSS pixels of the right-hand action controls. */
     actionControlSize: SnapshotStore<number>
+    /** Persisted leading-side gutter of the transcript, in CSS pixels. */
+    transcriptLeadingPad: SnapshotStore<number>
     /** Persisted turn-rail placement and, for its own column, alignment. */
     turnRailLayout: SnapshotStore<TurnRailLayout>
     /** Live question-navigation shortcuts and question-bar placement. */

@@ -11,7 +11,19 @@ import {
   ACTION_CONTROL_SIZE_MAX, ACTION_CONTROL_SIZE_MIN, ACTION_CONTROL_SIZE_STEP,
   DEFAULT_ACTION_CONTROL_SIZE, clampActionControlSize,
 } from '../src/chat-settings.ts'
-import { ActionControlSizeRow, type ActionControlSizeRowProps } from '../src/client/settings/ActionControlSizeRow.tsx'
+import {
+  PixelStepperRow, type PixelPreferenceDescriptor, type PixelStepperRowProps,
+} from '../src/client/settings/PixelStepperRow.tsx'
+
+/** The action-control size preference, as apply() describes it to the row. */
+const SIZE_PREFERENCE: PixelPreferenceDescriptor = {
+  title: 'settings.actionSize.title',
+  description: 'settings.actionSize.description',
+  shrink: 'settings.actionSize.shrink',
+  enlarge: 'settings.actionSize.enlarge',
+  min: ACTION_CONTROL_SIZE_MIN,
+  max: ACTION_CONTROL_SIZE_MAX,
+}
 import { en } from '../src/client/locale.ts'
 
 afterEach(cleanup)
@@ -35,28 +47,29 @@ function noPendingInteraction() {
 // The resource hook the resources plugin merges into GlobalStandardProps; this row reads no address.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 
-function mount(size: number = DEFAULT_ACTION_CONTROL_SIZE) {
+function mount(size: number = DEFAULT_ACTION_CONTROL_SIZE, preference: PixelPreferenceDescriptor = SIZE_PREFERENCE) {
   const source = createSnapshotStore(size)
-  const zoomActionControls = vi.fn((steps: number) => {
+  const zoomPixels = vi.fn((steps: number) => {
     source.set(clampActionControlSize(source.getSnapshot() + steps * ACTION_CONTROL_SIZE_STEP))
   })
-  const props: ActionControlSizeRowProps = {
+  const props: PixelStepperRowProps = {
     useSessions: emptySessions(),
     useSessionPendingInteraction: noPendingInteraction(),
     useWorkspaces: emptyWorkspaces(),
     useResource,
-    useActionControlSize: bindSnapshotSelector(source),
-    zoomActionControls,
+    usePixelValue: bindSnapshotSelector(source),
+    zoomPixels,
+    preference,
     t: makeTranslate(en),
   }
-  render(<ActionControlSizeRow {...props} />)
-  return { zoomActionControls, source }
+  render(<PixelStepperRow {...props} />)
+  return { zoomPixels, source }
 }
 
 const shrink = () => screen.getByRole('button', { name: en['settings.actionSize.shrink'] })
 const enlarge = () => screen.getByRole('button', { name: en['settings.actionSize.enlarge'] })
 
-describe('ActionControlSizeRow', () => {
+describe('PixelStepperRow', () => {
   it('explains the preference and reads the standing size in px', () => {
     mount()
     expect(screen.getByText(en['settings.actionSize.title'])).toBeDefined()
@@ -67,11 +80,11 @@ describe('ActionControlSizeRow', () => {
   it('zooms in both directions and follows the mirrored value', () => {
     const b = mount()
     fireEvent.click(enlarge())
-    expect(b.zoomActionControls).toHaveBeenCalledWith(1)
+    expect(b.zoomPixels).toHaveBeenCalledWith(1)
     expect(screen.getByText(`${String(DEFAULT_ACTION_CONTROL_SIZE + ACTION_CONTROL_SIZE_STEP)} px`)).toBeDefined()
 
     fireEvent.click(shrink())
-    expect(b.zoomActionControls).toHaveBeenCalledWith(-1)
+    expect(b.zoomPixels).toHaveBeenCalledWith(-1)
     expect(screen.getByText(`${String(DEFAULT_ACTION_CONTROL_SIZE)} px`)).toBeDefined()
   })
 

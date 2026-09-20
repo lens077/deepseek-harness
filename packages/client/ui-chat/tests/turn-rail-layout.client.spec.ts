@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import {
-  DEFAULT_ACTION_CONTROL_SIZE, DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT,
+  DEFAULT_ACTION_CONTROL_SIZE, DEFAULT_TRANSCRIPT_LEADING_PAD,
+  DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT,
   type ChatSettings, type TurnRailAlignment, type TurnRailPlacement,
 } from '../src/chat-settings.ts'
 import { DEFAULT_TURN_RAIL_LAYOUT, TurnRailLayoutPolicy } from '../src/client/turn-rail-layout.ts'
@@ -14,6 +15,7 @@ function section(turnRailPlacement: TurnRailPlacement, turnRailAlignment: TurnRa
     actionControlSize: DEFAULT_ACTION_CONTROL_SIZE,
     turnRailPlacement,
     turnRailAlignment,
+    transcriptLeadingPad: DEFAULT_TRANSCRIPT_LEADING_PAD,
   }
 }
 
