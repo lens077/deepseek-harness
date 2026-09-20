@@ -17,13 +17,84 @@ export type TranscriptViewMode = typeof TRANSCRIPT_VIEW_MODES[number]
 /** Default preserves the compact process disclosure introduced by Chat. */
 export const DEFAULT_TRANSCRIPT_VIEW_MODE: TranscriptViewMode = 'compact'
 
+/** Field carrying the edge length of the transcript's right-hand action controls. */
+export const ACTION_CONTROL_SIZE_FIELD = 'actionControlSize'
+
+/** Smallest accepted control edge in CSS pixels; smaller icons stop being reliable pointer targets. */
+export const ACTION_CONTROL_SIZE_MIN = 26
+
+/** Largest accepted control edge in CSS pixels; larger controls eat the transcript's reading width. */
+export const ACTION_CONTROL_SIZE_MAX = 58
+
+/** Edge-length increment one zoom step applies. */
+export const ACTION_CONTROL_SIZE_STEP = 4
+
+/** Default edge length: the size the column carried before it became adjustable. */
+export const DEFAULT_ACTION_CONTROL_SIZE = 34
+
+/** Field carrying where the turn rail stands relative to the action controls. */
+export const TURN_RAIL_PLACEMENT_FIELD = 'turnRailPlacement'
+
+/**
+ * Turn-rail placements. `stacked` shares the action controls' column and ends
+ * just above them, so the newest Turn sits beside the controls the reader is
+ * using; `column` gives the rail its own column, which fits more Turns at the
+ * cost of transcript width.
+ */
+export const TURN_RAIL_PLACEMENTS = ['stacked', 'column'] as const
+
+/** Where the turn rail stands relative to the action controls. */
+export type TurnRailPlacement = typeof TURN_RAIL_PLACEMENTS[number]
+
+/** Default keeps the rail in one column with the controls: most sessions hold few Turns. */
+export const DEFAULT_TURN_RAIL_PLACEMENT: TurnRailPlacement = 'stacked'
+
+/** Field carrying the rail's vertical alignment in its own column. */
+export const TURN_RAIL_ALIGNMENT_FIELD = 'turnRailAlignment'
+
+/** Vertical alignments available to a rail in its own column. */
+export const TURN_RAIL_ALIGNMENTS = ['top', 'center', 'bottom'] as const
+
+/** Vertical alignment of a rail in its own column; ignored while the rail is stacked. */
+export type TurnRailAlignment = typeof TURN_RAIL_ALIGNMENTS[number]
+
+/** Default for the column placement: the ladder starts where its oldest Turn is. */
+export const DEFAULT_TURN_RAIL_ALIGNMENT: TurnRailAlignment = 'top'
+
+/**
+ * Snap an arbitrary edge length onto the accepted range and zoom step. The
+ * grid is anchored on the default rather than on zero, so the size the column
+ * shipped with and every step away from it stay reachable; both range ends sit
+ * on that grid too. The schema rejects an out-of-range durable value; this
+ * keeps zoom arithmetic on one accepted answer at the ends.
+ * @param size - requested edge length in CSS pixels.
+ * @returns the nearest accepted edge length.
+ */
+export function clampActionControlSize(size: number): number {
+  const steps = Math.round((size - DEFAULT_ACTION_CONTROL_SIZE) / ACTION_CONTROL_SIZE_STEP)
+  const snapped = DEFAULT_ACTION_CONTROL_SIZE + steps * ACTION_CONTROL_SIZE_STEP
+  return Math.min(ACTION_CONTROL_SIZE_MAX, Math.max(ACTION_CONTROL_SIZE_MIN, snapped))
+}
+
 /** Durable Chat section shared by the Host schema and browser scope. */
 export interface ChatSettings {
   /** Presentation mode for completed Turn process content. */
   transcriptView: TranscriptViewMode
+  /** Edge length in CSS pixels of the transcript's right-hand action controls. */
+  actionControlSize: number
+  /** Where the turn rail stands relative to those controls. */
+  turnRailPlacement: TurnRailPlacement
+  /** The rail's vertical alignment while it has its own column. */
+  turnRailAlignment: TurnRailAlignment
 }
 
 /** Durable Chat schema; also the wire envelope the browser scope validates against. */
 export const ChatSettingsSchema: z<ChatSettings> = z.object({
   [TRANSCRIPT_VIEW_FIELD]: z.union([...TRANSCRIPT_VIEW_MODES]).default(DEFAULT_TRANSCRIPT_VIEW_MODE),
+  [ACTION_CONTROL_SIZE_FIELD]: z.number().step(1)
+    .min(ACTION_CONTROL_SIZE_MIN)
+    .max(ACTION_CONTROL_SIZE_MAX)
+    .default(DEFAULT_ACTION_CONTROL_SIZE),
+  [TURN_RAIL_PLACEMENT_FIELD]: z.union([...TURN_RAIL_PLACEMENTS]).default(DEFAULT_TURN_RAIL_PLACEMENT),
+  [TURN_RAIL_ALIGNMENT_FIELD]: z.union([...TURN_RAIL_ALIGNMENTS]).default(DEFAULT_TURN_RAIL_ALIGNMENT),
 })

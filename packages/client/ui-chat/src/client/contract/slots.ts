@@ -21,6 +21,7 @@ import type {
 } from './snapshot.ts'
 import type { TurnProcessSpec } from './turn-process.ts'
 import type { TranscriptViewMode } from '../../chat-settings.ts'
+import type { TurnRailLayout } from '../turn-rail-layout.ts'
 
 /** Selector hook over the current Conversation binding's Chat target. */
 export type UseChat = SnapshotSelectorHook<ChatSnapshot>
@@ -212,6 +213,10 @@ export interface ChatViewInjected {
   hooks: {
     /** Persisted completed-Turn transcript presentation. */
     transcriptView: SnapshotStore<TranscriptViewMode>
+    /** Persisted edge length in CSS pixels of the right-hand action controls. */
+    actionControlSize: SnapshotStore<number>
+    /** Persisted turn-rail placement and, for its own column, alignment. */
+    turnRailLayout: SnapshotStore<TurnRailLayout>
     /** Live question-navigation shortcuts and question-bar placement. */
     questionNavigation: ObservableSnapshot<QuestionNavigationSettings>
   }

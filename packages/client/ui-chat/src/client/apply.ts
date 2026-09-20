@@ -29,9 +29,13 @@ import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { en, NS, zh } from './locale.ts'
+import { ActionControlSizeRow, type ActionControlSizeRowInjected } from './settings/ActionControlSizeRow.tsx'
 import { TranscriptViewRow, type TranscriptViewRowInjected } from './settings/TranscriptViewRow.tsx'
+import { TurnRailLayoutRow, type TurnRailLayoutRowInjected } from './settings/TurnRailLayoutRow.tsx'
 import { createChatStore } from './stores.ts'
+import { ActionControlSizePolicy } from './action-control-size.ts'
 import { TranscriptViewPolicy } from './transcript-view.ts'
+import { TurnRailLayoutPolicy } from './turn-rail-layout.ts'
 import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../chat-settings.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
 
@@ -87,9 +91,10 @@ export function apply(ctx: Context): void {
     },
   } satisfies ChatReveal)
   const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
-  const transcriptView = new TranscriptViewPolicy(
-    ctx.settingsScope.bind<ChatSettings>({ namespace: CHAT_SETTINGS_NAMESPACE }),
-  )
+  const chatSettingsScope = ctx.settingsScope.bind<ChatSettings>({ namespace: CHAT_SETTINGS_NAMESPACE })
+  const transcriptView = new TranscriptViewPolicy(chatSettingsScope)
+  const actionControlSize = new ActionControlSizePolicy(chatSettingsScope)
+  const turnRailLayout = new TurnRailLayoutPolicy(chatSettingsScope)
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -101,6 +106,28 @@ export function apply(ctx: Context): void {
       setTranscriptView: (mode) => { transcriptView.setMode(mode) },
     }),
   }, TranscriptViewRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'action-control-size',
+    order: 13,
+    locale: NS,
+    inject: (): ActionControlSizeRowInjected => ({
+      hooks: { actionControlSize: actionControlSize.size },
+      zoomActionControls: (steps) => { actionControlSize.zoom(steps) },
+    }),
+  }, ActionControlSizeRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'turn-rail-layout',
+    order: 14,
+    locale: NS,
+    inject: (): TurnRailLayoutRowInjected => ({
+      hooks: { turnRailLayout: turnRailLayout.layout },
+      setTurnRailLayout: (layout) => { turnRailLayout.setLayout(layout) },
+    }),
+  }, TurnRailLayoutRow))
 
   ctx.slots.inject('conversation.view', () => {
     const disposeView = ctx.slots.register({
@@ -128,6 +155,8 @@ export function apply(ctx: Context): void {
         return {
           hooks: {
             transcriptView: transcriptView.mode,
+            actionControlSize: actionControlSize.size,
+            turnRailLayout: turnRailLayout.layout,
             questionNavigation: ctx.questionNavigation.settings,
           },
           keyedHooks: {

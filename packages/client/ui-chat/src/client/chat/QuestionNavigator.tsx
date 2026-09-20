@@ -68,7 +68,7 @@ const NO_REMOVAL: QuestionRemovalProps = {
 
 export function QuestionNavigator({
   questions, current, hasMore, loadingAll, onPrevious, onNext, onSelect, onSelectSeq, onLoadAll, searchQuestions,
-  removal = NO_REMOVAL, atBottom = false, onToBottom, t,
+  removal = NO_REMOVAL, atBottom = false, onToBottom, onColumnHeight, t,
 }: {
   questions: readonly QuestionEntry[]
   current: number
@@ -93,6 +93,11 @@ export function QuestionNavigator({
   atBottom?: boolean
   /** Scroll the transcript to its bottom. Absent when the rail has no scroller to drive (bare tests). */
   onToBottom?: (() => void) | undefined
+  /**
+   * Report this column's rendered height in CSS pixels whenever it changes, so
+   * the turn rail beside it can stop short of the controls.
+   */
+  onColumnHeight?: ((height: number) => void) | undefined
   t: ChatViewSlotProps['t']
 }) {
   const [open, setOpen] = useState(false)
@@ -104,6 +109,20 @@ export function QuestionNavigator({
   const [removalState, setRemovalState] = useState<RemovalState>({ kind: 'idle' })
   const panelRef = useRef<HTMLDivElement | null>(null)
   const panelId = useId()
+  // The column's height moves when its entries change (load-all arriving or
+  // leaving) and when the size preference changes; both are resizes of this
+  // element, so one observer covers them.
+  useEffect(() => {
+    const column = panelRef.current
+    if (column === null || onColumnHeight === undefined) return
+    const publish = (): void => { onColumnHeight(column.offsetHeight) }
+    publish()
+    /* v8 ignore next -- jsdom lane has no ResizeObserver; the initial publish above still runs. */
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(publish)
+    observer.observe(column)
+    return () => { observer.disconnect() }
+  }, [onColumnHeight])
   const trimmed = query.trim()
   const { turnOfQuestion, removableTurns, removedTurns, onRemoveTurns } = removal
 

@@ -1,12 +1,16 @@
 // An enclosing `[data-conversation-scroll]` owns scrolling when present;
 // otherwise this view owns it. Each row subscribes to one stable node key.
 
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import {
+  Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+  type ComponentProps, type CSSProperties,
+} from 'react'
 import type {
   ConversationTimelineSnapshot, RenderMessageImages,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { DEFAULT_ACTION_CONTROL_SIZE } from '../../chat-settings.ts'
 import type { ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
@@ -19,6 +23,7 @@ import {
 } from './turn-summary.ts'
 import type { QuestionRemovalProps } from './QuestionNavigator.tsx'
 import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
+
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
@@ -232,6 +237,17 @@ const ChatNodeList = memo(function ChatNodeList({ order, recaps, onSelectQuestio
 
 const EMPTY_TURNS: ReadonlySet<number> = new Set()
 
+/** Root style carrying the user's action-control edge length to every consumer below it. */
+type ActionSizeStyle = CSSProperties & { readonly '--dsh-chat-action-size': string }
+
+function actionSizeStyle(size: number): ActionSizeStyle {
+  // A custom property's declared fallback does not rescue an invalid value, so
+  // a non-finite size would take the column's width to zero rather than to the
+  // shipped default.
+  const resolved = Number.isFinite(size) ? size : DEFAULT_ACTION_CONTROL_SIZE
+  return { '--dsh-chat-action-size': `${String(resolved)}px` }
+}
+
 /**
  * The chat view slot entry: pure component over the composed props; each
  * ordered business Node crosses the keyed renderer seat.
@@ -240,7 +256,7 @@ export function ChatView({
   useSession, useChat, useChatNode, useChatNodeProcess, useSessions, useStore, actions, renderSlot,
   sessionId, openFile, loadOlder, loadThrough, loadAll, searchQuestions, loadImage, openView,
   chatScroll, forkAt, removeTurns, fileMentions, turnFiles, turnFilesAvailable,
-  useTranscriptView, useQuestionNavigation, useProjection, t,
+  useTranscriptView, useActionControlSize, useTurnRailLayout, useQuestionNavigation, useProjection, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
   const nodeStore = useChat(s => s.nodes)
@@ -294,6 +310,23 @@ export function ChatView({
   const loadingOlder = useSession(s => s.loadingOlder)
   const reveal = useStore(s => s.reveal)
   const compactTranscript = useTranscriptView(mode => mode === 'compact')
+  // Edge length of the floating right-hand controls. It drives the control
+  // column, the turn rail beside it, and the transcript gutter that keeps
+  // content clear of both, so it is published once as a custom property.
+  const actionControlSize = useActionControlSize(value => value)
+  // Placement decides both how the rail positions itself and how much side
+  // room the transcript must give back: its own column costs a second width.
+  const railPlacement = useTurnRailLayout(value => value.placement)
+  const railAlignment = useTurnRailLayout(value => value.alignment)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  // The control column's own height decides where the turn rail beside it must
+  // stop. It is written straight onto the root as a custom property rather
+  // than held in state: the column resizes only when its entries or the size
+  // preference change, and a render per resize would ride every streaming
+  // commit for a value only CSS reads.
+  const publishActionColumn = useCallback((height: number) => {
+    rootRef.current?.style.setProperty('--dsh-chat-action-column', `${String(height)}px`)
+  }, [])
   const inspectCall = useCallback((callId: string) => {
     openView('trajectory', callId)
   }, [openView])
@@ -941,13 +974,20 @@ export function ChatView({
   ])
 
   return (
-    <div className={css.root}>
+    <div
+      className={css.root}
+      ref={rootRef}
+      data-rail-placement={railPlacement}
+      style={actionSizeStyle(actionControlSize)}
+    >
       <div ref={listRef} className={css.scroll}>
         <TurnNavigator
           items={railItems}
           activeTurn={activeTurn}
           busyTurn={busyJumpTurn}
           onNavigate={navigateToTurn}
+          placement={railPlacement}
+          alignment={railAlignment}
           t={t}
         />
         <QuestionNavigator
@@ -962,6 +1002,7 @@ export function ChatView({
           onNext={() => { navigateToQuestion(activeQuestionIndex + 1) }}
           onSelect={navigateToQuestion}
           onSelectSeq={navigateToQuestionSeq}
+          onColumnHeight={publishActionColumn}
           onLoadAll={loadAllQuestions}
           searchQuestions={searchQuestions}
           removal={removal}

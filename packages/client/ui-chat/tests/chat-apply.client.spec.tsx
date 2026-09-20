@@ -19,9 +19,14 @@ import {
   apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
-  ChatNodeTurnDataInjected, ChatSnapshot, TranscriptViewRowInjected, UseChatNodeTurnData,
+  ActionControlSizeRowInjected, ChatNodeTurnDataInjected, ChatSnapshot,
+  TranscriptViewRowInjected, TurnRailLayoutRowInjected, UseChatNodeTurnData,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
-import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../src/chat-settings.ts'
+import {
+  ACTION_CONTROL_SIZE_STEP, CHAT_SETTINGS_NAMESPACE, DEFAULT_ACTION_CONTROL_SIZE,
+  DEFAULT_TURN_RAIL_ALIGNMENT, DEFAULT_TURN_RAIL_PLACEMENT,
+  type ChatSettings,
+} from '../src/chat-settings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
   interface ConversationTurnDataMap {
@@ -86,7 +91,10 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('conversation.session.tabs.trailing').map(row => row.component))
       .toEqual(b.runtime.slots.entries('conversation.composer.dock').map(row => row.component))
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
-      .toEqual(['transcript-view', 'composer-enter', 'content-width', 'question-shortcuts'])
+      .toEqual([
+        'transcript-view', 'action-control-size', 'turn-rail-layout',
+        'composer-enter', 'content-width', 'question-shortcuts',
+      ])
     await b.runtime.dispose()
   })
 
@@ -102,9 +110,59 @@ describe('Chat apply wiring', () => {
     expect(b.chatSettings.set).toHaveBeenCalledWith('transcriptView', 'normal')
 
     b.chatSettings.publish({
-      status: 'ready', value: { transcriptView: 'compact' }, revision: 1, writable: true,
+      status: 'ready',
+      value: {
+        transcriptView: 'compact',
+        actionControlSize: DEFAULT_ACTION_CONTROL_SIZE,
+        turnRailPlacement: DEFAULT_TURN_RAIL_PLACEMENT,
+        turnRailAlignment: DEFAULT_TURN_RAIL_ALIGNMENT,
+      },
+      revision: 1,
+      writable: true,
     })
     expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
+    await b.runtime.dispose()
+  })
+
+  it('mirrors the Host control-size preference into its Settings row', async () => {
+    const b = await bench()
+    const row = b.runtime.slots.entries('settings.general.item')
+      .find(entry => entry.options.id === 'action-control-size')!
+    const face = (row.inject as unknown as () => ActionControlSizeRowInjected)()
+
+    expect(face.hooks.actionControlSize.getSnapshot()).toBe(DEFAULT_ACTION_CONTROL_SIZE)
+    face.zoomActionControls(1)
+    const enlarged = DEFAULT_ACTION_CONTROL_SIZE + ACTION_CONTROL_SIZE_STEP
+    expect(face.hooks.actionControlSize.getSnapshot()).toBe(enlarged)
+    expect(b.chatSettings.set).toHaveBeenCalledWith('actionControlSize', enlarged)
+
+    b.chatSettings.publish({
+      status: 'ready',
+      value: {
+        transcriptView: 'compact',
+        actionControlSize: DEFAULT_ACTION_CONTROL_SIZE,
+        turnRailPlacement: DEFAULT_TURN_RAIL_PLACEMENT,
+        turnRailAlignment: DEFAULT_TURN_RAIL_ALIGNMENT,
+      },
+      revision: 1,
+      writable: true,
+    })
+    expect(face.hooks.actionControlSize.getSnapshot()).toBe(DEFAULT_ACTION_CONTROL_SIZE)
+    await b.runtime.dispose()
+  })
+
+  it('mirrors the Host rail-layout preference into its Settings row', async () => {
+    const b = await bench()
+    const row = b.runtime.slots.entries('settings.general.item')
+      .find(entry => entry.options.id === 'turn-rail-layout')!
+    const face = (row.inject as unknown as () => TurnRailLayoutRowInjected)()
+
+    expect(face.hooks.turnRailLayout.getSnapshot())
+      .toEqual({ placement: DEFAULT_TURN_RAIL_PLACEMENT, alignment: DEFAULT_TURN_RAIL_ALIGNMENT })
+    face.setTurnRailLayout({ placement: 'column', alignment: 'bottom' })
+    expect(face.hooks.turnRailLayout.getSnapshot()).toEqual({ placement: 'column', alignment: 'bottom' })
+    expect(b.chatSettings.set).toHaveBeenCalledWith('turnRailPlacement', 'column')
+    expect(b.chatSettings.set).toHaveBeenCalledWith('turnRailAlignment', 'bottom')
     await b.runtime.dispose()
   })
 

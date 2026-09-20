@@ -25,6 +25,8 @@ import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-tes
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { EMPTY_CONVERSATION_SNAPSHOT } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import { DEFAULT_ACTION_CONTROL_SIZE } from '../src/chat-settings.ts'
+import { DEFAULT_TURN_RAIL_LAYOUT } from '../src/client/turn-rail-layout.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { ChatNodeSeat } from '../src/client/chat/ChatNodeSeat.tsx'
@@ -400,6 +402,8 @@ function makeHarness(
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
     useTranscriptView: bindSnapshotSelector(transcriptView),
+    useActionControlSize: bindSnapshotSelector(createSnapshotStore(DEFAULT_ACTION_CONTROL_SIZE)),
+    useTurnRailLayout: bindSnapshotSelector(createSnapshotStore(DEFAULT_TURN_RAIL_LAYOUT)),
     useQuestionNavigation: bindSnapshotSelector(createSnapshotStore({
       previousShortcut: 'Ctrl+ArrowUp',
       nextShortcut: 'Ctrl+ArrowDown',
@@ -608,7 +612,8 @@ describe('ChatView', () => {
     const h = makeHarness({}, {}, snapshot)
     const view = render(<h.ChatView {...h.props} />)
     const navigation = view.getByRole('navigation', { name: '轮次导航' })
-    expect(navigation.style.getPropertyValue('--turn-natural-height')).toBe('22px')
+    // Two marks at the 10px pitch plus the rail inset at each end.
+    expect(navigation.style.getPropertyValue('--turn-natural-height')).toBe('34px')
     const first = view.getByRole('button', { name: '跳转到第 1 轮' })
     const second = view.getByRole('button', { name: '跳转到第 2 轮' })
     expect(first.parentElement?.style.getPropertyValue('--turn-natural-position')).toBe('0px')
@@ -745,9 +750,9 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     const nav = view.getByRole('navigation', { name: '轮次导航' })
     // 60 marks at the fixed 10px pitch: the ladder keeps its natural height.
-    expect(nav.style.getPropertyValue('--turn-natural-height')).toBe('602px')
+    expect(nav.style.getPropertyValue('--turn-natural-height')).toBe('614px')
     const scroller = nav.querySelector('[class*="scroller"]') as HTMLElement
-    Object.defineProperty(scroller, 'scrollHeight', { value: 602, configurable: true })
+    Object.defineProperty(scroller, 'scrollHeight', { value: 614, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true })
     scroller.scrollTop = 0
     fireEvent.scroll(scroller)
@@ -760,10 +765,10 @@ describe('ChatView', () => {
     expect(scroller.className).toContain('fadeBottom')
     expect(nav.style.getPropertyValue('--turn-scroll-top')).toBe('150px')
 
-    // Pointer mapping subtracts the rail scroll: y=94 with scrollTop 150 is
-    // natural offset 238px → the 25th mark.
+    // Pointer mapping subtracts the rail scroll and the inset: y=102 with
+    // scrollTop 150 is natural offset 240px → the 25th mark.
     vi.spyOn(nav, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect)
-    fireEvent.pointerMove(nav, { clientY: 94 })
+    fireEvent.pointerMove(nav, { clientY: 102 })
     expect(view.getByRole('tooltip').textContent).toContain('p25')
   })
 
@@ -2683,7 +2688,10 @@ describe('ChatView', () => {
     Object.defineProperty(scroller, 'scrollHeight', { value: 1_400, writable: true })
     act(() => { notify?.() })
     expect(scroller.scrollTop).toBe(200)
-    expect(observe).toHaveBeenCalledTimes(1)
+    // One observation drives the follow; the action column separately observes
+    // itself for the height the turn rail reads, which is not a second follow.
+    const actionColumn = view.container.querySelector('[class*="questionNavigator"]')
+    expect(observe.mock.calls.filter(([element]) => element !== actionColumn)).toHaveLength(1)
   })
 
   it('pinned dynamic-height updates select the latest Turn without reading row geometry', () => {

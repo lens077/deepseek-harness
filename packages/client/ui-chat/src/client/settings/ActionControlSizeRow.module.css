@@ -1,0 +1,95 @@
+/* Right-hand action control size row: label plus a zoom stepper reading px. */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 48px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.stepper {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 4px;
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+/* The glyphs are drawn rather than lettered: a zoom stepper carries no copy,
+   and the icon set has no minus counterpart to its plus. */
+.step {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.step::before {
+  content: '';
+  width: 12px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.stepIn::after {
+  content: '';
+  position: absolute;
+  width: 1.5px;
+  height: 12px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.step:not(:disabled):hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Tabular figures so stepping never shifts the stepper's width. */
+.value {
+  min-width: 56px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}

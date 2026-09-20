@@ -2,7 +2,9 @@ import {
   memo, useEffect, useId, useRef, useState,
   type CSSProperties, type MouseEvent, type PointerEvent,
 } from 'react'
+import { IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
+import type { TurnRailAlignment, TurnRailPlacement } from '../../chat-settings.ts'
 import type { TurnRailItem } from './turn-rail-items.ts'
 import css from './TurnNavigator.module.css'
 
@@ -12,13 +14,22 @@ interface TurnNavigatorProps {
   /** Turn whose jump is still paging history in; its mark pulses. */
   readonly busyTurn: number | null
   readonly onNavigate: (item: TurnRailItem) => void
+  /** Whether the rail shares the action controls' column or takes its own. */
+  readonly placement: TurnRailPlacement
+  /** Where the rail sits in its own column; a stacked rail ends above the controls instead. */
+  readonly alignment: TurnRailAlignment
   readonly t: ChatViewSlotProps['t']
 }
 
 /** Fixed pitch between neighbouring marks; overflow scrolls inside the frame. */
 const TURN_SPACING_PX = 10
-/** Rail padding above the first mark and below the last one, per end. */
-const RAIL_INSET_PX = 6
+/**
+ * Rail padding above the first mark and below the last one, per end. It is
+ * half a mark's hit area: a smaller inset lets the first and last hit boxes
+ * hang past the ladder, which reads as a scrollable rail that is really at
+ * rest and leaves a paging control standing with nowhere to go.
+ */
+const RAIL_INSET_PX = 12
 /** Fade band the mask reserves at a scrollable end. */
 const FADE_PX = 24
 
@@ -80,12 +91,14 @@ function sameRailScrollState(left: RailScrollState, right: RailScrollState): boo
     && left.canScrollDown === right.canScrollDown
 }
 
-function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, t }: TurnNavigatorProps) {
+function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, placement, alignment, t }: TurnNavigatorProps) {
   const [previewTurn, setPreviewTurn] = useState<number | null>(null)
   const [scrollState, setScrollState] = useState<RailScrollState>(RAIL_AT_REST)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   /** While the pointer works the rail, follow must not move it under the hand. */
   const pointerInsideRef = useRef(false)
+  /** The placement whose resting ladder position has already been applied. */
+  const restedPlacementRef = useRef<TurnRailPlacement | null>(null)
   const previewId = useId()
 
   const syncScrollState = (): void => {
@@ -105,6 +118,21 @@ function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, t }: TurnN
     return () => { observer.disconnect() }
   }, [])
   useEffect(syncScrollState, [items.length])
+
+  // A stacked rail ends at the controls, so its newest Turn is the one the
+  // reader is working beside: the ladder rests at its end rather than at its
+  // oldest Turn. Applied once per placement, so a reader who scrolls the rail
+  // keeps their position.
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (scroller === null || items.length === 0) return
+    if (restedPlacementRef.current === placement) return
+    restedPlacementRef.current = placement
+    scroller.scrollTop = placement === 'stacked'
+      ? Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      : 0
+    syncScrollState()
+  }, [placement, items.length])
 
   // Keep the active mark visible: centre it whenever it leaves the scrollport,
   // unless the reader's pointer is working the rail.
@@ -126,6 +154,24 @@ function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, t }: TurnN
     syncScrollState()
   }, [activeTurn, items])
 
+  // Wheel scrolling already reaches the ladder; these edges are the pointer
+  // and keyboard equivalent for a session too long to show at once, and their
+  // presence is what tells a reader the rail continues past the fade.
+  const scrollRail = (direction: -1 | 1): void => {
+    const scroller = scrollerRef.current
+    /* v8 ignore next -- the edges render only inside a mounted, scrollable frame. */
+    if (scroller === null) return
+    const step = Math.max(TURN_SPACING_PX * 4, scroller.clientHeight * 0.8)
+    const target = scroller.scrollTop + direction * step
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ top: target, behavior: reduced ? 'auto' : 'smooth' })
+    } else {
+      scroller.scrollTop = target
+    }
+    syncScrollState()
+  }
+
   if (items.length < 2) return null
   const previewIndex = items.findIndex(item => item.turn === previewTurn)
   const preview = previewIndex < 0 ? undefined : items[previewIndex]
@@ -146,6 +192,8 @@ function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, t }: TurnN
     <div className={css.slot}>
       <nav
         className={css.frame}
+        data-placement={placement}
+        data-align={alignment}
         style={frameStyle(items.length, scrollState.top)}
         aria-label={t('chat.turnNavigation.label')}
         onClick={navigateAtPointer}
@@ -194,6 +242,32 @@ function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, t }: TurnN
             })}
           </div>
         </div>
+        {scrollState.canScrollUp && (
+          <button
+            type="button"
+            className={`${css.edge} ${css.edgeTop}`}
+            aria-label={t('chat.turnNavigation.older')}
+            onClick={(event) => {
+              event.stopPropagation()
+              scrollRail(-1)
+            }}
+          >
+            <IconChevronUpOutline14 />
+          </button>
+        )}
+        {scrollState.canScrollDown && (
+          <button
+            type="button"
+            className={`${css.edge} ${css.edgeBottom}`}
+            aria-label={t('chat.turnNavigation.newer')}
+            onClick={(event) => {
+              event.stopPropagation()
+              scrollRail(1)
+            }}
+          >
+            <IconChevronDownOutline14 />
+          </button>
+        )}
         {preview !== undefined && previewPosition !== undefined && (
           <div id={previewId} role="tooltip" className={css.preview} style={previewPosition}>
             <div className={css.previewPrompt}>

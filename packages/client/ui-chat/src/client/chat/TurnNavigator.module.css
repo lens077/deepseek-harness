@@ -19,25 +19,66 @@
     var(--dsh-conversation-viewport-height, 100dvh) - var(--dsh-composer-height, 152px)
   );
   --turn-preview-height: 100px;
-
-  position: absolute;
-  top: calc(var(--turn-rail-band) / 2);
-  /* Flush with the scrollport edge: the slot sits inside the transcript's side
-     padding, so the rail gives that inset back and keeps 12px of its own. */
-  right: calc(12px - (var(--dsh-composer-side-clearance) + 16px));
-  width: 28px;
-  /* Fixed-pitch marks never compress: a ladder taller than the band scrolls
-     inside this frame instead of pushing marks under the composer or above
-     the scrollport. */
-  height: min(
-    var(--turn-natural-height),
-    max(0px, calc(var(--turn-rail-band) - 64px)),
-    420px
+  /* Tick geometry scales with the action controls beside it, so one size
+     preference moves the whole right-hand column together. The fallback
+     matches ChatView's own, for a rail rendered outside that root. */
+  --turn-tick: calc(var(--dsh-chat-action-size, 34px) * 0.48);
+  /* Gap the rail keeps from the scrollport ends and from the controls. */
+  --turn-rail-gap: 12px;
+  /* Fixed-pitch marks never compress: the ladder shows every Turn it can fit
+     and scrolls the rest inside this frame. */
+  --turn-rail-height: min(var(--turn-natural-height), var(--turn-rail-free));
+  /* The action controls' own floor offset, so the rail can stack on them. */
+  --turn-rail-controls-top: calc(
+    var(--dsh-composer-height, 152px) + 20px + var(--dsh-chat-action-column, 210px)
   );
+
+  /* Fixed, like the action controls, and offset from the same floor: the
+     scroller reserves a scrollbar gutter, so a rail positioned against the
+     scroll box would miss the controls' column by that gutter. */
+  position: fixed;
+  width: var(--dsh-chat-action-size, 34px);
+  height: var(--turn-rail-height);
   cursor: pointer;
   pointer-events: auto;
-  transform: translateY(-50%);
   transition: height 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Stacked: one column with the action controls, ending one gap above them, so
+   the newest Turn's tick sits directly over the search button. */
+.frame[data-placement='stacked'] {
+  --turn-rail-free: max(0px, calc(
+    var(--turn-rail-band) - var(--dsh-chat-action-column, 210px) - 3 * var(--turn-rail-gap)
+  ));
+
+  right: 12px;
+  bottom: calc(var(--turn-rail-controls-top) + var(--turn-rail-gap));
+}
+
+/* Own column: the rail stands left of the controls and may use the whole
+   band, because nothing below it shares that column. */
+.frame[data-placement='column'] {
+  --turn-rail-free: max(0px, calc(var(--turn-rail-band) - 2 * var(--turn-rail-gap)));
+
+  right: calc(16px + var(--dsh-chat-action-size, 34px));
+}
+
+.frame[data-placement='column'][data-align='top'] {
+  bottom: calc(
+    var(--dsh-composer-height, 152px) + var(--turn-rail-band)
+    - var(--turn-rail-gap) - var(--turn-rail-height)
+  );
+}
+
+.frame[data-placement='column'][data-align='center'] {
+  bottom: calc(
+    var(--dsh-composer-height, 152px) + (var(--turn-rail-band) - var(--turn-rail-height)) / 2
+  );
+}
+
+/* The controls' own floor offset, so both columns end on one line. */
+.frame[data-placement='column'][data-align='bottom'] {
+  bottom: calc(var(--dsh-composer-height, 152px) + 20px);
 }
 
 /* The frame's inner scroller: no visible scrollbar, no scroll chaining into
@@ -82,7 +123,7 @@
   top: calc(var(--turn-natural-position) + var(--turn-rail-inset));
   right: 0;
   left: 0;
-  height: 10px;
+  height: 22px;
   transform: translateY(-50%);
   transition: top 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   animation: dsh-turn-mark-enter 150ms ease-out;
@@ -95,7 +136,7 @@
   /* As wide as the longest tick, right-aligned with it: the focus ring below
      then wraps the tick instead of the rail's full pointer column. */
   inset: 0 0 0 auto;
-  width: 20px;
+  width: calc(var(--dsh-chat-action-size, 34px) - 8px);
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -108,8 +149,8 @@
   position: absolute;
   top: 50%;
   right: 0;
-  width: 12px;
-  height: 2px;
+  width: var(--turn-tick);
+  height: 3px;
   border-radius: 2px;
   background: var(--dsw-alias-border-l4);
   content: '';
@@ -119,12 +160,12 @@
 
 /* Ordered before hover/active so those states keep their stronger tick. */
 .markUnloaded::before {
-  width: 8px;
+  width: calc(var(--turn-tick) * 0.7);
   opacity: 0.6;
 }
 
 .markPreview::before {
-  width: 18px;
+  width: calc(var(--turn-tick) * 1.4);
   background: var(--dsw-alias-label-tertiary);
 }
 
@@ -133,7 +174,7 @@
 }
 
 .markActive::before {
-  width: 20px;
+  width: calc(var(--turn-tick) * 1.6);
   background: var(--dsw-alias-label-primary);
 }
 
@@ -141,13 +182,50 @@
    the rest of the rail never uses, and a hairline ring keeps it legible
    against a busy transcript. */
 .mark:focus-visible::before {
-  width: 20px;
+  width: calc(var(--turn-tick) * 1.6);
   background: var(--dsw-alias-state-business-primary);
 }
 
 .mark:focus-visible {
   outline: 1px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
+}
+
+/* Rail ends: flat paging entries that appear only on the side that can still
+   scroll. Flat on purpose — the round elevated pills below are transcript
+   commands, while these only move the ladder. */
+.edge {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+  animation: dsh-turn-mark-enter 150ms ease-out;
+}
+
+.edge:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.edge:focus-visible {
+  outline: 1px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.edgeTop {
+  top: -21px;
+}
+
+.edgeBottom {
+  bottom: -21px;
 }
 
 .preview {
@@ -226,6 +304,7 @@
   .markPosition,
   .mark::before,
   .markBusy::before,
+  .edge,
   .preview {
     transition: none;
     animation: none;
