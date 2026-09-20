@@ -38,6 +38,12 @@ function mount(props: {
   return { view, anchor, wrapper: anchor.parentElement as HTMLElement }
 }
 
+/** Pointer entering the wrapper just inside its top-left corner (the dwell re-checks this position against the rect). */
+function enter(wrapper: HTMLElement): void {
+  const r = wrapper.getBoundingClientRect()
+  fireEvent.pointerEnter(wrapper, { clientX: r.left + 1, clientY: r.top + 1 })
+}
+
 /** Install the async browser clipboard and restore its prior host shape. */
 function installClipboard(writeText: (text: string) => Promise<void>): () => void {
   const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
@@ -54,7 +60,7 @@ function installClipboard(writeText: (text: string) => Promise<void>): () => voi
 describe('HoverCard', () => {
   it('opens after the dwell delay, positioned right of the anchor', () => {
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     expect(screen.queryByText('card body')).toBeNull()
     act(() => { vi.advanceTimersByTime(499) })
     expect(screen.queryByText('card body')).toBeNull()
@@ -67,14 +73,14 @@ describe('HoverCard', () => {
 
   it('honors a custom openDelayMs', () => {
     const { wrapper } = mount({ openDelayMs: 50 })
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(50) })
     expect(screen.getByText('card body')).toBeTruthy()
   })
 
   it('pointerleave before the delay cancels the pending open', () => {
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     fireEvent.pointerLeave(wrapper)
     act(() => { vi.advanceTimersByTime(1000) })
     expect(screen.queryByText('card body')).toBeNull()
@@ -82,7 +88,7 @@ describe('HoverCard', () => {
 
   it('pointerleave closes an open card a grace later; re-enter after that restarts the dwell', () => {
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     expect(screen.getByText('card body')).toBeTruthy()
     fireEvent.pointerLeave(wrapper)
@@ -90,7 +96,7 @@ describe('HoverCard', () => {
     expect(screen.getByText('card body')).toBeTruthy()
     act(() => { vi.advanceTimersByTime(1) })
     expect(screen.queryByText('card body')).toBeNull()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     expect(screen.getByText('card body')).toBeTruthy()
   })
@@ -100,20 +106,20 @@ describe('HoverCard', () => {
     // arriving on it re-enters the wrapper — the gesture an anchor gap
     // would make impossible.
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     fireEvent.pointerLeave(wrapper)
     act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS - 50) })
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS * 10) })
     expect(screen.getByText('card body')).toBeTruthy()
   })
 
   it('re-entering while open does not queue a second dwell', () => {
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     fireEvent.pointerLeave(wrapper)
     act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
     // A dwell restarted by the redundant enter would reopen the card here.
@@ -123,7 +129,7 @@ describe('HoverCard', () => {
 
   it('a press inside the anchor dismisses the card without waiting for disabled', () => {
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     expect(screen.getByText('card body')).toBeTruthy()
     fireEvent.pointerDown(screen.getByText('row'))
@@ -138,7 +144,7 @@ describe('HoverCard', () => {
     // it reach the wrapper's dismissal handler too; they must not close it,
     // or the first pointerdown of a text-selection drag would kill the card.
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     fireEvent.pointerDown(screen.getByText('card body'))
     // Still mounted after a grace's worth of time: no close was armed either.
@@ -153,7 +159,7 @@ describe('HoverCard', () => {
     if (selection === null) throw new Error('jsdom selection API unavailable')
     try {
       const { wrapper } = mount({ copyText: 'card body', copyLabel: 'Copy' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       const card = screen.getByRole('button', { name: 'Copy: card body' })
       const selectedText = screen.getByText('card body')
@@ -207,7 +213,7 @@ describe('HoverCard', () => {
         copyLabel: 'Copy path',
         copiedLabel: 'Copied',
       })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       const card = screen.getByRole('button', { name: 'Copy path: /full/path' })
       const status = screen.getByRole('status')
@@ -240,7 +246,7 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { wrapper } = mount({ copyText: 'value', copiedLabel: 'Copied' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       const card = screen.getByRole('button')
       fireEvent.keyDown(card, { key: 'Escape' })
@@ -260,7 +266,7 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { wrapper } = mount({ copyText: 'value', copiedLabel: 'Copied' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       await act(async () => { fireEvent.click(screen.getByRole('button')) })
       expect(screen.queryByText('Copied')).toBeNull()
@@ -275,7 +281,7 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { view, wrapper } = mount({ copyText: 'value' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       await act(async () => { fireEvent.click(screen.getByRole('button')) })
       expect(vi.getTimerCount()).toBe(1)
@@ -291,14 +297,14 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { wrapper } = mount({ copyText: 'value', copiedLabel: 'Copied' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       await act(async () => { fireEvent.click(screen.getByRole('button')) })
       expect(screen.getByRole('status').textContent).toBe('Copied')
       fireEvent.pointerLeave(wrapper)
       act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
       expect(screen.queryByText('Copied')).toBeNull()
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('card body')).toBeTruthy()
     } finally {
@@ -312,7 +318,7 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { view, wrapper } = mount({ copyText: 'value' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       fireEvent.click(screen.getByRole('button'))
       expect(writeText).toHaveBeenCalledOnce()
@@ -330,12 +336,12 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { wrapper } = mount({ copyText: 'value', copiedLabel: 'Copied' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       fireEvent.click(screen.getByRole('button'))
       fireEvent.pointerLeave(wrapper)
       act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       await act(async () => { acceptWrite?.() })
       expect(vi.getTimerCount()).toBe(0)
@@ -351,7 +357,7 @@ describe('HoverCard', () => {
     const restoreClipboard = installClipboard(writeText)
     try {
       const { wrapper } = mount({ copyText: 'value', copiedLabel: 'Copied' })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       const card = screen.getByRole('button')
       fireEvent.click(card)
@@ -366,14 +372,14 @@ describe('HoverCard', () => {
 
   it('disabled suppresses opening entirely', () => {
     const { wrapper } = mount({ disabled: true })
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(1000) })
     expect(screen.queryByText('card body')).toBeNull()
   })
 
   it('flipping disabled true closes an open card', () => {
     const { view, wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     expect(screen.getByText('card body')).toBeTruthy()
     view.rerender(
@@ -397,7 +403,7 @@ describe('HoverCard', () => {
     try {
       const { wrapper } = mount()
       stubAnchorRect(screen.getByText('row'), { top: 280, right: 200 })
-      fireEvent.pointerEnter(wrapper)
+      enter(wrapper)
       act(() => { vi.advanceTimersByTime(500) })
       const card = screen.getByText('card body').parentElement as HTMLElement
       // 300 - 120 - 8 = 172, instead of the anchor top 280.
@@ -411,7 +417,7 @@ describe('HoverCard', () => {
     window.innerHeight = 300
     const { wrapper } = mount()
     stubAnchorRect(screen.getByText('row'), { top: 280, right: 200 })
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     const card = screen.getByText('card body').parentElement as HTMLElement
     Object.defineProperty(card, 'offsetHeight', { value: 120 })
@@ -421,7 +427,7 @@ describe('HoverCard', () => {
 
   it('repositions on capture-phase scroll while open and stops listening after close', () => {
     const { wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     stubAnchorRect(screen.getByText('row'), { top: 90, right: 300 })
     act(() => { fireEvent.scroll(document) })
@@ -433,9 +439,110 @@ describe('HoverCard', () => {
     expect(screen.queryByText('card body')).toBeNull()
   })
 
+  it('does not open when the anchor scrolled out from under the resting pointer during the dwell', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    stubAnchorRect(screen.getByText('row'), { top: 400, right: 200 })
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.queryByText('card body')).toBeNull()
+    // Re-entering the moved anchor opens normally.
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText('card body')).toBeTruthy()
+  })
+
+  it('the dwell reads the pointer position the wrapper last saw', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    fireEvent.pointerMove(wrapper, { clientX: 150, clientY: 60 })
+    // The anchor moves so only the later position stays inside it.
+    stubAnchorRect(screen.getByText('row'), { top: 50, right: 200 })
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText('card body')).toBeTruthy()
+  })
+
+  it('pointer motion outside the anchor and card closes it after the grace without a pointerleave', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText('card body')).toBeTruthy()
+    fireEvent.pointerMove(document.body, { clientX: 600, clientY: 600 })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS - 1) })
+    expect(screen.getByText('card body')).toBeTruthy()
+    // Continued motion outside does not push the close back.
+    fireEvent.pointerMove(document.body, { clientX: 620, clientY: 620 })
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(screen.queryByText('card body')).toBeNull()
+  })
+
+  it('pointer motion over the anchor or the card cancels a pending departure close', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    fireEvent.pointerMove(document.body, { clientX: 600, clientY: 600 })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS - 50) })
+    fireEvent.pointerMove(screen.getByText('card body'), { clientX: 300, clientY: 50 })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS * 10) })
+    expect(screen.getByText('card body')).toBeTruthy()
+    fireEvent.pointerMove(document.body, { clientX: 600, clientY: 600 })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS - 50) })
+    fireEvent.pointerMove(screen.getByText('row'), { clientX: 150, clientY: 50 })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS * 10) })
+    expect(screen.getByText('card body')).toBeTruthy()
+  })
+
+  it('stops watching pointer motion once closed', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    fireEvent.pointerLeave(wrapper)
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
+    expect(screen.queryByText('card body')).toBeNull()
+    // A closed card ignores motion: nothing arms, nothing reopens.
+    fireEvent.pointerMove(document.body, { clientX: 600, clientY: 600 })
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.queryByText('card body')).toBeNull()
+  })
+
+  it('a scroll that carries the anchor away from the resting pointer closes the card', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    stubAnchorRect(screen.getByText('row'), { top: 400, right: 200 })
+    act(() => { fireEvent.scroll(document) })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
+    expect(screen.queryByText('card body')).toBeNull()
+  })
+
+  it('a scroll elsewhere keeps the card while the pointer still rests on the anchor or the card', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    act(() => { fireEvent.scroll(document) })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
+    expect(screen.getByText('card body')).toBeTruthy()
+    // Resting on the card: the anchor rect no longer contains the pointer.
+    const card = screen.getByText('card body').parentElement as HTMLElement
+    card.getBoundingClientRect = () => ({
+      left: 208, right: 452, top: 40, bottom: 120, width: 244, height: 80, x: 208, y: 40, toJSON: () => ({}),
+    })
+    fireEvent.pointerMove(card, { clientX: 300, clientY: 60 })
+    act(() => { fireEvent.scroll(document) })
+    act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
+    expect(screen.getByText('card body')).toBeTruthy()
+  })
+
+  it('losing window focus closes the card immediately', () => {
+    const { wrapper } = mount()
+    enter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    act(() => { fireEvent.blur(window) })
+    expect(screen.queryByText('card body')).toBeNull()
+  })
+
   it('unmount clears a pending open timer', () => {
     const { view, wrapper } = mount()
-    fireEvent.pointerEnter(wrapper)
+    enter(wrapper)
     view.unmount()
     act(() => { vi.advanceTimersByTime(1000) })
     expect(screen.queryByText('card body')).toBeNull()

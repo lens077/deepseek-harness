@@ -5,8 +5,24 @@ import { writeClipboard } from './clipboard.ts'
 import { usePointerGrace } from './pointer-grace.ts'
 import css from './HoverCard.module.css'
 
+/** Viewport pointer position in CSS pixels. */
+interface Point {
+  x: number
+  y: number
+}
+
+/** Whether a viewport point lies inside a rect, edges inclusive. */
+function inRect(rect: DOMRect, point: Point): boolean {
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
+}
+
 /**
- * Render an anchor with a hover-triggered preview card.
+ * Render an anchor with a hover-triggered preview card. The card opens only
+ * while the pointer still rests on the anchor when the dwell elapses, and
+ * closes a grace after the pointer is last seen outside both the anchor and
+ * the card — by boundary event, by pointer motion elsewhere, or by the anchor
+ * scrolling away beneath a resting pointer — or at once when the window
+ * loses focus.
  * @param props.anchor - the hover target (rendered in place inside a wrapper span).
  * @param props.content - card content; the pointer may rest on it, so it is
  * readable and selectable, but it carries no dismissal affordance of its own.
@@ -38,6 +54,13 @@ export function HoverCard({
   const copyEpochRef = useRef(0)
   const copyingRef = useRef(false)
   const mountedRef = useRef(true)
+  // Last known pointer position. The wrapper's own pointer events feed it
+  // while closed (the first pointerenter writes it before any read), the
+  // document watcher while open.
+  const pointerRef = useRef<Point>({ x: 0, y: 0 })
+  // A departure close is pending; arming once per departure keeps pointer
+  // motion outside the card from deferring the close indefinitely.
+  const awayRef = useRef(false)
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const [copied, setCopied] = useState(false)
@@ -53,11 +76,21 @@ export function HoverCard({
 
   const close = useCallback(() => {
     copyEpochRef.current += 1
+    awayRef.current = false
     clearCopied()
     setOpen(false)
   }, [clearCopied])
 
-  const { arm: armClose, cancel: cancelClose } = usePointerGrace(close)
+  const { arm, cancel } = usePointerGrace(close)
+  const armClose = useCallback(() => {
+    if (awayRef.current) return
+    awayRef.current = true
+    arm()
+  }, [arm])
+  const cancelClose = useCallback(() => {
+    awayRef.current = false
+    cancel()
+  }, [cancel])
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -100,14 +133,52 @@ export function HoverCard({
       const top = r.top + h > window.innerHeight - 8 ? window.innerHeight - h - 8 : r.top
       setPos({ left: r.right + 8, top })
     }
-    place()
-    window.addEventListener('scroll', place, true)
-    window.addEventListener('resize', place)
-    return () => {
-      window.removeEventListener('scroll', place, true)
-      window.removeEventListener('resize', place)
+    // A resting pointer sees no boundary event when the anchor scrolls away
+    // beneath it (Chromium defers hover updates until scrolling ends), so
+    // the rest position decides against the moved anchor and card rects.
+    const track = () => {
+      place()
+      const wrapper = rootRef.current
+      const card = cardRef.current
+      /* v8 ignore next -- both are mounted before the listeners attach and die with them. */
+      if (wrapper === null || card === null) return
+      const point = pointerRef.current
+      if (inRect(wrapper.getBoundingClientRect(), point) || inRect(card.getBoundingClientRect(), point)) cancelClose()
+      else armClose()
     }
-  }, [open])
+    place()
+    window.addEventListener('scroll', track, true)
+    window.addEventListener('resize', track)
+    return () => {
+      window.removeEventListener('scroll', track, true)
+      window.removeEventListener('resize', track)
+    }
+  }, [open, armClose, cancelClose])
+
+  // Boundary events alone strand the card whenever the anchor parts from the
+  // pointer without the pointer crossing its edge: the row reorders under a
+  // resting pointer, the sidebar collapses, or focus moves to another window.
+  // While open, every pointer move is checked against the anchor and the
+  // card, and losing window focus closes outright.
+  useEffect(() => {
+    if (!open) return
+    const onMove = (e: PointerEvent) => {
+      pointerRef.current = { x: e.clientX, y: e.clientY }
+      const path = e.composedPath()
+      if (path.some(node => node === rootRef.current || node === cardRef.current)) cancelClose()
+      else armClose()
+    }
+    const closeNow = () => {
+      cancelClose()
+      close()
+    }
+    document.addEventListener('pointermove', onMove, true)
+    window.addEventListener('blur', closeNow)
+    return () => {
+      document.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('blur', closeNow)
+    }
+  }, [open, armClose, cancelClose, close])
 
   // The first placement ran before the card mounted (height read 0): once the
   // card's real height is measurable, correct the bottom-edge clamp. The
@@ -171,14 +242,26 @@ export function HoverCard({
     <span
       ref={rootRef}
       className={css.root}
-      onPointerEnter={() => {
+      onPointerEnter={(e) => {
+        pointerRef.current = { x: e.clientX, y: e.clientY }
         if (disabled) return
         // Coming back inside during the grace (the gap, or the card itself)
         // keeps the current card rather than restarting the dwell.
         cancelClose()
         if (open) return
         clearTimer()
-        timerRef.current = setTimeout(() => { setOpen(true) }, openDelayMs)
+        const wrapper = e.currentTarget
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null
+          // The anchor may have scrolled out from under a resting pointer
+          // during the dwell; a card beside a row nobody is pointing at
+          // would open stranded.
+          if (!inRect(wrapper.getBoundingClientRect(), pointerRef.current)) return
+          setOpen(true)
+        }, openDelayMs)
+      }}
+      onPointerMove={(e) => {
+        pointerRef.current = { x: e.clientX, y: e.clientY }
       }}
       onPointerLeave={() => {
         clearTimer()
