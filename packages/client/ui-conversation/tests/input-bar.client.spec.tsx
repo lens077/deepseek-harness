@@ -201,6 +201,7 @@ function bench(over?: BenchOptions) {
       return attachment === undefined ? [] : [attachment]
     }),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
+    setBusyEnter: (behavior) => { policy.setBusyEnter(behavior) },
     useBusyEnter: bindSnapshotSelector(busyEnter),
     useSendShortcut: bindSnapshotSelector(policy.sendShortcut),
     useNotices: bindSnapshotSelector(shell.notices),

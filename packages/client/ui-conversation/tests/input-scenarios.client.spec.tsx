@@ -136,6 +136,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
   actx.on('slash/input-consume-token', req => shell.consumeToken(req.guard) ? true : undefined)
   const wiring = shell
   const sessionStore = createSnapshotStore<SessionSnapshot>(sessionSnapshot(sessionId))
+  const busyEnter = createSnapshotStore<'queue' | 'steer'>('queue')
   const barProps: InputBarProps = {
     sessionId,
     SessionProvider: ({ children }) => children,
@@ -167,7 +168,8 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
       file: new File([Uint8Array.of(1)], `${id}.png`, { type: 'image/png' }),
       previewUrl: `blob:${id}`,
     })),
-    useBusyEnter: bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue')),
+    setBusyEnter: (behavior) => { busyEnter.set(behavior) },
+    useBusyEnter: bindSnapshotSelector(busyEnter),
     useSendShortcut: bindSnapshotSelector(createSnapshotStore<'enter'>('enter')),
     toggleCommandMenu: (selection) => {
       const snapshot = shell.snapshot

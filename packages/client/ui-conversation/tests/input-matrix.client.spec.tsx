@@ -47,6 +47,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     running: over?.running ?? false,
     removed: over?.disabled ?? false,
   })
+  const busyEnter = createSnapshotStore<'queue' | 'steer'>('queue')
   const props: InputBarProps = {
     sessionId: SID,
     SessionProvider: ({ children }) => children,
@@ -79,7 +80,8 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
       previewUrl: `blob:${id}`,
     })),
     toggleCommandMenu: vi.fn(),
-    useBusyEnter: bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue')),
+    setBusyEnter: (behavior) => { busyEnter.set(behavior) },
+    useBusyEnter: bindSnapshotSelector(busyEnter),
     useSendShortcut: bindSnapshotSelector(createSnapshotStore<'enter'>('enter')),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),

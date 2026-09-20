@@ -163,6 +163,7 @@ function mount(
   const useSession = bindSnapshotSelector(session)
   const conversation = createSnapshotStore<ConversationSnapshot>(EMPTY_CONVERSATION_SNAPSHOT)
   const useConversation = bindSnapshotSelector(conversation)
+  const busyEnter = createSnapshotStore<'queue' | 'steer'>('queue')
   const useSessionPendingInteraction = bindSnapshotSelector(
     createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),
   )
@@ -271,7 +272,8 @@ function mount(
           removeAttachment={() => {}}
           resolveDraftAttachments={() => []}
           toggleCommandMenu={vi.fn()}
-          useBusyEnter={bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue'))}
+          setBusyEnter={(behavior) => { busyEnter.set(behavior) }}
+          useBusyEnter={bindSnapshotSelector(busyEnter)}
           useSendShortcut={bindSnapshotSelector(createSnapshotStore<'enter'>('enter'))}
           useNotices={bindSnapshotSelector(wiring.notices)}
           useLexicon={bindSnapshotSelector(wiring.lexicon)}
