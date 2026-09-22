@@ -26,11 +26,16 @@ afterEach(async () => {
   await ctx.fiber.dispose()
 })
 
-function execute(rawName: string, args: Record<string, unknown> = {}) {
+function execute(
+  rawName: string,
+  args: Record<string, unknown> = {},
+  agent?: { readonly id: string },
+) {
   return ctx.tools.execute({
     name: `cua_driver_native__${rawName}`,
     callId: ToolCallId('native-test'),
     arguments: args,
+    ...(agent === undefined ? {} : { agent: agent as never }),
     signal: new AbortController().signal,
   })
 }
@@ -49,6 +54,24 @@ describe('Cua Driver native provider', () => {
     expect(ctx.computerUse.providerName).toBeUndefined()
     expect(fixture.shutdowns).toBe(1)
     expect(fixture.destroys).toBe(1)
+  })
+
+  it('routes each Agent through its own named Cua Driver session', async () => {
+    await ctx.plugin(NativeProvider)
+    const first = { id: 'session-one' }
+    const second = { id: 'session-two' }
+
+    await execute('click', { pid: 9, window_id: 7, session: 'shared' }, first)
+    await execute('click', { pid: 9, window_id: 7 }, second)
+    await execute('click', { pid: 9, window_id: 7 }, first)
+
+    expect(fixture.calls.map(call => call.args.session)).toEqual([
+      'dsh-session-one',
+      'dsh-session-two',
+      'dsh-session-one',
+    ])
+    await execute('check_permissions', {}, first)
+    expect(fixture.calls.at(-1)?.args.session).toBeUndefined()
   })
 
   it('rejects another provider before importing or creating a native runtime', async () => {

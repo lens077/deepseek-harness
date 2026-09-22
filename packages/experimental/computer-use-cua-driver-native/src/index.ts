@@ -34,6 +34,14 @@ const ToolCatalog = z.object({
 /** DeepSeek's function-name alphabet and maximum length are protocol constants. */
 const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/u
 
+function acceptsSession(inputSchema: Record<string, unknown>): boolean {
+  const properties = inputSchema.properties
+  return typeof properties === 'object'
+    && properties !== null
+    && !Array.isArray(properties)
+    && Object.hasOwn(properties, 'session')
+}
+
 const GUIDANCE = `Cua Driver native computer-use tools operate the host desktop. Discover the exact app and window, then get a fresh window snapshot before acting. Use element_token from that snapshot, or coordinates from its screenshot. A new snapshot of that window invalidates its earlier element tokens. Select either target or the legacy pid/window_id fields; do not combine them.
 
 Prefer background delivery. A refusal does not authorize a foreground retry. Verify the requested outcome from fresh state after an action; a delivered click alone does not prove the outcome. After cancellation, inspect current state before retrying because completed input is not rolled back. Other sessions and applications may change the same desktop.
@@ -100,6 +108,7 @@ export async function apply(ctx: Context): Promise<void> {
       }
       if (names.has(publicName)) throw new Error(`Cua Driver listed tool "${tool.name}" more than once`)
       names.add(publicName)
+      const sessionField = acceptsSession(tool.inputSchema)
       const definition = createMcpToolDefinition(inner, {
         name: publicName,
         rawName: tool.name,
@@ -109,7 +118,12 @@ export async function apply(ctx: Context): Promise<void> {
         async call(args, execution) {
           const combined = AbortSignal.any([execution.signal, lifetime.signal])
           combined.throwIfAborted()
-          const result = await activeDriver.callTool(tool.name, JSON.stringify(args), { signal: combined })
+          // The SDK's omitted session is transport-global. Bind model calls to
+          // the DSH Agent identity so forked Sessions do not reuse one driver run.
+          const routedArgs = execution.agent === undefined || !sessionField
+            ? args
+            : { ...args, session: `dsh-${String(execution.agent.id)}` }
+          const result = await activeDriver.callTool(tool.name, JSON.stringify(routedArgs), { signal: combined })
           combined.throwIfAborted()
           return JSON.parse(result.rawJson) as unknown
         },

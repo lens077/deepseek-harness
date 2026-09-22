@@ -58,7 +58,7 @@ env -u NODE_USE_ENV_PROXY DSH_COMPUTER_USE_NATIVE_E2E=1 node node_modules/vitest
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The provider reserves the shared computer-use registration before loading native code. A child plugin owns discovery, model tools, guidance, and the native runtime. The parent retains the registration until child teardown has removed tools, interrupted native calls and image-capability admission, awaited settlement, and completed native shutdown. Cancellation does not undo input already delivered to an application.
+The provider reserves the shared computer-use registration before loading native code. A child plugin owns discovery, model tools, guidance, and the native runtime. Agent-backed calls use a named Cua Driver session derived from the Agent id, so forked DSH Sessions do not reuse one implicit driver session. The parent retains the registration until child teardown has removed tools, interrupted native calls and image-capability admission, awaited settlement, and completed native shutdown. Cancellation does not undo input already delivered to an application.
 
 | File | Role |
 |---|---|
@@ -129,7 +129,7 @@ The package preserves the upstream driver's platform and application limits.
 
 - **Host permissions and graphics session** — npm installation does not grant desktop access or create a graphical session.
 - **Native cursor overlay** — a headless macOS Node host can receive `facility_unavailable` for overlay operations while screenshots and background input remain usable.
-- **Shared desktop** — the provider does not reserve windows or complete workflows for a Session. Other callers and applications can change the same desktop between calls.
+- **Shared desktop** — Agent-backed calls have separate Cua Driver session state, but the provider does not clone or reserve windows, browser profiles, or workflows for a DSH Session. Other callers and applications can change the same desktop between calls.
 - **Cancellation** — an aborted call can have delivered input already; inspect fresh state before retrying. The provider waits for SDK shutdown during unload but does not promise native action rollback.
 - **Failed shutdown** — if native shutdown fails, the registration remains occupied. Restart the host before mounting another computer-use provider.
 - **Experimental release** — tool schemas follow the pinned upstream SDK and have no DSH stability promise.

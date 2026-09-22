@@ -11,13 +11,13 @@ export const catalog = {
     {
       name: 'get_window_state',
       description: 'Capture a Cua Driver window screenshot.',
-      inputSchema: { type: 'object', properties: { pid: { type: 'integer' }, window_id: { type: 'integer' } }, required: ['pid', 'window_id'] },
+      inputSchema: { type: 'object', properties: { pid: { type: 'integer' }, window_id: { type: 'integer' }, session: { type: 'string' } }, required: ['pid', 'window_id'] },
       outputSchema: { type: 'object', properties: { window_id: { type: 'integer' }, clicked: { type: 'boolean' } }, required: ['window_id', 'clicked'] },
     },
     {
       name: 'click',
       description: 'Click the selected Cua Driver window.',
-      inputSchema: { type: 'object', properties: { pid: { type: 'integer' }, window_id: { type: 'integer' } }, required: ['pid', 'window_id'] },
+      inputSchema: { type: 'object', properties: { pid: { type: 'integer' }, window_id: { type: 'integer' }, session: { type: 'string' } }, required: ['pid', 'window_id'] },
     },
     {
       name: 'check_permissions',

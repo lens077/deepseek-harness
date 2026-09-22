@@ -19,7 +19,7 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeProvider from '../src/index.ts'
-import { resetFixture, screenshotBase64 } from './fixtures/cua-driver.ts'
+import { fixture, resetFixture, screenshotBase64 } from './fixtures/cua-driver.ts'
 
 vi.mock('@trycua/cua-driver', async () => import('./fixtures/cua-driver.ts'))
 
@@ -121,4 +121,5 @@ it('loads from cordis.yml and logs the native screenshot before the next model r
   })
   if (direct.isError) throw new Error('Programmatic native screenshot failed')
   expect(direct.value).toMatchObject({ structuredContent: { window_id: 7, clicked: false } })
+  expect(fixture.calls.at(-1)?.args.session).toBe('dsh-native-loader')
 })
