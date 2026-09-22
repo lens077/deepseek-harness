@@ -612,9 +612,13 @@
   font: var(--dsw-font-xs-13);
 }
 
+/* Three entries do not fit one line at the panel's width in every locale; a
+   whole entry drops to the next line rather than its label folding inside
+   the button. */
 .questionRemovalBar {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   padding: 0 4px;
@@ -626,6 +630,7 @@
   align-items: center;
   height: 28px;
   padding: 0 10px;
+  white-space: nowrap;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   color: var(--dsw-alias-label-primary);

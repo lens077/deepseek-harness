@@ -517,6 +517,50 @@ describe('question context removal', () => {
     expect(picks()).toEqual(['false', 'true', 'false'])
   })
 
+  it('sweeps from the row the gesture opened on when nothing was anchored yet', () => {
+    // Regression: with no anchor, every move recomputed the range as the hovered
+    // row alone, so a sweep from the fourth row to the first ended with only the
+    // first row picked.
+    renderFourRows()
+    fireEvent.pointerOver(rowContainer('第四个提问'))
+    fireEvent.keyDown(document, { key: 'Shift' })
+    expect(picks()).toEqual(['false', 'false', 'false', 'true'])
+    fireEvent.pointerOver(rowContainer('第二个提问'))
+    expect(picks()).toEqual(['false', 'true', 'false', 'true'])
+    fireEvent.pointerOver(rowContainer('第一个提问'))
+    expect(picks()).toEqual(['true', 'true', 'false', 'true'])
+    // The opening row is the anchor from then on: a Shift press on it while
+    // the sweep is live ranges to itself rather than unpicking it.
+    fireEvent.click(screen.getByTitle('第四个提问'), { shiftKey: true })
+    expect(picks()).toEqual(['true', 'true', 'false', 'true'])
+    fireEvent.keyUp(document, { key: 'Shift' })
+    expect(picks()).toEqual(['true', 'true', 'false', 'true'])
+  })
+
+  it('re-anchors a sweep on the hovered row when the old anchor is filtered away', () => {
+    const removal: QuestionRemovalProps = {
+      turnOfQuestion: new Map([['q1', 1], ['q2', 2], ['q3', 3], ['q4', 4]]),
+      removableTurns: new Set([1, 2, 3, 4]),
+      removedTurns: new Set(),
+      onRemoveTurns: vi.fn().mockResolvedValue(undefined),
+    }
+    renderNavigator({
+      questions: [question(1, 'alpha'), question(2, 'beta x'), question(3, 'gamma x'), question(4, 'delta x')],
+      removal,
+    })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByTitle('alpha'), { metaKey: true })
+    // The query hides the anchor row; the sweep opens on 'delta x' instead.
+    fireEvent.change(screen.getByPlaceholderText(zh['chat.questions.search']), { target: { value: 'x' } })
+    fireEvent.pointerOver(rowContainer('delta x'))
+    fireEvent.keyDown(document, { key: 'Shift' })
+    fireEvent.pointerOver(rowContainer('beta x'))
+    expect(picks()).toEqual(['true', 'true', 'true'])
+    fireEvent.keyUp(document, { key: 'Shift' })
+    // The hidden pick survived: four turns leave, not three.
+    expect(screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '4') })).toBeTruthy()
+  })
+
   it('cancels an open range with Escape, keeping the picks it started from', () => {
     renderFourRows()
     fireEvent.click(screen.getByTitle('第一个提问'), { metaKey: true })

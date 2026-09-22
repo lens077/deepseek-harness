@@ -322,11 +322,17 @@ export function QuestionNavigator({
     if (hoverSeq === null) return
     const hovered = removableTurnOfSeq(hoverSeq)
     if (hovered === undefined) return
+    // The row under the pointer when the gesture opens is its fixed end when
+    // no reachable anchor exists yet; without this the sweep would range from
+    // nothing and collapse to the hovered row alone at every move.
+    const anchorReachable = anchorSeq !== null && rows.some(row => row.seq === anchorSeq)
+    const from = anchorReachable ? anchorSeq : hoverSeq
+    if (!anchorReachable && rangeBase.current === null) setAnchorSeq(hoverSeq)
     setSelecting(true)
     setSelected((value) => {
       const base = rangeBase.current ?? value
       rangeBase.current = base
-      const range = anchorSeq === null ? [hovered] : rangeTurns(anchorSeq, hoverSeq)
+      const range = rangeTurns(from, hoverSeq)
       return new Set([...base, ...(range.length > 0 ? range : [hovered])])
     })
   }, [anchorSeq, hoverSeq, shiftHeld])
