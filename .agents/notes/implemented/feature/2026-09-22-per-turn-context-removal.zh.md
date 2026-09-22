@@ -18,7 +18,7 @@
 
 **执行器是 host 平面服务 `ctx.contextRemoval`**，位于 `packages/compaction/context-remove`。它像 `/compact` 一样在 `agent.runMaintenance` 内运行，用一次日志扫描和当前 surface 校验每个请求的回合，然后不让出控制地追加所有组：要么每组都落地，要么什么都不变。它拒绝未闭合的 compaction 括号、持久未结束的回合、未知或未完成的回合、已移除的回合，以及区间与其他历史共用 compaction 摘要的回合。会话控制器把它暴露为 `session.removeTurns`，把拒绝映射为 `session/agent-busy` 与 `session/turn-remove-unavailable`。
 
-**提问面板拥有选择。** Chat 提问面板新增逐行垃圾桶入口（单选）和带复选框行与一个移除按钮的选择模式（多选）；两者都在面板内联确认，因为面板在外部指针按下时关闭，面板外的确认会在指针下被关掉。回合仍在进行、未载入、已移除或已压缩的行不可选，提示说明原因。移除后 transcript 保留每一行：被移除回合的行通过流项上的 `data-context-removed` 以降低的不透明度渲染，一条标记行显示检查点落在何处。
+**提问面板拥有选择。** Chat 提问面板新增逐行垃圾桶入口（单选）和带复选框行、全选入口与一个移除按钮的选择模式（多选）；两者都走[确认对话框 Agent Note](2026-09-23-context-removal-confirmation-dialog.zh.md) 描述的居中确认对话框，该对话框存在期间还会暂停面板的外部按下关闭。回合仍在进行、未载入、已移除或已压缩的行不可选，提示说明原因。移除后 transcript 保留每一行：被移除回合的行通过流项上的 `data-context-removed` 以降低的不透明度渲染，一条标记行显示检查点落在何处。
 
 ## 考虑过的替代方案
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-22-per-turn-context-removal.md
-2026-09-22-per-turn-context-removal.md: 8ea0fd9b953ad57862b5852e081f2089a120ee83
-2026-09-22-per-turn-context-removal.zh.md: 352b0278ab68b81947cf77edc92042ac458f9cdc
+2026-09-22-per-turn-context-removal.md: d8429af256d0f34c635ba5a7ade19a5c41ca9e29
+2026-09-22-per-turn-context-removal.zh.md: fc0ae2a4bd4c7619980044eb38af67de83ee7e41

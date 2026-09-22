@@ -11,6 +11,20 @@
  * a question, the rail stays visible with search and stepping disabled so
  * load-all remains reachable.
  *
+ * Picking questions for removal works from the list itself: Cmd/Ctrl press
+ * adds one row, Shift press adds every removable row between the anchor and
+ * the pressed one, and merely holding Shift takes the range live so the
+ * hovered row joins the picks as the pointer moves. Either gesture enters
+ * selection mode, so the explicit mode toggle is a discoverable alternative
+ * rather than a required first step. Escape backs out one level at a time:
+ * an open range, then selection mode, then the panel.
+ *
+ * Removing questions from model context is confirmed in a centered modal
+ * dialog over the page, not in a strip above the list: the panel opens upward
+ * from the composer floor, so an inline confirmation displaces the rows it is
+ * asking about. Enter confirms and Escape cancels, and the panel's
+ * outside-press close is suspended while that dialog stands.
+ *
  * Back-to-bottom lives on this rail rather than in the scroll container so
  * every floating control shares one containing block: two anchors (a fixed
  * rail and a sticky slot inside the scroller) drift apart on narrow viewports
@@ -19,13 +33,15 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  IconCheckOutline14, IconChevronDownOutline14, IconChevronUpOutline14, IconDownloadOutline16,
-  IconLoadingOutline16, IconSearchOutline16, IconTrashOutline16,
+  Button, IconCheckOutline14, IconChevronDownOutline14, IconChevronUpOutline14, IconDownloadOutline16,
+  IconLoadingOutline16, IconSearchOutline16, IconTrashOutline16, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { SearchQuestions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { QuestionEntry } from './turn-summary.ts'
-import { filterLoadedQuestions, resolveHits, type QuestionSearchState } from './question-search.ts'
+import {
+  filterLoadedQuestions, resolveHits, type QuestionSearchResultRow, type QuestionSearchState,
+} from './question-search.ts'
 import css from './ChatView.module.css'
 
 function formatTime(time: number): string {
@@ -106,7 +122,17 @@ export function QuestionNavigator({
   // Multi-select lives only while the panel is open; a closed panel forgets it.
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set())
+  // Seq of the last row a pick addressed: the fixed end of a Shift range.
+  const [anchorSeq, setAnchorSeq] = useState<number | null>(null)
+  // Row the pointer last stood on, and whether Shift is down: together they
+  // are the moving end of a live range.
+  const [hoverSeq, setHoverSeq] = useState<number | null>(null)
+  const [shiftHeld, setShiftHeld] = useState(false)
   const [removalState, setRemovalState] = useState<RemovalState>({ kind: 'idle' })
+  // Picks held before the live range started. Non-null exactly while a range
+  // is open, which is what Escape can still take back; a released Shift
+  // commits by dropping it.
+  const rangeBase = useRef<ReadonlySet<number> | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const panelId = useId()
   // The column's height moves when its entries change (load-all arriving or
@@ -131,19 +157,25 @@ export function QuestionNavigator({
   // and becomes the displayed answer only when no host search is composed in.
   const local = useMemo(() => filterLoadedQuestions(questions, query), [query, questions])
 
+  // The removal dialog is portaled to the document body, so every press inside
+  // it lands outside the panel. Suspending the outside-press rule while a
+  // removal is open is what lets the dialog leave the panel at all.
+  const removalOpen = removalState.kind !== 'idle'
   useEffect(() => {
-    if (!open) return
+    if (!open || removalOpen) return
     const onPointer = (event: PointerEvent): void => {
       if (panelRef.current?.contains(event.target as Node) !== true) setOpen(false)
     }
     document.addEventListener('pointerdown', onPointer)
     return () => { document.removeEventListener('pointerdown', onPointer) }
-  }, [open])
+  }, [open, removalOpen])
 
   useEffect(() => {
     if (open) return
     setSelecting(false)
     setSelected(new Set())
+    setAnchorSeq(null)
+    setHoverSeq(null)
     setRemovalState({ kind: 'idle' })
   }, [open])
 
@@ -203,11 +235,126 @@ export function QuestionNavigator({
       setRemovalState({ kind: 'idle' })
       setSelected(new Set())
       setSelecting(false)
+      setAnchorSeq(null)
     }, (error: unknown) => {
       setRemovalState({ kind: 'failed', message: error instanceof Error ? error.message : String(error) })
     })
   }
+  const closeRemoval = (): void => { setRemovalState({ kind: 'idle' }) }
   const pendingTurns = removalState.kind === 'confirm' || removalState.kind === 'running' ? removalState.turns : null
+  const failureMessage = removalState.kind === 'failed' ? removalState.message : null
+
+  // Enter answers the open question; Escape and the mask cancel it through the
+  // dialog itself. A request already running answers neither, so a second
+  // Enter cannot send the same removal twice.
+  useEffect(() => {
+    if (removalState.kind !== 'confirm') return
+    const turns = removalState.turns
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Enter') return
+      event.preventDefault()
+      confirmRemoval(turns)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [removalState])
+
+  const rows = remote.kind === 'resolved' ? remote.hits : local
+
+  // A displayed row addresses a turn only while its question is loaded; an
+  // out-of-window search hit addresses none, which is why it offers neither
+  // removal nor a pick.
+  const turnOfRow = (row: QuestionSearchResultRow): number | undefined => {
+    const entry = row.index === undefined ? undefined : questions[row.index]
+    return entry === undefined ? undefined : turnOfQuestion.get(entry.key)
+  }
+  /** The turn a displayed row may hand to a removal, by that row's seq. */
+  const removableTurnOfSeq = (seq: number): number | undefined => {
+    const row = rows.find(candidate => candidate.seq === seq)
+    const turn = row === undefined ? undefined : turnOfRow(row)
+    return turn !== undefined && removableTurns.has(turn) ? turn : undefined
+  }
+  /**
+   * Removable turns of the displayed rows between two rows inclusive. The
+   * range follows the list as it stands, so a filtered list ranges over what
+   * the reader can actually see rather than over hidden history.
+   */
+  const rangeTurns = (fromSeq: number, toSeq: number): readonly number[] => {
+    const from = rows.findIndex(row => row.seq === fromSeq)
+    const to = rows.findIndex(row => row.seq === toSeq)
+    if (from < 0) return []
+    const [first, last] = from <= to ? [from, to] : [to, from]
+    return rows.slice(first, last + 1)
+      .map(turnOfRow)
+      .filter((turn): turn is number => turn !== undefined && removableTurns.has(turn))
+  }
+
+  // Shift is a held state, not only a click modifier: while it is down the
+  // panel tracks it so the hovered row can join the picks without a press.
+  // A lost keyup (focus leaving the window mid-gesture) would strand the
+  // range open, so blur releases it too.
+  useEffect(() => {
+    if (!open) return
+    const release = (): void => { setShiftHeld(false) }
+    const onKeyDown = (event: KeyboardEvent): void => { if (event.key === 'Shift') setShiftHeld(true) }
+    const onKeyUp = (event: KeyboardEvent): void => { if (event.key === 'Shift') release() }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', release)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', release)
+      release()
+    }
+  }, [open])
+
+  // Holding Shift over a row takes the range live: the hovered row and every
+  // removable row back to the anchor join the picks as the pointer moves,
+  // recomputed from the picks held when the gesture started so the range
+  // shrinks as readily as it grows. Releasing Shift commits it by forgetting
+  // that starting point.
+  useEffect(() => {
+    if (!shiftHeld) {
+      rangeBase.current = null
+      return
+    }
+    if (hoverSeq === null) return
+    const hovered = removableTurnOfSeq(hoverSeq)
+    if (hovered === undefined) return
+    setSelecting(true)
+    setSelected((value) => {
+      const base = rangeBase.current ?? value
+      rangeBase.current = base
+      const range = anchorSeq === null ? [hovered] : rangeTurns(anchorSeq, hoverSeq)
+      return new Set([...base, ...(range.length > 0 ? range : [hovered])])
+    })
+  }, [anchorSeq, hoverSeq, shiftHeld])
+
+  // Escape backs out one level at a time: it cancels an open range, then
+  // leaves selection mode, and only then closes the panel. While the removal
+  // dialog stands, Escape belongs to the dialog.
+  useEffect(() => {
+    if (!open || removalOpen) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      const base = rangeBase.current
+      if (base !== null) {
+        rangeBase.current = null
+        setSelected(base)
+        return
+      }
+      if (selecting) {
+        setSelecting(false)
+        setSelected(new Set())
+        setAnchorSeq(null)
+        return
+      }
+      setOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [open, removalOpen, selecting])
 
   // A complete lone question has nowhere to step or search, so the question
   // controls leave. An incomplete window keeps them mounted even before its
@@ -216,11 +363,10 @@ export function QuestionNavigator({
   const stepping = questions.length > 1 || hasMore || loadingAll
   if (!stepping && onToBottom === undefined) return null
 
-  // Which rows to show, and what the view is entitled to claim about them.
-  // `notice` is non-null exactly when the list on screen is not the whole
-  // truth, so an empty list is never left to speak for the session by itself.
+  // What the view is entitled to claim about the rows it shows: `notice` is
+  // non-null exactly when the list on screen is not the whole truth, so an
+  // empty list is never left to speak for the session by itself.
   const searching = remote.kind === 'searching'
-  const rows = remote.kind === 'resolved' ? remote.hits : local
   const notice = ((): string | null => {
     if (trimmed === '') return hasMore ? t('chat.questions.windowOnlyIdle') : null
     switch (remote.kind) {
@@ -240,6 +386,36 @@ export function QuestionNavigator({
     }
   })()
 
+  const visibleRemovable = [...new Set(
+    rows.map(turnOfRow).filter((turn): turn is number => turn !== undefined && removableTurns.has(turn)),
+  )]
+
+  // Cmd/Ctrl adds one row to the picks, Shift adds every removable row between
+  // the anchor and this one, and either enters selection mode: the reader
+  // never has to find the mode toggle first. A Shift press with no anchor yet,
+  // or one whose anchor a query has filtered away, picks the pressed row and
+  // becomes the new anchor.
+  const pickRow = (row: QuestionSearchResultRow, turn: number, ranged: boolean): void => {
+    const range = ranged && anchorSeq !== null ? rangeTurns(anchorSeq, row.seq) : []
+    setSelecting(true)
+    if (range.length > 0) {
+      setSelected(value => new Set([...value, ...range]))
+      return
+    }
+    toggleSelected(turn)
+    setAnchorSeq(row.seq)
+  }
+  const allVisibleSelected = visibleRemovable.length > 0 && visibleRemovable.every(turn => selected.has(turn))
+  // The dialog covers the panel, so it names the questions that are leaving
+  // rather than making the reader remember a selection it hides.
+  const pending = pendingTurns === null ? null : new Set(pendingTurns)
+  const pendingQuestions = pending === null
+    ? []
+    : questions.filter((entry) => {
+      const turn = turnOfQuestion.get(entry.key)
+      return turn !== undefined && pending.has(turn)
+    })
+
   return (
     <div className={css.questionNavigator} ref={panelRef}>
       {stepping && open && (
@@ -256,11 +432,10 @@ export function QuestionNavigator({
           {notice !== null && (
             <p className={css.questionSearchNotice} role="status" aria-live="polite">{notice}</p>
           )}
-          {/* Removal controls: the multi-select toggle, and while a request is
-              pending, the inline confirmation that names how many turns leave.
-              Confirmation stays inside the panel so the outside-pointer close
-              rule cannot dismiss it under the pointer. */}
-          {removableTurns.size > 0 && pendingTurns === null && removalState.kind !== 'failed' && (
+          {/* Removal controls: the multi-select toggle, the select-all entry
+              that makes a many-question removal one gesture, and the remove
+              button that opens the confirmation dialog. */}
+          {removableTurns.size > 0 && !removalOpen && (
             <div className={css.questionRemovalBar}>
               <button
                 type="button"
@@ -270,65 +445,94 @@ export function QuestionNavigator({
                 onClick={() => {
                   setSelecting(value => !value)
                   setSelected(new Set())
+                  setAnchorSeq(null)
                 }}
               >
                 {selecting ? t('chat.questions.selectCancel') : t('chat.questions.select')}
               </button>
+              {!selecting && (
+                <span className={css.questionSelectHint}>{t('chat.questions.selectHint')}</span>
+              )}
               {selecting && (
-                <button
-                  type="button"
-                  className={`${css.questionRemovalAction} ${css.questionRemovalPrimary}`}
-                  disabled={selected.size === 0}
-                  onClick={() => { requestRemoval([...selected].sort((left, right) => left - right)) }}
-                >
-                  <IconTrashOutline16 aria-hidden="true" />
-                  {t('chat.questions.removeSelected', { count: selected.size })}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className={css.questionRemovalAction}
+                    disabled={visibleRemovable.length === 0}
+                    onClick={() => { setSelected(allVisibleSelected ? new Set() : new Set(visibleRemovable)) }}
+                  >
+                    {allVisibleSelected ? t('chat.questions.selectNone') : t('chat.questions.selectAll')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${css.questionRemovalAction} ${css.questionRemovalPrimary}`}
+                    disabled={selected.size === 0}
+                    onClick={() => { requestRemoval([...selected].sort((left, right) => left - right)) }}
+                  >
+                    <IconTrashOutline16 aria-hidden="true" />
+                    {t('chat.questions.removeSelected', { count: selected.size })}
+                  </button>
+                </>
               )}
             </div>
           )}
+          {/* The decision is a centered dialog over a mask, not a strip above
+              the list: the panel stands at the composer floor, where a strip
+              pushes the list it describes out from under the pointer. Enter
+              confirms, Escape and the mask cancel. */}
           {pendingTurns !== null && (
-            <div className={css.questionRemovalConfirm} role="alertdialog" aria-live="assertive">
-              <p>{t('chat.questions.removeConfirm', { count: pendingTurns.length })}</p>
-              <div className={css.questionRemovalBar}>
-                <button
-                  type="button"
-                  className={`${css.questionRemovalAction} ${css.questionRemovalPrimary}`}
-                  disabled={removing}
-                  aria-busy={removing || undefined}
-                  onClick={() => { confirmRemoval(pendingTurns) }}
-                >
-                  {removing ? t('chat.questions.removing') : t('chat.questions.removeConfirmYes')}
-                </button>
-                <button
-                  type="button"
-                  className={css.questionRemovalAction}
-                  disabled={removing}
-                  onClick={() => { setRemovalState({ kind: 'idle' }) }}
-                >
-                  {t('chat.questions.removeConfirmNo')}
-                </button>
-              </div>
-            </div>
+            <Modal
+              open
+              onClose={closeRemoval}
+              dismissable={!removing}
+              title={t('chat.questions.removeConfirmTitle')}
+              closeLabel={t('close')}
+              description={t('chat.questions.removeConfirm', { count: pendingTurns.length })}
+              footer={(
+                <>
+                  <Button variant="outline" disabled={removing} onClick={closeRemoval}>
+                    {t('chat.questions.removeConfirmNo')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={css.questionRemovalDanger}
+                    disabled={removing}
+                    aria-busy={removing || undefined}
+                    autoFocus
+                    onClick={() => { confirmRemoval(pendingTurns) }}
+                  >
+                    {removing ? t('chat.questions.removing') : t('chat.questions.removeConfirmYes')}
+                  </Button>
+                </>
+              )}
+            >
+              <ul className={css.questionRemovalList}>
+                {pendingQuestions.map(entry => <li key={entry.key}>{entry.text}</li>)}
+              </ul>
+              <p className={css.questionRemovalHint}>{t('chat.questions.removeConfirmHint')}</p>
+            </Modal>
           )}
-          {removalState.kind === 'failed' && (
-            <div className={css.questionRemovalConfirm} role="alert">
-              <p>{t('chat.questions.removeFailed', { message: removalState.message })}</p>
-              <div className={css.questionRemovalBar}>
-                <button
-                  type="button"
-                  className={css.questionRemovalAction}
-                  onClick={() => { setRemovalState({ kind: 'idle' }) }}
-                >
-                  {t('chat.questions.removeConfirmNo')}
-                </button>
-              </div>
-            </div>
+          {failureMessage !== null && (
+            <Modal
+              open
+              onClose={closeRemoval}
+              title={t('chat.questions.removeConfirmTitle')}
+              closeLabel={t('close')}
+              footer={<Button variant="outline" onClick={closeRemoval}>{t('close')}</Button>}
+            >
+              <p className={css.questionRemovalFailure} role="alert">
+                {t('chat.questions.removeFailed', { message: failureMessage })}
+              </p>
+            </Modal>
           )}
-          <div className={css.questionList} aria-busy={searching || undefined}>
+          <div
+            className={css.questionList}
+            aria-busy={searching || undefined}
+            // The pointer left every row, so no row is the range's moving end.
+            onPointerLeave={() => { setHoverSeq(null) }}
+          >
             {rows.map((row) => {
-              const entry = row.index === undefined ? undefined : questions[row.index]
-              const turn = entry === undefined ? undefined : turnOfQuestion.get(entry.key)
+              const turn = turnOfRow(row)
               const removed = turn !== undefined && removedTurns.has(turn)
               const removableTurn = turn !== undefined && removableTurns.has(turn) ? turn : undefined
               const removable = removableTurn !== undefined
@@ -344,6 +548,10 @@ export function QuestionNavigator({
                   data-current={row.index === current || undefined}
                   data-removed={removed || undefined}
                   data-selected={checked || undefined}
+                  // pointerover, not pointerenter: it bubbles from the row's
+                  // own children, so crossing the trash entry keeps the row
+                  // under the pointer as the range's moving end.
+                  onPointerOver={() => { setHoverSeq(row.seq) }}
                 >
                   <button
                     type="button"
@@ -352,9 +560,17 @@ export function QuestionNavigator({
                     aria-checked={selecting ? checked : undefined}
                     disabled={selecting && !removable}
                     title={selecting && !removable && !removed ? t('chat.questions.notRemovable') : row.text}
-                    onClick={() => {
+                    onClick={(event) => {
+                      const modified = event.metaKey || event.ctrlKey || event.shiftKey
+                      if (modified) {
+                        // A row that cannot leave model history answers no
+                        // pick, so the modifier press does nothing rather
+                        // than jumping the transcript under the reader.
+                        if (removableTurn !== undefined) pickRow(row, removableTurn, event.shiftKey)
+                        return
+                      }
                       if (selecting) {
-                        if (turn !== undefined) toggleSelected(turn)
+                        if (removableTurn !== undefined) pickRow(row, removableTurn, false)
                         return
                       }
                       navigate()

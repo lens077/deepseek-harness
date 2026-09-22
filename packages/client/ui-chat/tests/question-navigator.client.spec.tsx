@@ -6,7 +6,7 @@
  * search panel shows says what it covers, so an empty result never speaks
  * for the whole session on the loaded window's authority alone.
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UserMessageNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -267,6 +267,15 @@ describe('question context removal', () => {
     }
   }
 
+  /** The centered removal dialog, told apart from the panel by its own title. */
+  function queryConfirmDialog(): HTMLElement | null {
+    return screen.queryByRole('dialog', { name: zh['chat.questions.removeConfirmTitle'] })
+  }
+
+  function confirmDialog(): HTMLElement {
+    return screen.getByRole('dialog', { name: zh['chat.questions.removeConfirmTitle'] })
+  }
+
   function rowOf(text: string): HTMLElement {
     const row = screen.getByText(text).closest('[data-current], div:has(> button[title])')
     if (!(row instanceof HTMLElement)) throw new Error(`no row for ${text}`)
@@ -280,7 +289,7 @@ describe('question context removal', () => {
     expect(screen.queryByRole('button', { name: zh['chat.questions.removeOne'] })).toBeNull()
   })
 
-  it('removes one question through its row entry after an inline confirmation', async () => {
+  it('removes one question through its row entry after confirming in the centered dialog', async () => {
     const removal = removalProps()
     renderNavigator({ removal })
     fireEvent.click(searchEntry())
@@ -288,24 +297,70 @@ describe('question context removal', () => {
     const entries = screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })
     expect(entries).toHaveLength(2)
     fireEvent.click(entries[1]!)
-    expect(screen.getByRole('alertdialog').textContent).toContain(
-      zh['chat.questions.removeConfirm'].replace('{count}', '1'),
-    )
+    // The dialog names the count, the exact question leaving, and the keys.
+    const dialog = confirmDialog()
+    expect(dialog.textContent).toContain(zh['chat.questions.removeConfirm'].replace('{count}', '1'))
+    expect(dialog.textContent).toContain('第二个提问')
+    expect(dialog.textContent).not.toContain('第一个提问')
+    expect(dialog.textContent).toContain(zh['chat.questions.removeConfirmHint'])
     expect(removal.onRemoveTurns).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    fireEvent.click(within(dialog).getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
     expect(removal.onRemoveTurns).toHaveBeenCalledWith([2])
     await screen.findByRole('button', { name: zh['chat.questions.select'] })
-    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(queryConfirmDialog()).toBeNull()
   })
 
-  it('cancels a pending confirmation without calling the host', () => {
+  it('cancels a pending confirmation without calling the host, leaving the panel open', () => {
     const removal = removalProps()
     renderNavigator({ removal })
     fireEvent.click(searchEntry())
     fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
-    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmNo'] }))
-    expect(screen.queryByRole('alertdialog')).toBeNull()
+    fireEvent.click(within(confirmDialog()).getByRole('button', { name: zh['chat.questions.removeConfirmNo'] }))
+    expect(queryConfirmDialog()).toBeNull()
     expect(removal.onRemoveTurns).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: zh['chat.questions.history'] })).toBeTruthy()
+  })
+
+  it('confirms with Enter and cancels with Escape', () => {
+    const removal = removalProps()
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(queryConfirmDialog()).toBeNull()
+    expect(removal.onRemoveTurns).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    // A key that decides nothing leaves the request standing.
+    fireEvent.keyDown(document, { key: 'a' })
+    expect(removal.onRemoveTurns).not.toHaveBeenCalled()
+    fireEvent.keyDown(document, { key: 'Enter' })
+    expect(removal.onRemoveTurns).toHaveBeenCalledWith([1])
+  })
+
+  it('keeps the panel open while the dialog stands, though the dialog sits outside it', () => {
+    renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    // The dialog is portaled to the body, so its own presses are "outside" the
+    // panel; the panel must not close under them and take the dialog with it.
+    fireEvent.pointerDown(confirmDialog())
+    expect(confirmDialog()).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: zh['chat.questions.history'] })).toBeTruthy()
+  })
+
+  it('answers nothing twice while the removal runs', () => {
+    const removal = removalProps({ onRemoveTurns: vi.fn().mockReturnValue(new Promise(() => {})) })
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    fireEvent.click(within(confirmDialog()).getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    const running = within(confirmDialog()).getByRole('button', { name: zh['chat.questions.removing'] })
+    expect((running as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.keyDown(document, { key: 'Enter' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(removal.onRemoveTurns).toHaveBeenCalledOnce()
+    expect(confirmDialog()).toBeTruthy()
   })
 
   it('multi-selects removable rows as checkboxes and removes them together', async () => {
@@ -327,11 +382,191 @@ describe('question context removal', () => {
     expect(boxes[1]!.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(boxes[1]!)
     fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '2') }))
-    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    const dialog = confirmDialog()
+    expect(dialog.textContent).toContain(zh['chat.questions.removeConfirm'].replace('{count}', '2'))
+    expect(dialog.textContent).toContain('第一个提问')
+    expect(dialog.textContent).toContain('第二个提问')
+    fireEvent.click(within(dialog).getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
     expect(removal.onRemoveTurns).toHaveBeenCalledWith([1, 2])
     // Success leaves selection mode.
     await screen.findByRole('button', { name: zh['chat.questions.select'] })
     expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
+  it('picks every removable row on screen at once, and clears the picks again', () => {
+    const removal = removalProps()
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.selectAll'] }))
+    // The running third turn is not removable, so select-all leaves it alone.
+    expect(screen.getAllByRole('checkbox').map(box => box.getAttribute('aria-checked')))
+      .toEqual(['true', 'true', 'false'])
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.selectNone'] }))
+    expect(screen.getAllByRole('checkbox').map(box => box.getAttribute('aria-checked')))
+      .toEqual(['false', 'false', 'false'])
+  })
+
+  it('offers no select-all when no row on screen can be removed', () => {
+    renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.select'] }))
+    fireEvent.change(screen.getByPlaceholderText(zh['chat.questions.search']), { target: { value: '第三' } })
+    const all = screen.getByRole('button', { name: zh['chat.questions.selectAll'] }) as HTMLButtonElement
+    expect(all.disabled).toBe(true)
+  })
+
+  /** Checked state of every row, in list order. */
+  function picks(): (string | null)[] {
+    return screen.getAllByRole('checkbox').map(box => box.getAttribute('aria-checked'))
+  }
+
+  it('enters selection from a ⌘/Ctrl press on a row, and toggles that one pick', () => {
+    const { props } = renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    expect(screen.getByText(zh['chat.questions.selectHint'])).toBeTruthy()
+    fireEvent.click(screen.getByTitle('第一个提问'), { metaKey: true })
+    // The press picks instead of navigating, and the mode toggle was skipped.
+    expect(props.onSelect).not.toHaveBeenCalled()
+    expect(picks()).toEqual(['true', 'false', 'false'])
+    fireEvent.click(screen.getByTitle('第二个提问'), { ctrlKey: true })
+    expect(picks()).toEqual(['true', 'true', 'false'])
+    fireEvent.click(screen.getByTitle('第二个提问'), { metaKey: true })
+    expect(picks()).toEqual(['true', 'false', 'false'])
+  })
+
+  it('takes every removable row between the anchor and a Shift press', () => {
+    const removal: QuestionRemovalProps = {
+      turnOfQuestion: new Map([['q1', 1], ['q2', 2], ['q3', 3], ['q4', 4]]),
+      // The third turn is still running, so a range steps over it.
+      removableTurns: new Set([1, 2, 4]),
+      removedTurns: new Set(),
+      onRemoveTurns: vi.fn().mockResolvedValue(undefined),
+    }
+    renderNavigator({ questions: [...QUESTIONS, question(4, '第四个提问')], removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByTitle('第一个提问'), { metaKey: true })
+    fireEvent.click(screen.getByTitle('第四个提问'), { shiftKey: true })
+    expect(picks()).toEqual(['true', 'true', 'false', 'true'])
+    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '3') }))
+    fireEvent.click(within(confirmDialog()).getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    expect(removal.onRemoveTurns).toHaveBeenCalledWith([1, 2, 4])
+  })
+
+  it('treats a Shift press with no reachable anchor as a single pick', () => {
+    renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    // Nothing anchors the range yet.
+    fireEvent.click(screen.getByTitle('第二个提问'), { shiftKey: true })
+    expect(picks()).toEqual(['false', 'true', 'false'])
+
+    // An anchor the query filtered away cannot end a range either, so the
+    // press picks its own row and becomes the new anchor.
+    fireEvent.change(screen.getByPlaceholderText(zh['chat.questions.search']), { target: { value: '第一' } })
+    fireEvent.click(screen.getByTitle('第一个提问'), { shiftKey: true })
+    expect(picks()).toEqual(['true'])
+    expect(screen.getByRole('button', { name: zh['chat.questions.removeSelected'].replace('{count}', '2') })).toBeTruthy()
+  })
+
+  /** The row container the pointer events go to, addressed by its question text. */
+  function rowContainer(text: string): HTMLElement {
+    const row = screen.getByText(text).closest('button')?.parentElement
+    if (!(row instanceof HTMLElement)) throw new Error(`no row for ${text}`)
+    return row
+  }
+
+  function renderFourRows(): QuestionRemovalProps {
+    const removal: QuestionRemovalProps = {
+      turnOfQuestion: new Map([['q1', 1], ['q2', 2], ['q3', 3], ['q4', 4]]),
+      // The third turn is still running, so a range steps over it.
+      removableTurns: new Set([1, 2, 4]),
+      removedTurns: new Set(),
+      onRemoveTurns: vi.fn().mockResolvedValue(undefined),
+    }
+    renderNavigator({ questions: [...QUESTIONS, question(4, '第四个提问')], removal })
+    fireEvent.click(searchEntry())
+    return removal
+  }
+
+  it('takes the range live while Shift is held, following the hovered row', () => {
+    renderFourRows()
+    fireEvent.click(screen.getByTitle('第一个提问'), { metaKey: true })
+    fireEvent.pointerOver(rowContainer('第四个提问'))
+    fireEvent.keyDown(document, { key: 'Shift' })
+    // The hovered row is picked with the range that reaches it.
+    expect(picks()).toEqual(['true', 'true', 'false', 'true'])
+    // Sweeping back shrinks the range: it recomputes from the picks the
+    // gesture started with rather than accumulating everything crossed.
+    fireEvent.pointerOver(rowContainer('第二个提问'))
+    expect(picks()).toEqual(['true', 'true', 'false', 'false'])
+    // Releasing Shift commits, so a later Escape cannot take it back.
+    fireEvent.keyUp(document, { key: 'Shift' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
+  it('enters selection from a held Shift alone, with the hovered row as the pick', () => {
+    const { props } = renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.pointerOver(rowContainer('第二个提问'))
+    fireEvent.keyDown(document, { key: 'Shift' })
+    expect(picks()).toEqual(['false', 'true', 'false'])
+    expect(props.onSelect).not.toHaveBeenCalled()
+    // A hovered row that cannot be removed adds nothing.
+    fireEvent.pointerOver(rowContainer('第三个提问'))
+    expect(picks()).toEqual(['false', 'true', 'false'])
+  })
+
+  it('cancels an open range with Escape, keeping the picks it started from', () => {
+    renderFourRows()
+    fireEvent.click(screen.getByTitle('第一个提问'), { metaKey: true })
+    fireEvent.pointerOver(rowContainer('第四个提问'))
+    fireEvent.keyDown(document, { key: 'Shift' })
+    expect(picks()).toEqual(['true', 'true', 'false', 'true'])
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // Back to the pick held before the sweep, still in selection mode.
+    expect(picks()).toEqual(['true', 'false', 'false', 'false'])
+  })
+
+  it('backs Escape out one level at a time: range, then selection, then the panel', () => {
+    renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByTitle('第一个提问'), { metaKey: true })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // No range was open, so this leaves selection mode and drops the picks.
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.getByRole('dialog', { name: zh['chat.questions.history'] })).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: zh['chat.questions.history'] })).toBeNull()
+  })
+
+  it('leaves Escape to the removal dialog while it stands', () => {
+    renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // The dialog closed and the panel stayed: one Escape, one level.
+    expect(queryConfirmDialog()).toBeNull()
+    expect(screen.getByRole('dialog', { name: zh['chat.questions.history'] })).toBeTruthy()
+  })
+
+  it('ignores a modifier press on a row that cannot be removed', () => {
+    const { props } = renderNavigator({ removal: removalProps() })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getByTitle('第三个提问'), { metaKey: true })
+    fireEvent.click(screen.getByTitle('第三个提问'), { shiftKey: true })
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('names in the dialog only the questions whose turns are leaving', () => {
+    // A question whose turn the window holds no boundary for is never listed.
+    const removal = removalProps({ turnOfQuestion: new Map([['q1', 1], ['q2', 2]]) })
+    renderNavigator({ removal })
+    fireEvent.click(searchEntry())
+    fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[0]!)
+    const listed = within(confirmDialog()).getAllByRole('listitem').map(item => item.textContent)
+    expect(listed).toEqual(['第一个提问'])
   })
 
   it('leaves selection mode with its picks when cancelled, and forgets it when the panel closes', () => {
@@ -353,10 +588,10 @@ describe('question context removal', () => {
     renderNavigator({ removal })
     fireEvent.click(searchEntry())
     fireEvent.click(screen.getAllByRole('button', { name: zh['chat.questions.removeOne'] })[1]!)
-    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
+    fireEvent.click(within(confirmDialog()).getByRole('button', { name: zh['chat.questions.removeConfirmYes'] }))
     expect((await screen.findByRole('alert')).textContent).toContain('turn 2 has not completed')
     expect(screen.getAllByText(/提问$/)).toHaveLength(3)
-    fireEvent.click(screen.getByRole('button', { name: zh['chat.questions.removeConfirmNo'] }))
+    fireEvent.click(within(confirmDialog()).getAllByRole('button', { name: commonZh['close'] })[1]!)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 

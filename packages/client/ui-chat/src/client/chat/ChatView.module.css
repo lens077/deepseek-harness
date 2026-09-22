@@ -649,21 +649,56 @@
   border-color: var(--dsw-alias-state-error-primary);
 }
 
-.questionRemovalConfirm {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+/* The modifier hint stands beside the mode toggle it makes optional, and
+   clips rather than wrapping the bar's buttons onto a second line. */
+.questionSelectHint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.questionRemovalConfirm > p {
+/* Confirmation dialog body: the questions that leave, then the key hint. The
+   list scrolls on its own so a wide multi-selection never grows the card past
+   the viewport. */
+.questionRemovalList {
+  max-height: 180px;
   margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.questionRemovalList > li {
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 5px 0;
   color: var(--dsw-alias-label-secondary);
   font: var(--dsw-font-xs-13);
   line-height: 18px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.questionRemovalHint,
+.questionRemovalFailure {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+  line-height: 18px;
+}
+
+.questionRemovalFailure {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.questionRemovalDanger:not(:disabled) {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
 }
 
 .questionNumber {
