@@ -31,11 +31,11 @@ Users switch the color scheme and content font size from two rows in Settings (G
 
 The plugin registers Appearance preference cubes and a font-size stepper in the General section. The stepper accepts integer values from 12 through 17 px and defaults to 14 px. It changes conversation headings and base text by the same increment, including the user bubble and composer draft; flow-row titles, summaries, and tables follow one step under the body size, while small text and code keep fixed sizes. Each accepted change writes through the Host settings API. Rapid changes serialize in gesture order with namespace revisions, and a rejected latest write reloads the durable values. Non-loopback pages keep both choices process-local.
 
-### Phone appearance
+### Layout presentation
 
-General settings also provides independent phone preferences: `mobileLayout` accepts `large`, `medium` (default), or `small`; `mobileFontSize` accepts integer CSS-pixel values from 12 through 22 and defaults to 16. Changing density preserves the phone font size, and neither preference changes desktop `fontSize`. The theme-owned presentation observable supplies the root's `data-mobile-layout`, phone typography variables, and the cross-viewport `pureUi` switch. Pure UI hides Session chrome and folds the composer behind a floating action button while keeping the current question readable at the top of the transcript.
+The Layout page provides independent desktop and phone densities. `desktopLayout` and `mobileLayout` each accept `large`, `medium` (default), or `small`; `mobileFontSize` accepts integer CSS-pixel values from 12 through 22 and defaults to 16. Density changes preserve phone font size and desktop conversation `fontSize`. The theme-owned presentation observable supplies the root's desktop and phone density attributes, phone typography variables, and the cross-viewport `pureUi` switch. Pure UI hides Session chrome and folds the composer behind a floating action button while keeping the current question readable at the top of the transcript.
 
-Host-backed scopes persist these values in `ui-theme`. Memory-mode remote browsers persist only the phone preferences in origin-local browser storage under `dsh.mobile.appearance`; invalid stored values reset to schema defaults. This browser-local persistence does not change the process-local policy for remote desktop appearance.
+Host-backed scopes persist these values in `ui-theme`. Memory-mode remote browsers persist the presentation preferences in origin-local browser storage under `dsh.mobile.appearance`; invalid stored values reset to schema defaults. This browser-local persistence does not change the process-local policy for the color theme and desktop conversation font size.
 
 ### Registering a theme
 

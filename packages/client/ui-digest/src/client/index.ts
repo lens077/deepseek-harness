@@ -77,7 +77,7 @@ export type { ProjectDocumentResult, ProjectTodosRemote, ProjectTodosView } from
 export type { ProjectSettingsView } from './project-settings.ts'
 export type { NavSettingsView } from './nav-settings-policy.ts'
 export type { PinsSettingsView } from './pins-settings-policy.ts'
-export type { DigestSettings, NavBadgeState } from '../nav-settings.ts'
+export type { CardAction, DigestSettings, NavBadgeState } from '../nav-settings.ts'
 export type { SessionPinsSettings } from '../pins-settings.ts'
 export type { ToggleShortcut } from '../toggle-shortcut.ts'
 export { createDigestStore } from './stores.ts'
@@ -199,6 +199,7 @@ export function apply(ctx: ClientContext): void {
         setNavFinishedBadge: show => navSettings.setNavFinishedBadge(show),
         setNavBadgeOrder: order => navSettings.setNavBadgeOrder(order),
         setToggleShortcut: shortcut => navSettings.setToggleShortcut(shortcut),
+        setEnterAction: action => navSettings.setEnterAction(action),
       }),
     }, DigestSettingsSection))
 
@@ -208,7 +209,7 @@ export function apply(ctx: ClientContext): void {
     settingsCtx.slots.inject('settings.section', () => settingsCtx.slots.register({
       name: 'settings.section',
       id: 'project-todos',
-      // Below the shipped sections and the conversation-layout page (40).
+      // Below the shipped Settings sections.
       order: 45,
       locale: NS,
       label: () => translate('settings.nav'),

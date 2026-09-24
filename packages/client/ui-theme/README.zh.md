@@ -31,11 +31,11 @@ kind: "package-reference"
 
 插件在「通用」分区注册外观偏好方块与字号步进器。步进器接受 12 至 17 px 的整数，默认值为 14 px。它以相同增量调整会话标题与基础文本，包括用户气泡与 composer 草稿；流内行的标题、摘要与表格跟随比正文低一档的字号，小号文本和代码保持固定字号。每次通过的变更都经 Host settings API 写入。连续快速变更按操作顺序携带命名空间 revision 串行写入，最新写入被拒时重新加载持久值。非 loopback 页面把两个选择都保留在进程内。
 
-### 手机外观
+### 布局显示
 
-通用设置还提供独立的手机偏好：`mobileLayout` 接受 `large`、`medium`（默认）或 `small`；`mobileFontSize` 接受 12 至 22 的整数 CSS 像素值，默认 16。改变密度会保留手机字号，两项偏好都不改变桌面 `fontSize`。主题持有的展示可观察状态提供根节点的 `data-mobile-layout`、手机排版变量以及跨设备生效的 `pureUi` 开关。纯净 UI 会隐藏会话顶部栏，把输入框收进右下角浮动按钮，同时在会话顶部保留当前提问，方便阅读。
+「布局」页提供相互独立的桌面与手机密度。`desktopLayout` 和 `mobileLayout` 均接受 `large`、`medium`（默认）或 `small`；`mobileFontSize` 接受 12 至 22 的整数 CSS 像素值，默认 16。改变密度会保留手机字号与桌面对话 `fontSize`。主题持有的展示可观察状态提供根节点的桌面和手机密度属性、手机排版变量以及跨设备生效的 `pureUi` 开关。纯净 UI 会隐藏会话顶部栏，把输入框收进右下角浮动按钮，同时在会话顶部保留当前提问，方便阅读。
 
-Host-backed scope 将这些值持久化到 `ui-theme`。使用 memory 模式的远程浏览器仅将手机偏好保存在同源浏览器存储的 `dsh.mobile.appearance` 中；无效存储值重置为 schema 默认值。这种浏览器本地持久化不改变远程桌面外观仅保留在进程内的策略。
+Host-backed scope 将这些值持久化到 `ui-theme`。使用 memory 模式的远程浏览器将展示偏好保存在同源浏览器存储的 `dsh.mobile.appearance` 中；无效存储值重置为 schema 默认值。这种浏览器本地持久化不改变配色主题与桌面对话字号仅保留在进程内的策略。
 
 ### 注册主题
 

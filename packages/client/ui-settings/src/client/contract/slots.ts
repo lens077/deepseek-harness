@@ -87,10 +87,21 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * layer and every registrant already depends on it for `ctx.settingsScope`.
      */
     'settings.general.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /**
+     * One preference row inside the Layout section. Feature plugins own their
+     * row copy, state, and write path; the shell only orders and stacks rows.
+     */
+    'settings.layout.item': { kind: 'list'; scope: 'root'; owner: SettingsLayoutItemOwnerProps }
   }
 }
 /** Owner share of a General preference row (the section supplies nothing). */
 export interface SettingsGeneralItemOwnerProps {
+  /** Marker field: item owner props are intentionally empty. */
+  children?: never
+}
+
+/** Owner share of a Layout preference row (the section supplies nothing). */
+export interface SettingsLayoutItemOwnerProps {
   /** Marker field: item owner props are intentionally empty. */
   children?: never
 }

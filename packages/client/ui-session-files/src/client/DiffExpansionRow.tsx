@@ -20,7 +20,7 @@ export interface DiffExpansionRowInjected {
 
 /** Full Settings-row props. */
 export type DiffExpansionRowProps =
-  PropsRuntime<'settings.conversation-layout.item'>
+  PropsRuntime<'settings.layout.item'>
   & PropsLocale<typeof NS>
   & InjectFace<DiffExpansionRowInjected>
 

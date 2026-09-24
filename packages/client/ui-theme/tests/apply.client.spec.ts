@@ -19,7 +19,8 @@ import type { createAppearanceRowStore, createFontSizeRowStore } from '../src/cl
 // so browser-language detection never runs and a fresh LocaleRuntime opens on
 // FALLBACK_LOCALE (en); bench stages zh explicitly on the locale instead.
 
-const SLOT = 'settings.general.item'
+const GENERAL_SLOT = 'settings.general.item'
+const LAYOUT_SLOT = 'settings.layout.item'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -63,7 +64,13 @@ async function bench(isLoopback = true) {
 /** Stand in for the settings shell: declare the General item slot from root. */
 function declareItems(slots: SlotRegistry): () => void {
   return slots.register(
-    { name: 'root', children: { [SLOT]: { kind: 'list', scope: 'root' } } } as never,
+    {
+      name: 'root',
+      children: {
+        [GENERAL_SLOT]: { kind: 'list', scope: 'root' },
+        [LAYOUT_SLOT]: { kind: 'list', scope: 'root' },
+      },
+    } as never,
     () => null,
   )
 }
@@ -71,7 +78,7 @@ function declareItems(slots: SlotRegistry): () => void {
 /** Mirror the framework's inject choreography: bake a real instance from the
  * declared handle and hand its actions to the entry's inject factory. */
 function faceOf(slots: SlotRegistry) {
-  const entry = slots.entries(SLOT).find(e => e.component === AppearanceRow)!
+  const entry = slots.entries(GENERAL_SLOT).find(e => e.component === AppearanceRow)!
   const handle = entry.store as ReturnType<typeof createAppearanceRowStore>
   const instance = handle.create()
   const face = (entry.inject as unknown as (a: typeof instance.actions) => AppearanceRowInjected)(instance.actions)
@@ -80,7 +87,7 @@ function faceOf(slots: SlotRegistry) {
 
 /** The same choreography for the font-size row entry. */
 function fontSizeFaceOf(slots: SlotRegistry) {
-  const entry = slots.entries(SLOT).find(e => e.component === FontSizeRow)!
+  const entry = slots.entries(GENERAL_SLOT).find(e => e.component === FontSizeRow)!
   const handle = entry.store as ReturnType<typeof createFontSizeRowStore>
   const instance = handle.create()
   const face = (entry.inject as unknown as (a: typeof instance.actions) => FontSizeRowInjected)(instance.actions)
@@ -100,22 +107,23 @@ describe('ui-theme apply', () => {
     expect(before.locale.bind(SETTINGS_NS)('fontSize.title')).toBe('字号大小')
     before.locale.setLocale('en')
     expect(before.locale.bind(SETTINGS_NS)('appearance.title')).toBe('Appearance')
-    const entry = before.slots.entries(SLOT).find(e => e.component === AppearanceRow)!
+    const entry = before.slots.entries(GENERAL_SLOT).find(e => e.component === AppearanceRow)!
     expect(entry.options).toMatchObject({ id: 'appearance', order: 10 })
-    const fontEntry = before.slots.entries(SLOT).find(e => e.component === FontSizeRow)!
+    const fontEntry = before.slots.entries(GENERAL_SLOT).find(e => e.component === FontSizeRow)!
     expect(fontEntry.options).toMatchObject({ id: 'font-size', order: 11 })
     expect(fontEntry.locale).toBe(SETTINGS_NS)
-    const pureEntry = before.slots.entries(SLOT).find(e => e.component === PureUiRow)!
+    const pureEntry = before.slots.entries(LAYOUT_SLOT).find(e => e.component === PureUiRow)!
     expect(pureEntry.options).toMatchObject({ id: 'pure-ui', order: 9 })
+    expect(before.slots.entries(LAYOUT_SLOT)).toHaveLength(2)
 
     const after = await bench()
     const fiber = after.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(after.slots.entries(SLOT)).toHaveLength(0)
+    expect(after.slots.entries(GENERAL_SLOT)).toHaveLength(0)
     declareItems(after.slots)
     await Promise.resolve()
-    expect(after.slots.entries(SLOT).some(e => e.component === AppearanceRow)).toBe(true)
-    expect(after.slots.entries(SLOT).some(e => e.component === FontSizeRow)).toBe(true)
+    expect(after.slots.entries(GENERAL_SLOT).some(e => e.component === AppearanceRow)).toBe(true)
+    expect(after.slots.entries(GENERAL_SLOT).some(e => e.component === FontSizeRow)).toBe(true)
   })
 
   it('projects service snapshots into the row store and routes face writes back', async () => {
@@ -130,7 +138,7 @@ describe('ui-theme apply', () => {
     // The inject-time re-sync sealed the init window: the mirror is current.
     expect(instance.getSnapshot().preference).toBe('dark')
     // Copy rides the standard locale seat: the entry declares the namespace.
-    expect(b.slots.entries(SLOT).find(e => e.component === AppearanceRow)!.locale).toBe(SETTINGS_NS)
+    expect(b.slots.entries(GENERAL_SLOT).find(e => e.component === AppearanceRow)!.locale).toBe(SETTINGS_NS)
 
     face.setTheme('system')
     expect(theme.getTheme().preference).toBe('system')
@@ -221,17 +229,19 @@ describe('ui-theme apply', () => {
     const b = await bench()
     const host = declareItems(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries(SLOT)).toHaveLength(4)
+    expect(b.slots.entries(GENERAL_SLOT)).toHaveLength(2)
+    expect(b.slots.entries(LAYOUT_SLOT)).toHaveLength(2)
 
     // Collapse: the declarer dies, the cascade removes our entries while the
     // apply closure still holds its (now stale) disposers.
     host()
-    expect(b.slots.entries(SLOT)).toHaveLength(0)
+    expect(b.slots.entries(GENERAL_SLOT)).toHaveLength(0)
+    expect(b.slots.entries(LAYOUT_SLOT)).toHaveLength(0)
 
     declareItems(b.slots)
     await Promise.resolve()
-    expect(b.slots.entries(SLOT).some(e => e.component === AppearanceRow)).toBe(true)
-    expect(b.slots.entries(SLOT).some(e => e.component === FontSizeRow)).toBe(true)
+    expect(b.slots.entries(GENERAL_SLOT).some(e => e.component === AppearanceRow)).toBe(true)
+    expect(b.slots.entries(GENERAL_SLOT).some(e => e.component === FontSizeRow)).toBe(true)
   })
 
   it('teardown removes the rows and the dictionaries; teardown without a declaration is quiet', async () => {
@@ -239,9 +249,11 @@ describe('ui-theme apply', () => {
     declareItems(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(b.slots.entries(SLOT)).toHaveLength(4)
+    expect(b.slots.entries(GENERAL_SLOT)).toHaveLength(2)
+    expect(b.slots.entries(LAYOUT_SLOT)).toHaveLength(2)
     await fiber.dispose()
-    expect(b.slots.entries(SLOT)).toHaveLength(0)
+    expect(b.slots.entries(GENERAL_SLOT)).toHaveLength(0)
+    expect(b.slots.entries(LAYOUT_SLOT)).toHaveLength(0)
     // Dictionary disposal: translation falls back to the bare key.
     expect(b.locale.bind(SETTINGS_NS)('appearance.title')).toBe('appearance.title')
 
@@ -250,6 +262,6 @@ describe('ui-theme apply', () => {
     const f2 = quiet.ctx.plugin({ inject: [...inject], apply })
     await f2.await()
     await f2.dispose()
-    expect(quiet.slots.entries(SLOT)).toHaveLength(0)
+    expect(quiet.slots.entries(GENERAL_SLOT)).toHaveLength(0)
   })
 })

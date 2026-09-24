@@ -3,7 +3,9 @@ import { useId } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { MOBILE_FONT_SIZE_MAX, MOBILE_FONT_SIZE_MIN, MOBILE_LAYOUTS, type MobileLayout } from '../theme-settings.ts'
+import {
+  MOBILE_FONT_SIZE_MAX, MOBILE_FONT_SIZE_MIN, MOBILE_LAYOUTS, type DesktopLayout, type MobileLayout,
+} from '../theme-settings.ts'
 import type { MobileAppearance } from './mobile-appearance.ts'
 import css from './MobileAppearanceRows.module.css'
 
@@ -12,9 +14,10 @@ export interface MobileAppearanceRowsInjected {
   hooks: { mobileAppearance: ObservableSnapshot<MobileAppearance> }
   setMobileFontSize: (fontSize: number) => void
   setMobileLayout: (layout: MobileLayout) => void
+  setDesktopLayout: (layout: DesktopLayout) => void
 }
 
-type MobileAppearanceRowsProps = PropsRuntime<'settings.general.item'>
+type MobileAppearanceRowsProps = PropsRuntime<'settings.layout.item'>
   & PropsLocale<'settings.theme'> & InjectFace<MobileAppearanceRowsInjected>
 
 /**
@@ -22,8 +25,10 @@ type MobileAppearanceRowsProps = PropsRuntime<'settings.general.item'>
  * @param props - framework-bound theme settings props.
  * @returns the phone settings group, hidden in the desktop layout.
  */
-export function MobileAppearanceRows({ useMobileAppearance, setMobileFontSize, setMobileLayout, t }: MobileAppearanceRowsProps) {
-  const { mobileLayout: layout, mobileFontSize: fontSize } = useMobileAppearance(value => value)
+export function MobileAppearanceRows({
+  useMobileAppearance, setMobileFontSize, setMobileLayout, setDesktopLayout, t,
+}: MobileAppearanceRowsProps) {
+  const { desktopLayout, mobileLayout, mobileFontSize: fontSize } = useMobileAppearance(value => value)
   const id = useId()
   return (
     <section className={css.group} aria-labelledby={`${id}-title`} data-mobile-appearance>
@@ -32,10 +37,23 @@ export function MobileAppearanceRows({ useMobileAppearance, setMobileFontSize, s
         <p className={css.description}>{t('mobile.description')}</p>
       </div>
       <fieldset className={css.layouts}>
+        <legend className={css.label}>{t('desktop.layout')}</legend>
+        {MOBILE_LAYOUTS.map(value => (
+          <label className={css.option} key={value}>
+            <input type="radio" name={`${id}-desktop-layout`} value={value} checked={desktopLayout === value}
+              onChange={() => { setDesktopLayout(value) }} />
+            <span className={css.optionText}>
+              <span className={css.label}>{t(`desktop.layout.${value}`)}</span>
+              <span className={css.description}>{t(`desktop.layout.${value}.description`)}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className={css.layouts}>
         <legend className={css.label}>{t('mobile.layout')}</legend>
         {MOBILE_LAYOUTS.map(value => (
           <label className={css.option} key={value}>
-            <input type="radio" name={`${id}-layout`} value={value} checked={layout === value}
+            <input type="radio" name={`${id}-mobile-layout`} value={value} checked={mobileLayout === value}
               onChange={() => { setMobileLayout(value) }} />
             <span className={css.optionText}>
               <span className={css.label}>{t(`mobile.layout.${value}`)}</span>

@@ -11,7 +11,6 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { EMPTY_CHAT_SNAPSHOT } from '@deepseek-ai/dsh-client-ui-chat/client'
-import { ConversationLayoutSection } from '../src/client/ConversationLayoutSection.tsx'
 import { DelegationFiles, type DelegationFilesInjected } from '../src/client/DelegationFiles.tsx'
 import { DiffExpansionRow, type DiffExpansionRowInjected } from '../src/client/DiffExpansionRow.tsx'
 import { FilesVisibilityRow, type FilesVisibilityRowInjected } from '../src/client/FilesVisibilityRow.tsx'
@@ -68,7 +67,7 @@ function declare(slots: SlotRegistry, chat = true): () => void {
       'conversation.session.rail': { kind: 'single', scope: 'session' },
       'tool.call.tail': { kind: 'list', scope: 'session' },
       ...(chat ? { 'conversation.chat.node': { kind: 'keyed', scope: 'session' } } : {}),
-      'settings.section': { kind: 'list', scope: 'root' },
+      'settings.layout.item': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -123,7 +122,7 @@ describe('session-files browser plugin', () => {
     try {
       expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(0)
       expect(b.slots.entries('conversation.session.rail')).toHaveLength(0)
-      expect(b.slots.entries('settings.section')).toHaveLength(1)
+      expect(b.slots.entries('settings.layout.item')).toHaveLength(2)
       declaration()
       declaration = declare(b.slots)
       expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(1)
@@ -163,13 +162,9 @@ describe('session-files browser plugin', () => {
     expect(b.slots.entries('tool.call.tail')).toHaveLength(0)
   })
 
-  it('registers the Conversation-layout section and writes the expansion preference through its row', async () => {
+  it('registers Layout rows and writes the expansion preference through its row', async () => {
     const b = await bench()
-    const section = b.slots.entries('settings.section')[0]
-    expect(section?.component).toBe(ConversationLayoutSection)
-    expect(section?.options).toMatchObject({ id: 'conversation-layout', order: 40 })
-
-    const rows = b.slots.entries('settings.conversation-layout.item')
+    const rows = b.slots.entries('settings.layout.item')
     expect(rows.map(entry => [entry.options.id, entry.component])).toEqual([
       ['session-files-visibility', FilesVisibilityRow],
       ['session-files-diff-expansion', DiffExpansionRow],
@@ -183,12 +178,12 @@ describe('session-files browser plugin', () => {
     expect(b.ctx.chatFileDiffs.expansion.getSnapshot()).toBe('single')
 
     await b.fiber.dispose()
-    expect(b.slots.entries('settings.section')).toHaveLength(0)
+    expect(b.slots.entries('settings.layout.item')).toHaveLength(0)
   })
 
   it('releases both seats while the preference says hide, and retakes them on show', async () => {
     const b = await bench()
-    const row = b.slots.entries('settings.conversation-layout.item')
+    const row = b.slots.entries('settings.layout.item')
       .find(entry => entry.options.id === 'session-files-visibility')
     const face = (row?.inject as unknown as () => FilesVisibilityRowInjected)()
     expect(face.hooks.filesVisibility.getSnapshot()).toBe('show')
@@ -201,7 +196,7 @@ describe('session-files browser plugin', () => {
     // Conversation content is unaffected: the delegation chips keep their seat,
     // and the settings rows stay so the choice can be reversed.
     expect(b.slots.entries('tool.call.tail')).toHaveLength(1)
-    expect(b.slots.entries('settings.conversation-layout.item')).toHaveLength(2)
+    expect(b.slots.entries('settings.layout.item')).toHaveLength(2)
 
     face.setFilesVisibility('show')
     await vi.waitFor(() => {
@@ -216,7 +211,7 @@ describe('session-files browser plugin', () => {
     })
     await b.fiber.dispose()
     expect(b.slots.entries('conversation.session.tabs.leading')).toHaveLength(0)
-    expect(b.slots.entries('settings.conversation-layout.item')).toHaveLength(0)
+    expect(b.slots.entries('settings.layout.item')).toHaveLength(0)
   })
 
   it('shares one rail preference between the control and the pane', async () => {

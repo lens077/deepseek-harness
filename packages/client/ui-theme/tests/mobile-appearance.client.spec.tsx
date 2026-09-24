@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** Phone appearance persistence, desktop isolation, and accessible live controls. */
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentProps } from 'react'
 import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
@@ -14,7 +14,14 @@ import { en } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup(); localStorage.clear() })
 
-const defaults = { preference: 'system', fontSize: 14, mobileFontSize: 16, mobileLayout: 'medium', pureUi: false }
+const defaults = {
+  preference: 'system', fontSize: 14, mobileFontSize: 16,
+  mobileLayout: 'medium', desktopLayout: 'medium', pureUi: false,
+}
+
+const defaultAppearance = {
+  mobileFontSize: 16, mobileLayout: 'medium', desktopLayout: 'medium', pureUi: false,
+}
 
 describe('phone appearance preferences', () => {
   it('defaults phone settings independently of the existing desktop preference', () => {
@@ -24,6 +31,7 @@ describe('phone appearance preferences', () => {
     // @ts-expect-error -- Serialized settings can contain nonnumeric font values.
     for (const mobileFontSize of [11, 23, 16.5, '18']) expect(() => ThemeSettingsSchema({ mobileFontSize })).toThrow()
     for (const mobileLayout of ['large', 'medium', 'small'] as const) expect(ThemeSettingsSchema({ mobileLayout }).mobileLayout).toBe(mobileLayout)
+    for (const desktopLayout of ['large', 'medium', 'small'] as const) expect(ThemeSettingsSchema({ desktopLayout }).desktopLayout).toBe(desktopLayout)
     // @ts-expect-error -- Serialized settings can contain an unsupported layout id.
     expect(() => ThemeSettingsSchema({ mobileLayout: 'compact' })).toThrow()
     expect(ThemeSettingsSchema({ pureUi: true }).pureUi).toBe(true)
@@ -40,18 +48,25 @@ describe('phone appearance preferences', () => {
     mobile.setFontSize(20)
     mobile.setLayout('large')
     mobile.setLayout('small')
+    mobile.setDesktopLayout('large')
     mobile.setPureUi(true)
-    expect(mobile.appearance.getSnapshot()).toEqual({ mobileFontSize: 20, mobileLayout: 'small', pureUi: true })
+    expect(mobile.appearance.getSnapshot()).toEqual({
+      mobileFontSize: 20, mobileLayout: 'small', desktopLayout: 'large', pureUi: true,
+    })
     expect(theme.getTheme()).toBe(desktop)
-    expect(host.set.mock.calls).toEqual([['mobileFontSize', 20], ['mobileLayout', 'large'], ['mobileLayout', 'small'], ['pureUi', true]])
+    expect(host.set.mock.calls).toEqual([
+      ['mobileFontSize', 20], ['mobileLayout', 'large'], ['mobileLayout', 'small'],
+      ['desktopLayout', 'large'], ['pureUi', true],
+    ])
     mobile.setFontSize(20)
     mobile.setLayout('small')
+    mobile.setDesktopLayout('large')
     mobile.setPureUi(true)
-    expect(host.set).toHaveBeenCalledTimes(4)
+    expect(host.set).toHaveBeenCalledTimes(5)
     host.publish({ value: ThemeSettingsSchema({ mobileFontSize: 18, mobileLayout: 'medium', fontSize: 17 }) })
-    expect(mobile.appearance.getSnapshot()).toEqual({ mobileFontSize: 18, mobileLayout: 'medium', pureUi: false })
+    expect(mobile.appearance.getSnapshot()).toEqual({ ...defaultAppearance, mobileFontSize: 18 })
     expect(theme.getTheme().fontSize).toBe(17)
-    expect(host.set).toHaveBeenCalledTimes(4)
+    expect(host.set).toHaveBeenCalledTimes(5)
     const accepted = mobile.appearance.getSnapshot()
     host.publish({ revision: 2 })
     expect(mobile.appearance.getSnapshot()).toBe(accepted)
@@ -64,18 +79,22 @@ describe('phone appearance preferences', () => {
     first.setFontSize(19)
     first.setLayout('small')
     first.setPureUi(true)
-    expect(JSON.parse(localStorage.getItem('dsh.mobile.appearance')!)).toEqual({ mobileFontSize: 19, mobileLayout: 'small', pureUi: true })
-    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 19, mobileLayout: 'small', pureUi: true })
+    expect(JSON.parse(localStorage.getItem('dsh.mobile.appearance')!)).toEqual({
+      mobileFontSize: 19, mobileLayout: 'small', desktopLayout: 'medium', pureUi: true,
+    })
+    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({
+      mobileFontSize: 19, mobileLayout: 'small', desktopLayout: 'medium', pureUi: true,
+    })
     expect(host.set).not.toHaveBeenCalled()
     const localHost = stubSettingsScope<ThemeSettings>()
-    expect(new MobileAppearancePolicy(localHost.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false })
+    expect(new MobileAppearancePolicy(localHost.scope).appearance.getSnapshot()).toEqual(defaultAppearance)
   })
 
   it('validates browser-stored phone fields before using them', () => {
     const host = stubSettingsScope<ThemeSettings>()
     host.publish({ mode: 'memory', status: 'unavailable' })
     localStorage.setItem('dsh.mobile.appearance', JSON.stringify({ mobileFontSize: 100, mobileLayout: 'unknown' }))
-    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false })
+    expect(new MobileAppearancePolicy(host.scope).appearance.getSnapshot()).toEqual(defaultAppearance)
   })
 
   it('shows three labeled layouts and preserves a chosen font while switching density', () => {
@@ -87,13 +106,18 @@ describe('phone appearance preferences', () => {
       useMobileAppearance,
       setMobileFontSize: (value: number) => { policy.setFontSize(value) },
       setMobileLayout: (value: ThemeSettings['mobileLayout']) => { policy.setLayout(value) },
+      setDesktopLayout: (value: ThemeSettings['desktopLayout']) => { policy.setDesktopLayout(value) },
       t: makeTranslate(en),
     } as ComponentProps<typeof MobileAppearanceRows>
     const view = render(<MobileAppearanceRows {...props} />)
-    expect(view.getByRole('radio', { name: /^Medium/ }).getAttribute('checked')).not.toBeNull()
+    const phone = view.getByRole('group', { name: 'Phone layout' })
+    const desktop = view.getByRole('group', { name: 'Desktop layout' })
+    expect(within(phone).getByRole('radio', { name: /^Medium/ }).getAttribute('checked')).not.toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Increase mobile font size' }))
-    fireEvent.click(view.getByRole('radio', { name: /^Large/ }))
-    fireEvent.click(view.getByRole('radio', { name: /^Small/ }))
+    fireEvent.click(within(phone).getByRole('radio', { name: /^Large/ }))
+    fireEvent.click(within(phone).getByRole('radio', { name: /^Small/ }))
+    fireEvent.click(within(desktop).getByRole('radio', { name: /^Spacious/ }))
+    expect(policy.appearance.getSnapshot().desktopLayout).toBe('large')
     expect(view.getByText('17 px')).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: 'Decrease mobile font size' }))
     expect(view.getByText('16 px')).toBeTruthy()

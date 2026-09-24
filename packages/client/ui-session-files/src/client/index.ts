@@ -19,7 +19,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // the registration below typechecks against the seat ui-tool declares.
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { segmentLabel, sessionFilesOf, type SessionFilesSnapshot } from './session-files.ts'
-import { ConversationLayoutSection } from './ConversationLayoutSection.tsx'
 import { FilesVisibilityRow, type FilesVisibilityRowInjected } from './FilesVisibilityRow.tsx'
 import { RailVisibilityPolicy } from './rail-visibility.ts'
 import { SessionFilesRailController } from './rail-store.ts'
@@ -59,8 +58,6 @@ export { SessionTreeController } from './tree-controller.ts'
 export type { SessionTreeEntry, SessionTreeState, SubagentApi } from './tree-controller.ts'
 export { DiffExpansionPolicy, SectionFieldPolicy } from './diff-expansion.ts'
 export { RailVisibilityPolicy } from './rail-visibility.ts'
-export { ConversationLayoutSection } from './ConversationLayoutSection.tsx'
-export type { ConversationLayoutItemOwnerProps, ConversationLayoutSectionProps } from './ConversationLayoutSection.tsx'
 export { FilesVisibilityRow, type FilesVisibilityRowInjected } from './FilesVisibilityRow.tsx'
 export { DiffExpansionRow, type DiffExpansionRowInjected } from './DiffExpansionRow.tsx'
 export { DelegationFiles, childSessionOf } from './DelegationFiles.tsx'
@@ -154,19 +151,8 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'conversation-layout',
-    // Below every shipped section (General 0, Models 10, Plugins 15, Agent
-    // presets 20) and the installed vision bundle (30): a tuning page, not a
-    // daily destination.
-    order: 40,
-    locale: NS,
-    label: () => t('settings.layout.nav'),
-    children: { 'settings.conversation-layout.item': { kind: 'list', scope: 'root' } },
-  }, ConversationLayoutSection))
-  ctx.slots.inject('settings.conversation-layout.item', () => ctx.slots.register({
-    name: 'settings.conversation-layout.item',
+  ctx.slots.inject('settings.layout.item', () => ctx.slots.register({
+    name: 'settings.layout.item',
     id: 'session-files-visibility',
     // The whole-surface switch reads before the per-diff behavior below it.
     order: 10,
@@ -176,8 +162,8 @@ export function apply(ctx: ClientContext): void {
       setFilesVisibility: (visibility) => { visibilityPolicy.set(visibility) },
     }),
   }, FilesVisibilityRow))
-  ctx.slots.inject('settings.conversation-layout.item', () => ctx.slots.register({
-    name: 'settings.conversation-layout.item',
+  ctx.slots.inject('settings.layout.item', () => ctx.slots.register({
+    name: 'settings.layout.item',
     id: 'session-files-diff-expansion',
     order: 20,
     locale: NS,

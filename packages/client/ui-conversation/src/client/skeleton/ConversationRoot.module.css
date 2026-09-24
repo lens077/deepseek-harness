@@ -20,8 +20,8 @@
      adaptive clamp and no draggable width handles. */
   --dsh-chat-content-width: 100%;
   --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
-  --dsh-composer-side-clearance: 16px;
-  --dsh-composer-dock-inset: 8px;
+  --dsh-composer-side-clearance: var(--dsh-desktop-composer-clearance, 16px);
+  --dsh-composer-dock-inset: var(--dsh-desktop-composer-dock-inset, 8px);
 }
 
 /* Adaptive mode (Settings-owned opt-in): W adapts to the column, not the
@@ -43,7 +43,9 @@
 .header {
   position: relative;
   flex: none;
-  padding: 12px 28px 0 20px;
+  padding: var(--dsh-desktop-header-block-start, 12px)
+    var(--dsh-desktop-header-inline-end, 28px) 0
+    var(--dsh-desktop-header-inline-start, 20px);
   border-bottom: 1px solid transparent;
 }
 
@@ -191,7 +193,7 @@
   position: relative;
   z-index: 1;
   display: flex;
-  gap: 36px;
+  gap: var(--dsh-desktop-tab-gap, 36px);
   margin-top: 4px;
   padding-left: 8px;
 }
@@ -341,7 +343,7 @@
 .composerStack {
   /* Horizontal geometry (card width, clearance, dock inset) rides the shared
      .root variables above so takeover siblings match the stack. */
-  --dsh-composer-stack-gap: 6px;
+  --dsh-composer-stack-gap: var(--dsh-desktop-composer-stack-gap, 6px);
 
   display: flex;
   flex-direction: column;

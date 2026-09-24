@@ -20,7 +20,7 @@ export interface PureUiRowInjected {
 
 /** Full component props: runtime share + locale seat + injected face. */
 export type PureUiRowComponentProps =
-  PropsRuntime<'settings.general.item'> & PropsLocale<'settings.theme'> & InjectFace<PureUiRowInjected>
+  PropsRuntime<'settings.layout.item'> & PropsLocale<'settings.theme'> & InjectFace<PureUiRowInjected>
 
 /**
  * Render the pure-UI row.

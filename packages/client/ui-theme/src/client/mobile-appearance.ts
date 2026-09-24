@@ -2,28 +2,38 @@
 import { createSnapshotStore, type ObservableSnapshot, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  DEFAULT_MOBILE_FONT_SIZE, DEFAULT_MOBILE_LAYOUT, DEFAULT_PURE_UI, MOBILE_FONT_SIZE_FIELD, MOBILE_LAYOUT_FIELD,
-  PURE_UI_FIELD, ThemeSettingsSchema, type MobileLayout, type ThemeSettings,
+  DEFAULT_DESKTOP_LAYOUT, DEFAULT_MOBILE_FONT_SIZE, DEFAULT_MOBILE_LAYOUT, DEFAULT_PURE_UI, DESKTOP_LAYOUT_FIELD,
+  MOBILE_FONT_SIZE_FIELD, MOBILE_LAYOUT_FIELD, PURE_UI_FIELD, ThemeSettingsSchema, type DesktopLayout, type MobileLayout,
+  type ThemeSettings,
 } from '../theme-settings.ts'
 
 /**
  * Presentation values consumed by the root frame and the settings rows.
- * `mobileFontSize` and `mobileLayout` apply below the phone breakpoint only;
- * `pureUi` applies to every viewport.
+ * Phone typography and density apply below the phone breakpoint; desktop
+ * density applies above it, while `pureUi` applies to every viewport.
  */
-export type MobileAppearance = Pick<ThemeSettings, 'mobileFontSize' | 'mobileLayout' | 'pureUi'>
+export type MobileAppearance = Pick<ThemeSettings, 'mobileFontSize' | 'mobileLayout' | 'desktopLayout' | 'pureUi'>
 
 const INITIAL: MobileAppearance = {
-  mobileFontSize: DEFAULT_MOBILE_FONT_SIZE, mobileLayout: DEFAULT_MOBILE_LAYOUT, pureUi: DEFAULT_PURE_UI,
+  mobileFontSize: DEFAULT_MOBILE_FONT_SIZE,
+  mobileLayout: DEFAULT_MOBILE_LAYOUT,
+  desktopLayout: DEFAULT_DESKTOP_LAYOUT,
+  pureUi: DEFAULT_PURE_UI,
 }
 
 function pick(section: ThemeSettings): MobileAppearance {
-  return { mobileFontSize: section.mobileFontSize, mobileLayout: section.mobileLayout, pureUi: section.pureUi }
+  return {
+    mobileFontSize: section.mobileFontSize,
+    mobileLayout: section.mobileLayout,
+    desktopLayout: section.desktopLayout,
+    pureUi: section.pureUi,
+  }
 }
 
 function same(left: MobileAppearance, right: MobileAppearance): boolean {
   return left.mobileFontSize === right.mobileFontSize
     && left.mobileLayout === right.mobileLayout
+    && left.desktopLayout === right.desktopLayout
     && left.pureUi === right.pureUi
 }
 
@@ -67,6 +77,17 @@ export class MobileAppearancePolicy {
     if (current.mobileLayout === layout) return
     this.source.set({ ...current, mobileLayout: layout })
     if (this.host.getSnapshot().mode === 'host') void this.host.set(MOBILE_LAYOUT_FIELD, layout)
+  }
+
+  /**
+   * Change desktop density without changing the independently chosen phone density.
+   * @param layout - desktop layout density.
+   */
+  setDesktopLayout(layout: DesktopLayout): void {
+    const current = this.source.getSnapshot()
+    if (current.desktopLayout === layout) return
+    this.source.set({ ...current, desktopLayout: layout })
+    if (this.host.getSnapshot().mode === 'host') void this.host.set(DESKTOP_LAYOUT_FIELD, layout)
   }
 
   /**

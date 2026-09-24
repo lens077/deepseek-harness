@@ -9,6 +9,7 @@ import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/d
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
+import { LayoutSection } from '../src/client/LayoutSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
 
@@ -22,7 +23,6 @@ const SEATS = [
   ['settings.header', HeaderContent],
   ['settings.action', SettingsDocumentAction],
   ['settings.close', CloseLabel],
-  ['settings.section', GeneralSection],
 ] as const
 
 async function bench(isLoopback = true) {
@@ -77,6 +77,10 @@ function generalEntry(slots: SlotRegistry) {
   return slots.entries('settings.section').find(e => e.component === GeneralSection)
 }
 
+function layoutEntry(slots: SlotRegistry) {
+  return slots.entries('settings.section').find(e => e.component === LayoutSection)
+}
+
 describe('ui-settings-general apply', () => {
   it('declares the services it uses', () => {
     expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'remote.settings', 'settingsScope'])
@@ -95,6 +99,10 @@ describe('ui-settings-general apply', () => {
     expect(resolveSlotLabel(entry.options.label)).toBe('通用设置')
     expect(before.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
     expect(before.slots.entries('settings.general.item')).toEqual([])
+    const layout = layoutEntry(before.slots)!
+    expect(layout.options).toMatchObject({ id: 'layout', order: 5 })
+    expect(resolveSlotLabel(layout.options.label)).toBe('布局')
+    expect(before.slots.spec('settings.layout.item')).toEqual({ kind: 'list', scope: 'root' })
     // The onboarding hole stays declared for feature-owned steps; this plugin
     // no longer seats one.
     expect(before.slots.entries('settings.onboarding')).toEqual([])

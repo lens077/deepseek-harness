@@ -20,7 +20,7 @@ export interface FilesVisibilityRowInjected {
 
 /** Full Settings-row props. */
 export type FilesVisibilityRowProps =
-  PropsRuntime<'settings.conversation-layout.item'>
+  PropsRuntime<'settings.layout.item'>
   & PropsLocale<typeof NS>
   & InjectFace<FilesVisibilityRowInjected>
 

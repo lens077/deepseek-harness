@@ -38,6 +38,7 @@ function mount({
   onboardingActive = true,
   rows = [
     { id: 'general', order: 0, label: 'General' },
+    { id: 'layout', order: 5, label: 'Layout' },
     { id: 'models', order: 10, label: 'Models' },
     { id: 'agent-presets', order: 20, label: 'Agent presets' },
   ],
@@ -260,6 +261,7 @@ describe('SettingsPanel navigation', () => {
     mount({
       rows: [
         { id: 'general', order: 0, label: 'General' },
+        { id: 'layout', order: 5, label: 'Layout' },
         { id: 'models', order: 10, label: 'Models' },
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
         { id: 'plugins', order: 30, label: 'Plugins' },
@@ -270,12 +272,12 @@ describe('SettingsPanel navigation', () => {
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Vision tools', 'Conversation layout', 'Contributed']
+    const glyphs = ['General', 'Layout', 'Models', 'Agent presets', 'Plugins', 'Vision tools', 'Conversation layout', 'Contributed']
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    expect(new Set(glyphs.slice(0, 4)).size).toBe(4)
-    expect(glyphs.slice(4)).toEqual([glyphs[0], glyphs[0], glyphs[0]])
+    expect(new Set(glyphs.slice(0, 5)).size).toBe(5)
+    expect(glyphs.slice(5)).toEqual([glyphs[0], glyphs[0], glyphs[0]])
   })
 
   it('switches the rendered section on nav click', () => {

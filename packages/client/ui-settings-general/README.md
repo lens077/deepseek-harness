@@ -29,9 +29,9 @@ Users reach the shell through the sidebar's bottom Settings control; feature plu
 
 On phones, Settings is reached from the top header. Below 768px, the dialog places its section navigation in a horizontally scrollable row above the full-width content; the close control stays at the upper right.
 
-### The General section
+### General and Layout sections
 
-The General section holds rows registered into `settings.general.item` by feature packages — it has no built-in rows. Feature plugins own the row copy and behavior; the shell only provides the section and its slot. The Appearance row, for example, lives in ui-theme.
+The General section holds rows registered into `settings.general.item`; the Layout section holds rows registered into `settings.layout.item`. Neither section has built-in rows. Feature plugins own row copy and behavior, while the shell provides the two peer pages and their slots. ui-theme contributes appearance and desktop conversation typography to General, then contributes desktop and phone density plus Pure UI to Layout. ui-session-files contributes Files visibility and inline-diff expansion to Layout.
 
 ### Opening the configuration file
 

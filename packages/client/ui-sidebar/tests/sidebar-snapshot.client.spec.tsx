@@ -43,7 +43,7 @@ async function bench(options: { locale?: 'en' } = {}) {
   runtime.ctx.provide('uiWorkspace', { startSession: vi.fn() } as never)
   runtime.ctx.provide('theme', {
     mobile: {
-      appearance: { getSnapshot: () => ({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false }), subscribe: () => () => {} },
+      appearance: { getSnapshot: () => ({ mobileFontSize: 16, mobileLayout: 'medium', desktopLayout: 'medium', pureUi: false }), subscribe: () => () => {} },
       setPureUi: vi.fn(),
     },
   } as never)

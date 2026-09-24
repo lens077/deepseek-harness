@@ -32,14 +32,20 @@ export const FONT_SIZE_MAX = 17
 /** Content font size when the user-settings document has no override (px). */
 export const DEFAULT_FONT_SIZE = 14
 
-/** Phone layouts accepted by the persisted appearance settings. */
-export const MOBILE_LAYOUTS = ['large', 'medium', 'small'] as const
+/** Layout densities accepted by desktop and phone presentation settings. */
+export const LAYOUT_DENSITIES = ['large', 'medium', 'small'] as const
+/** Phone layout densities, retained as the public name for existing consumers. */
+export const MOBILE_LAYOUTS = LAYOUT_DENSITIES
 
-/** Phone layout density; independent of the selected phone font size. */
-export type MobileLayout = typeof MOBILE_LAYOUTS[number]
+/** Layout density used independently by desktop and phone presentation. */
+export type MobileLayout = typeof LAYOUT_DENSITIES[number]
+/** Desktop layout density. */
+export type DesktopLayout = MobileLayout
 
 /** Default phone density. */
 export const DEFAULT_MOBILE_LAYOUT: MobileLayout = 'medium'
+/** Default desktop density. */
+export const DEFAULT_DESKTOP_LAYOUT: DesktopLayout = 'medium'
 
 /** Phone font-size preference bounds and default, in CSS pixels. */
 export const MOBILE_FONT_SIZE_MIN = 12
@@ -52,6 +58,8 @@ export const DEFAULT_MOBILE_FONT_SIZE = 16
 export const MOBILE_FONT_SIZE_FIELD = 'mobileFontSize'
 /** Field carrying the phone layout density. */
 export const MOBILE_LAYOUT_FIELD = 'mobileLayout'
+/** Field carrying the desktop layout density. */
+export const DESKTOP_LAYOUT_FIELD = 'desktopLayout'
 /** Field carrying the pure-UI (reading) presentation switch. */
 export const PURE_UI_FIELD = 'pureUi'
 /** Pure UI is off when the user-settings document has no override. */
@@ -67,6 +75,8 @@ export interface ThemeSettings {
   mobileFontSize: number
   /** Phone controls and information density; switching it preserves mobileFontSize. */
   mobileLayout: MobileLayout
+  /** Desktop spacing and information density; independent of the phone density. */
+  desktopLayout: DesktopLayout
   /**
    * Pure UI: every viewport hides the Session header, shows the current
    * question as plain text, and folds the composer behind a floating button
@@ -81,6 +91,7 @@ export const ThemeSettingsSchema: z<Partial<ThemeSettings>, ThemeSettings> = z.o
   [FONT_SIZE_FIELD]: z.number().step(1).min(FONT_SIZE_MIN).max(FONT_SIZE_MAX).default(DEFAULT_FONT_SIZE),
   [MOBILE_FONT_SIZE_FIELD]: z.number().step(1).min(MOBILE_FONT_SIZE_MIN).max(MOBILE_FONT_SIZE_MAX).default(DEFAULT_MOBILE_FONT_SIZE),
   [MOBILE_LAYOUT_FIELD]: z.union([...MOBILE_LAYOUTS]).default(DEFAULT_MOBILE_LAYOUT),
+  [DESKTOP_LAYOUT_FIELD]: z.union([...LAYOUT_DENSITIES]).default(DEFAULT_DESKTOP_LAYOUT),
   [PURE_UI_FIELD]: z.boolean().default(DEFAULT_PURE_UI),
 })
 

@@ -67,11 +67,18 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-type MobileAppearanceStub = { mobileFontSize: number; mobileLayout: 'large' | 'medium' | 'small'; pureUi: boolean }
+type MobileAppearanceStub = {
+  mobileFontSize: number
+  mobileLayout: 'large' | 'medium' | 'small'
+  desktopLayout: 'large' | 'medium' | 'small'
+  pureUi: boolean
+}
 
 function mountFrame(
   windowWidth = frameWidth,
-  appearance: MobileAppearanceStub = { mobileFontSize: 16, mobileLayout: 'medium', pureUi: false },
+  appearance: MobileAppearanceStub = {
+    mobileFontSize: 16, mobileLayout: 'medium', desktopLayout: 'medium', pureUi: false,
+  },
 ) {
   vi.stubGlobal('innerWidth', windowWidth)
   const instance = createLayoutStore().create()
@@ -543,9 +550,10 @@ describe('AppFrame pointer resizing', () => {
 describe('AppFrame phone presentation', () => {
   it('applies phone density and font only below the mobile breakpoint', () => {
     frameWidth = 390
-    const { frame, rerenderFrame, sidebarOwner } = mountFrame(390, { mobileFontSize: 20, mobileLayout: 'small', pureUi: false })
+    const { frame, rerenderFrame, sidebarOwner } = mountFrame(390, { mobileFontSize: 20, mobileLayout: 'small', desktopLayout: 'large', pureUi: false })
     expect(frame.dataset.mobile).toBe('true')
     expect(frame.dataset.mobileLayout).toBe('small')
+    expect(frame.dataset.desktopLayout).toBeUndefined()
     expect(frame.dataset.mobileView).toBe('overview')
     expect(frame.style.getPropertyValue('--dsh-mobile-font-size')).toBe('20px')
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('')
@@ -558,12 +566,28 @@ describe('AppFrame phone presentation', () => {
     rerenderFrame()
     expect(frame.dataset.mobile).toBeUndefined()
     expect(frame.dataset.mobileLayout).toBeUndefined()
+    expect(frame.dataset.desktopLayout).toBe('large')
     expect(frame.style.getPropertyValue('--dsh-mobile-font-size')).toBe('')
     expect((sidebarOwner() as { navigateMobile?: unknown }).navigateMobile).toBeUndefined()
   })
 
+  it('changes desktop density without selecting the phone structure', () => {
+    const appearance: MobileAppearanceStub = {
+      mobileFontSize: 16, mobileLayout: 'large', desktopLayout: 'medium', pureUi: false,
+    }
+    frameWidth = 1024
+    const { frame, rerenderFrame, sidebarOwner } = mountFrame(1024, appearance)
+    expect(frame.dataset.desktopLayout).toBe('medium')
+    expect(frame.dataset.mobileLayout).toBeUndefined()
+    expect((sidebarOwner() as { navigateMobile?: unknown }).navigateMobile).toBeUndefined()
+    appearance.desktopLayout = 'small'
+    rerenderFrame()
+    expect(frame.dataset.desktopLayout).toBe('small')
+    expect(frame.dataset.mobile).toBeUndefined()
+  })
+
   it('changes density without replacing the independently chosen phone font', () => {
-    const appearance: MobileAppearanceStub = { mobileFontSize: 18, mobileLayout: 'medium', pureUi: false }
+    const appearance: MobileAppearanceStub = { mobileFontSize: 18, mobileLayout: 'medium', desktopLayout: 'medium', pureUi: false }
     frameWidth = 390
     const { frame, rerenderFrame } = mountFrame(390, appearance)
     appearance.mobileLayout = 'large'
@@ -576,7 +600,7 @@ describe('AppFrame phone presentation', () => {
   })
 
   it('marks the pure-UI presentation on every viewport width', () => {
-    const appearance: MobileAppearanceStub = { mobileFontSize: 16, mobileLayout: 'medium', pureUi: true }
+    const appearance: MobileAppearanceStub = { mobileFontSize: 16, mobileLayout: 'medium', desktopLayout: 'small', pureUi: true }
     frameWidth = 1024
     const { frame, rerenderFrame } = mountFrame(1024, appearance)
     expect(frame.dataset.mobile).toBeUndefined()

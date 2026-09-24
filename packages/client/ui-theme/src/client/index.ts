@@ -37,7 +37,7 @@ export type { FontSizeRowComponentProps, FontSizeRowInjected } from './FontSizeR
 export type { PureUiRowComponentProps, PureUiRowInjected } from './PureUiRow.tsx'
 export type { AppearanceRowState, FontSizeRowState } from './settings-store.ts'
 export type { ThemeKey } from './locales.ts'
-export type { ThemePreference, ThemeSettings, MobileLayout } from '../theme-settings.ts'
+export type { DesktopLayout, ThemePreference, ThemeSettings, MobileLayout } from '../theme-settings.ts'
 export type { MobileAppearance } from './mobile-appearance.ts'
 
 /** Namespace owning this feature's settings-row copy. */
@@ -524,20 +524,21 @@ export function apply(ctx: ClientContext): void {
     inject: fontSizeInjected,
   }, FontSizeRow))
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
-    id: 'mobile-appearance',
+  ctx.slots.inject('settings.layout.item', () => ctx.slots.register({
+    name: 'settings.layout.item',
+    id: 'appearance-density',
     order: 8,
     locale: SETTINGS_NS,
     inject: (): MobileAppearanceRowsInjected => ({
       hooks: { mobileAppearance: theme.mobile.appearance },
       setMobileFontSize: (fontSize) => { theme.mobile.setFontSize(fontSize) },
       setMobileLayout: (layout) => { theme.mobile.setLayout(layout) },
+      setDesktopLayout: (layout) => { theme.mobile.setDesktopLayout(layout) },
     }),
   }, MobileAppearanceRows))
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  ctx.slots.inject('settings.layout.item', () => ctx.slots.register({
+    name: 'settings.layout.item',
     id: 'pure-ui',
     order: 9,
     locale: SETTINGS_NS,

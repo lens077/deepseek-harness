@@ -7,9 +7,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import {
-  ConversationLayoutSection, type ConversationLayoutSectionProps,
-} from '../src/client/ConversationLayoutSection.tsx'
 import { DEFAULT_RAIL_VISIBILITY, RailVisibilityPolicy } from '../src/client/rail-visibility.ts'
 import { FilesVisibilityRow, type FilesVisibilityRowProps } from '../src/client/FilesVisibilityRow.tsx'
 import type { SessionFilesSettings } from '../src/diff-settings.ts'
@@ -66,14 +63,6 @@ describe('RailVisibilityPolicy', () => {
     // for no choice, not for hiding: the shipped default stands.
     host.publish({ status: 'ready', value: { diffExpansion: 'all' } as SessionFilesSettings })
     expect(policy.visibility.getSnapshot()).toBe('show')
-  })
-})
-
-describe('ConversationLayoutSection', () => {
-  it('renders its row seat as one column', () => {
-    const renderSlot = vi.fn(() => null)
-    render(<ConversationLayoutSection {...({ renderSlot } as unknown as ConversationLayoutSectionProps)} />)
-    expect(renderSlot).toHaveBeenCalledWith('settings.conversation-layout.item', {})
   })
 })
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-会话文件侧栏：本会话读过和改过的文件。Node 半边只注册一个持久化 section——文件类偏好（内联 diff 展开、「文件」显示与否）——除此之外什么都不做，因为侧栏展示的每个事实都已在 session log 里。浏览器半边占据 [`dsh-client-ui-conversation`](../ui-conversation/README.zh.md) 声明的两个座位：`conversation.session.tabs.leading` 承载视图标签行首的控件，`conversation.session.rail` 承载活动视图旁的常驻面板。只有随附的 Web patch 会加载本包；移除它那一条 cordis.yml 条目即可移除两处surface，标签行与视图区回到无占位时的形状。持久化的*文件*显示偏好在运行时以同样的方式门控这两个座位，来自本包注册的「对话布局」设置分区（`RailVisibilityPolicy`，默认**显示**）：选择**隐藏**即回到同样的无占位形状——只剩对话与轨迹——而转录内的产出文件卡片属于对话内容，保持不变。
+会话文件侧栏：本会话读过和改过的文件。Node 半边只注册一个持久化 section——文件类偏好（内联 diff 展开、「文件」显示与否）——除此之外什么都不做，因为侧栏展示的每个事实都已在 session log 里。浏览器半边占据 [`dsh-client-ui-conversation`](../ui-conversation/README.zh.md) 声明的两个座位：`conversation.session.tabs.leading` 承载视图标签行首的控件，`conversation.session.rail` 承载活动视图旁的常驻面板。只有随附的 Web patch 会加载本包；移除它那一条 cordis.yml 条目即可移除两处surface，标签行与视图区回到无占位时的形状。持久化的*文件*显示偏好在运行时以同样的方式门控这两个座位，来自共享的「布局」设置页（`RailVisibilityPolicy`，默认**显示**）：选择**隐藏**即回到同样的无占位形状——只剩对话与轨迹——而转录内的产出文件卡片属于对话内容，保持不变。
 
 文件按钮与文件栏还依赖 `conversation.chat.node` 声明。只有 Chat 存在且文件偏好为显示时才注册；该声明被移除时，两者随之消失。不含 `ui-chat` 的组合将这两个座位留空，而不提供虚假的 Chat hook。
 
@@ -24,7 +24,7 @@ diff 刻意不在侧栏内渲染。在这个宽度下两栏代码无法阅读，
 
 同一份推导以本包提供的可选 `chatFileDiffs` service 抵达那个surface：给定一个会话和一个路径，它返回已记录的 hunks，每段标注做出该改动的轮次与工具（`第 3 轮 · Edit`），由 [`dsh-client-ui-deliverables`](../ui-deliverables/README.zh.md) 画在读者展开的那个 chip 之下。该 service 经 `ctx.get` 获取，因此把本包组合掉会让那些 chip 回到它存在之前的打开行为。
 
-一个回合有多少内容不经询问就展开，作为响应式偏好搭同一个 service 传递，因此改动会抵达已经渲染在屏幕上的转录。`DiffExpansionPolicy` 拥有它：默认**全部展开**——写入文件的 diff 正是读者要看的东西——另有**仅单个文件时展开**与**全部收起**两个选项，从同一「对话布局」设置页的*文件改动的对比*一行中选取。存在 settings provider 时该值经 `settingsScope` 持久化，否则退化为进程内偏好，与 composer 的 busy-Enter 偏好是同一套安排。读取按构造不在这个词汇表里：一个只被读过的文件没有可展开的对比。
+一个回合有多少内容不经询问就展开，作为响应式偏好搭同一个 service 传递，因此改动会抵达已经渲染在屏幕上的转录。`DiffExpansionPolicy` 拥有它：默认**全部展开**——写入文件的 diff 正是读者要看的东西——另有**仅单个文件时展开**与**全部收起**两个选项，从同一「布局」设置页的*文件改动的对比*一行中选取。存在 settings provider 时该值经 `settingsScope` 持久化，否则退化为进程内偏好，与 composer 的 busy-Enter 偏好是同一套安排。读取按构造不在这个词汇表里：一个只被读过的文件没有可展开的对比。
 
 ## Model Experience
 

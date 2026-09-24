@@ -12,7 +12,7 @@ async function bench(declare = true) {
   await ctx.plugin(SlotRegistry).await()
   const layout = { toggleSidebar: vi.fn() }
   const uiWorkspace = { startSession: vi.fn() }
-  const appearance = { getSnapshot: () => ({ mobileFontSize: 16, mobileLayout: 'medium', pureUi: false }), subscribe: () => () => {} }
+  const appearance = { getSnapshot: () => ({ mobileFontSize: 16, mobileLayout: 'medium', desktopLayout: 'medium', pureUi: false }), subscribe: () => () => {} }
   const theme = { mobile: { appearance, setPureUi: vi.fn() } }
   const sessions = { create: vi.fn(async () => 'scratch'), open: vi.fn() }
   ctx.provide('sessions', sessions as never)

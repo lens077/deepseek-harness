@@ -16,6 +16,44 @@
   transition: none;
 }
 
+/* Desktop density changes spacing only. It never selects the phone structure,
+   which remains exclusively controlled by data-mobile below 768px. */
+.frame[data-desktop-layout='large'] {
+  --dsh-desktop-header-block-start: 16px;
+  --dsh-desktop-header-inline-start: 28px;
+  --dsh-desktop-header-inline-end: 36px;
+  --dsh-desktop-tab-gap: 44px;
+  --dsh-desktop-sidebar-block-padding: 10px;
+  --dsh-desktop-sidebar-inline-padding: 16px;
+  --dsh-desktop-composer-clearance: 20px;
+  --dsh-desktop-composer-stack-gap: 10px;
+  --dsh-desktop-composer-dock-inset: 10px;
+}
+
+.frame[data-desktop-layout='medium'] {
+  --dsh-desktop-header-block-start: 12px;
+  --dsh-desktop-header-inline-start: 20px;
+  --dsh-desktop-header-inline-end: 28px;
+  --dsh-desktop-tab-gap: 36px;
+  --dsh-desktop-sidebar-block-padding: 6px;
+  --dsh-desktop-sidebar-inline-padding: 12px;
+  --dsh-desktop-composer-clearance: 16px;
+  --dsh-desktop-composer-stack-gap: 6px;
+  --dsh-desktop-composer-dock-inset: 8px;
+}
+
+.frame[data-desktop-layout='small'] {
+  --dsh-desktop-header-block-start: 8px;
+  --dsh-desktop-header-inline-start: 14px;
+  --dsh-desktop-header-inline-end: 18px;
+  --dsh-desktop-tab-gap: 24px;
+  --dsh-desktop-sidebar-block-padding: 3px;
+  --dsh-desktop-sidebar-inline-padding: 8px;
+  --dsh-desktop-composer-clearance: 10px;
+  --dsh-desktop-composer-stack-gap: 3px;
+  --dsh-desktop-composer-dock-inset: 5px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .frame {
     transition: none;

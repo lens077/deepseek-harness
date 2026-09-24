@@ -13,8 +13,8 @@ function mount(startUngrouped = vi.fn(async () => {}), pureUi = false) {
   const navigateMobile = vi.fn()
   const startSession = vi.fn()
   const setPureUi = vi.fn()
-  const useMobileAppearance = ((selector: (value: { mobileFontSize: number; mobileLayout: 'medium'; pureUi: boolean }) => unknown) =>
-    selector({ mobileFontSize: 16, mobileLayout: 'medium', pureUi })) as SidebarRootComponentProps['useMobileAppearance']
+  const useMobileAppearance = ((selector: (value: { mobileFontSize: number; mobileLayout: 'medium'; desktopLayout: 'medium'; pureUi: boolean }) => unknown) =>
+    selector({ mobileFontSize: 16, mobileLayout: 'medium', desktopLayout: 'medium', pureUi })) as SidebarRootComponentProps['useMobileAppearance']
   const neverHook = (() => { throw new Error('mobile chrome does not read business snapshots') }) as never
   let owner: SidebarSectionOwnerProps | undefined
   const props: SidebarRootComponentProps = {
