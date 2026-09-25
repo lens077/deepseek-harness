@@ -2182,7 +2182,11 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     const summary = summaryOf(id)
     if (summary === undefined || summary.running === running) return
     summary.running = running
-    emitRemote('api-session/status', [id, running])
+    const log = logs.get(id) ?? []
+    emitRemote('api-session/status', [id, running, {
+      asOfSeq: log.at(-1)?.seq ?? -1,
+      values: projectionValuesOf(log),
+    }])
   }
   const logOf = (id: SessionId): SessionEvent[] => {
     let log = logs.get(id)

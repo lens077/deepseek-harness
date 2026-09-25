@@ -12,9 +12,9 @@ A user who runs many agent conversations across several Workspaces and leaves fo
 
 ### The user's decisions live on the Host
 
-`@deepseek-ai/dsh-session-inbox` is a storage-domain sidecar behind the `sessionInbox` Remote. Per Session it stores `lastSeenSeq` (the highest log seq the user had on screen; `markSeen` only raises it), `handledAt`, `snoozedUntil`, and `pinned`; globally it stores `reviewedAt`; and it stores todos addressed to a Session and optionally to one `user/message` seq. Every read and mutation answers with the complete snapshot and every write emits `session-inbox/changed`, forwarded to browsers through the `dsh-api-remotes` allowlist. The Session log stays the record of what the agent did; the sidecar is the record of what the user decided about it, so it survives refresh, another browser, and a Host restart, and two browsers converge on one snapshot without merging.
+`@deepseek-ai/dsh-session-inbox` is a storage-domain sidecar behind the `sessionInbox` Remote. Per Session it stores `lastSeenSeq` (the highest acknowledged log seq; `markSeen` only raises it), `handledAt`, `snoozedUntil`, and `pinned`; globally it stores `reviewedAt`; and it stores todos addressed to a Session and optionally to one `user/message` seq. Every read and mutation answers with the complete snapshot and every write emits `session-inbox/changed`, forwarded to browsers through the `dsh-api-remotes` allowlist. The Session log stays the record of what the agent did; the sidecar is the record of what the user decided about it, so it survives refresh, another browser, and a Host restart, and two browsers converge on one snapshot without merging.
 
-"Unread" is derived, not stored: a row is unread when the digest's newest landed seq (`replySeq`, or `questionSeq` while unanswered) exceeds `lastSeenSeq`. The client marks the current session seen whenever that seq is on screen, so opening a session clears its unread state exactly as the green dot did — but the mark is durable and the row does not vanish, it moves to "seen, not handled" until the user marks it handled.
+"Unread" is derived, not stored: a row is unread when the digest's newest landed seq (`replySeq`, or `questionSeq` while unanswered) exceeds `lastSeenSeq`. The client acknowledges a completed reply through [reading grace or explicit Mark as viewed](2026-09-26-session-reading-grace-research.md), not selection alone. The durable mark moves unread work to "seen, not handled" under the review-window policy; handling remains a separate user action.
 
 ### The digest projection carries what the inbox needs
 
@@ -44,11 +44,11 @@ Finished work no longer disappears from the record when it is viewed; it moves t
 
 `sessionDigest` bumps its state version, so persisted projection cache rows are recomputed on next fold. The list payload grows by the bounded history and file list per row (`historyQuestions`, `changedFilePaths` budgets). Marks on deleted Sessions stay in the sidecar until their todos are removed; nothing joins them, so they are invisible.
 
-The seen mark follows selection, not reading position; the snooze time is fixed at 09:00 the next day; and the panel remains a surface switch over the center column.
+Automatic seen marks require continuous foreground exposure of the completed reply; manual acknowledgement remains available. Neither establishes comprehension. The snooze time is fixed at 09:00 the next day, and the panel remains a surface switch over the center column.
 
 ## Verification
 
-The Host suite pins monotonic `markSeen`, handled/snooze/pin idempotence, `snooze-in-past`, todo text validation and lifecycle, sort stability, restart recovery, and disposal admission. The digest suite pins the file record narrowing and bounds, the history bound, and the new field budgets. Client suites pin classification and sectioning, the window and workspace filters, the chip counts, the timeline grouping, the todo join, the brief text, the controller's read/push/resync/failure paths, the seen-mark subscription, the badge seat, the `sessionTodos` seat, the `chatReveal` handoff through the chat store, the keyboard ring, and every card and tab action. `pnpm run test:gui` passes apart from the pre-existing `directory-picker-native` Win32 probe.
+The Host suite pins monotonic `markSeen`, handled/snooze/pin idempotence, `snooze-in-past`, todo text validation and lifecycle, sort stability, restart recovery, and disposal admission. The digest suite pins the file record narrowing and bounds, the history bound, and the new field budgets. Client suites pin classification and sectioning, the window and workspace filters, the chip counts, the timeline grouping, the todo join, the brief text, the controller's read/push/resync/failure paths, seen-mark acknowledgement, the badge seat, the `sessionTodos` seat, the `chatReveal` handoff through the chat store, the keyboard ring, and every card and tab action.
 
 ## Related
 

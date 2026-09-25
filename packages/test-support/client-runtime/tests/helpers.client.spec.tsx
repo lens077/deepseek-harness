@@ -76,6 +76,38 @@ describe('fixture helpers', () => {
 })
 
 describe('Session fixture lifecycle', () => {
+  it('records completion acknowledgement and clears only the named fixture reminder', async () => {
+    const runtime = await SlotTestRuntime.create()
+    const navigated = vi.fn()
+    const stopNavigation = runtime.ctx.on('sessions/navigated', navigated)
+    try {
+      const selected = await runtime.sessions.add({ id: 'selected', summary: { completed: true } })
+      const target = await runtime.sessions.add({ id: 'target', summary: { completed: true } }, { current: false })
+      const before = runtime.sessions.list.getSnapshot()
+      runtime.sessions.acknowledgeCompletion(target)
+      expect(runtime.sessions.list.getSnapshot()).toEqual({
+        ...before,
+        byId: { ...before.byId, [target]: { ...before.byId[target], completed: false } },
+      })
+      await runtime.sessions.updateSummary(target, { displayTitle: 'Renamed' })
+      expect(runtime.sessions.list.getSnapshot().byId[target]?.completed).toBe(false)
+      expect(runtime.sessions.list.getSnapshot().byId[selected]?.completed).toBe(true)
+      const after = runtime.sessions.list.getSnapshot()
+      runtime.sessions.acknowledgeCompletion(target)
+      runtime.sessions.acknowledgeCompletion('unknown' as SessionId)
+      expect(runtime.sessions.list.getSnapshot()).toBe(after)
+      expect(runtime.sessions.calls).toEqual([
+        { method: 'acknowledgeCompletion', args: [target] },
+        { method: 'acknowledgeCompletion', args: [target] },
+        { method: 'acknowledgeCompletion', args: ['unknown'] },
+      ])
+      expect(navigated).not.toHaveBeenCalled()
+    } finally {
+      stopNavigation()
+      await runtime.dispose()
+    }
+  })
+
   it('initializes and drives complete event windows through replace, prepend, and append', async () => {
     const runtime = await SlotTestRuntime.create()
     const first = entry(1)

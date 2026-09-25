@@ -253,7 +253,7 @@ describe('Host Remote event routing', () => {
     expect(manager.getListSnapshot().items).toHaveLength(1)
 
     const session = manager.get(S1)
-    manager.handleSessionStatus(S1, true)
+    manager.handleSessionStatus(S1, true, { asOfSeq: -1, values: {} })
     expect(session.getSnapshot().running).toBe(true)
     expect(manager.getListSnapshot().items[0]?.running).toBe(true)
 
@@ -328,7 +328,7 @@ describe('subagent catalogs', () => {
     expect(api.callsOf('session.history')).toEqual([])
     expect(api.callsOf('session.prompt')).toEqual([])
     const listCalls = api.callsOf('subagents.list').length
-    manager.handleSessionStatus(S2, false)
+    manager.handleSessionStatus(S2, false, { asOfSeq: -1, values: {} })
     expect(manager.getListSnapshot().subagentsByParent[S1]?.entries[0]).toMatchObject({
       kind: 'child', id: S2, activity: 'inactive',
     })
@@ -444,8 +444,8 @@ describe('subagent catalogs', () => {
     const manager = new SessionManager(fakeRemote(api))
     const refresh = manager.refreshSubagents(root)
 
-    manager.handleSessionStatus(S1, false)
-    manager.handleSessionStatus(S2, true)
+    manager.handleSessionStatus(S1, false, { asOfSeq: -1, values: {} })
+    manager.handleSessionStatus(S2, true, { asOfSeq: -1, values: {} })
     response.resolve(ok({
       entries: [
         {
@@ -715,7 +715,7 @@ describe('remaining branches', () => {
   it('ignores Host status and error events for sessions without an instance', () => {
     const api = new FakeApiClient()
     const manager = new SessionManager(fakeRemote(api))
-    manager.handleSessionStatus(S2, true)
+    manager.handleSessionStatus(S2, true, { asOfSeq: -1, values: {} })
     manager.handleSessionError(S2, '无实例')
   })
 
@@ -725,7 +725,7 @@ describe('remaining branches', () => {
     const manager = new SessionManager(fakeRemote(api))
     await manager.refreshList()
     const before = manager.getListSnapshot()
-    manager.handleSessionStatus(S2, true)
+    manager.handleSessionStatus(S2, true, { asOfSeq: -1, values: {} })
     const after = manager.getListSnapshot()
     expect(after.items).not.toBe(before.items)
     const beforeS1 = before.items.find(e => e.sessionId === S1)
@@ -801,7 +801,7 @@ describe('connected generation', () => {
 
 describe('completed reminder', () => {
   const status = (manager: SessionManager, sessionId: SessionId, running: boolean): void => {
-    manager.handleSessionStatus(sessionId, running)
+    manager.handleSessionStatus(sessionId, running, { asOfSeq: -1, values: {} })
   }
   const added = (manager: SessionManager, sessionId: SessionId): void => {
     manager.handleSessionAdded(summary(sessionId))
@@ -809,7 +809,7 @@ describe('completed reminder', () => {
   const entry = (manager: SessionManager, sessionId: SessionId) =>
     manager.getListSnapshot().items.find(item => item.sessionId === sessionId)
 
-  it('arms on a running→idle flip of a non-selected session and clears on select', () => {
+  it('arms on a running→idle flip and retains the reminder through selection changes', () => {
     const manager = makeManager()
     added(manager, S1)
     added(manager, S2)
@@ -818,24 +818,120 @@ describe('completed reminder', () => {
     status(manager, S2, true)
     status(manager, S2, false)
     expect(entry(manager, S2)?.completed).toBe(true)
-    // Opening the session consumes the reminder.
     manager.select(S2)
-    expect(entry(manager, S2)?.completed).toBe(false)
+    expect(entry(manager, S2)?.completed).toBe(true)
+    manager.select(S1)
+    manager.clearSelection()
+    expect(entry(manager, S2)?.completed).toBe(true)
   })
 
-  it('never arms for the session being watched and re-arms after a switch-away re-run', () => {
+  it('arms for the selected session and re-arms after a later run', () => {
     const manager = makeManager()
     added(manager, S1)
     added(manager, S2)
     manager.select(S2)
     status(manager, S2, true)
     status(manager, S2, false)
-    expect(entry(manager, S2)?.completed).toBe(false) // watched to completion: no reminder
-    // Switch away; a fresh run completing again arms the reminder.
+    expect(entry(manager, S2)?.completed).toBe(true)
     manager.select(S1)
     status(manager, S2, true)
+    expect(entry(manager, S2)?.completed).toBe(false)
     status(manager, S2, false)
     expect(entry(manager, S2)?.completed).toBe(true)
+  })
+
+  it('retains a listed child reminder when opening its catalog address', async () => {
+    const api = new FakeApiClient()
+    api.onSubagentList = () => Promise.resolve(ok({
+      entries: [{
+        kind: 'child', id: S2, mode: 'continuable', label: 'worker',
+        activity: 'inactive', hasChildren: false,
+      }],
+      parentAvailable: true,
+    }))
+    const manager = new SessionManager(fakeRemote(api))
+    try {
+      added(manager, S1)
+      manager.handleSessionAdded(summary(S2, { parentSessionId: S1, origin: 'subagent' }))
+      await manager.refreshSubagents(S1)
+      status(manager, S2, true)
+      status(manager, S2, false)
+      const address = { parentSessionId: S1, childSessionId: S2, mode: 'continuable' as const }
+      manager.selectSubagent(address)
+      expect(manager.getListSnapshot().currentAddress).toEqual(address)
+      expect(entry(manager, S2)?.completed).toBe(true)
+      manager.select(S2)
+      expect(entry(manager, S2)?.completed).toBe(true)
+    } finally {
+      await manager.dispose()
+    }
+  })
+
+  it('clears the named reminder immediately and batches its publication, ignoring absent reminders', async () => {
+    const manager = new SessionManager(fakeRemote(new FakeApiClient()), S1)
+    const reminders: SessionId[][] = []
+    const unsubscribe = manager.subscribe(() => {
+      reminders.push(manager.getListSnapshot().items.filter(item => item.completed).map(item => item.sessionId))
+    })
+    try {
+      added(manager, S1)
+      added(manager, S2)
+      status(manager, S2, true)
+      status(manager, S2, false)
+      await Promise.resolve()
+      reminders.length = 0
+      const before = manager.getListSnapshot()
+      manager.acknowledgeCompletion(S2)
+      expect(reminders).toEqual([])
+      expect(manager.getListSnapshot()).toEqual({
+        ...before,
+        items: before.items.map(item => item.sessionId === S2 ? { ...item, completed: false } : item),
+      })
+      await Promise.resolve()
+      expect(reminders).toEqual([[]])
+      const after = manager.getListSnapshot()
+      manager.acknowledgeCompletion(S2)
+      manager.acknowledgeCompletion(S1)
+      manager.acknowledgeCompletion('unknown' as SessionId)
+      expect(manager.getListSnapshot()).toBe(after)
+      expect(reminders).toEqual([[]])
+    } finally {
+      unsubscribe()
+      await manager.dispose()
+    }
+  })
+
+  it('coalesces bulk acknowledgement without recursive list publication', async () => {
+    const manager = new SessionManager(fakeRemote(new FakeApiClient()))
+    const ids = Array.from({ length: 100 }, (_, i) => `bulk-${i}` as SessionId)
+    for (const id of ids) {
+      added(manager, id)
+      status(manager, id, true)
+      status(manager, id, false)
+    }
+    await Promise.resolve()
+    let depth = 0
+    let maxDepth = 0
+    let publications = 0
+    const unsubscribe = manager.subscribe(() => {
+      depth += 1
+      publications += 1
+      maxDepth = Math.max(maxDepth, depth)
+      for (const item of manager.getListSnapshot().items) {
+        if (item.completed) manager.acknowledgeCompletion(item.sessionId)
+      }
+      depth -= 1
+    })
+    try {
+      manager.select(ids[0]!)
+      await Promise.resolve()
+      expect(maxDepth).toBe(1)
+      expect(publications).toBe(2)
+      expect(manager.getListSnapshot().items.some(item => item.completed)).toBe(false)
+    } finally {
+      unsubscribe()
+      await manager.dispose()
+    }
   })
 
   it('a re-run disarms the reminder while running and re-arms on its completion', () => {

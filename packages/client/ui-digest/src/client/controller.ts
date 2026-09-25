@@ -140,7 +140,7 @@ export class InboxController extends SnapshotController<InboxView> {
 
   /**
    * Raise a Session's seen mark. Skipped without a call when the known mark
-   * already covers `seq`, so a selection subscription can call this freely.
+   * already covers `seq`; callers own exposure or explicit acknowledgement.
    * @param sessionId - the Session on screen.
    * @param seq - the highest seq shown.
    * @returns the settled result.

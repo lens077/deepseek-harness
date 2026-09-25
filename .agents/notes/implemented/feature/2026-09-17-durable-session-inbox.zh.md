@@ -12,9 +12,9 @@
 
 ### 用户的决定存在 Host 上
 
-`@deepseek-ai/dsh-session-inbox` 是 `sessionInbox` Remote 背后的存储域 sidecar。它按 Session 存储 `lastSeenSeq`（用户在屏幕上看到过的最高日志 seq；`markSeen` 只会抬高它）、`handledAt`、`snoozedUntil` 与 `pinned`；全局存储 `reviewedAt`；并存储指向某个 Session、可选地指向某条 `user/message` seq 的待办。每次读取与变更都返回完整快照，每次写入都发出 `session-inbox/changed`，经 `dsh-api-remotes` 允许列表转发到浏览器。Session 日志仍是 Agent 做了什么的记录；sidecar 是用户对它做了什么决定的记录，因此刷新、换浏览器、Host 重启都不会丢，多个浏览器无需合并即可收敛到同一快照。
+`@deepseek-ai/dsh-session-inbox` 是 `sessionInbox` Remote 背后的存储域 sidecar。它按 Session 存储 `lastSeenSeq`（已确认查看的最高日志 seq；`markSeen` 只会抬高它）、`handledAt`、`snoozedUntil` 与 `pinned`；全局存储 `reviewedAt`；并存储指向某个 Session、可选地指向某条 `user/message` seq 的待办。每次读取与变更都返回完整快照，每次写入都发出 `session-inbox/changed`，经 `dsh-api-remotes` 允许列表转发到浏览器。Session 日志仍是 Agent 做了什么的记录；sidecar 是用户对它做了什么决定的记录，因此刷新、换浏览器、Host 重启都不会丢，多个浏览器无需合并即可收敛到同一快照。
 
-"未读"是推导出来的，不是存储的：当汇总里最新落地的 seq（`replySeq`，未回答时为 `questionSeq`）超过 `lastSeenSeq`，该行即为未读。客户端在该 seq 出现在屏幕上时把当前会话标记为已读，因此打开会话会像绿点一样清除未读状态——但标记是持久的，行不会消失，而是移到"已读未处理"，直到用户标记已处理。
+"未读"是推导出来的，不是存储的：当汇总里最新落地的 seq（`replySeq`，未回答时为 `questionSeq`）超过 `lastSeenSeq`，该行即为未读。客户端通过[阅读宽限期或明确的标记已查看动作](2026-09-26-session-reading-grace-research.zh.md)确认已完成回答，而不是仅凭选中。持久标记将未读工作移到审阅时间窗策略下的"已读未处理"；标记已处理仍是独立的用户动作。
 
 ### 汇总投影携带收件箱需要的东西
 
@@ -44,11 +44,11 @@
 
 `sessionDigest` 提升了状态版本，因此持久化投影缓存行会在下次折叠时重算。列表载荷因每行的有界历史与文件列表而增大（`historyQuestions`、`changedFilePaths` 预算）。已删除 Session 的标记会留在 sidecar 中直到其待办被删除；没有东西与之连接，所以不可见。
 
-已读标记跟随选中而非阅读位置；延后时间固定为次日 09:00；面板仍是覆盖中间栏的界面切换。
+自动已查看标记要求已完成回答在前台连续可见；手动确认仍然可用。两者都不能证明理解。延后时间固定为次日 09:00，面板仍是覆盖中间栏的界面切换。
 
 ## 验证
 
-Host 测试固定了单调的 `markSeen`、已处理/延后/置顶的幂等性、`snooze-in-past`、待办文本校验与生命周期、排序稳定性、重启恢复与销毁准入。汇总测试固定了文件记录的收窄与上界、历史上界与新字段预算。客户端测试固定了分类与分区、时间窗与工作区筛选、chip 计数、时间线分组、待办连接、晨报文本、控制器的读取/推送/重同步/失败路径、已读标记订阅、徽标座位、`sessionTodos` 座位、经聊天 store 的 `chatReveal` 交接、键盘环，以及每个卡片与标签操作。`pnpm run test:gui` 除既有的 `directory-picker-native` Win32 探测外全部通过。
+Host 测试固定了单调的 `markSeen`、已处理/延后/置顶的幂等性、`snooze-in-past`、待办文本校验与生命周期、排序稳定性、重启恢复与销毁准入。汇总测试固定了文件记录的收窄与上界、历史上界与新字段预算。客户端测试固定了分类与分区、时间窗与工作区筛选、chip 计数、时间线分组、待办连接、晨报文本、控制器的读取/推送/重同步/失败路径、已查看标记确认、徽标座位、`sessionTodos` 座位、经聊天 store 的 `chatReveal` 交接、键盘环，以及每个卡片与标签操作。
 
 ## 相关
 

@@ -312,7 +312,7 @@ function makeHarness(
       case 'context':
         return <ContextMessageNodeView {...nodeProps<'context'>()} />
       case 'assistant-step':
-        return <AssistantNodeView {...nodeProps<'assistant-step'>()} />
+        return <AssistantNodeView {...nodeProps<'assistant-step'>()} reportReplyExposure={() => {}} />
       case 'command':
         return (
           <CommandNodeView

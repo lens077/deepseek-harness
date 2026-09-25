@@ -1,0 +1,9 @@
+- heading "Seen, not handled 1" [level=3]
+- article:
+  - text: "Finished NavScenario: first run bash to Ungrouped Question Reply in markdown with: a level-2 heading \"Navigation Summary\", a bulleted list of exactly two items, and a fenced code block containing echo WATERFALL. Then stop. Result ## Navigation Summary - alpha nav - beta nav ``` echo WATERFALL ```"
+  - button "Open session"
+  - button "Continue"
+  - button "Mark handled"
+  - button "Add todo"
+  - button "Pin"
+  - button "Tomorrow"

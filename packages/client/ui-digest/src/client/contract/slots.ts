@@ -9,6 +9,7 @@ import type { HostObservable, InjectFace, PropsLocale, PropsRuntime, PropsStore 
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls ui-sidebar's SlotMap merge (the 'sidebar.nav.entry' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: pulls ui-settings' SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -20,7 +21,7 @@ import type { ProjectDocumentResult, ProjectTodosView } from '../projects-contro
 import type { ProjectSettingsView } from '../project-settings.ts'
 import type { PinsSettingsView } from '../pins-settings-policy.ts'
 import type { NavSettingsView } from '../nav-settings-policy.ts'
-import type { NavBadgeState } from '../../nav-settings.ts'
+import type { DigestSettings, NavBadgeState } from '../../nav-settings.ts'
 import type { ToggleShortcut } from '../../toggle-shortcut.ts'
 import type { createDigestStore } from '../stores.ts'
 
@@ -88,6 +89,19 @@ export interface DigestPanelInjected {
   removeTodo: (id: InboxTodoId) => Promise<InboxActionResult>
 }
 
+/** Session-level explicit acknowledgement without handling or unpinning. */
+export interface ReadAcknowledgementInjected {
+  hooks: InboxHooks
+  /** Acknowledge the specified currently completed reply, not a later answer. */
+  markReplySeen: (id: SessionId, seq: number) => Promise<InboxActionResult>
+}
+
+/** Full props for the header's explicit viewed action. */
+export type ReadAcknowledgementProps =
+  PropsRuntime<'conversation.session.header.actions'>
+  & InjectFace<ReadAcknowledgementInjected>
+  & PropsLocale<'digest'>
+
 /** Full props of the sidebar entry: owner wide flag, the shared store, the inbox hook, and copy. */
 export type DigestNavEntryProps =
   PropsRuntime<'sidebar.nav.entry'>
@@ -125,6 +139,10 @@ export interface DigestSettingsInjected {
   setNavBadgeOrder: (order: readonly NavBadgeState[]) => Promise<void>
   /** Replace the panel's toggle chord with one the recorder accepted. */
   setToggleShortcut: (shortcut: ToggleShortcut) => Promise<void>
+  /** Choose automatic exposure acknowledgement or explicit confirmation only. */
+  setReadAcknowledgement: (mode: DigestSettings['readAcknowledgement']) => Promise<void>
+  /** Replace the continuous foreground exposure interval in seconds. */
+  setReadGraceSeconds: (seconds: number) => Promise<void>
 }
 
 /** Full props of the digest panel settings section: the settings view, its writers, and copy. */

@@ -13,6 +13,7 @@ kind: "package-reference"
 ## 目录
 
 - [使用本包](#use-this-package)
+- [Client 完成提醒](#client-completion-reminders)
 - [会话媒体引用](#session-media-references)
 - [配置](#configuration)
 - [模型体验](#model-experience)
@@ -36,6 +37,15 @@ Client adapter 提供 `SessionEventStream`，即绑定到一个普通 Session �
 
 Session 对象还承载本地提交回显：`session.beginSubmission` 在调用方序列化与 prompt 之前，同步把一条回显写入 `SessionSnapshot.pendingSubmissions`，会话 UI 因此能在点击提交的当帧显示消息。回显按顺序存放图片预览与持久文件引用。Session 根据当前运行状态与请求的投递模式推导其 `transcript`、`queued` 或 `steering` 位置，并在序列化期间保留该位置。prompt 的 `requestId` 是关联标识：Host 把它回显为 durable user source 的 `rpcId`，queue occurrence 也把它投影为 `SessionQueuedItem.rpcId`。回显在观察到其 durable event 或 queue occurrence 后延迟一个动画帧退休，带标识的 prompt 失败或被放弃时立即退休，销毁时按 failed 退休。每次退休恰好触发一次 `onRetire`；observed 退休还会携带有序的持久附件引用，让 composer 释放成功卡片并保留失败草稿。回显只存在于 Client 内存；刷新与重连只从 durable event 重建会话。
 
+
+<a id="client-completion-reminders"></a>
+## Client 完成提醒
+
+Host 的每个 `api-session/status` 事件同时携带运行状态与必需的完整 `SessionProjectionBaseline`，进入运行中和闲置时均如此。Client 按较高 seq 优先的规则应用基线，再改变运行状态或设置提醒，因此延迟到达的控制帧不能恢复更早的回复。Host 与 Client 必须使用匹配的事件定义；缺少基线属于无效输入，不会使用默认值替代。
+
+Client 的 `completed` 标志是本地提醒，不是持久化的已读或已处理标记。每次观察到从运行中变为闲置时都会设置提醒，包括当前选中的会话；打开或重新选择会话不会改变它。首次观察到闲置会话不设置提醒，再次运行或移除会清除提醒。`ctx.sessions.acknowledgeCompletion(id)` 只同步清除指定的内部提醒；列表订阅者通知按微任务批量发布。该操作不导航、不改变置顶、不写入持久状态，也不调用 Host；未知 id 或不存在的提醒不产生操作。调用方必须在确认前立即核实最新结果仍然匹配。[ui-digest](../../client/ui-digest/README.zh.md#reading-and-acknowledgement)根据持久化的已查看或已处理标记执行该检查；Chat 可见性与确认计时不属于 Session 模型。
+
+-----
 
 <a id="session-media-references"></a>
 ## 会话媒体引用

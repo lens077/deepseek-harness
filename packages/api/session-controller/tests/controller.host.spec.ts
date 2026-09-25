@@ -98,7 +98,9 @@ describe('SessionController facade', () => {
       events,
     })
     expect(inspect).toHaveBeenCalledOnce()
+    const runningProjections = ctx.sessionProjections.snapshot(session)
     ctx.emit('agent/status', { agent, status: 'running' })
+    expect(status).toHaveBeenLastCalledWith(sessionId, true, runningProjections)
     ctx.emit('agent/error', { agent, turn: 1, step: 0, error: new Error('fixture failure') })
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'hello' }],
@@ -108,7 +110,10 @@ describe('SessionController facade', () => {
       content: [{ type: 'text', text: 'browser prompt' }],
       source: { kind: 'user', rpcId: 'controller-rpc' as never },
     }), { surfaceOp: 'append' })
-    expect(status).toHaveBeenCalledWith(sessionId, true)
+    const idleProjections = ctx.sessionProjections.snapshot(session)
+    ctx.emit('agent/status', { agent, status: 'idle' })
+    expect(status).toHaveBeenLastCalledWith(sessionId, false, idleProjections)
+    expect(idleProjections.asOfSeq).toBeGreaterThan(runningProjections.asOfSeq)
     expect(failure).toHaveBeenCalledWith(sessionId, expect.stringContaining('fixture failure'))
     expect(activity).toHaveBeenCalledWith(sessionId, expect.any(Number))
     session.append('request/header', {

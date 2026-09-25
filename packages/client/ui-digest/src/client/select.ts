@@ -15,8 +15,8 @@ export type InboxWindow = 'sinceReview' | 'today' | 'week' | 'all'
 
 /**
  * Why a row is in the inbox, in the order the panel lists them. `unread` is
- * work that finished while the user was away and `seen` is opened but not
- * yet dealt with — finished results lead so the panel opens on what is ready
+ * completed work without a viewed acknowledgement and `seen` is acknowledged
+ * but not yet dealt with — finished results lead so the panel opens on what is ready
  * to read; `running` follows as the in-flight picture; `needsYou` is where
  * the agent is idle until the user answers; `failed` closes the list.
  */

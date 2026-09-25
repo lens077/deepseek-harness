@@ -43,6 +43,8 @@ Connection 拥有 request correlation、`/api` carrier、trust check、精确 Fe
 - `SessionManager` 拥有 list baseline、实时 list/control update、惰性 Session instance、queue、projection store、subagent catalog，以及 pull 与后到 update 之间的冲突顺序。
 - 每个 `Session` 拥有一段由 `SessionEventLikeEntry` value 表示的连续逻辑 event window、pagination、follow、prompt/control state 与供 adapter 消费的 observable snapshot。
 
+导航不确认结果。[Session Controller 的 Client 完成提醒](../../packages/api/session-controller/README.zh.md#client-completion-reminders)包含当前选中的会话，通过显式的 Client-only 操作清除。Host 状态事件原子携带完整投影基线；匹配的 Host 与 Client 定义要求该基线必填，Client 在判断提醒前按较高 seq 优先应用它，而不依赖控制流的到达顺序。[Chat](../../packages/client/ui-chat/README.zh.md#reply-exposure)负责已渲染回答的前台可见性；[ui-digest](../../packages/client/ui-digest/README.zh.md#reading-and-acknowledgement)负责阅读等待时间、手动确认、持久化的已读写入与本地提醒同步。已查看、已处理和已置顶是不同事实。DOM 观察与阅读计时不进入共享 Session 模型，这些展示事实也不新增模型可见的 Session 事件。
+
 持久 event 路径打开 `follow()`，其首帧包含当前 header、tail page、cursor 与完整 projection baseline。历史 record 带有显式 `event` 或 `chunks` 判别字段和字段对齐的内部 `event`；journal 先校验每条 record 的逻辑 seq 闭区间，Client 再直接把这些 record 保留为 `SessionEventLikeEntry`，无需逐 record 转换。每个物理 generation 都根据该 snapshot 原子替换保留窗口，随后按 seq append 标准实时 event。`page()` 只用于更早历史与 gap repair。瞬态 control stream 每代以完整 baseline 开始，随后应用 queue、job 与 projection update。
 
 ### Workspaces

@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { BoundActions, ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore, type BoundActions, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 // The `file` entry of `SidebarRightResourceParamsMap`, which types `{ params: { line } }` below.
@@ -19,7 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {
   ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected,
-  ChatReveal, TurnTailOwnerProps,
+  ChatReveal, ChatReplyExposure, ChatReplyExposureValue, TurnTailOwnerProps,
 } from './contract/slots.ts'
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
@@ -76,8 +76,23 @@ export function apply(ctx: Context): void {
     }
     return source
   }
+  const replyExposure = createSnapshotStore<ChatReplyExposureValue | null>(null)
+  ctx.provide('chatReplyExposure', { view: replyExposure } satisfies ChatReplyExposure)
+  let active = true
+  ctx.effect(() => () => { active = false; replyExposure.set(null) }, 'ui-chat: reply exposure cleanup')
+  ctx.effect(() => ctx.sessions.list.subscribe(() => {
+    if (replyExposure.getSnapshot()?.sessionId !== ctx.sessions.list.getSnapshot().current) replyExposure.set(null)
+  }), 'ui-chat: reply exposure selection')
   registerConversationNodes(ctx)
-  registerChatNodeRenderers(ctx)
+  registerChatNodeRenderers(ctx, (sessionId, seq, exposed) => {
+    if (!active) return
+    const current = replyExposure.getSnapshot()
+    if (exposed && ctx.sessions.list.getSnapshot().current === sessionId) {
+      if (current?.sessionId !== sessionId || current.seq !== seq) replyExposure.set({ sessionId, seq })
+    } else if (current?.sessionId === sessionId && current.seq === seq) {
+      replyExposure.set(null)
+    }
+  })
   ctx.uiSession.provide({
     hooks: ['chat'],
     resolve: binding => ({ hooks: { chat: chatSource(binding) } }),

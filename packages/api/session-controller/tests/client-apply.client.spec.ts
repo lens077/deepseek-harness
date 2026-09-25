@@ -129,12 +129,15 @@ describe('Session Controller Client apply', () => {
       updatedAt: 1,
     })
 
-    bench.dispatch('api-session/status', sid('session-1'), true)
+    bench.dispatch('api-session/status', sid('session-1'), true, {
+      asOfSeq: 4, values: { title: 'Status title' },
+    })
     bench.dispatch('api-session/activity', sid('session-1'), 9)
     bench.dispatch('api-session/error', sid('session-1'), 'agent failed')
     await flush()
     expect(bench.sessions.list.getSnapshot().byId[sid('session-1')]).toMatchObject({
       running: true,
+      title: 'Status title',
       updatedAt: 9,
     })
     expect(error).toHaveBeenCalledWith(sid('session-1'), 'agent failed')

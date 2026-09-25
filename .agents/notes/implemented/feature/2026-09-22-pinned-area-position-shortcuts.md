@@ -16,7 +16,7 @@ The pinned area binds one chord per listed position, records chords by keypress 
 
 `pinnedShortcuts` in the workspace viewing store is a list of ten entries, one per pinned-area position in row order, each a canonical `[Ctrl+][Meta+][Alt+][Shift+]Key` string or `null`. The default is the digit row, `1` through `9` then `0`. `pinnedShortcutsEnabled` (default on) switches the whole list off without losing it. Both persist with the rest of the viewing state (persist key bumped to `v12`), so the bindings are browser-local: they never reach the Host, and each browser profile keeps its own. Binding a chord to a position releases it from any other position, so a chord opens exactly one row.
 
-A position is a slot in `pinnedRows`, the same recency-ordered list the area draws, so the keycap each row wears is the truth the listener reads. Opening through a chord runs the same `openPinnedRow` as a click: the Session opens, a pinned mark stays (the user put it there to come back to), and a row listed by status alone is dismissed until its statuses change, so the pinned rows are a keyboard the user learns while the status rows behave as an inbox.
+A position is a slot in `pinnedRows`, the same recency-ordered list the area draws, so the keycap each row wears is the truth the listener reads. Opening through a chord runs the same `openPinnedRow` as a click: it only navigates, retaining both a manual pin and status-derived membership. [Session reading grace](2026-09-26-session-reading-grace-research.md) owns this retention and separates viewing acknowledgement from handled state.
 
 ### One listener on this tab's document
 
@@ -40,7 +40,7 @@ The chord is drawn in the platform's notation by `formatPinShortcut`: `⌃⌥⇧
 
 **Refuse conflicting chords outright.** Rejected: the browser's and the system's tables vary by version, extension, and window manager, and a user who has rebound ⌘1 in their browser should be able to use it here. A warning with an explicit **仍然绑定** keeps the decision with the user while making the risk visible.
 
-**Unpin a marked row when its chord opens it.** Rejected after use: a chord that removes its own target turns the keyboard into a stack that pops, so the second press reaches a different Session than the keycap promised; the mark is the user's, and only the status listing is the area's to clear.
+**Unpin a marked row when its chord opens it.** Rejected after use: a chord that removes its own target turns the keyboard into a stack that pops, so the second press reaches a different Session than the keycap promised; the mark is the user's, and navigation changes neither the mark nor automatic membership.
 
 **Suppress a modifierless chord everywhere but the sidebar.** Rejected: the shortcut's point is reaching a pinned row from wherever the user is; only editable fields, where the key means typing, need the silence.
 
@@ -52,7 +52,7 @@ Every pinned row now carries a keycap, and the digit keys open pinned rows whene
 
 ## Verification
 
-`ui-workspace` specs pin the platform detection, chord spelling (physical codes, transient keys, refused keys), exact matching, the command-modifier rule, the editable-target rule, the conflict tables per platform, the notation per platform, and the assign-releases-elsewhere rule in `pin-shortcuts.client.spec.ts`; the browser spec pins the row keycaps, the digit press opening a marked row while keeping its mark and dismissing a status-listed one, silence in the search field and on default-prevented or unmatched presses, the menu switch and the settings-off case, a command-modifier chord firing inside an input, the recorder's status, refusal, transient wait, binding, release, Escape, blur, Backspace, preset, clear, close, and the conflict flow with **仍然绑定** and **重新录制**.
+`ui-workspace` specs pin the platform detection, chord spelling (physical codes, transient keys, refused keys), exact matching, the command-modifier rule, the editable-target rule, the conflict tables per platform, the notation per platform, and the assign-releases-elsewhere rule in `pin-shortcuts.client.spec.ts`; the browser spec pins the row keycaps, the digit press opening a marked row while keeping its mark and retaining a status-listed one, silence in the search field and on default-prevented or unmatched presses, the menu switch and the settings-off case, a command-modifier chord firing inside an input, the recorder's status, refusal, transient wait, binding, release, Escape, blur, Backspace, preset, clear, close, and the conflict flow with **仍然绑定** and **重新录制**.
 
 ## Related
 

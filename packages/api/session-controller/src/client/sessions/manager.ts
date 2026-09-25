@@ -8,6 +8,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type {
   SessionControlBaseline,
   SessionControlFrame,
+  SessionProjectionBaseline,
   SessionQueuedItem,
   SessionSummary,
   SessionJob as JobView,
@@ -99,9 +100,8 @@ export class SessionManager {
   /** Latest transient queues, retained independently of Session object materialization. */
   private readonly queues = new Map<SessionId, readonly SessionQueuedItem[]>()
   /**
-   * Sessions that finished running while not selected — the sidebar's green
-   * "done" reminder (manager-owned, survives connection generations; cleared
-   * on select and session-removed, re-armed by the next completion).
+   * Observed running→idle reminders, retained across selection and connection
+   * generations until acknowledgement, the next run, or Session removal.
    */
   private readonly completedNotifications = new Set<SessionId>()
   /** Last-observed running bits per session; the true→false edge here arms {@link completedNotifications}. */
@@ -178,8 +178,6 @@ export class SessionManager {
         : this.catalogs.get(address.parentSessionId)?.parentAvailable,
     )
     this.selected = sessionId
-    // Looking at the session consumes its completion reminder (dot clears).
-    this.completedNotifications.delete(sessionId)
     void this.refreshSubagents(sessionId)
     this.notifier.notifyNow()
   }
@@ -197,9 +195,17 @@ export class SessionManager {
     this.addresses.set(address.childSessionId, address)
     this.sessions.get(address.childSessionId)?.configureSubagent(address, catalog?.parentAvailable)
     this.selected = address.childSessionId
-    this.completedNotifications.delete(address.childSessionId)
     void this.refreshSubagents(address.childSessionId)
     this.notifier.notifyNow()
+  }
+
+  /**
+   * Clear only the current local completion reminder and batch subscriber publication.
+   * @param sessionId - Session to acknowledge; absent reminders leave the snapshot unchanged.
+   */
+  acknowledgeCompletion(sessionId: SessionId): void {
+    if (!this.completedNotifications.delete(sessionId)) return
+    this.notifier.markDirty()
   }
 
   /** Clear the selection (the layout falls to the no-session view state). */
@@ -760,11 +766,13 @@ export class SessionManager {
   }
 
   /**
-   * Apply one live Agent running-state change.
+   * Publish one Agent state with projections at least as fresh as that transition.
    * @param sessionId - Session whose Agent state changed.
    * @param running - current Agent running state.
+   * @param projections - complete Host projection snapshot at the transition.
    */
-  handleSessionStatus(sessionId: SessionId, running: boolean): void {
+  handleSessionStatus(sessionId: SessionId, running: boolean, projections: SessionProjectionBaseline): void {
+    this.projectionStore(sessionId).seed({ ...projections, asOfSeq: sessionSeqCursor(projections.asOfSeq) })
     this.recordMutation({ kind: 'status', sessionId, running })
     this.sessions.get(sessionId)?.handleRunning(running)
     this.updateCatalogActivity(sessionId, running)
@@ -880,10 +888,10 @@ export class SessionManager {
   /**
    * Reconcile completion reminders against the latest summaries, eagerly after
    * every mutation and pull (a snapshot-build-time pass would collapse
-   * consecutive status frames into one observation). A running→idle edge of a
-   * non-selected session arms its reminder; running disarms it; removal drops
-   * it. First observation only records the running bit — sessions already
-   * idle at load get no reminder.
+   * consecutive status frames into one observation). Every running→idle edge
+   * arms a reminder regardless of selection; running and removal clear it.
+   * First observation only records the running bit — Sessions already idle
+   * at load get no reminder.
    */
   private syncCompletedNotifications(): void {
     const seen = new Set<SessionId>()
@@ -895,7 +903,7 @@ export class SessionManager {
         continue
       }
       if (prev && !s.running) {
-        if (s.sessionId !== this.selected) this.completedNotifications.add(s.sessionId)
+        this.completedNotifications.add(s.sessionId)
       } else if (s.running) {
         this.completedNotifications.delete(s.sessionId)
       }

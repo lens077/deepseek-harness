@@ -1,5 +1,5 @@
 import { Fragment, memo, useMemo } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { JsonBlock, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MarkdownFileMentions, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
@@ -26,6 +26,8 @@ export function localPathMediaUrl(protocol: string, origin: string, value: strin
 }
 
 export interface AssistantMarkdownProps {
+  /** Local renderer measurement target; never crosses a plugin interface. */
+  bodyRef?: RefObject<HTMLDivElement>
   blocks: readonly AssistantBlock[]
   streaming: boolean
   /** Frozen partial of an aborted turn: rendered with a stopped marker. */
@@ -45,7 +47,7 @@ export interface AssistantMarkdownProps {
 /** Reasoning block as the Think variant summary row (figma 39:28304). */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   blocks, streaming, interrupted, renderMessageImages,
-  reasoningHidden = false, revealProcess, mentions, t,
+  reasoningHidden = false, revealProcess, mentions, t, bodyRef,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
@@ -133,7 +135,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
   }
   return (
     <div className={css.root} data-streaming={streaming || undefined}>
-      <div className={css.body}>
+      <div className={css.body} ref={bodyRef}>
         {rendered}
         {interrupted && <span className={css.stopped}>{t('message.stopped')}</span>}
       </div>
@@ -147,7 +149,7 @@ function ProcessReasoning({ hidden, reveal, children }: {
   children: ReactNode
 }) {
   const ref = useSearchableHidden(hidden, reveal ?? NOOP)
-  return <div ref={ref} data-turn-process-inline={hidden || undefined}>{children}</div>
+  return <div ref={ref} data-assistant-reasoning="" data-turn-process-inline={hidden || undefined}>{children}</div>
 }
 
 const NOOP = (): void => {}

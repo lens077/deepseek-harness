@@ -1106,16 +1106,17 @@ Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/sess
 
 #### `api-session/status` — emit
 
-One Agent changed running state.
+One Agent changed running state with a consistent projection snapshot.
 
 ```ts cordis-catalog
 /**
- * One Agent changed running state.
+ * One Agent changed running state with a consistent projection snapshot.
  * @mode emit
  * @param sessionId - Agent and Session identity.
  * @param running - whether the Agent is running.
+ * @param projections - complete projections at the state transition; applied before its running state.
  */
-'api-session/status'(sessionId: SessionId, running: boolean): void
+'api-session/status'(sessionId: SessionId, running: boolean, projections: SessionProjectionBaseline): void
 ```
 
 Types: [SessionId](core.zh.md)

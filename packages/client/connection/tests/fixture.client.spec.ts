@@ -1025,7 +1025,7 @@ describe('createFixtureApi', () => {
       expect(hostSeen).toContainEqual({
         type: 'emit',
         event: 'api-session/status',
-        args: [sid('fx-gamma'), true],
+        args: [sid('fx-gamma'), true, { asOfSeq: -1, values: expect.any(Object) as unknown }],
       })
       expect(await readOpeningCursor(api.sessionRemote, sid('fx-gamma'))).toBe(-1)
       abort.abort()

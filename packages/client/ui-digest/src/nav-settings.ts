@@ -31,6 +31,10 @@ export interface DigestSettings {
   navBadgeOrder: NavBadgeState[]
   /** Canonical chord that toggles the panel from anywhere; see `toggle-shortcut.ts`. */
   toggleShortcut: ToggleShortcut
+  /** Whether viewing an answer acknowledges it automatically or requires an explicit action. */
+  readAcknowledgement: 'automatic' | 'manual'
+  /** Foreground-visible answer time before automatic acknowledgement, in whole seconds from 1 to 60. */
+  readGraceSeconds: number
 }
 
 /** Defaults applied to an absent or partial section. */
@@ -39,6 +43,8 @@ export const DEFAULT_DIGEST_SETTINGS: DigestSettings = {
   navFinishedBadge: false,
   navBadgeOrder: [...NAV_BADGE_STATES],
   toggleShortcut: DEFAULT_TOGGLE_SHORTCUT,
+  readAcknowledgement: 'automatic',
+  readGraceSeconds: 5,
 }
 
 /** Durable digest schema; also the wire envelope the browser scope validates against. */
@@ -47,6 +53,8 @@ export const DigestSettingsSchema: z<DigestSettings> = z.object({
   navFinishedBadge: z.boolean().default(DEFAULT_DIGEST_SETTINGS.navFinishedBadge),
   navBadgeOrder: z.array(z.union([...NAV_BADGE_STATES])).default([...NAV_BADGE_STATES]),
   toggleShortcut: z.string().pattern(TOGGLE_SHORTCUT_PATTERN).default(DEFAULT_TOGGLE_SHORTCUT),
+  readAcknowledgement: z.union(['automatic', 'manual']).default(DEFAULT_DIGEST_SETTINGS.readAcknowledgement),
+  readGraceSeconds: z.number().step(1).min(1).max(60).default(DEFAULT_DIGEST_SETTINGS.readGraceSeconds),
 })
 
 /**

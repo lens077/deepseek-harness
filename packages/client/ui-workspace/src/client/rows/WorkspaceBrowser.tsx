@@ -1402,13 +1402,9 @@ function DesktopWorkspaceBrowser({
       console.warn('session pin rejected:', reason)
     })
   }, [setPinnedRows])
-  // Opening from the pinned area keeps a pinned mark: the user put it there
-  // to come back to. A row listed by status alone is handled by the open, so
-  // it is dismissed until its statuses change.
   const openPinnedRow = useCallback((id: SessionId): void => {
     open(id)
-    if (!pinnedIds.has(id)) onPin(id, false)
-  }, [onPin, open, pinnedIds])
+  }, [open])
   const pinnedCollapsed = useStore(s => s.pinnedCollapsed)
   const pinnedShortcuts = useStore(s => s.pinnedShortcuts)
   const pinnedShortcutsEnabled = useStore(s => s.pinnedShortcutsEnabled)

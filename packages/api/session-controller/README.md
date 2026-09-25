@@ -13,6 +13,7 @@ English | [中文](README.zh.md)
 ## Table of Contents
 
 - [Use this package](#use-this-package)
+- [Client completion reminders](#client-completion-reminders)
 - [Session media references](#session-media-references)
 - [Configuration](#configuration)
 - [Model Experience](#model-experience)
@@ -36,6 +37,15 @@ When a [`dsh-model-router`](../../llm/model-router/README.md) provider is mounte
 
 The Session object also carries local submission echoes: `session.beginSubmission` inserts one into `SessionSnapshot.pendingSubmissions` synchronously, before the caller serializes and prompts, so a conversation UI can show the message on the submit click's own frame. The echo stores ordered image previews and durable file references. Session derives its `transcript`, `queued`, or `steering` placement from the current running state and requested delivery mode, then retains that placement while serialization is in flight. The prompt's `requestId` is the correlation identity: the Host echoes it as the durable user source's `rpcId`, and queue occurrences project it as `SessionQueuedItem.rpcId`. An echo retires one animation frame after its durable event or queue occurrence is observed, immediately when its identified prompt fails or is abandoned, and as failed on disposal. Each retirement fires `onRetire` exactly once; an observed retirement includes the ordered durable attachment references so the composer can release successful cards while preserving failed drafts. Echoes are Client memory only; reload and reconnect rebuild the conversation from durable events alone.
 
+
+<a id="client-completion-reminders"></a>
+## Client completion reminders
+
+Every Host `api-session/status` event carries the running flag and a required complete `SessionProjectionBaseline` together, for running and idle transitions alike. The Client applies the baseline with higher-seq-wins before changing running state or arming a reminder, so delayed control frames cannot restore an older reply. Host and Client must use matching event definitions; a missing baseline is invalid rather than replaced with defaults.
+
+The Client's `completed` flag is a local reminder, not a durable seen or handled mark. Every observed running-to-idle transition arms it, including for the selected Session; opening or reselecting a Session leaves it unchanged. First observing an idle Session does not arm a reminder, and running again or removal clears it. `ctx.sessions.acknowledgeCompletion(id)` synchronously clears only the named internal reminder; list-subscriber publication is microtask-batched. It does not navigate, change pins, write durable state, or call the Host; unknown ids and absent reminders are no-ops. The caller must verify that the latest result still matches immediately before acknowledging it. [ui-digest](../../client/ui-digest/README.md#reading-and-acknowledgement) performs that check against durable viewed or handled marks; Chat exposure and acknowledgement timing remain outside the Session model.
+
+-----
 
 <a id="session-media-references"></a>
 ## Session media references

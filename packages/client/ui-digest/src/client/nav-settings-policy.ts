@@ -24,6 +24,10 @@ export interface NavSettingsView {
   navBadgeOrder: readonly NavBadgeState[]
   /** Canonical chord that toggles the panel; a reserved stored chord reads as the default. */
   toggleShortcut: ToggleShortcut
+  /** Whether viewing an answer acknowledges it automatically or requires an explicit action. */
+  readAcknowledgement: DigestSettings['readAcknowledgement']
+  /** Foreground-visible answer time before automatic acknowledgement, in whole seconds from 1 to 60. */
+  readGraceSeconds: number
   /** Whether writes reach the Host document. */
   writable: boolean
 }
@@ -34,6 +38,8 @@ const INITIAL: NavSettingsView = Object.freeze({
   navFinishedBadge: DEFAULT_DIGEST_SETTINGS.navFinishedBadge,
   navBadgeOrder: Object.freeze([...DEFAULT_DIGEST_SETTINGS.navBadgeOrder]),
   toggleShortcut: DEFAULT_DIGEST_SETTINGS.toggleShortcut,
+  readAcknowledgement: DEFAULT_DIGEST_SETTINGS.readAcknowledgement,
+  readGraceSeconds: DEFAULT_DIGEST_SETTINGS.readGraceSeconds,
   writable: false,
 })
 
@@ -103,6 +109,24 @@ export class NavSettingsPolicy {
     return this.write('toggleShortcut', shortcut)
   }
 
+  /**
+   * Choose automatic or explicit acknowledgement of viewed answers.
+   * @param mode - when an answer is marked viewed.
+   * @returns settlement of the durable write.
+   */
+  setReadAcknowledgement(mode: DigestSettings['readAcknowledgement']): Promise<void> {
+    return this.write('readAcknowledgement', mode)
+  }
+
+  /**
+   * Set how long an answer must be visible in the foreground before automatic acknowledgement.
+   * @param seconds - a whole number from 1 to 60.
+   * @returns settlement of the durable write; the settings schema rejects values outside the range.
+   */
+  setReadGraceSeconds(seconds: number): Promise<void> {
+    return this.write('readGraceSeconds', seconds)
+  }
+
   private write(field: keyof DigestSettings, value: unknown): Promise<void> {
     if (this.host === undefined) return Promise.reject(new Error('digest settings are unavailable'))
     return this.host.set(field, value)
@@ -124,6 +148,8 @@ export class NavSettingsPolicy {
       toggleShortcut: section === undefined
         ? current.toggleShortcut
         : validateToggleShortcut(section.toggleShortcut) ? section.toggleShortcut : DEFAULT_DIGEST_SETTINGS.toggleShortcut,
+      readAcknowledgement: section?.readAcknowledgement ?? current.readAcknowledgement,
+      readGraceSeconds: section?.readGraceSeconds ?? current.readGraceSeconds,
       writable: snapshot.writable,
     }))
   }

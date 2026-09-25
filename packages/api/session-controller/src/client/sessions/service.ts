@@ -47,7 +47,7 @@ export interface SessionSummary {
   /** Coarse durable origin for navigation filtering; not a continuation capability. */
   origin?: 'subagent'
   running: boolean
-  /** Finished while not selected and not yet opened — the sidebar's green "done" reminder. Absent = false. */
+  /** Observed completion reminder; cleared by acknowledgement, the next run, or removal, never selection. Absent = false. */
   completed?: boolean
   /**
    * Empty-log bit (host summary derivation mirror). New Session reuses a blank
@@ -281,6 +281,10 @@ export class ClientSessions implements ISessions {
   open(id: SessionId): void {
     this.manager.select(id)
     this.rootCtx.emit('sessions/navigated', id)
+  }
+
+  acknowledgeCompletion(id: SessionId): void {
+    this.manager.acknowledgeCompletion(id)
   }
 
   /**

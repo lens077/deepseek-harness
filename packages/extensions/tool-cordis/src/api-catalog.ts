@@ -3366,10 +3366,10 @@ export const EVENT_API: readonly EventApiEntry[] = [
   {
     name: 'api-session/status',
     mode: 'emit',
-    signature: '\'api-session/status\'(sessionId: SessionId, running: boolean): void',
-    summary: 'One Agent changed running state.',
-    description: 'One Agent changed running state.',
-    parameters: [{ name: 'sessionId', description: 'Agent and Session identity.' }, { name: 'running', description: 'whether the Agent is running.' }],
+    signature: '\'api-session/status\'(sessionId: SessionId, running: boolean, projections: SessionProjectionBaseline): void',
+    summary: 'One Agent changed running state with a consistent projection snapshot.',
+    description: 'One Agent changed running state with a consistent projection snapshot.',
+    parameters: [{ name: 'sessionId', description: 'Agent and Session identity.' }, { name: 'running', description: 'whether the Agent is running.' }, { name: 'projections', description: 'complete projections at the state transition; applied before its running state.' }],
   },
   {
     name: 'approval/request',

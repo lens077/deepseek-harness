@@ -28,36 +28,43 @@ describe('NavSettingsPolicy', () => {
     const policy = new NavSettingsPolicy()
     expect(policy.view.getSnapshot()).toEqual({
       status: 'unavailable', navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', writable: false,
+      readAcknowledgement: 'automatic', readGraceSeconds: 5,
     })
     const stub = stubSettingsScope<DigestSettings>()
     const detach = policy.bind(stub.scope)
     expect(policy.view.getSnapshot()).toMatchObject({ status: 'loading', navBadges: true })
-    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'failed'], toggleShortcut: 'Alt+D' } })
+    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'failed'], toggleShortcut: 'Alt+D', readAcknowledgement: 'manual', readGraceSeconds: 12 } })
     // A repeated or missing state in the document is repaired for display.
     expect(policy.view.getSnapshot()).toEqual({
       status: 'ready', writable: true, navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'Alt+D',
+      readAcknowledgement: 'manual', readGraceSeconds: 12,
     })
     // A hand-written chord the schema pattern admits but editing owns reads as the default.
-    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+C' } })
+    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+C', readAcknowledgement: 'automatic', readGraceSeconds: 20 } })
     expect(policy.view.getSnapshot()).toMatchObject({ toggleShortcut: 'Ctrl+1' })
     stub.publish({ status: 'unavailable', value: undefined, writable: false })
-    expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1' })
+    expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', readAcknowledgement: 'automatic', readGraceSeconds: 20 })
     detach()
     expect(stub.listenerCount()).toBe(0)
-    expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: true, navBadgeOrder: DEFAULT_ORDER })
+    expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: true, navBadgeOrder: DEFAULT_ORDER, readAcknowledgement: 'automatic', readGraceSeconds: 5 })
   })
 
   it('routes repaired writes to the scope and rejects writes while unbound', async () => {
     const policy = new NavSettingsPolicy()
     await expect(policy.setNavBadges(false)).rejects.toThrow('unavailable')
+    await expect(policy.setReadAcknowledgement('manual')).rejects.toThrow('unavailable')
+    await expect(policy.setReadGraceSeconds(12)).rejects.toThrow('unavailable')
     const stub = stubSettingsScope<DigestSettings>()
     policy.bind(stub.scope)
     await policy.setNavBadges(false)
     await policy.setNavFinishedBadge(true)
     await policy.setNavBadgeOrder(['running', 'waiting'])
     await policy.setToggleShortcut('F2')
+    await policy.setReadAcknowledgement('manual')
+    await policy.setReadGraceSeconds(12)
     expect(stub.set.mock.calls).toEqual([
       ['navBadges', false], ['navFinishedBadge', true], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'F2'],
+      ['readAcknowledgement', 'manual'], ['readGraceSeconds', 12],
     ])
   })
 })
@@ -67,15 +74,19 @@ type SectionCalls = {
   setNavFinishedBadge: ReturnType<typeof vi.fn<(show: boolean) => Promise<void>>>
   setNavBadgeOrder: ReturnType<typeof vi.fn<(order: readonly NavBadgeState[]) => Promise<void>>>
   setToggleShortcut: ReturnType<typeof vi.fn<(shortcut: string) => Promise<void>>>
+  setReadAcknowledgement: ReturnType<typeof vi.fn<(mode: DigestSettings['readAcknowledgement']) => Promise<void>>>
+  setReadGraceSeconds: ReturnType<typeof vi.fn<(seconds: number) => Promise<void>>>
 }
 
 function mount(view: Partial<NavSettingsView> = {}, over: Partial<SectionCalls> = {}) {
-  const state: NavSettingsView = { status: 'ready', writable: true, navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', ...view }
+  const state: NavSettingsView = { status: 'ready', writable: true, navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', readAcknowledgement: 'automatic', readGraceSeconds: 5, ...view }
   const calls: SectionCalls = {
     setNavBadges: vi.fn<(show: boolean) => Promise<void>>(async () => undefined),
     setNavFinishedBadge: vi.fn<(show: boolean) => Promise<void>>(async () => undefined),
     setNavBadgeOrder: vi.fn<(order: readonly NavBadgeState[]) => Promise<void>>(async () => undefined),
     setToggleShortcut: vi.fn<(shortcut: string) => Promise<void>>(async () => undefined),
+    setReadAcknowledgement: vi.fn<(mode: DigestSettings['readAcknowledgement']) => Promise<void>>(async () => undefined),
+    setReadGraceSeconds: vi.fn<(seconds: number) => Promise<void>>(async () => undefined),
     ...over,
   }
   const props = {
@@ -84,8 +95,14 @@ function mount(view: Partial<NavSettingsView> = {}, over: Partial<SectionCalls> 
     ...calls,
     t,
   } as unknown as DigestSettingsSectionProps
-  render(<DigestSettingsSection {...props} />)
-  return calls
+  const rendered = render(<DigestSettingsSection {...props} />)
+  return {
+    ...calls,
+    update(next: Partial<NavSettingsView>): void {
+      Object.assign(state, next)
+      rendered.rerender(<DigestSettingsSection {...props} />)
+    },
+  }
 }
 
 /** The order list's rows, by state key. */
@@ -122,6 +139,105 @@ describe('DigestSettingsSection', () => {
     mount()
     expect((screen.getByRole('button', { name: '恢复默认 Ctrl+1' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByText(zh['digestSettings.shortcut.plain'])).toBeNull()
+  })
+
+  it('offers automatic and manual acknowledgement and explains foreground-visible time without implying handled', () => {
+    const c = mount()
+    const mode = screen.getByRole('combobox', { name: '查看确认方式' }) as HTMLSelectElement
+    expect(mode.value).toBe('automatic')
+    expect([...mode.options].map(option => [option.value, option.textContent])).toEqual([
+      ['automatic', '自动标记已查看'], ['manual', '手动标记已查看'],
+    ])
+    const hint = screen.getByText('自动模式仅计算答案在前台页面中可见的时间；切到后台或答案不可见时不计时。手动模式需点击「标记已查看」。已查看不代表已处理。')
+    expect(mode.getAttribute('aria-describedby')).toBe(hint.id)
+    fireEvent.change(mode, { target: { value: 'manual' } })
+    expect(c.setReadAcknowledgement).toHaveBeenCalledWith('manual')
+    cleanup()
+    const manual = mount({ readAcknowledgement: 'manual', readGraceSeconds: 12 })
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '查看确认方式' }).value).toBe('manual')
+    const seconds = screen.getByRole('spinbutton', { name: '自动标记前的等待时间（秒）' }) as HTMLInputElement
+    expect(seconds.disabled).toBe(true)
+    expect(seconds.value).toBe('12')
+    fireEvent.change(screen.getByRole('combobox', { name: '查看确认方式' }), { target: { value: 'automatic' } })
+    expect(manual.setReadAcknowledgement).toHaveBeenCalledWith('automatic')
+  })
+
+  it('commits changed whole seconds on blur, not while typing, including both bounds', () => {
+    const c = mount()
+    const seconds = screen.getByRole('spinbutton', { name: '自动标记前的等待时间（秒）' }) as HTMLInputElement
+    expect(seconds.value).toBe('5')
+    expect([seconds.min, seconds.max, seconds.step]).toEqual(['1', '60', '1'])
+    fireEvent.blur(seconds)
+    expect(c.setReadGraceSeconds).not.toHaveBeenCalled()
+    fireEvent.change(seconds, { target: { value: '12' } })
+    fireEvent.change(seconds, { target: { value: '5' } })
+    fireEvent.blur(seconds)
+    expect(c.setReadGraceSeconds).not.toHaveBeenCalled()
+    for (const value of ['12', '1', '60']) {
+      c.setReadGraceSeconds.mockClear()
+      fireEvent.change(seconds, { target: { value } })
+      expect(seconds.value).toBe(value)
+      expect(c.setReadGraceSeconds).not.toHaveBeenCalled()
+      fireEvent.blur(seconds)
+      expect(c.setReadGraceSeconds).toHaveBeenCalledWith(Number(value))
+    }
+  })
+
+  it.each(['', '0', '61', '2.5'])('refuses an invalid grace period %j without writing it', (value) => {
+    const c = mount({ readGraceSeconds: 12 })
+    const seconds = screen.getByRole('spinbutton', { name: '自动标记前的等待时间（秒）' }) as HTMLInputElement
+    fireEvent.change(seconds, { target: { value } })
+    fireEvent.blur(seconds)
+    expect(c.setReadGraceSeconds).not.toHaveBeenCalled()
+    expect(seconds.value).toBe('12')
+    expect(screen.getByRole('alert').textContent).toBe('请输入 1–60 之间的整数秒数。')
+  })
+
+  it.each([
+    { status: 'loading' as const }, { status: 'unavailable' as const }, { writable: false },
+  ])('disables reading controls when settings cannot be written: %j', (view) => {
+    mount(view)
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '查看确认方式' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: '自动标记前的等待时间（秒）' }).disabled).toBe(true)
+  })
+
+  it.each([
+    { writable: false }, { readAcknowledgement: 'manual' as const },
+  ])('discards a grace draft when settings become disabled before blur: %j', (view) => {
+    const c = mount()
+    const seconds = screen.getByRole<HTMLInputElement>('spinbutton', { name: '自动标记前的等待时间（秒）' })
+    fireEvent.change(seconds, { target: { value: '12' } })
+    c.update(view)
+    fireEvent.blur(seconds)
+    expect(seconds.disabled).toBe(true)
+    expect(seconds.value).toBe('5')
+    expect(c.setReadGraceSeconds).not.toHaveBeenCalled()
+  })
+
+  it('shows updated persisted seconds after the draft is committed', () => {
+    const c = mount()
+    const seconds = screen.getByRole<HTMLInputElement>('spinbutton', { name: '自动标记前的等待时间（秒）' })
+    c.update({ readGraceSeconds: 20 })
+    expect(seconds.value).toBe('20')
+    fireEvent.change(seconds, { target: { value: '12' } })
+    fireEvent.blur(seconds)
+    c.update({ readGraceSeconds: 12 })
+    expect(seconds.value).toBe('12')
+  })
+
+  it('reports failed acknowledgement and grace-period writes', async () => {
+    mount({}, { setReadAcknowledgement: vi.fn(async () => { throw new Error('denied') }) })
+    fireEvent.change(screen.getByRole('combobox', { name: '查看确认方式' }), { target: { value: 'manual' } })
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByRole('alert').textContent).toBe('保存失败：denied')
+    cleanup()
+    mount({}, { setReadGraceSeconds: vi.fn(async () => { throw new Error('refused') }) })
+    const seconds = screen.getByRole('spinbutton', { name: '自动标记前的等待时间（秒）' }) as HTMLInputElement
+    fireEvent.change(seconds, { target: { value: '12' } })
+    fireEvent.blur(seconds)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByRole('alert').textContent).toBe('保存失败：refused')
+    expect(seconds.value).toBe('5')
   })
 
   it('writes the two toggles, and the finished toggle follows the badges toggle', () => {

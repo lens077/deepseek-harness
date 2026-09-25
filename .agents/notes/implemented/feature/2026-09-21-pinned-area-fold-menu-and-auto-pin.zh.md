@@ -14,11 +14,11 @@ Status: implemented
 
 ### 再增两个持久化字段，同一个座位
 
-`session-pins` 命名空间新增两个字段。`sidebarRows` 在 1–20 整数之外接受 `'auto'`：此时列表按每个 Session 一行取高（上限 20 行，即最大的固定行数，为工作区区块保留空间），而不是固定的行槽数。`autoPinStatuses` 是 `'running' | 'completed' | 'failed'` 上的列表（默认进行中和已完成）：处于其中任一状态的可见 Session 会与置顶标记一起在该区列出，每个只出现一次，沿用同样的最近更新排序，`derivePinned` 对两个来源都应用树的可见性规则。`completed` 指已结束且尚未打开，来自两个来源：Session 摘要里临时的"未选中时结束且尚未重新打开"位，以及 provider 从收件箱持久化标记发布的 `completedSessionIds`（`selectFinishedUnhandled`：`selectInbox` 在「自上次查看」窗口下给出的 已完成 与 已读未处理 行——结果为完成、未处理、未推迟、不在等待用户；未读行不受窗口限制，已读行只取最后一次 标记已查看 之后或最近一天）。仅靠摘要位会随 Host 进程一起消失，导致每次重启后置顶区为空而汇总仍列着同样的 Session；持久化 id 让两个界面共用一个定义，标记已处理 移除单条，标记已查看 清除已读的那些。`failed` 是汇总的 `outcome === 'error'`。`sessionPins` 座位在其视图里携带这两个字段，并新增 `setSidebarRows` 与 `setAutoPinStatuses` 写入器，由 `ui-digest` 转给其 `PinsSettingsPolicy`，因此侧栏菜单和设置页写同一份文档、读同一个视图。
+`session-pins` 命名空间新增两个字段。`sidebarRows` 在 1–20 整数之外接受 `'auto'`：此时列表按每个 Session 一行取高（上限 20 行，即最大的固定行数，为工作区区块保留空间），而不是固定的行槽数。`autoPinStatuses` 是 `'running' | 'completed' | 'failed'` 上的列表（默认进行中和已完成）：处于其中任一状态的可见 Session 会与置顶标记一起在该区列出，每个只出现一次，沿用同样的最近更新排序，`derivePinned` 对两个来源都应用树的可见性规则。`completed` 合并两个来源：Session 摘要里尚未确认的临时完成提醒（选中后保留），以及 provider 从收件箱持久化标记发布的 `completedSessionIds`（`selectFinishedUnhandled`：`selectInbox` 在「自上次查看」窗口下给出的 已完成 与 已读未处理 行——结果为完成、未处理、未推迟、不在等待用户；未读行不受窗口限制，已读行只取最后一次 标记已查看 之后或最近一天）。仅靠摘要位会随 Host 进程一起消失，导致每次重启后置顶区为空而汇总仍列着同样的 Session；持久化 id 让两个界面共用一个定义，标记已处理 移除单条，汇总级的 标记已查看 审阅动作推进已读行的时间窗。`failed` 是汇总的 `outcome === 'error'`。`sessionPins` 座位在其视图里携带这两个字段，并新增 `setSidebarRows` 与 `setAutoPinStatuses` 写入器，由 `ui-digest` 转给其 `PinsSettingsPolicy`，因此侧栏菜单和设置页写同一份文档、读同一个视图。
 
 ### 列出的行视为已置顶，取消置顶会移除自动列出的行
 
-按状态列出的 Session 没有置顶标记，但它明明在置顶区里、菜单却写着 **置顶**，读起来是错的。因此浏览器把"被置顶区列出"当作每个行菜单和多选动作的置顶状态：**取消置顶** 对有标记的 Session 清除标记，对按状态列出的 Session 则移除它。移除是浏览器本地的 viewing 状态（工作区 viewing store 里的 `pinnedAutoDismissed`，Session id → `autoPinStatusKey`，即移除时匹配的状态），只在该键不变时生效：进行中时移除的 Session 在完成后回来，已完成时移除的在再次运行时回来，**置顶** 会先撤销移除再写入标记。`derivePinned` 只在记录的键与当前键相同时跳过被移除的候选，因此过期的记录不会隐藏 Session。
+按状态列出的 Session 没有置顶标记，但它明明在置顶区里、菜单却写着 **置顶**，读起来是错的。因此浏览器把"被置顶区列出"当作每个行菜单和多选动作的置顶状态：**取消置顶** 对有标记的 Session 清除标记，对按状态列出的 Session 则移除它。移除是浏览器本地的 viewing 状态（工作区 viewing store 里的 `pinnedAutoDismissed`，Session id → `autoPinStatusKey`，即移除时匹配的状态），只在该键不变时生效：进行中时移除的 Session 在完成后回来，已完成时移除的在再次运行时回来，**置顶** 会先撤销移除再写入标记。`derivePinned` 只在记录的键与当前键相同时跳过被移除的候选，因此过期的记录不会隐藏 Session。[打开行只执行导航](2026-09-26-session-reading-grace-research.zh.md)，既不触发这种移除，也不创建永久置顶。
 
 ### 标题拥有折叠与菜单
 
@@ -36,7 +36,7 @@ Status: implemented
 
 **只从摘要位读取 `completed`。** 使用后拒绝：Host 重启会丢掉所有提醒位，置顶区因此打开时为空，而汇总仍显示已完成的 Session；`running` 在重启后为空是合理的，但用户尚未处理的已完成回复是收件箱已经存储的持久化事实。
 
-**持久化的 `completed` 只取未读行。** 使用后拒绝：打开 Session 即标记为已查看，于是重启后置顶区只剩之后新开的会话，而汇总的 已读未处理 分组里还留着用户瞄过一眼但没有收尾的工作。用户的"这件事完了"是已处理标记而不是已查看标记；「自上次查看」窗口对已读行的约束与汇总完全一致。
+**持久化的 `completed` 只取未读行。** 拒绝：确认回答会将其标为已查看，但汇总的 已读未处理 分组仍保留用户看过却未处理的已完成工作。只取未读行会让这些工作在重启后从置顶区消失。用户的"这件事完了"是已处理标记而不是已查看标记；「自上次查看」窗口对已读行的约束与汇总完全一致。
 
 **把运行中的行排在最前。** 暂时拒绝：该区的契约是最近更新排序，运行中的边框已经标出它们，第二种排序需要自己的设置项。
 
@@ -46,7 +46,7 @@ Status: implemented
 
 ## 后果
 
-在默认设置下，保留该功能的用户会在置顶区看到每个运行中的 Session 和每个未打开的已完成 Session，因此该区一开始就有内容，而不是显示空态提示。想要旧行为的用户在任一界面清空自动置顶状态即可。`dsh.workspace.view.v9` 的持久化 viewing 状态被 `v11` 键（以及位置快捷键的 `v12` 键）弃用；分组、排序和展开偏好会重置一次。以前一版 schema 写入的 `session-pins` 设置文档解码不变：新字段取默认值。
+在默认设置下，运行中的 Session 和符合条件的已完成 Session 会出现在置顶区，包括审阅时间窗内的已读未处理工作，并受可见性与明确移除动作约束。想要旧行为的用户在任一界面清空自动置顶状态即可。`dsh.workspace.view.v9` 的持久化 viewing 状态被 `v11` 键（以及位置快捷键的 `v12` 键）弃用；分组、排序和展开偏好会重置一次。以前一版 schema 写入的 `session-pins` 设置文档解码不变：新字段取默认值。
 
 ## 验证
 

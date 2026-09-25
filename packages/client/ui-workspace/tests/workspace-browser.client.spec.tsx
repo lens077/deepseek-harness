@@ -1831,6 +1831,44 @@ describe('pinned sessions', () => {
     expect(within(pinnedArea()).getByText(zh['pinned.empty'])).toBeTruthy()
   })
 
+  describe.each(['mouse', 'digit shortcut'] as const)('navigation by %s', (navigation) => {
+    it.each([
+      { name: 'running auto-pin', session: summary('target-s', 2, { running: true }), autoPinStatuses: ['running'], manual: false, durable: false },
+      { name: 'completed auto-pin', session: summary('target-s', 2, { completed: true }), autoPinStatuses: ['completed'], manual: false, durable: false },
+      { name: 'durable completed auto-pin', session: summary('target-s', 2), autoPinStatuses: ['completed'], manual: false, durable: true },
+      { name: 'manual pin', session: summary('target-s', 2), autoPinStatuses: [], manual: true, durable: false },
+    ] as const)('retains a $name without changing pin state', ({ session, autoPinStatuses, manual, durable }) => {
+      const items = [summary('other-s', 1), session]
+      const b = mount({
+        useSessions: hook(sessionState(items)),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['other-s', 'target-s'])])),
+        useSessionPins: pinsView({
+          pinnedSessionIds: manual ? [sid('other-s'), sid('target-s')] : [sid('other-s')],
+          autoPinStatuses,
+          completedSessionIds: durable ? [sid('target-s')] : [],
+        }),
+      })
+      expect(pinnedTitles()).toEqual(['target-s', 'other-s'])
+      if (navigation === 'mouse') {
+        fireEvent.click(within(pinnedArea()).getByText('target-s'))
+      } else {
+        fireEvent.keyDown(document.body, { key: '1', code: 'Digit1' })
+      }
+      expect(b.props.open).toHaveBeenCalledWith(sid('target-s'))
+      expect(pinnedTitles()).toEqual(['target-s', 'other-s'])
+      expect(b.props.setPinned).not.toHaveBeenCalled()
+      expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({})
+
+      rerender(b, { useSessions: hook(sessionState(items, { current: sid('target-s') })) })
+      expect(pinnedTitles()).toEqual(['target-s', 'other-s'])
+      fireEvent.keyDown(document.body, { key: '1', code: 'Digit1' })
+      expect(b.props.open).toHaveBeenNthCalledWith(2, sid('target-s'))
+      expect(pinnedTitles()).toEqual(['target-s', 'other-s'])
+      expect(b.props.setPinned).not.toHaveBeenCalled()
+      expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({})
+    })
+  })
+
   it('offers unpin on an auto-listed row: dismissing it until its statuses change, while a pin lifts the dismissal', async () => {
     const setPinned = vi.fn(async () => undefined)
     const running = summary('run-s', 2, { running: true })
@@ -1998,20 +2036,6 @@ describe('pinned sessions', () => {
       rerender(b, { useSessionPins: pinsView({ pinnedSessionIds: [sid('old-s'), sid('new-s')], sidebarArea: false }) })
       press({ key: '1', code: 'Digit1' })
       expect(b.props.open).toHaveBeenCalledTimes(2)
-    })
-
-    it('dismisses a status-listed row it opens, until its statuses change', () => {
-      const b = mount({
-        useSessions: hook(sessionState([summary('old-s', 1), summary('run-s', 2, { running: true })])),
-        useWorkspaces: hook(workspaceState([workspace('alpha', ['old-s', 'run-s'])])),
-        useSessionPins: pinsView({ pinnedSessionIds: [], autoPinStatuses: ['running'] }),
-      })
-      expect(pinnedTitles()).toEqual(['run-s'])
-      press({ key: '1', code: 'Digit1' })
-      expect(b.props.open).toHaveBeenCalledWith(sid('run-s'))
-      expect(b.props.setPinned).not.toHaveBeenCalled()
-      expect(b.store.getSnapshot().pinnedAutoDismissed).toEqual({ 'run-s': 'running' })
-      expect(pinnedTitles()).toEqual([])
     })
 
     it('keeps a chord with a command modifier live inside editable fields', () => {

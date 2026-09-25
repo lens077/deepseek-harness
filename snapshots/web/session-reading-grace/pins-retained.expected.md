@@ -1,0 +1,9 @@
+- region "Pinned sessions":
+  - button "Collapse pinned area" [expanded]:
+    - img
+    - text: Pinned
+  - button "Pinned area options":
+    - img
+  - tree:
+    - 'treeitem "Completed NavScenario: first run bash to Shortcut 1 {{age}}" [selected]': "Completed NavScenario: first run bash to 1 {{age}}"
+    - 'treeitem "Completed NavScenario: first run bash to Shortcut 2 {{age}}"': "Completed NavScenario: first run bash to 2 {{age}}"

@@ -9,10 +9,10 @@
  * slots are declared by other plugins, so `apply` registers through
  * `slots.inject()` and re-registers if a declaring slot is restored.
  *
- * The plugin also owns the seen mark: whenever the current session's newest
- * reply lands on screen, its seq is recorded on the Host, which is what turns
- * "finished while I was away" into a durable fact instead of a green dot that
- * vanishes on refresh.
+ * The plugin owns durable viewed acknowledgement: a completed Chat answer
+ * qualifies after continuous foreground exposure under the user's policy,
+ * or the user confirms it explicitly. Selection never acknowledges a reply,
+ * and viewed, handled, and pinned remain independent.
  *
  * The panel's fourth tab lists project-level todo documents (`TODO.md` and
  * friends) the Host scans across the configured roots and every registered
@@ -44,12 +44,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SessionPins, SessionPinsView, SessionTodos } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SessionDigestView } from '@deepseek-ai/dsh-session-digest/client'
 import type { ProjectTodosSettings } from '@deepseek-ai/dsh-project-todos/types'
 import type {
-  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, PinsSettingsInjected, ProjectSettingsInjected,
+  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected,
+  PinsSettingsInjected, ProjectSettingsInjected, ReadAcknowledgementInjected,
 } from './contract/slots.ts'
 import { InboxController, type InboxActionResult } from './controller.ts'
+import { ReadingGrace, unreadReply } from './reading-grace.ts'
+import { ReadAcknowledgement } from './ReadAcknowledgement.tsx'
 import { ProjectTodosController } from './projects-controller.ts'
 import { PROJECT_TODOS_SETTINGS_NAMESPACE, ProjectSettingsPolicy } from './project-settings.ts'
 import { ProjectSettingsSection } from './ProjectSettingsSection.tsx'
@@ -77,7 +79,7 @@ export type { ProjectDocumentResult, ProjectTodosRemote, ProjectTodosView } from
 export type { ProjectSettingsView } from './project-settings.ts'
 export type { NavSettingsView } from './nav-settings-policy.ts'
 export type { PinsSettingsView } from './pins-settings-policy.ts'
-export type { CardAction, DigestSettings, NavBadgeState } from '../nav-settings.ts'
+export type { DigestSettings, NavBadgeState } from '../nav-settings.ts'
 export type { SessionPinsSettings } from '../pins-settings.ts'
 export type { ToggleShortcut } from '../toggle-shortcut.ts'
 export { createDigestStore } from './stores.ts'
@@ -94,17 +96,6 @@ export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'uiSess
 
 /** Longest question kept in an automatically worded todo. */
 const TODO_QUESTION_CHARS = 120
-
-/**
- * The seq a viewer of a session has necessarily seen: the newest reply, or
- * the newest question while no reply has landed.
- * @param digest - the session's digest value.
- * @returns the seq, or `null` when nothing has been asked.
- */
-function landedSeq(digest: SessionDigestView | undefined): number | null {
-  if (digest === undefined) return null
-  return digest.replySeq ?? digest.questionSeq
-}
 
 /**
  * Client plugin body: one store handle, one inbox controller, one sidebar
@@ -199,7 +190,8 @@ export function apply(ctx: ClientContext): void {
         setNavFinishedBadge: show => navSettings.setNavFinishedBadge(show),
         setNavBadgeOrder: order => navSettings.setNavBadgeOrder(order),
         setToggleShortcut: shortcut => navSettings.setToggleShortcut(shortcut),
-        setEnterAction: action => navSettings.setEnterAction(action),
+        setReadAcknowledgement: mode => navSettings.setReadAcknowledgement(mode),
+        setReadGraceSeconds: seconds => navSettings.setReadGraceSeconds(seconds),
       }),
     }, DigestSettingsSection))
 
@@ -300,16 +292,65 @@ export function apply(ctx: ClientContext): void {
     setAutoPinStatuses: statuses => pinsSettings.setAutoPinStatuses(statuses),
   } satisfies SessionPins)
 
-  // Seen mark: the current session's newest landed seq is what the user has
-  // on screen. The controller skips the call when the mark already covers it.
-  ctx.effect(() => ctx.sessions.list.subscribe(() => {
+  const markReplySeen = async (id: SessionId, seq: number): Promise<InboxActionResult> => {
+    const row = ctx.sessions.list.getSnapshot().byId[id]
+    if (row?.running !== false || row.projectionValues?.sessionDigest?.replySeq !== seq
+      || row.projectionValues.sessionDigest.outcome !== 'completed') return { ok: true }
+    try {
+      return await controller.markSeen(id, seq)
+    } catch (error) {
+      return failure(error)
+    }
+  }
+  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
+    name: 'conversation.session.header.actions', id: 'digest-read', order: 20, locale: NS,
+    inject: (): ReadAcknowledgementInjected => ({ hooks: { inbox: controller }, markReplySeen }),
+  }, ReadAcknowledgement))
+
+  // Durable acknowledgement, including another browser's, consumes only a
+  // reminder whose current reply is covered; opening a route proves nothing.
+  const syncReminders = (): void => {
+    const view = controller.getSnapshot()
+    if (view.status !== 'ready') return
     const list = ctx.sessions.list.getSnapshot()
-    const id = list.current
-    if (id === undefined) return
-    const seq = landedSeq(list.byId[id]?.projectionValues?.sessionDigest)
-    if (seq === null || controller.getSnapshot().status !== 'ready') return
-    void controller.markSeen(id, seq)
-  }), 'ui-digest: seen mark')
+    const marks = new Map(view.snapshot.sessions.map(mark => [mark.sessionId, mark]))
+    for (const id of list.ids) {
+      const row = list.byId[id]
+      const mark = marks.get(id)
+      const seq = row?.projectionValues?.sessionDigest?.replySeq
+      if (row?.completed !== true || row.running || mark === undefined) continue
+      if (mark.handledAt !== null || (seq != null && (mark.lastSeenSeq ?? -1) >= seq)) ctx.sessions.acknowledgeCompletion(id)
+    }
+  }
+  ctx.effect(() => controller.subscribe(syncReminders), 'ui-digest: durable completion acknowledgement')
+  ctx.effect(() => ctx.sessions.list.subscribe(syncReminders), 'ui-digest: current completion acknowledgement')
+  syncReminders()
+
+  ctx.inject(['chatReplyExposure'], (exposureCtx) => {
+    const exposure = exposureCtx.chatReplyExposure.view
+    const grace = new ReadingGrace(({ sessionId, seq }) => {
+      void markReplySeen(sessionId, seq)
+    })
+    const refresh = (): void => {
+      const settings = navSettings.view.getSnapshot()
+      const view = controller.getSnapshot()
+      const visible = exposure.getSnapshot()
+      const list = ctx.sessions.list.getSnapshot()
+      const unread = unreadReply(visible === null ? undefined : list.byId[visible.sessionId], view.snapshot)
+      const qualifies = settings.status === 'ready' && settings.readAcknowledgement === 'automatic'
+        && view.status === 'ready' && visible !== null && list.current === visible.sessionId
+        && unread?.sessionId === visible.sessionId && unread.seq === visible.seq
+        && !ctx.uiSession.pendingInteractions.getSnapshot().has(visible.sessionId)
+      grace.update(qualifies ? visible : null, settings.readGraceSeconds)
+    }
+    exposureCtx.effect(() => exposure.subscribe(refresh), 'ui-digest: visible reply')
+    exposureCtx.effect(() => ctx.sessions.list.subscribe(refresh), 'ui-digest: reading Session')
+    exposureCtx.effect(() => controller.subscribe(refresh), 'ui-digest: reading marks')
+    exposureCtx.effect(() => navSettings.view.subscribe(refresh), 'ui-digest: reading preferences')
+    exposureCtx.effect(() => ctx.uiSession.pendingInteractions.subscribe(refresh), 'ui-digest: reading interruption')
+    exposureCtx.effect(() => () => { grace.dispose() }, 'ui-digest: reading grace cleanup')
+    refresh()
+  })
 
   // Document badge: the attention count for the browser tab title. The
   // renderer owns the title and offers the badge seat; this plugin only

@@ -197,7 +197,7 @@ export class TestSessions implements ISessions {
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
+    method: 'create' | 'open' | 'acknowledgeCompletion' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
       | 'clear' | 'refresh' | 'search' | 'fork' | 'directories' | 'replaceDirectories' | 'delete'
     args: unknown[]
   }[] = []
@@ -442,6 +442,14 @@ export class TestSessions implements ISessions {
       draft.currentAddress = undefined
     })
     this.rootCtx.emit('sessions/navigated', id)
+  }
+
+  acknowledgeCompletion(id: SessionId): void {
+    this.calls.push({ method: 'acknowledgeCompletion', args: [id] })
+    const record = this.records.get(id)
+    if (record === undefined || record.summary.completed !== true) return
+    record.summary = { ...record.summary, completed: false }
+    this.list.update((draft) => { draft.byId[id] = record.summary })
   }
 
   /** Open an existing fixture through its catalog address. */

@@ -27,6 +27,7 @@ describe('ui-digest host', () => {
     // These parser inputs deliberately omit fields the schema must default.
     expect(DigestSettingsSchema({} as DigestSettings)).toEqual(DEFAULT_DIGEST_SETTINGS)
     expect(DigestSettingsSchema({ navBadges: false } as DigestSettings)).toEqual({ ...DEFAULT_DIGEST_SETTINGS, navBadges: false })
+    expect(DigestSettingsSchema({} as DigestSettings)).toMatchObject({ readAcknowledgement: 'automatic', readGraceSeconds: 5 })
   })
 
   it('repairs a stored order into a permutation of every state', () => {
@@ -43,7 +44,7 @@ describe('ui-digest host', () => {
     const ns = DIGEST_SETTINGS_NAMESPACE
     expect(ctx.settings.get(ns)).toEqual(DEFAULT_DIGEST_SETTINGS)
     await ctx.settings.update(ns, { navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
-    expect(ctx.settings.get(ns)).toEqual({ navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
+    expect(ctx.settings.get(ns)).toEqual({ ...DEFAULT_DIGEST_SETTINGS, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
     await expect(ctx.settings.update(ns, { navBadgeOrder: ['nope'] })).rejects.toThrow()
     await expect(ctx.settings.update(ns, { navBadges: 'yes' })).rejects.toThrow()
     // Noncanonical modifier order and unsupported keys never reach the document.
@@ -53,6 +54,27 @@ describe('ui-digest host', () => {
     expect(ctx.settings.get(ns)).toMatchObject({ toggleShortcut: 'F2' })
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
+  })
+
+  it('persists reading acknowledgement preferences and rejects invalid modes and grace periods', async () => {
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings).await()
+    const fiber = ctx.plugin({ apply })
+    await fiber.await()
+    try {
+      const ns = DIGEST_SETTINGS_NAMESPACE
+      await ctx.settings.update(ns, { readAcknowledgement: 'manual', readGraceSeconds: 1 })
+      expect(ctx.settings.get(ns)).toMatchObject({ readAcknowledgement: 'manual', readGraceSeconds: 1 })
+      await ctx.settings.update(ns, { readAcknowledgement: 'automatic', readGraceSeconds: 60 })
+      expect(ctx.settings.get(ns)).toMatchObject({ readAcknowledgement: 'automatic', readGraceSeconds: 60 })
+      await expect(ctx.settings.update(ns, { readAcknowledgement: 'immediate' })).rejects.toThrow()
+      for (const readGraceSeconds of [0, 61, 2.5, Number.NaN, Number.POSITIVE_INFINITY, '5']) {
+        await expect(ctx.settings.update(ns, { readGraceSeconds })).rejects.toThrow()
+      }
+      expect(ctx.settings.get(ns)).toMatchObject({ readAcknowledgement: 'automatic', readGraceSeconds: 60 })
+    } finally {
+      await fiber.dispose()
+    }
   })
 
   it('registers the pin section with defaults and row bounds, and disposes it with the fiber', async () => {

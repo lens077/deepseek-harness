@@ -35,7 +35,9 @@ function move<T>(list: readonly T[], from: number, to: number): T[] {
  */
 export function DigestSettingsSection(props: DigestSettingsSectionProps) {
   const { useNavSettings, setNavBadges, setNavFinishedBadge, setNavBadgeOrder, setToggleShortcut, t } = props
+  const { setReadAcknowledgement, setReadGraceSeconds } = props
   const view = useNavSettings(value => value)
+  const [graceDraft, setGraceDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refused, setRefused] = useState<'reserved' | 'unsupported' | null>(null)
   const [dragging, setDragging] = useState<NavBadgeState | null>(null)
@@ -48,6 +50,17 @@ export function DigestSettingsSection(props: DigestSettingsSectionProps) {
   const disabled = view.status !== 'ready' || !view.writable
   const failed = (cause: unknown): void => {
     setError(t('settings.saveFailed', { message: cause instanceof Error ? cause.message : String(cause) }))
+  }
+  const commitGraceSeconds = (): void => {
+    if (graceDraft === null) return
+    const seconds = Number(graceDraft)
+    setGraceDraft(null)
+    if (disabled || view.readAcknowledgement === 'manual') return
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 60) {
+      setError(t('digestSettings.readGraceSeconds.invalid'))
+      return
+    }
+    if (seconds !== view.readGraceSeconds) void setReadGraceSeconds(seconds).catch(failed)
   }
   const order = view.navBadgeOrder
   const commit = (next: readonly NavBadgeState[]): void => {
@@ -108,6 +121,40 @@ export function DigestSettingsSection(props: DigestSettingsSectionProps) {
         </div>
         {refused !== null && <p className={css.error} role="alert">{t(`digestSettings.shortcut.${refused}`)}</p>}
         {!hasCommandModifier(view.toggleShortcut) && <p className={css.warn}>{t('digestSettings.shortcut.plain')}</p>}
+      </div>
+
+      <div className={css.field}>
+        <label className={css.label} htmlFor="digest-read-acknowledgement">{t('digestSettings.readAcknowledgement')}</label>
+        <p id="digest-read-acknowledgement-hint" className={css.hint}>{t('digestSettings.readAcknowledgement.hint')}</p>
+        <select
+          id="digest-read-acknowledgement"
+          className={css.input}
+          value={view.readAcknowledgement}
+          disabled={disabled}
+          aria-describedby="digest-read-acknowledgement-hint"
+          onChange={(event) => {
+            const mode = event.target.value as typeof view.readAcknowledgement
+            void setReadAcknowledgement(mode).catch(failed)
+          }}
+        >
+          <option value="automatic">{t('digestSettings.readAcknowledgement.automatic')}</option>
+          <option value="manual">{t('digestSettings.readAcknowledgement.manual')}</option>
+        </select>
+        <label className={css.label} htmlFor="digest-read-grace-seconds">{t('digestSettings.readGraceSeconds')}</label>
+        <p id="digest-read-grace-seconds-hint" className={css.hint}>{t('digestSettings.readGraceSeconds.hint')}</p>
+        <input
+          id="digest-read-grace-seconds"
+          className={css.input}
+          type="number"
+          min={1}
+          max={60}
+          step={1}
+          value={graceDraft ?? view.readGraceSeconds}
+          disabled={disabled || view.readAcknowledgement === 'manual'}
+          aria-describedby="digest-read-acknowledgement-hint digest-read-grace-seconds-hint"
+          onChange={(event) => { setGraceDraft(event.target.value) }}
+          onBlur={commitGraceSeconds}
+        />
       </div>
 
       <div className={css.field}>

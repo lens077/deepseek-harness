@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-22-pinned-area-position-shortcuts.md
-2026-09-22-pinned-area-position-shortcuts.md: f5caaa5ef36df5210098b7d3d626df60a4d99a69
-2026-09-22-pinned-area-position-shortcuts.zh.md: f2c22dff1c182e2ad46b3e3d60a9314b63dbad43
+2026-09-22-pinned-area-position-shortcuts.md: d6563649d921fca402afc3202f4ab02596998a1a
+2026-09-22-pinned-area-position-shortcuts.zh.md: 882fd854ea7f7aa732997578d037f978bfe66c77

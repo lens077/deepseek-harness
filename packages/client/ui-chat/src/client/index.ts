@@ -36,7 +36,8 @@ export type { TurnRailLayoutRowInjected, TurnRailLayoutRowProps } from './settin
 export type { TurnRailLayout } from './turn-rail-layout.ts'
 export type { TranscriptViewMode } from '../chat-settings.ts'
 export type {
-  AssistantActionOwnerProps, ChatFileDiffExpansion, ChatFileDiffs, ChatFileDiffSegment,
+  AssistantActionOwnerProps, AssistantExposureInjected, ChatReplyExposure, ChatReplyExposureValue,
+  ChatFileDiffExpansion, ChatFileDiffs, ChatFileDiffSegment,
   ChatFileMentions, ChatFileOpener, ChatReveal, ChatNodeOwnerProps, ChatNodeTurnDataInjected, ChatTurnFileChange,
   ChatNodeViewProps, ChatScrollPosition, ChatStore, ChatViewInjected, ChatViewSlotProps,
   CommandRowOwnerProps, CommandRowProps, MessageImagesProps, OpenFileOptions,

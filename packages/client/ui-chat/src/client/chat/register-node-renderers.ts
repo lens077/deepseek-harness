@@ -1,4 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { AssistantExposureInjected } from '../contract/slots.ts'
 import { NS } from '../locale.ts'
 import { AssistantNodeView } from './AssistantNodeView.tsx'
 import { CommandNodeView, ManualCompactionNodeView } from './CommandNodeView.tsx'
@@ -13,8 +15,12 @@ import { TurnTailNodeView } from './TurnTailNodeView.tsx'
 /**
  * Register this package's business renderers behind the keyed Chat Node seat.
  * @param ctx - owning UI Conversation context.
+ * @param reportExposure - publish visibility of one completed Assistant answer.
  */
-export function registerChatNodeRenderers(ctx: Context): void {
+export function registerChatNodeRenderers(
+  ctx: Context,
+  reportExposure: (sessionId: SessionId, seq: number, exposed: boolean) => void,
+): void {
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'user', locale: NS }, UserMessageNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
@@ -23,8 +29,12 @@ export function registerChatNodeRenderers(ctx: Context): void {
     { name: 'conversation.chat.node', key: 'context', locale: NS }, ContextMessageNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'system-prompt', locale: NS }, SystemPromptNodeView))
-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
-    { name: 'conversation.chat.node', key: 'assistant-step', locale: NS }, AssistantNodeView))
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node', key: 'assistant-step', locale: NS,
+    inject: (sessionId: SessionId): AssistantExposureInjected => ({
+      reportReplyExposure: (seq, exposed) => { reportExposure(sessionId, seq, exposed) },
+    }),
+  }, AssistantNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'command',

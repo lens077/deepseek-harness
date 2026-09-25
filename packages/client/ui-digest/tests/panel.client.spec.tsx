@@ -86,6 +86,7 @@ function mountPanel({
   const navSettings: NavSettingsView = {
     status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
     navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut,
+    readAcknowledgement: 'automatic', readGraceSeconds: 5,
   }
   const pinsSettings: PinsSettingsView = {
     status: 'ready', writable: true, enabled: true, sidebarArea: true, sidebarRows: 5, autoPinStatuses: ['running', 'completed'], digestSection: true, ...pins,
@@ -923,7 +924,8 @@ describe('DigestNavEntry', () => {
     const store = createDigestStore().create()
     const settings: NavSettingsView = {
       status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
-      navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1', ...over.settings,
+      navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1',
+      readAcknowledgement: 'automatic', readGraceSeconds: 5, ...over.settings,
     }
     const rows = over.rows ?? [row('a')]
     const sessionState = { ids: rows.map(r => r.id), byId: Object.fromEntries(rows.map(r => [r.id, r])) }

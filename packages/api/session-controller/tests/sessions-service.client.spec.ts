@@ -111,6 +111,44 @@ describe('list store projection', () => {
   })
 })
 
+describe('completion acknowledgement', () => {
+  it('clears only the named local reminder without navigating or calling the Host', async () => {
+    const b = bench()
+    const navigated = vi.fn()
+    const stopNavigation = b.ctx.on('sessions/navigated', navigated)
+    try {
+      await feedList(b, [{ id: 's1' }, { id: 's2' }])
+      for (const id of [sid('s1'), sid('s2')]) {
+        b.svc.handleSessionStatus(id, true, { asOfSeq: -1, values: {} })
+        b.svc.handleSessionStatus(id, false, { asOfSeq: -1, values: {} })
+      }
+      await Promise.resolve()
+      const before = b.svc.list.getSnapshot()
+      expect(before.byId[sid('s1')]?.completed).toBe(true)
+      expect(before.byId[sid('s2')]?.completed).toBe(true)
+      const callsBefore = [...b.api.calls]
+      b.svc.acknowledgeCompletion(sid('s2'))
+      await Promise.resolve()
+      const after = b.svc.list.getSnapshot()
+      expect(after).toEqual({
+        ...before,
+        byId: {
+          ...before.byId,
+          [sid('s2')]: { id: sid('s2'), displayTitle: 's2', running: false, blank: false, updatedAt: 1, projectionValues: {} },
+        },
+      })
+      b.svc.acknowledgeCompletion(sid('s2'))
+      b.svc.acknowledgeCompletion(sid('unknown'))
+      expect(b.svc.list.getSnapshot()).toBe(after)
+      expect(navigated).not.toHaveBeenCalled()
+      expect(b.api.calls).toEqual(callsBefore)
+    } finally {
+      stopNavigation()
+      await b.ctx.fiber.dispose()
+    }
+  })
+})
+
 describe('search', () => {
   it('delegates transient content search without changing the list snapshot', async () => {
     const b = bench()
@@ -1038,7 +1076,7 @@ describe('blank mirror', () => {
     const b = bench()
     await feedList(b, [{ id: 's1', blank: true }])
     expect(b.svc.list.getSnapshot().byId[sid('s1')]).toMatchObject({ blank: true })
-    b.svc.handleSessionStatus(sid('s1'), true)
+    b.svc.handleSessionStatus(sid('s1'), true, { asOfSeq: -1, values: {} })
     await Promise.resolve()
     expect(b.svc.list.getSnapshot().byId[sid('s1')]).toMatchObject({ blank: false, running: true })
     // The instantiated Session mirrors the same flip.

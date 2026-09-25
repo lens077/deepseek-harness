@@ -27,7 +27,7 @@ export interface SessionListEntry {
   cwd?: string
   /** Current host-computed projection values for list consumers. */
   projectionValues?: Readonly<Partial<SessionProjectionMap>>
-  /** Finished running while not selected and not yet opened — the sidebar's green "done" reminder (clears on select or the next run). */
+  /** Observed completion reminder; retained across selection until acknowledgement, the next run, or removal. */
   completed: boolean
   /** Lineage indent depth: root = 0; the UI just multiplies by the indent width. */
   depth: number

@@ -11,14 +11,18 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import { SlotTestRuntime, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, SlotTestRuntime, TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
 import type { InboxSnapshot } from '@deepseek-ai/dsh-session-inbox/types'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ChatReplyExposureValue } from '@deepseek-ai/dsh-client-ui-chat/client'
+import { DEFAULT_DIGEST_SETTINGS } from '../src/nav-settings.ts'
 import type { ProjectTodosSnapshot } from '@deepseek-ai/dsh-project-todos/types'
 import { apply, inject } from '../src/client/index.ts'
 import type {
-  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected, PinsSettingsInjected, ProjectSettingsInjected,
+  DigestNavEntryInjected, DigestPanelInjected, DigestSettingsInjected,
+  PinsSettingsInjected, ProjectSettingsInjected, ReadAcknowledgementInjected,
 } from '../src/client/contract/slots.ts'
 import type { DigestSettings } from '../src/nav-settings.ts'
 import type { SessionPinsSettings } from '../src/pins-settings.ts'
@@ -34,6 +38,7 @@ beforeEach(() => { localStorage.clear() })
 afterEach(async () => {
   await runtime?.dispose()
   runtime = undefined
+  vi.useRealTimers()
 })
 
 /** Entry ids currently registered in one list slot. */
@@ -45,6 +50,8 @@ function entryIds(ctx: Context, slot: string): (string | undefined)[] {
 async function bench(initial: InboxSnapshot = inbox()) {
   runtime = await SlotTestRuntime.create()
   const ctx = runtime.ctx
+  const exposure = createSnapshotStore<ChatReplyExposureValue | null>(null)
+  ctx.provide('chatReplyExposure', { view: exposure })
   const remote = new TestRemote(ctx)
   const calls: { method: string; request: unknown }[] = []
   let snapshot = initial
@@ -59,7 +66,15 @@ async function bench(initial: InboxSnapshot = inbox()) {
   }
   const sessionInbox = {
     get: answer('get'),
-    markSeen: answer('markSeen'),
+    markSeen: (request: { sessionId: SessionId; seq: number }) => {
+      calls.push({ method: 'markSeen', request })
+      const existing = snapshot.sessions.find(item => item.sessionId === request.sessionId) ?? mark(request.sessionId)
+      snapshot = {
+        ...snapshot,
+        sessions: [...snapshot.sessions.filter(item => item.sessionId !== request.sessionId), { ...existing, lastSeenSeq: request.seq }],
+      }
+      return carried(snapshot)
+    },
     setHandled: answer('setHandled'),
     setPinned: answer('setPinned'),
     markReviewed: answer('markReviewed'),
@@ -116,10 +131,12 @@ async function bench(initial: InboxSnapshot = inbox()) {
     'sidebar.nav.entry': { kind: 'list', scope: 'root' },
     'center.overlay': { kind: 'list', scope: 'root' },
     'settings.section': { kind: 'list', scope: 'root' },
+    'conversation.session.header.actions': { kind: 'list', scope: 'session' },
   }, () => null)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   ctx.locale.setLocale('zh')
   const feature = await runtime.mount({ inject: [...inject], apply })
+  digestScope.publish({ status: 'ready', value: { ...DEFAULT_DIGEST_SETTINGS }, revision: 1, writable: true })
   const panel = (): DigestPanelInjected => {
     const entry = ctx.slots.entries('center.overlay').find(e => e.options.id === 'digest')
     if (entry === undefined) throw new Error('panel entry missing')
@@ -148,6 +165,7 @@ async function bench(initial: InboxSnapshot = inbox()) {
   return {
     ctx,
     runtime,
+    exposure,
     remote,
     calls,
     feature,
@@ -182,6 +200,7 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'settings.section')).toContain('project-todos')
     expect(entryIds(b.ctx, 'settings.section')).toContain('digest')
     expect(entryIds(b.ctx, 'settings.section')).toContain('session-pins')
+    expect(entryIds(b.ctx, 'conversation.session.header.actions')).toContain('digest-read')
     await b.runtime.flush()
     // The project scan is not read until the tab shows.
     expect(b.calls.map(call => call.method)).toEqual(['get'])
@@ -193,6 +212,7 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('project-todos')
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('digest')
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('session-pins')
+    expect(entryIds(b.ctx, 'conversation.session.header.actions')).not.toContain('digest-read')
   })
 
   it('closes the panel on repeated session navigation and releases the listener on teardown', async () => {
@@ -270,6 +290,10 @@ describe('ui-digest browser half', () => {
     await b.runtime.flush()
     const face = b.panel()
     await expect(face.openPath('/tmp/root/alpha/TODO.md')).resolves.toEqual({ ok: true })
+    const refused = vi.spyOn(b.ctx.remote.session, 'openWorkspacePath')
+      .mockResolvedValueOnce({ ok: false, error: new RemoteError('gateway/internal', 'unavailable', {}) })
+    await expect(face.openPath('/x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'unavailable' } })
+    refused.mockRestore()
     b.sessionRemote.openWorkspacePath = async () => { throw new Error('no opener') }
     await expect(face.openPath('/x')).resolves.toEqual({ ok: false, error: { code: 'runtime', message: 'no opener' } })
   })
@@ -304,13 +328,13 @@ describe('ui-digest browser half', () => {
     const digestBinding = b.bound.find(spec => spec.namespace === 'ui-digest')
     expect(digestBinding).toBeDefined()
     // The decoder defaults an incomplete wire section rather than passing it through.
-    expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ navBadges: false, navFinishedBadge: false, navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1' })
+    expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ ...DEFAULT_DIGEST_SETTINGS, navBadges: false })
     const face = b.digestSettings()
     expect(face.hooks.navSettings).toBe(b.nav().hooks.navSettings)
-    expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'loading', navBadges: true, navFinishedBadge: false, writable: false })
-    b.digestScope.publish({ status: 'ready', writable: true, value: { navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2' } })
+    expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'ready', navBadges: true, navFinishedBadge: false, writable: true })
+    b.digestScope.publish({ status: 'ready', writable: true, value: { ...DEFAULT_DIGEST_SETTINGS, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2' } })
     expect(face.hooks.navSettings.getSnapshot()).toEqual({
-      status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2',
+      ...DEFAULT_DIGEST_SETTINGS, status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2',
     })
     // The panel reads the same view to name the chord in its key legend.
     expect(b.panel().hooks.navSettings).toBe(face.hooks.navSettings)
@@ -318,8 +342,11 @@ describe('ui-digest browser half', () => {
     await face.setNavFinishedBadge(false)
     await face.setNavBadgeOrder(['running', 'running', 'waiting'])
     await face.setToggleShortcut('Ctrl+Shift+I')
+    await face.setReadAcknowledgement('manual')
+    await face.setReadGraceSeconds(8)
     expect(b.digestScope.set.mock.calls).toEqual([
       ['navBadges', false], ['navFinishedBadge', false], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'Ctrl+Shift+I'],
+      ['readAcknowledgement', 'manual'], ['readGraceSeconds', 8],
     ])
     const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'digest')
     b.ctx.locale.setLocale('zh')
@@ -433,33 +460,124 @@ describe('ui-digest browser half', () => {
     expect(b.calls.map(call => call.method)).toEqual(['get', 'get'])
   })
 
-  it('marks the current session seen at its newest landed seq', async () => {
+  it('marks only a continuously exposed completed reply seen, not selection or an unanswered question', async () => {
     const b = await bench()
     await b.runtime.flush()
     await b.runtime.sessions.add({
       id: 's1',
-      summary: { title: 'One', projectionValues: { sessionDigest: digest({ replySeq: 9 }) } },
-    }, { current: true })
+      summary: { updatedAt: Date.now(), completed: true, title: 'One', projectionValues: { sessionDigest: digest({ replySeq: 9 }) } },
+    })
     await b.runtime.flush()
+    vi.useFakeTimers()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+    b.exposure.set({ sessionId: 's1' as SessionId, seq: 9 })
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+    await vi.advanceTimersByTimeAsync(1)
     expect(b.calls.filter(call => call.method === 'markSeen').map(call => call.request)).toEqual([{ sessionId: 's1', seq: 9 }])
-    // A session without a landed seq, or one already covered, issues no call.
-    b.setSnapshot(inbox({ sessions: [mark('s1', { lastSeenSeq: 9 })] }))
-    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { lastSeenSeq: 9 })] })])
-    await b.runtime.sessions.setCurrent(undefined)
-    await b.runtime.sessions.add({ id: 's2', summary: { title: 'Two' } }, { current: true })
-    await b.runtime.flush()
-    await b.runtime.sessions.setCurrent('s1')
-    await b.runtime.flush()
-    expect(b.calls.filter(call => call.method === 'markSeen')).toHaveLength(1)
-    // A question still being answered marks by its own seq.
+    expect(b.panel().hooks.inbox.getSnapshot().snapshot.sessions[0]).toMatchObject({ lastSeenSeq: 9, handledAt: null, pinned: false })
+    expect(b.runtime.sessions.list.getSnapshot().byId['s1' as SessionId]?.completed).toBe(false)
+    expect(b.ctx.sessionPins.view.getSnapshot().completedSessionIds).toContain('s1')
+    vi.useRealTimers()
     await b.runtime.sessions.add({
       id: 's3',
-      summary: { title: 'Three', projectionValues: { sessionDigest: digest({ replySeq: null, questionSeq: 4 }) } },
-    }, { current: true })
+      summary: { running: true, projectionValues: { sessionDigest: digest({ replySeq: null, questionSeq: 4 }) } },
+    })
+    vi.useFakeTimers()
+    b.exposure.set({ sessionId: 's3' as SessionId, seq: 4 })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toHaveLength(1)
+  })
+
+  it('resets exposure on interruption and never consumes a newer reply with an old timer', async () => {
+    const b = await bench()
     await b.runtime.flush()
-    expect(b.calls.filter(call => call.method === 'markSeen').map(call => call.request)).toEqual([
-      { sessionId: 's1', seq: 9 }, { sessionId: 's3', seq: 4 },
-    ])
+    await b.runtime.sessions.add({ id: 's1', summary: { projectionValues: { sessionDigest: digest({ replySeq: 9 }) } } })
+    vi.useFakeTimers()
+    b.exposure.set({ sessionId: 's1' as SessionId, seq: 9 })
+    await vi.advanceTimersByTimeAsync(4_000)
+    b.exposure.set(null)
+    await vi.advanceTimersByTimeAsync(2_000)
+    b.exposure.set({ sessionId: 's1' as SessionId, seq: 9 })
+    await vi.advanceTimersByTimeAsync(4_000)
+    b.runtime.sessions.list.update((draft) => {
+      draft.byId['s1' as SessionId]!.projectionValues = { sessionDigest: digest({ replySeq: 19 }) }
+    })
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+    b.exposure.set({ sessionId: 's1' as SessionId, seq: 19 })
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(b.calls.filter(call => call.method === 'markSeen').map(call => call.request)).toEqual([{ sessionId: 's1', seq: 19 }])
+  })
+
+  it.each(['loading', 'unavailable'] as const)('does not infer viewing before authoritative preferences are available: %s', async (status) => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({ id: 's1', summary: { projectionValues: { sessionDigest: digest({ replySeq: 9 }) } } })
+    b.digestScope.publish({ status, value: undefined, writable: false })
+    vi.useFakeTimers()
+    b.exposure.set({ sessionId: 's1' as SessionId, seq: 9 })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+  })
+
+  it('manual mode never consumes exposure and feature disposal cancels a pending interval', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({ id: 's1', summary: { projectionValues: { sessionDigest: digest({ replySeq: 9 }) } } })
+    b.digestScope.publish({ status: 'ready', value: { ...DEFAULT_DIGEST_SETTINGS, readAcknowledgement: 'manual' }, revision: 1, writable: true })
+    vi.useFakeTimers()
+    b.exposure.set({ sessionId: 's1' as SessionId, seq: 9 })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+    b.digestScope.publish({ status: 'ready', value: { ...DEFAULT_DIGEST_SETTINGS, readGraceSeconds: 8 }, revision: 2, writable: true })
+    await vi.advanceTimersByTimeAsync(7_999)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+    await b.feature.dispose()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+  })
+
+  it('routes explicit viewing independently of automatic settings and refuses a stale or unfinished reply', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    const id = 's1' as SessionId
+    await b.runtime.sessions.add({ id, summary: { projectionValues: { sessionDigest: digest({ replySeq: 9 }) } } })
+    b.digestScope.publish({ status: 'unavailable', value: undefined, writable: false })
+    const entry = b.ctx.slots.entries('conversation.session.header.actions').find(item => item.options.id === 'digest-read')!
+    const face = (entry.inject as unknown as () => ReadAcknowledgementInjected)()
+    expect(face.hooks.inbox).toBe(b.panel().hooks.inbox)
+    await face.markReplySeen(id, 8)
+    await face.markReplySeen('unknown' as SessionId, 9)
+    b.runtime.sessions.list.update((draft) => { draft.byId[id]!.running = true })
+    await face.markReplySeen(id, 9)
+    b.runtime.sessions.list.update((draft) => {
+      draft.byId[id]!.running = false
+      draft.byId[id]!.projectionValues = { sessionDigest: digest({ replySeq: 9, outcome: 'error' }) }
+    })
+    await face.markReplySeen(id, 9)
+    expect(b.calls.filter(call => call.method === 'markSeen')).toEqual([])
+    b.runtime.sessions.list.update((draft) => {
+      draft.byId[id]!.projectionValues = { sessionDigest: digest({ replySeq: 9 }) }
+    })
+    const write = vi.spyOn(b.ctx.remote.sessionInbox, 'markSeen')
+    write.mockRejectedValueOnce(new Error('offline'))
+    expect(await face.markReplySeen(id, 9)).toEqual({ ok: false, error: { code: 'runtime', message: 'offline' } })
+    expect(b.panel().hooks.inbox.getSnapshot().snapshot.sessions).toEqual([])
+    expect(await face.markReplySeen(id, 9)).toEqual({ ok: true })
+    expect(b.panel().hooks.inbox.getSnapshot().snapshot.sessions[0]).toMatchObject({ lastSeenSeq: 9, handledAt: null, pinned: false })
+    write.mockRestore()
+  })
+
+  it('synchronizes remote acknowledgement without consuming an uncovered completion', async () => {
+    const b = await bench()
+    await b.runtime.flush()
+    await b.runtime.sessions.add({ id: 's1', summary: { completed: true, projectionValues: { sessionDigest: digest({ replySeq: 9 }) } } })
+    await b.runtime.sessions.add({ id: 's2', summary: { completed: true, projectionValues: { sessionDigest: digest({ replySeq: 19 }) } } })
+    b.remote.emit('session-inbox/changed', [inbox({ sessions: [mark('s1', { handledAt: 1 }), mark('s2', { lastSeenSeq: 9 })] })])
+    expect(b.runtime.sessions.list.getSnapshot().byId['s1' as SessionId]?.completed).toBe(false)
+    expect(b.runtime.sessions.list.getSnapshot().byId['s2' as SessionId]?.completed).toBe(true)
   })
 
   it('routes the panel verbs to the Remote and the runtime', async () => {

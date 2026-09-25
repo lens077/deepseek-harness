@@ -18,6 +18,7 @@ Use this package to render a browser chat from recorded Session conversations, i
 - [Question navigation](#question-navigation)
 - [Turn Process Folding](#turn-process-folding)
 - [Scroll ownership](#scroll-ownership)
+- [Reply exposure](#reply-exposure)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
@@ -67,6 +68,13 @@ Settings → General exposes a persisted `Normal` / `Compact` conversation-displ
 ## Scroll ownership
 
 Chat restores semantic anchors across history prepend and renderer remounts. Pinned scroll deliveries without reader movement update follow ownership immediately, before subsequent layout changes can invalidate their floor. Reader movement remains pending until the sampling interval or `scrollend`, even inside the follow threshold, so layout growth cannot erase small scroll gestures. While the reader is pinned to the floor, `ResizeObserver` follows the new floor and selects the latest loaded Turn without reading row geometry. Once the reader moves away, flow-height changes preserve the top position and the reading-line geometry selects the active Turn. Turn-rail previews paint above sticky Markdown code-block banners, while the rail frame remains inside the transcript band above the composer.
+
+-----
+
+<a id="reply-exposure"></a>
+## Reply exposure
+
+Chat provides the read-only `chatReplyExposure` service through `ChatReplyExposure`. Its observable identifies the current Session and its latest completed closing answer by seq while a rendered answer block is visibly exposed in a focused, visible document; otherwise it publishes `null`. Scrollport geometry and hit testing exclude offscreen or covered content, and reasoning alone does not qualify. Selection or historical navigation alone provides no evidence. The renderer reports through an injected callback, and leaving the answer or disposing its renderer withdraws the observation. [ui-digest](../ui-digest/README.md#reading-and-acknowledgement) owns the grace interval, settings, manual action, and durable seen writes. Exposure does not establish comprehension.
 
 -----
 

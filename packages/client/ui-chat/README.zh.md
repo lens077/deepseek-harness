@@ -18,6 +18,7 @@ kind: "package-reference"
 - [提问导航](#question-navigation)
 - [轮次过程折叠](#turn-process-folding)
 - [滚动归属](#scroll-ownership)
+- [回答可见性](#reply-exposure)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
@@ -67,6 +68,13 @@ kind: "package-reference"
 ## 滚动归属
 
 Chat 会在历史前插与 renderer 重新挂载时恢复语义锚点。没有读者移动的贴底滚动事件会立即更新跟随归属，避免后续布局变化使其底部位置失效。读者移动即使位于跟随阈值内，也保持待处理直到采样周期或 `scrollend`，防止布局增长抵消小幅滚动操作。读者跟随底部时，`ResizeObserver` 追随新的底部，并且无需读取行几何就选中最后一个已加载 Turn；读者离开底部后，高度变化会保持顶部位置，再由阅读线几何选择活跃 Turn。轮次导航预览位于 Markdown 代码块粘性头栏上方，而导航外框始终处于 composer 上方的 transcript 区域内。
+
+-----
+
+<a id="reply-exposure"></a>
+## 回答可见性
+
+Chat 通过 `ChatReplyExposure` 提供只读的 `chatReplyExposure` 服务。实际渲染的回答块在聚焦且可见的页面中可见时，其可观察快照以会话标识和 seq 指明当前会话最新的已完成收尾回答；否则发布 `null`。滚动视口几何与命中测试排除屏幕外或被遮挡的内容，只有思考内容可见时不符合条件。仅选择会话或导航历史不构成可见证据。渲染器通过注入的回调报告，离开回答或释放其渲染器会撤回该观察值。[ui-digest](../ui-digest/README.zh.md#reading-and-acknowledgement)负责等待时间、设置、手动操作与持久化的已读写入。可见不代表理解。
 
 -----
 

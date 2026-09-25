@@ -82,6 +82,23 @@ export interface ChatFileOpener {
   open(path: string): Promise<void>
 }
 
+/** Closing Assistant answer currently exposed in a foreground Chat viewport. */
+export interface ChatReplyExposureValue {
+  readonly sessionId: SessionId
+  readonly seq: number
+}
+
+/** Read-only exposure evidence; selection alone never publishes an answer. */
+export interface ChatReplyExposure {
+  readonly view: ObservableSnapshot<ChatReplyExposureValue | null>
+}
+
+/** Chat-owned callback injected into the Assistant renderer. */
+export interface AssistantExposureInjected {
+  /** Report foreground visibility of the newest completed answer, or withdraw it. */
+  reportReplyExposure: (seq: number, exposed: boolean) => void
+}
+
 /** Cross-surface request to reveal one Session question in its Chat transcript. */
 export interface ChatReveal {
   /**
@@ -145,6 +162,8 @@ declare module '@deepseek-ai/cordis' {
     chatFileOpener: ChatFileOpener
     /** Optional question-reveal provider owned by ui-chat. */
     chatReveal: ChatReveal
+    /** Foreground exposure of the newest completed Chat answer, owned by ui-chat. */
+    chatReplyExposure: ChatReplyExposure
   }
 }
 

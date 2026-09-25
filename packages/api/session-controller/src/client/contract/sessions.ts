@@ -44,6 +44,15 @@ export interface ISessions {
    */
   open(id: SessionId): void
   /**
+   * Synchronously clear the current Client-local completion reminder without changing
+   * selection, pins, or durable seen/handled state. Unknown ids and absent reminders
+   * are no-ops. The caller must verify the latest result still matches immediately
+   * before calling. Subscriber publication is microtask-batched so bulk acknowledgement
+   * does not re-enter the list's subscribers.
+   * @param id - Session whose current completion reminder is acknowledged.
+   */
+  acknowledgeCompletion(id: SessionId): void
+  /**
    * Open a healthy catalog child through its exact direct-parent address.
    * @param address - catalog-derived parent and child ids.
    */

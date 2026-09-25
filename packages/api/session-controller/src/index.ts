@@ -50,6 +50,7 @@ import type {
   SessionPageRequest,
   SessionPromptRequest,
   SessionPromptValue,
+  SessionProjectionValues,
   SessionRemoveTurnsRequest,
   SessionRemoveTurnsValue,
   SessionReplaceDirectoriesRequest,
@@ -162,7 +163,11 @@ export class SessionController extends TypertRemoteService {
       ctx.emit('api-session/removed', session.id)
     })
     ctx.on('agent/status', ({ agent, status }) => {
-      ctx.emit('api-session/status', agent.id, status === 'running')
+      const projections = ctx.sessionProjections.snapshot(agent.session)
+      ctx.emit('api-session/status', agent.id, status === 'running', {
+        asOfSeq: projections.asOfSeq,
+        values: projections.values as SessionProjectionValues,
+      })
     })
     ctx.on('agent/error', ({ agent, error }) => {
       ctx.emit('api-session/error', agent.id, errorChain(error))

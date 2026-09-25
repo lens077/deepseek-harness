@@ -14,6 +14,7 @@ import type {
   SessionControlFrame,
   SessionFollowFrame,
   SessionFollowRequest,
+  SessionListValue,
   SessionPage,
   SessionPageRequest,
   SessionProjectionBaseline,
@@ -122,7 +123,7 @@ export class FakeApiClient {
   readonly followStarts: SessionId[] = []
 
   // Programmable slots (defaults answer OK-empty); reassign per case.
-  onList: (payload: unknown) => Promise<RemoteResult<{ items: never[] }>> = () => Promise.resolve(ok({ items: [] }))
+  onList: (payload: unknown) => Promise<RemoteResult<SessionListValue>> = () => Promise.resolve(ok({ items: [] }))
   onSearch: (payload: unknown) => Promise<RemoteResult<{ items: SessionSearchItem[]; hasMore: boolean }>> =
     () => Promise.resolve(ok({ items: [], hasMore: false }))
   onCreate: (payload: unknown) => Promise<RemoteResult<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-new' as SessionId }))

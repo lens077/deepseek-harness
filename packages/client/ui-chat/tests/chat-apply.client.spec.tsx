@@ -19,7 +19,7 @@ import {
   apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
-  ChatNodeTurnDataInjected, ChatSnapshot, PixelStepperRowInjected,
+  AssistantExposureInjected, ChatNodeTurnDataInjected, ChatSnapshot, PixelStepperRowInjected,
   TranscriptViewRowInjected, TurnRailLayoutRowInjected, UseChatNodeTurnData,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
@@ -78,6 +78,31 @@ function storeOf(runtime: SlotTestRuntime, key: 'conversation.session' | 'conver
 }
 
 describe('Chat apply wiring', () => {
+  it('publishes exact reply exposure and withdraws it on navigation or disposal', async () => {
+    const b = await bench()
+    await b.runtime.sessions.add({ id: SID })
+    const exposure = b.runtime.ctx.chatReplyExposure.view
+    const entry = b.runtime.slots.entries('conversation.chat.node').find(row => row.options.key === 'assistant-step')!
+    const face = (entry.inject as unknown as (id: SessionId) => AssistantExposureInjected)(SID)
+    expect(exposure.getSnapshot()).toBeNull()
+    face.reportReplyExposure(9, true)
+    const snapshot = exposure.getSnapshot()
+    expect(snapshot).toEqual({ sessionId: SID, seq: 9 })
+    face.reportReplyExposure(9, true)
+    expect(exposure.getSnapshot()).toBe(snapshot)
+    face.reportReplyExposure(10, true)
+    face.reportReplyExposure(9, false)
+    expect(exposure.getSnapshot()).toEqual({ sessionId: SID, seq: 10 })
+    await b.runtime.sessions.setCurrent(undefined)
+    expect(exposure.getSnapshot()).toBeNull()
+    face.reportReplyExposure(9, true)
+    expect(exposure.getSnapshot()).toBeNull()
+    await b.runtime.dispose()
+    expect(b.runtime.ctx.get('chatReplyExposure')).toBeUndefined()
+    face.reportReplyExposure(9, true)
+    expect(exposure.getSnapshot()).toBeNull()
+  })
+
   it('contributes Chat View, node renderers, and stats', async () => {
     const b = await bench()
     const views = b.runtime.slots.entries('conversation.view')
