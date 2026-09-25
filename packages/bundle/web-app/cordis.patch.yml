@@ -294,6 +294,11 @@
     - id: ui-layout
       name: '@deepseek-ai/dsh-client-ui-layout'
 
+    # Decorative companion is opt-in per deployment.
+    - id: ui-companion
+      name: '@deepseek-ai/dsh-client-ui-companion'
+      disabled: true
+
     - id: ui-renderer
       name: '@deepseek-ai/dsh-client-ui-renderer'
 

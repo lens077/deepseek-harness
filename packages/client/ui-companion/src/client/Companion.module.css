@@ -1,0 +1,232 @@
+.root {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px 4px;
+  box-sizing: border-box;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.root[data-floating] {
+  position: fixed;
+  z-index: 30;
+  left: var(--companion-x);
+  top: var(--companion-y);
+  width: min(264px, 100vw);
+  max-height: 100dvh;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-elevation-panel);
+}
+
+.root[data-floating][data-compact] {
+  width: max-content;
+  max-width: 100vw;
+  flex-direction: row;
+}
+
+.root[data-dragging] .character {
+  cursor: grabbing;
+}
+
+.root[data-floating][data-compact] .stage {
+  width: auto;
+  flex: none;
+}
+
+.dock {
+  flex: none;
+}
+
+.dragHelp {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.stage {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 100%;
+}
+
+.character {
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 132px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.character:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.art {
+  display: block;
+  position: relative;
+  width: 116px;
+  transform-origin: 50% 95%;
+  animation: companion-idle 5.6s ease-in-out infinite;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.art[data-mood='greeting'] {
+  animation: companion-greet 650ms ease-in-out 1;
+}
+
+.art[data-mood='sleeping'] {
+  transform: rotate(-5deg);
+  animation: companion-rest 7s ease-in-out infinite;
+}
+
+.sleepMark {
+  position: absolute;
+  top: 8%;
+  right: 3%;
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 3px;
+  transform: rotate(12deg);
+  animation: companion-dream 3.5s ease-in-out infinite;
+}
+
+.hint {
+  margin: 4px 0;
+  min-height: 32px;
+  max-width: 208px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.controls button {
+  font-size: 11px;
+}
+
+.root[data-compact] {
+  width: auto;
+  padding: 0;
+}
+
+.root[data-compact] .character {
+  width: 44px;
+  height: 44px;
+}
+
+.root[data-compact] .art {
+  width: 34px;
+}
+
+.root[data-compact] .sleepMark {
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.root[data-paused] .art,
+.root[data-paused] .sleepMark {
+  animation-play-state: paused;
+}
+
+@keyframes companion-idle {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-3px) rotate(1deg); }
+}
+
+@keyframes companion-greet {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-6deg) translateY(-2px); }
+  65% { transform: rotate(5deg) translateY(-3px); }
+}
+
+@keyframes companion-rest {
+  0%, 100% { transform: rotate(-5deg) scale(1); }
+  50% { transform: rotate(-5deg) scale(1.025, 0.985); }
+}
+
+@keyframes companion-dream {
+  0%, 100% { opacity: 0.45; transform: translateY(0) rotate(12deg); }
+  50% { opacity: 1; transform: translateY(-4px) rotate(12deg); }
+}
+
+@media (max-height: 600px) {
+  .root:not([data-compact]) {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .root:not([data-compact]) .stage {
+    width: 44px;
+    flex: 0 0 44px;
+  }
+
+  .character {
+    width: 44px;
+    height: 44px;
+  }
+
+  .root .art {
+    width: 34px;
+    animation: none;
+  }
+
+  .root .sleepMark {
+    font-size: 9px;
+    letter-spacing: 0;
+    animation: none;
+  }
+
+  .hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .controls {
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root .art,
+  .root .sleepMark {
+    animation: none;
+  }
+}

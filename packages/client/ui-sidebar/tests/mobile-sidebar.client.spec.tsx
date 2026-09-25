@@ -24,6 +24,7 @@ function mount(startUngrouped = vi.fn(async () => {}), pureUi = false) {
     t: key => (en as Record<string, string>)[key] ?? key,
     renderSlot: ((key: string, params: SidebarSectionOwnerProps) => {
       if (key === 'sidebar.settings') return <button>Settings</button>
+      if (key === 'sidebar.footer.action') return <button>{params.wide ? 'Wide companion' : 'Compact companion'}</button>
       if (key === 'sidebar.nav.entry') return <><button>Overview</button><button>Pending</button></>
       if (key === 'sidebar.workspaces') {
         owner = params
@@ -43,6 +44,8 @@ describe('phone sidebar', () => {
     expect(within(nav).getAllByRole('button').map(button => button.textContent)).toEqual(['Overview', 'Pending', 'Workspaces', 'New Session'])
     expect(within(nav).queryByRole('button', { name: 'Settings' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Compact companion' })).toBeTruthy()
+    expect(within(nav).queryByRole('button', { name: 'Compact companion' })).toBeNull()
     const filter = screen.getByRole('textbox', { name: 'workspace filter' })
     fireEvent.change(filter, { target: { value: 'kept filter' } })
     b.view.rerender(<SidebarRoot {...b.props} mobileView="pending" />)

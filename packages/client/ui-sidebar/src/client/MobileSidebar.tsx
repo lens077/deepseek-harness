@@ -27,6 +27,7 @@ export function MobileSidebar({
       <header className={css.header}>
         <span className={css.title}>{t('brand.localBuild')}</span>
         <div className={css.settings}>
+          {renderSlot('sidebar.footer.action', { wide: false })}
           <button
             type="button"
             className={css.pureUi}

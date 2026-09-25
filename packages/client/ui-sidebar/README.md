@@ -27,7 +27,7 @@ The dsh web client sidebar lets users recognize the active build, start a new se
 
 The sidebar is the navigation shell: users see the brand, start new sessions, collapse the rail, and reach Settings. Feature plugins fill its seats — ui-workspace fills `sidebar.workspaces`, ui-settings registers the trigger row and settings panel at `sidebar.settings`.
 
-On phones, the fixed bottom navigation contains **Overview**, **Pending**, **Workspaces**, and **New Session** in that order. ui-digest supplies the first two entries through `sidebar.nav.entry`; Settings remains in the top header. Phone **New Session** explicitly creates an ungrouped scratch Session rather than inheriting the current Workspace; creation disables the button while pending and reports a failure without navigating away.
+On phones, the fixed bottom navigation contains **Overview**, **Pending**, **Workspaces**, and **New Session** in that order. ui-digest supplies the first two entries through `sidebar.nav.entry`; Settings remains in the top header. Optional `sidebar.footer.action` entries appear above Settings on desktop and beside Settings with `wide: false` in the phone header; phone occupants must fit a compact control. Phone **New Session** explicitly creates an ungrouped scratch Session rather than inheriting the current Workspace; creation disables the button while pending and reports a failure without navigating away.
 
 ### Brand and New Session
 

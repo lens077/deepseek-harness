@@ -27,7 +27,7 @@ dsh Web 客户端的侧边栏让用户识别当前构建、启动新会话、将
 
 侧边栏是导航外壳：用户看到品牌、启动新会话、折叠轨道并到达 Settings。功能插件填充它的席位——ui-workspace 填充 `sidebar.workspaces`，ui-settings 在 `sidebar.settings` 注册触发行与设置面板。
 
-手机端固定底部导航依次为**总览**、**待处理**、**工作区**和**新会话**。ui-digest 通过 `sidebar.nav.entry` 提供前两个入口；设置保留在顶部栏。手机端**新会话**明确创建未分组的临时 Session，而不继承当前 Workspace；创建期间按钮禁用，失败时显示错误并留在当前页面。
+手机端固定底部导航依次为**总览**、**待处理**、**工作区**和**新会话**。ui-digest 通过 `sidebar.nav.entry` 提供前两个入口；设置保留在顶部栏。可选的 `sidebar.footer.action` 条目在桌面端位于设置上方，在手机端顶部栏中以 `wide: false` 位于设置旁边；手机端占位方必须采用紧凑控件。手机端**新会话**明确创建未分组的临时 Session，而不继承当前 Workspace；创建期间按钮禁用，失败时显示错误并留在当前页面。
 
 ### 品牌与 New Session
 
