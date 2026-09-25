@@ -706,7 +706,7 @@ describe('DigestPanel keyboard ring', () => {
     expect(keycaps('run')).toEqual(['1', '4', '5'])
     b.press('4')
     expect(b.fileTodo).toHaveBeenCalledOnce()
-    expect(b.fileTodo.mock.calls[0]?.[0]).toMatchObject({ sessionId: 'run' })
+    expect(b.fileTodo).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'run' }))
     expect(screen.getByText(/Enter 继续 · Shift\+Enter 打开会话 · 1–6 按钮 · Esc 关闭 · Ctrl\+1 开关面板/)).toBeTruthy()
   })
 

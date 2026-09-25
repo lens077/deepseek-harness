@@ -24,7 +24,7 @@ function mount(rows: 'single' | 2 | 6 | 'all' = 'single') {
     clientHeight: { configurable: true, value: 28 },
     scrollHeight: { configurable: true, value: 96 },
   })
-  fireEvent(globalThis, new Event('resize'))
+  fireEvent(window, new Event('resize'))
   return { scroll, onSelect, ...view }
 }
 
