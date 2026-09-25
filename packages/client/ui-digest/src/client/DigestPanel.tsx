@@ -2,26 +2,33 @@
  * The inbox surface over the center column: what needs the user across every
  * workspace, sectioned by why — finished, seen but not dealt with, running,
  * waiting for a reply, failed — plus the todo, project todo, and timeline
- * tabs. On desktop the inbox is either stacked sections or the board, four
- * state columns side by side; both can hide the cards' replies to fit more
- * rows on screen.
+ * tabs. Desktop sections and board columns admit only populated states;
+ * a sole state uses the full card grid. Closing replies can be hidden without
+ * hiding running-work facts.
  *
  * The session list supplies every card's content (the digest projection rides
  * each row) and the durable inbox supplies the user's marks; the panel joins
  * them per render and never fetches a session. The keyboard ring walks the
- * inbox cards in section order, or column by column on the board, so a
+ * inbox cards in section order, or column by column on the board, the arrow
+ * keys move along the row or column on screen, Tab jumps between sections
+ * or columns, and the digit keys press the focused card's buttons, so a
  * morning of triage never needs the mouse.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import clsx from 'clsx'
 import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InboxTodoId } from '@deepseek-ai/dsh-session-inbox/types'
 import type { DigestPanelProps } from './contract/slots.ts'
 import { InboxCard, type InboxCardActions } from './InboxCard.tsx'
+import { WorkspaceFilter } from './WorkspaceFilter.tsx'
+import { workspaceRowsOf } from './workspace-layout.ts'
+import { cardColumnsOf } from './card-layout.ts'
 import type { BriefLabels, InboxItem, InboxSectionKey, InboxWindow } from './select.ts'
 import { questionSeqOf, renderBrief, selectColumns, selectInbox, selectTimeline, selectTodos, startOfDay } from './select.ts'
 import type { InboxLayout, InboxTab } from './stores.ts'
+import type { CardAction } from '../nav-settings.ts'
+import { cardActionAvailable, cardActionOfKey, neighborCard, type CardBox, type Direction } from './card-keys.ts'
 import { ProjectTodos, type ProjectTodosActions } from './ProjectTodos.tsx'
 import { Timeline } from './Timeline.tsx'
 import { TodoList } from './TodoList.tsx'
@@ -40,6 +47,23 @@ const TAB_KEYS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
 const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
 const SECTION_KEYS: readonly InboxSectionKey[] = ['pinned', 'unread', 'seen', 'running', 'needsYou', 'failed', 'handled']
 const LAYOUTS: readonly InboxLayout[] = ['sections', 'columns']
+const ARROWS: Readonly<Record<string, Direction>> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }
+
+/* v8 ignore next 3 -- closed-union backstop; only reached if the action is forged */
+function assertNever(value: never): never {
+  throw new Error(`unknown card action: ${String(value)}`)
+}
+
+/**
+ * The visible cards' boxes in viewport pixels, for the arrow keys.
+ * @returns one box per card, in document order.
+ */
+function cardBoxes(): CardBox[] {
+  return [...document.querySelectorAll<HTMLElement>('[data-digest-panel] [data-session-id]')].map((card) => {
+    const rect = card.getBoundingClientRect()
+    return { sessionId: card.dataset['sessionId'] as string, x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+  })
+}
 
 /**
  * Render the inbox panel, or nothing while it is closed.
@@ -70,10 +94,13 @@ export function DigestPanel(props: DigestPanelProps) {
   const showHandled = useStore(s => s.showHandled)
   const layout = useStore(s => s.layout)
   const showReply = useStore(s => s.showReply)
+  const workspaceRows = useStore(s => workspaceRowsOf(s.workspaceRows))
+  const cardColumns = useStore(s => cardColumnsOf(s.cardColumns))
   // The board is a desktop arrangement: phones list one column of rows anyway.
   const board = mobileView === undefined && layout === 'columns'
   const rows = useSessions(s => s.ids.map(id => s.byId[id]).filter(row => row !== undefined))
   const currentSessionId = useSessions(s => s.current)
+  const jobsBySession = useSessions(s => s.jobsBySession)
   const pending = useSessionPendingInteraction(value => value)
   const workspaces = useWorkspaces(s => s.items)
   const archived = useWorkspaces(s => s.archivedSessionIds)
@@ -82,13 +109,15 @@ export function DigestPanel(props: DigestPanelProps) {
   const inbox = useInbox(v => v.snapshot)
   const projectsView = useProjects(v => v)
   const toggleShortcut = useNavSettings(v => v.toggleShortcut)
+  const enterAction = useNavSettings(v => v.enterAction)
   // The master switch hides the card's pin action and its key; the section
   // switch only changes where a pinned row is listed.
   const pinning = usePinsSettings(v => v.enabled)
   const pinnedSection = usePinsSettings(v => v.enabled && v.digestSection)
 
+  const panelRef = useRef<HTMLDivElement>(null)
   const [now, setNow] = useState(() => Date.now())
-  const [focus, setFocus] = useState(0)
+  const [focusedSession, setFocusedSession] = useState<SessionId | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
@@ -122,9 +151,11 @@ export function DigestPanel(props: DigestPanelProps) {
       now, window: mobilePending ? 'all' : window,
       workspace: mobilePending ? undefined : workspaceFilter, showHandled: mobilePending ? false : showHandled, ungroupedLabel,
       pendingSessionIds: new Set(pending.keys()),
+      jobsBySession,
       pinnedSection,
     }),
-    [visibleRows, workspaces, inbox, pending, now, window, workspaceFilter, showHandled, ungroupedLabel, mobilePending, pinnedSection],
+    [visibleRows, workspaces, inbox, pending, jobsBySession, now, window, workspaceFilter, showHandled,
+      ungroupedLabel, mobilePending, pinnedSection],
   )
   const sections = useMemo(() => {
     if (mobileView === 'overview') {
@@ -139,11 +170,10 @@ export function DigestPanel(props: DigestPanelProps) {
   }, [selection, mobilePending, mobileView, runningOnly])
   const columns = useMemo(() => selectColumns(sections), [sections])
   // The ring walks whatever the user sees: sections top to bottom, or the
-  // board column by column, left to right.
-  const ring = useMemo(
-    () => (board ? columns : sections).flatMap(group => group.items),
-    [board, columns, sections],
-  )
+  // board column by column, left to right; Tab jumps between those groups.
+  const groups = board ? columns : sections
+  const ring = useMemo(() => groups.flatMap(group => group.items), [groups])
+  const focus = Math.max(0, ring.findIndex(item => item.sessionId === focusedSession))
   const todos = useMemo(() => selectTodos(inbox, visibleRows, workspaces, ungroupedLabel), [inbox, visibleRows, workspaces, ungroupedLabel])
   // Pinned rows keep their category, so the ring alone yields every failed row.
   const autoTodos = useMemo(() => ring.filter(item => item.category === 'failed'), [ring])
@@ -153,8 +183,8 @@ export function DigestPanel(props: DigestPanelProps) {
   )
 
   useEffect(() => {
-    if (focus >= ring.length) setFocus(Math.max(0, ring.length - 1))
-  }, [ring.length, focus])
+    if (!ring.some(item => item.sessionId === focusedSession)) setFocusedSession(ring[0]?.sessionId ?? null)
+  }, [ring, focusedSession])
 
   const cardActions = useMemo<InboxCardActions>(() => ({
     open: (item) => {
@@ -199,8 +229,8 @@ export function DigestPanel(props: DigestPanelProps) {
     readDocument: readProjectDocument,
   }), [rescanProjects, openProject, openPath, readProjectDocument, closePanel, t])
 
-  const focusCard = useCallback((index: number, item: InboxItem) => {
-    setFocus(index)
+  const focusCard = useCallback((item: InboxItem) => {
+    setFocusedSession(item.sessionId)
     for (const card of document.querySelectorAll<HTMLElement>('[data-digest-panel] [data-session-id]')) {
       if (card.dataset['sessionId'] !== item.sessionId) continue
       card.scrollIntoView({ block: 'nearest' })
@@ -208,54 +238,121 @@ export function DigestPanel(props: DigestPanelProps) {
     }
   }, [])
 
+  const runCardAction = useCallback((action: CardAction, item: InboxItem): void => {
+    switch (action) {
+      case 'open': cardActions.open(item); break
+      case 'continue': cardActions.continueWork(item); break
+      case 'handled': cardActions.toggleHandled(item); break
+      case 'todo': cardActions.addTodo(item); break
+      case 'pin': cardActions.togglePinned(item); break
+      case 'snooze': cardActions.snoozeUntilTomorrow(item); break
+      /* v8 ignore next -- closed-union exhaustiveness guard */
+      default: assertNever(action)
+    }
+  }, [cardActions])
+
   useEffect(() => {
     if (!open || tab !== 'inbox') return
-    const onKey = (event: KeyboardEvent): void => {
+    // The digit keys are claimed by the sidebar's pinned area on the same
+    // document, so they are taken in the capture phase while the panel is
+    // open; every other key waits for the bubble phase so a control closer
+    // to the press (a menu, a dialog) still sees it first.
+    const onKey = (event: KeyboardEvent, capturing: boolean): void => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isEditableTarget(event.target)) return
       if (mobileView !== undefined) return
+      const digitAction = cardActionOfKey(event.key)
+      if ((digitAction !== null) !== capturing) return
       if (event.key === 'Escape') {
         closePanel()
         event.preventDefault()
         return
       }
+      if (event.target instanceof HTMLElement && event.target.closest('button, a[href], summary, [role="button"], [role="tab"]') !== null) return
       const item = ring[focus]
       if (item === undefined) return
       const step = (next: number): void => {
         // `next` is clamped into the ring, so the lookup cannot miss.
         const target = ring[next] as InboxItem
-        focusCard(next, target)
+        focusCard(target)
+      }
+      const stepTo = (sessionId: string): void => {
+        step(ring.findIndex(candidate => candidate.sessionId === sessionId))
+      }
+      const run = (action: CardAction): void => {
+        runCardAction(cardActionAvailable(item, action, pinning) ? action : 'open', item)
+      }
+      const direction = ARROWS[event.key]
+      if (direction !== undefined) {
+        // Every ring item is drawn as a card, so the lookup lands.
+        const boxes = cardBoxes()
+        const from = boxes.find(box => box.sessionId === item.sessionId) as CardBox
+        if (from.width === 0 && from.height === 0) {
+          // No layout to measure (a hidden document): the ring order stands in.
+          step(direction === 'down' || direction === 'right' ? Math.min(ring.length - 1, focus + 1) : Math.max(0, focus - 1))
+        } else {
+          const next = neighborCard(boxes, from, direction)
+          if (next !== null) stepTo(next)
+        }
+        event.preventDefault()
+        return
       }
       switch (event.key) {
-        case 'j': case 'ArrowDown':
+        case 'j':
           step(Math.min(ring.length - 1, focus + 1))
           break
-        case 'k': case 'ArrowUp':
+        case 'k':
           step(Math.max(0, focus - 1))
           break
+        case 'Home':
+          step(0)
+          break
+        case 'End':
+          step(ring.length - 1)
+          break
+        case 'Tab': {
+          // A focused control keeps Tab for the browser's own focus order.
+          const active = document.activeElement
+          if (active !== null && active !== document.body && active !== panelRef.current) return
+          const populated = groups.filter(group => group.items.length > 0)
+          const at = populated.findIndex(group => group.items.includes(item))
+          const next = populated[at + (event.shiftKey ? -1 : 1)]
+          // At either edge, native Tab can reach the toolbar and workspace controls.
+          if (next === undefined) return
+          stepTo((next.items[0] as InboxItem).sessionId)
+          break
+        }
         case 'Enter':
-          cardActions.open(item)
-          break
-        case 'e':
-          if (!item.running) cardActions.toggleHandled(item)
-          break
-        case 't':
-          cardActions.addTodo(item)
-          break
-        case 'p':
-          if (!pinning) return
-          cardActions.togglePinned(item)
-          break
-        case 's':
-          if (!item.running && !item.waiting) cardActions.snoozeUntilTomorrow(item)
+          run(event.shiftKey ? 'open' : enterAction)
           break
         default:
-          return
+          if (digitAction === null) return
+          if (!cardActionAvailable(item, digitAction, pinning)) return
+          runCardAction(digitAction, item)
       }
       event.preventDefault()
     }
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('keydown', onKey) }
-  }, [open, tab, ring, focus, focusCard, cardActions, closePanel, mobileView, pinning])
+    const onCapture = (event: KeyboardEvent): void => { onKey(event, true) }
+    const onBubble = (event: KeyboardEvent): void => { onKey(event, false) }
+    document.addEventListener('keydown', onCapture, true)
+    document.addEventListener('keydown', onBubble)
+    return () => {
+      document.removeEventListener('keydown', onCapture, true)
+      document.removeEventListener('keydown', onBubble)
+    }
+  }, [open, tab, ring, groups, focus, focusCard, runCardAction, closePanel, mobileView, pinning, enterAction])
+
+  // The toggle chord is pressed wherever the user is typing, so the panel
+  // takes focus on open: keys then reach it rather than the covered field,
+  // which gets its focus back when the panel closes.
+  useEffect(() => {
+    if (!open || mobileView !== undefined) return
+    const previous = document.activeElement
+    panelRef.current?.focus({ preventScroll: true })
+    return () => {
+      const idle = document.activeElement === document.body
+      if (idle && previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true })
+    }
+  }, [open, mobileView])
 
   const copyBrief = useCallback(() => {
     const labels: BriefLabels = {
@@ -283,6 +380,7 @@ export function DigestPanel(props: DigestPanelProps) {
   // overlay pointer-transparent so the conversation stays fully interactive.
   if (!open) return null
 
+  const legend = t('panel.keys', { enter: t(`card.${enterAction}`), shortcut: toggleShortcut })
   const continueFromTodo = (id: SessionId, hint: string | null): void => {
     closePanel()
     continueSession(id, hint === null ? t('continue.prefill') : `${t('continue.prefill')}\n${hint}`)
@@ -293,7 +391,7 @@ export function DigestPanel(props: DigestPanelProps) {
   }
 
   return (
-    <div className={css.panel} role="region" aria-label={t(mobilePending ? 'mobile.pending' : mobileView === 'overview' ? 'mobile.overview' : 'panel.title')} data-digest-panel="" data-mobile-pending={mobilePending || undefined}>
+    <div ref={panelRef} tabIndex={-1} className={css.panel} role="region" aria-label={t(mobilePending ? 'mobile.pending' : mobileView === 'overview' ? 'mobile.overview' : 'panel.title')} data-digest-panel="" data-mobile-pending={mobilePending || undefined}>
       <header className={css.header}>
         <h2 className={css.title}>{t(mobilePending ? 'mobile.pending' : mobileView === 'overview' ? 'mobile.overview' : 'panel.title')}</h2>
         {!mobilePending && <span className={css.tabs} role="tablist">
@@ -452,29 +550,13 @@ export function DigestPanel(props: DigestPanelProps) {
       </div>}
 
       {!mobilePending && selection.workspaces.length > 1 && (
-        <div className={css.chips} role="group">
-          <button
-            type="button"
-            className={clsx(css.chip, workspaceFilter === undefined && css.chipActive)}
-            aria-pressed={workspaceFilter === undefined}
-            onClick={() => { actions.setWorkspace(undefined) }}
-          >
-            {t('panel.allWorkspaces')}
-          </button>
-          {selection.workspaces.map(count => (
-            <button
-              key={count.workspaceId ?? '__ungrouped__'}
-              type="button"
-              className={clsx(css.chip, workspaceFilter === count.workspaceId && css.chipActive)}
-              aria-pressed={workspaceFilter === count.workspaceId}
-              onClick={() => { actions.setWorkspace(count.workspaceId) }}
-            >
-              {count.title}
-              {count.attention > 0 && <span className={css.chipCount}>{count.attention}</span>}
-              {count.running > 0 && <span className={css.chipRunning}>{count.running}</span>}
-            </button>
-          ))}
-        </div>
+        <WorkspaceFilter
+          workspaces={selection.workspaces}
+          selected={workspaceFilter}
+          rows={workspaceRows}
+          onSelect={actions.setWorkspace}
+          t={t}
+        />
       )}
 
       {inboxStatus === 'error' && (
@@ -484,7 +566,7 @@ export function DigestPanel(props: DigestPanelProps) {
         </div>
       )}
 
-      <div className={css.body}>
+      <div className={css.body} data-digest-body="" style={{ '--digest-card-columns': cardColumns } as CSSProperties}>
         {(mobilePending || tab === 'inbox') && (
           sections.length === 0
             ? (
@@ -495,17 +577,16 @@ export function DigestPanel(props: DigestPanelProps) {
             )
             : board
               ? (
-                <div className={css.board} data-digest-board="">
-                  {columns.map(column => (
-                    <section key={column.key} className={css.column} data-column={column.key}>
-                      <h3 className={css.sectionLabel}>
-                        {t(`column.${column.key}`)}
-                        <span className={css.sectionCount}>{column.items.length}</span>
-                      </h3>
-                      <div className={css.columnList}>
-                        {column.items.length === 0
-                          ? <p className={css.columnEmpty}>{t('column.empty')}</p>
-                          : column.items.map(item => (
+                <div className={css.boardWrap}>
+                  <div className={css.board} data-digest-board="">
+                    {columns.map(column => (
+                      <section key={column.key} className={css.column} data-column={column.key}>
+                        <h3 className={css.sectionLabel}>
+                          {t(`column.${column.key}`)}
+                          <span className={css.sectionCount}>{column.items.length}</span>
+                        </h3>
+                        <div className={clsx(css.columnList, columns.length === 1 && [css.grid, css.columnListSingle])}>
+                          {column.items.map(item => (
                             <InboxCard
                               key={item.sessionId}
                               item={item}
@@ -516,13 +597,14 @@ export function DigestPanel(props: DigestPanelProps) {
                               showReply={showReply}
                             />
                           ))}
-                      </div>
-                    </section>
-                  ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
                 </div>
               )
               : (
-                <>
+                <div className={clsx(css.sections, mobileView === undefined && sections.length === 1 && css.sectionsSingle)}>
                   {sections.map(section => (
                     <section key={section.key} className={css.section} data-section={section.key} id={mobilePending ? `digest-pending-${section.key}` : undefined}>
                       <h3 className={css.sectionLabel}>
@@ -548,8 +630,7 @@ export function DigestPanel(props: DigestPanelProps) {
                       </div>
                     </section>
                   ))}
-                  <p className={css.keys}>{t('panel.keys', { shortcut: toggleShortcut })}</p>
-                </>
+                </div>
               )
         )}
         {mobilePending && <h3 className={css.sectionLabel} id="digest-pending-todos">{t('mobile.todos')}</h3>}
@@ -587,6 +668,7 @@ export function DigestPanel(props: DigestPanelProps) {
           <Timeline days={timeline} now={now} t={t} openQuestion={openAt} />
         )}
       </div>
+      {mobileView === undefined && tab === 'inbox' && ring.length > 0 && <footer className={css.keys} data-digest-keys="">{legend}</footer>}
     </div>
   )
 }

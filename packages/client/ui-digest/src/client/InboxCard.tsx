@@ -1,12 +1,16 @@
 /**
- * Inbox cards show the newest question, closing answer, changed files, and
- * triage actions. Phone rows disclose those details on demand; the panel owns
- * expansion and every action.
+ * Inbox cards show the newest question, live work or closing answer, changed
+ * files, and triage actions. Phone rows disclose those details on demand; the panel owns
+ * expansion and every action. Desktop buttons always show their digit key;
+ * keyboard actions target only the selected card.
  */
 import { useId } from 'react'
 import clsx from 'clsx'
+import type { CardAction } from '../nav-settings.ts'
+import { CARD_ACTION_KEYS } from './card-keys.ts'
 import type { DigestPanelProps } from './contract/slots.ts'
 import type { InboxItem } from './select.ts'
+import { RunningWork } from './RunningWork.tsx'
 import css from './DigestPanel.module.css'
 
 /** Actions the panel offers on one item; the keyboard ring calls the same ones. */
@@ -40,6 +44,10 @@ export function InboxCard({ item, focused, t, actions, pinning, showReply, discl
   disclosure?: { expanded: boolean; toggle: () => void } | undefined
 }) {
   const detailsId = useId()
+  // Phone rows have no keyboard ring, so they never draw a keycap.
+  const key = (action: CardAction) => disclosure === undefined
+    ? <kbd className={css.keycap} aria-hidden="true">{CARD_ACTION_KEYS[action]}</kbd>
+    : null
   const tone = item.waiting
     ? css.waiting
     : item.running
@@ -94,15 +102,16 @@ export function InboxCard({ item, focused, t, actions, pinning, showReply, discl
             <span className={css.cardTitle} title={item.title}>{item.title}</span>
             <span className={css.cardWorkspace} title={item.workspaceTitle}>{item.workspaceTitle}</span>
           </span>
-          <div className={clsx(css.cardBody, !showReply && css.cardBodyBrief)} data-card-body="">
+          <div className={clsx(css.cardBody, !item.running && !showReply && css.cardBodyBrief)} data-card-body="">
             <span className={css.fieldLabel}>{t('card.question')}</span>
             <span
-              className={clsx(css.question, !showReply && css.questionBrief)}
-              title={showReply || item.question === null ? undefined : item.question}
+              className={clsx(css.question, (item.running || !showReply) && css.questionBrief)}
+              title={(!item.running && showReply) || item.question === null ? undefined : item.question}
             >
               {item.question === null ? t('card.noQuestion') : item.question}
               {item.questionTruncated ? '…' : ''}
             </span>
+            {item.running && <RunningWork item={item} t={t} />}
             {!item.running && showReply && (
               <>
                 <span className={css.fieldLabel}>{t('card.reply')}</span>
@@ -129,31 +138,31 @@ export function InboxCard({ item, focused, t, actions, pinning, showReply, discl
               </span>
             )}
           </div>
-          <span className={css.cardActions}>
+          <span className={css.cardActions} data-card-actions="">
             <button type="button" className={css.openSession} onClick={() => { actions.open(item) }}>
-              {t('card.open')}
+              {key('open')}{t('card.open')}
             </button>
             {!item.running && !item.waiting && (
               <button type="button" className={css.action} onClick={() => { actions.continueWork(item) }}>
-                {t('card.continue')}
+                {key('continue')}{t('card.continue')}
               </button>
             )}
             {!item.running && (
               <button type="button" className={css.action} onClick={() => { actions.toggleHandled(item) }}>
-                {item.handled ? t('card.unhandle') : t('card.handled')}
+                {key('handled')}{item.handled ? t('card.unhandle') : t('card.handled')}
               </button>
             )}
             <button type="button" className={css.action} onClick={() => { actions.addTodo(item) }}>
-              {t('card.todo')}
+              {key('todo')}{t('card.todo')}
             </button>
             {pinning && (
               <button type="button" className={css.action} onClick={() => { actions.togglePinned(item) }}>
-                {item.pinned ? t('card.unpin') : t('card.pin')}
+                {key('pin')}{item.pinned ? t('card.unpin') : t('card.pin')}
               </button>
             )}
             {!item.running && !item.waiting && (
               <button type="button" className={css.action} onClick={() => { actions.snoozeUntilTomorrow(item) }}>
-                {t('card.snooze')}
+                {key('snooze')}{t('card.snooze')}
               </button>
             )}
           </span>

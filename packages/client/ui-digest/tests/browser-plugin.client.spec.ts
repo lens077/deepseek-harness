@@ -131,6 +131,7 @@ async function bench(initial: InboxSnapshot = inbox()) {
     'sidebar.nav.entry': { kind: 'list', scope: 'root' },
     'center.overlay': { kind: 'list', scope: 'root' },
     'settings.section': { kind: 'list', scope: 'root' },
+    'settings.layout.item': { kind: 'list', scope: 'root' },
     'conversation.session.header.actions': { kind: 'list', scope: 'session' },
   }, () => null)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
@@ -200,6 +201,11 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'settings.section')).toContain('project-todos')
     expect(entryIds(b.ctx, 'settings.section')).toContain('digest')
     expect(entryIds(b.ctx, 'settings.section')).toContain('session-pins')
+    expect(entryIds(b.ctx, 'settings.layout.item')).toContain('digest-workspaces')
+    const layout = b.ctx.slots.entries('settings.layout.item').find(entry => entry.options.id === 'digest-workspaces')
+    const panelEntry = b.ctx.slots.entries('center.overlay').find(entry => entry.options.id === 'digest')
+    expect(layout?.store).toBeDefined()
+    expect(layout?.store).toBe(panelEntry?.store)
     expect(entryIds(b.ctx, 'conversation.session.header.actions')).toContain('digest-read')
     await b.runtime.flush()
     // The project scan is not read until the tab shows.
@@ -212,6 +218,7 @@ describe('ui-digest browser half', () => {
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('project-todos')
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('digest')
     expect(entryIds(b.ctx, 'settings.section')).not.toContain('session-pins')
+    expect(entryIds(b.ctx, 'settings.layout.item')).not.toContain('digest-workspaces')
     expect(entryIds(b.ctx, 'conversation.session.header.actions')).not.toContain('digest-read')
   })
 
@@ -330,11 +337,15 @@ describe('ui-digest browser half', () => {
     // The decoder defaults an incomplete wire section rather than passing it through.
     expect(digestBinding?.decode?.({ navBadges: false })).toEqual({ ...DEFAULT_DIGEST_SETTINGS, navBadges: false })
     const face = b.digestSettings()
+    const settingsEntry = b.ctx.slots.entries('settings.section').find(entry => entry.options.id === 'digest')
+    const panelEntry = b.ctx.slots.entries('center.overlay').find(entry => entry.options.id === 'digest')
+    expect(settingsEntry?.store).toBeDefined()
+    expect(settingsEntry?.store).toBe(panelEntry?.store)
     expect(face.hooks.navSettings).toBe(b.nav().hooks.navSettings)
     expect(face.hooks.navSettings.getSnapshot()).toMatchObject({ status: 'ready', navBadges: true, navFinishedBadge: false, writable: true })
-    b.digestScope.publish({ status: 'ready', writable: true, value: { ...DEFAULT_DIGEST_SETTINGS, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2' } })
+    b.digestScope.publish({ status: 'ready', writable: true, value: { ...DEFAULT_DIGEST_SETTINGS, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2', enterAction: 'todo' } })
     expect(face.hooks.navSettings.getSnapshot()).toEqual({
-      ...DEFAULT_DIGEST_SETTINGS, status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2',
+      ...DEFAULT_DIGEST_SETTINGS, status: 'ready', writable: true, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'F2', enterAction: 'todo',
     })
     // The panel reads the same view to name the chord in its key legend.
     expect(b.panel().hooks.navSettings).toBe(face.hooks.navSettings)
@@ -342,10 +353,11 @@ describe('ui-digest browser half', () => {
     await face.setNavFinishedBadge(false)
     await face.setNavBadgeOrder(['running', 'running', 'waiting'])
     await face.setToggleShortcut('Ctrl+Shift+I')
+    await face.setEnterAction('pin')
     await face.setReadAcknowledgement('manual')
     await face.setReadGraceSeconds(8)
     expect(b.digestScope.set.mock.calls).toEqual([
-      ['navBadges', false], ['navFinishedBadge', false], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'Ctrl+Shift+I'],
+      ['navBadges', false], ['navFinishedBadge', false], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'Ctrl+Shift+I'], ['enterAction', 'pin'],
       ['readAcknowledgement', 'manual'], ['readGraceSeconds', 8],
     ])
     const entry = b.ctx.slots.entries('settings.section').find(e => e.options.id === 'digest')

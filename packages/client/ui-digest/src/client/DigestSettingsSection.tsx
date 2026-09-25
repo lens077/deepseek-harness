@@ -1,16 +1,19 @@
 /**
- * The Digest panel settings page: the chord that toggles the panel, whether
- * the sidebar entry shows the state badges, whether a grey finished badge
- * joins them, and the order the state badges take. The chord is recorded by
- * pressing it in a read-only field and saved on the spot; a refused press
- * names its reason beside the field. The order list is reordered by dragging
- * a row onto another, or by the move buttons for keyboard users; every edit
+ * The Digest panel settings page: the chord that toggles the panel, the card
+ * action plain Enter runs on the focused inbox card, whether the sidebar
+ * entry shows the state badges, whether a grey finished badge joins them,
+ * and the order the state badges take. The chord is recorded by pressing it
+ * in a read-only field and saved on the spot; a refused press names its
+ * reason beside the field. The order list is reordered by dragging a row
+ * onto another, or by the move buttons for keyboard users; every edit
  * writes the whole order so the document always holds a permutation.
  */
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import clsx from 'clsx'
 import type { DigestSettingsSectionProps } from './contract/slots.ts'
-import { NAV_BADGE_STATES, type NavBadgeState } from '../nav-settings.ts'
+import { CARD_ACTIONS, NAV_BADGE_STATES, type NavBadgeState } from '../nav-settings.ts'
+import { CARD_ACTION_KEYS } from './card-keys.ts'
+import { CARD_COLUMNS, cardColumnsOf } from './card-layout.ts'
 import { DEFAULT_TOGGLE_SHORTCUT, hasCommandModifier, recordToggleShortcut } from '../toggle-shortcut.ts'
 import css from './ProjectSettingsSection.module.css'
 
@@ -34,9 +37,10 @@ function move<T>(list: readonly T[], from: number, to: number): T[] {
  * @returns the page element.
  */
 export function DigestSettingsSection(props: DigestSettingsSectionProps) {
-  const { useNavSettings, setNavBadges, setNavFinishedBadge, setNavBadgeOrder, setToggleShortcut, t } = props
+  const { useNavSettings, setNavBadges, setNavFinishedBadge, setNavBadgeOrder, setToggleShortcut, setEnterAction, t } = props
   const { setReadAcknowledgement, setReadGraceSeconds } = props
   const view = useNavSettings(value => value)
+  const cardColumns = props.useStore(value => cardColumnsOf(value.cardColumns))
   const [graceDraft, setGraceDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refused, setRefused] = useState<'reserved' | 'unsupported' | null>(null)
@@ -93,6 +97,15 @@ export function DigestSettingsSection(props: DigestSettingsSectionProps) {
     <div className={css.section}>
       <h3 className={css.title}>{t('digestSettings.title')}</h3>
       <p className={css.desc}>{t('digestSettings.description')}</p>
+      <div className={css.field}>
+        <label className={css.label} htmlFor="digest-card-columns">{t('digestSettings.cardColumns')}</label>
+        <p id="digest-card-columns-hint" className={css.hint}>{t('digestSettings.cardColumns.hint')}</p>
+        <select id="digest-card-columns" className={css.input} value={cardColumns}
+          aria-describedby="digest-card-columns-hint"
+          onChange={(event) => { props.actions.setCardColumns(cardColumnsOf(event.currentTarget.value)) }}>
+          {CARD_COLUMNS.map(columns => <option key={columns} value={columns}>{t('digestSettings.cardColumns.option', { count: columns })}</option>)}
+        </select>
+      </div>
       {view.status === 'loading' && <p className={css.desc}>{t('settings.loading')}</p>}
       {view.status !== 'loading' && disabled && <p className={css.warn}>{t('settings.unavailable')}</p>}
       {error !== null && <p className={css.error} role="alert">{error}</p>}
@@ -156,6 +169,24 @@ export function DigestSettingsSection(props: DigestSettingsSectionProps) {
           onBlur={commitGraceSeconds}
         />
       </div>
+
+      <fieldset className={css.field}>
+        <legend className={css.label}>{t('digestSettings.enterAction')}</legend>
+        <p className={css.hint}>{t('digestSettings.enterAction.hint')}</p>
+        {CARD_ACTIONS.map(action => (
+          <label key={action} className={css.check}>
+            <input
+              type="radio"
+              name="digest-enter-action"
+              value={action}
+              checked={view.enterAction === action}
+              disabled={disabled}
+              onChange={() => { void setEnterAction(action).catch(failed) }}
+            />
+            <span className={css.label}>{t('digestSettings.enterAction.option', { key: CARD_ACTION_KEYS[action], action: t(`card.${action}`) })}</span>
+          </label>
+        ))}
+      </fieldset>
 
       <div className={css.field}>
         <label className={css.check}>

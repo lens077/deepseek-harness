@@ -56,6 +56,7 @@ interface MountOptions {
   projects?: Partial<ProjectTodosView>
   mobileView?: DigestPanelProps['mobileView']
   toggleShortcut?: string
+  enterAction?: NavSettingsView['enterAction']
   pins?: Partial<PinsSettingsView>
 }
 
@@ -72,6 +73,7 @@ function mountPanel({
   projects = {},
   mobileView,
   toggleShortcut = 'Ctrl+1',
+  enterAction = 'open',
   pins = {},
 }: MountOptions = {}) {
   const store = createDigestStore().create()
@@ -85,7 +87,7 @@ function mountPanel({
   const projectsView: ProjectTodosView = { status: 'ready', snapshot: projectsSnapshot(), error: null, scanning: false, ...projects }
   const navSettings: NavSettingsView = {
     status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
-    navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut,
+    navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut, enterAction,
     readAcknowledgement: 'automatic', readGraceSeconds: 5,
   }
   const pinsSettings: PinsSettingsView = {
@@ -129,6 +131,18 @@ function mountPanel({
   const rendered = render(<DigestPanel {...props} />)
   const rerender = (): void => { rendered.rerender(<DigestPanel {...props} />) }
   return { view: rendered, rerender, store, ...calls }
+}
+
+/** Give every card a box, keyed by session id, as `getBoundingClientRect` would report it; unlisted cards keep jsdom's empty box. */
+function layOut(boxes: Record<string, [x: number, y: number, width: number, height: number]>): void {
+  for (const card of document.querySelectorAll<HTMLElement>('[data-session-id]')) {
+    const box = boxes[card.dataset['sessionId'] ?? '']
+    if (box === undefined) continue
+    const [x, y, width, height] = box
+    card.getBoundingClientRect = () => ({
+      x, y, width, height, left: x, top: y, right: x + width, bottom: y + height, toJSON: () => null,
+    })
+  }
 }
 
 function section(key: string): HTMLElement {
@@ -198,6 +212,7 @@ describe('DigestPanel phone surfaces', () => {
       snapshot: inbox({ todos: [todo('manual', 'unread', { text: 'Personal follow-up' })] }),
     })
     expect(screen.getByRole('region', { name: zh['mobile.pending'] })).toBeTruthy()
+    expect(document.querySelector('kbd')).toBeNull()
     expect(section('needsYou').textContent).toContain('title-waiting')
     expect(section('unread').textContent).toContain('title-unread')
     expect(screen.getByText('Personal follow-up')).toBeTruthy()
@@ -255,7 +270,7 @@ describe('DigestPanel inbox tab', () => {
     expect(screen.queryByText('title-archived')).toBeNull()
     expect(screen.getByText('待处理 3')).toBeTruthy()
     expect(screen.getByText('运行中 1')).toBeTruthy()
-    expect(screen.getByText(zh['panel.keys'].replace('{shortcut}', 'Ctrl+1'))).toBeTruthy()
+    expect(screen.getByText(zh['panel.keys'].replace('{enter}', zh['card.open']).replace('{shortcut}', 'Ctrl+1'))).toBeTruthy()
   })
 
   it('shows the empty state, the loading state, and the error bar with retry', () => {
@@ -295,7 +310,7 @@ describe('DigestPanel inbox tab', () => {
     expect(body.textContent).toContain('已修复：token 刷新和跳转有竞态。…')
     expect(body.textContent).toContain('改了 1 个文件')
     expect(body.querySelector('button')).toBeNull()
-    expect(card.querySelector('button')?.textContent).toBe(zh['card.open'])
+    expect(within(card).getByRole('button', { name: zh['card.open'] }).querySelector('kbd')?.textContent).toBe('1')
     expect(body.contains(card.querySelector('[title="title-cut"]'))).toBe(false)
   })
 
@@ -375,7 +390,7 @@ describe('DigestPanel inbox tab', () => {
     expect([...document.querySelectorAll<HTMLElement>('[data-section]')].map(el => el.dataset['section'])).toEqual(['unread'])
     expect(screen.queryByRole('button', { name: zh['card.unpin'] })).toBeNull()
     expect(screen.queryByRole('button', { name: zh['card.pin'] })).toBeNull()
-    fireEvent.keyDown(document, { key: 'p' })
+    fireEvent.keyDown(document, { key: '5' })
     expect(m.setPinned).not.toHaveBeenCalled()
   })
 
@@ -392,6 +407,38 @@ describe('DigestPanel inbox tab', () => {
     expect(running.textContent).toContain(zh['card.noQuestion'])
     expect(running.textContent).not.toContain(zh['card.reply'])
     expect(within(running).queryByRole('button', { name: zh['card.handled'] })).toBeNull()
+  })
+
+  it('lets focused workspace and toolbar buttons keep their native Enter action', () => {
+    const m = mountPanel({ rows: [row('a'), row('b')], workspaces: [workspace('a', ['a']), workspace('b', ['b'])] })
+    for (const button of [screen.getByRole('button', { name: /^ws-a/ }), screen.getByRole('button', { name: zh['panel.close'] })]) {
+      button.focus()
+      expect(fireEvent.keyDown(button, { key: 'Enter' })).toBe(true)
+      expect(m.openSession).not.toHaveBeenCalled()
+    }
+  })
+
+  it('shows a recorded update while running without calling it a final result', () => {
+    const m = mountPanel({ rows: [row('r', { running: true, projectionValues: { sessionDigest: digest({ reply: '正在验证工作区滚动与卡片对齐。', outcome: null }) } })] })
+    const running = section('running')
+    expect(within(running).getByText('正在验证工作区滚动与卡片对齐。')).toBeTruthy()
+    expect(within(running).getByText('最新记录')).toBeTruthy()
+    expect(within(running).queryByText(zh['card.reply'])).toBeNull()
+    m.store.actions.toggleShowReply()
+    m.rerender()
+    expect(within(running).getByText('最新记录')).toBeTruthy()
+  })
+
+  it('keeps the selected session when live rows reorder', () => {
+    const rows = [row('a'), row('b', { updatedAt: NOW - 2 * HOUR })]
+    const m = mountPanel({ rows })
+    fireEvent.keyDown(document, { key: 'j' })
+    expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('b')
+    rows[1]!.updatedAt = NOW
+    m.rerender()
+    expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('b')
+    fireEvent.keyDown(document, { key: 'Enter' })
+    expect(m.openSession).toHaveBeenCalledWith('b')
   })
 
   it('switches window, workspace, and handled visibility through the store', () => {
@@ -463,12 +510,12 @@ describe('DigestPanel inbox tab', () => {
 })
 
 describe('DigestPanel keyboard ring', () => {
-  function ringBench() {
+  function ringBench(options: MountOptions = {}) {
     const m = mountPanel({ rows: [
       row('first', { updatedAt: NOW }),
       row('second', { updatedAt: NOW - HOUR }),
       row('run', { running: true }),
-    ] })
+    ], ...options })
     const focusedId = (): string | undefined =>
       document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']
     const press = (key: string, init: KeyboardEventInit = {}): void => {
@@ -477,22 +524,29 @@ describe('DigestPanel keyboard ring', () => {
     return { ...m, focusedId, press }
   }
 
-  it('moves with j/k and arrows, opens with Enter, and closes with Escape', () => {
+  it('moves with j/k, Home/End, and arrows without layout, opens with Enter, and closes with Escape', () => {
     const b = ringBench()
     // Finished rows lead, so the ring starts on the newest finished row.
     expect(b.focusedId()).toBe('first')
     b.press('j')
     b.rerender()
     expect(b.focusedId()).toBe('second')
+    // jsdom lays nothing out, so the arrows fall back to the ring order.
     b.press('ArrowDown')
     b.rerender()
     expect(b.focusedId()).toBe('run')
-    b.press('j')
+    b.press('ArrowRight')
     b.rerender()
     expect(b.focusedId()).toBe('run')
     b.press('k')
     b.press('ArrowUp')
-    b.press('k')
+    b.press('ArrowLeft')
+    b.rerender()
+    expect(b.focusedId()).toBe('first')
+    b.press('End')
+    b.rerender()
+    expect(b.focusedId()).toBe('run')
+    b.press('Home')
     b.rerender()
     expect(b.focusedId()).toBe('first')
     b.press('Enter')
@@ -504,45 +558,176 @@ describe('DigestPanel keyboard ring', () => {
     expect(b.store.getSnapshot().open).toBe(false)
   })
 
-  it('triages with e/t/p/s and leaves running rows and modified keys alone', () => {
+  it('walks the arrows along the row and down the column on screen, and stops at an edge', () => {
     const b = ringBench()
-    b.press('e')
+    // Two finished cards side by side, the running card alone in the next section under the left one.
+    layOut({ first: [0, 0, 280, 200], second: [292, 0, 280, 200], run: [0, 260, 280, 200] })
+    b.press('ArrowRight')
+    b.rerender()
+    expect(b.focusedId()).toBe('second')
+    b.press('ArrowRight')
+    b.rerender()
+    expect(b.focusedId()).toBe('second')
+    // Nothing sits under the right card, so Down stays put rather than drifting left.
+    b.press('ArrowDown')
+    b.rerender()
+    expect(b.focusedId()).toBe('second')
+    b.press('ArrowLeft')
+    b.press('ArrowDown')
+    b.rerender()
+    expect(b.focusedId()).toBe('run')
+    b.press('ArrowDown')
+    b.rerender()
+    expect(b.focusedId()).toBe('run')
+    b.press('ArrowUp')
+    b.rerender()
+    expect(b.focusedId()).toBe('first')
+    b.press('ArrowLeft')
+    b.rerender()
+    expect(b.focusedId()).toBe('first')
+  })
+
+  it('takes focus from the field the toggle chord was pressed in, keeps Tab while it holds it, and gives the focus back on close', () => {
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    field.focus()
+    const b = ringBench()
+    const panel = screen.getByRole('region', { name: zh['panel.title'] })
+    expect(document.activeElement).toBe(panel)
+    // Keys land on the panel, not the covered field.
+    fireEvent.keyDown(panel, { key: '3' })
     expect(b.setHandled).toHaveBeenCalledWith('first', true)
-    b.press('t')
+    fireEvent.keyDown(panel, { key: 'Tab' })
+    b.rerender()
+    expect(b.focusedId()).toBe('run')
+    b.store.actions.close()
+    b.rerender()
+    expect(document.activeElement).toBe(field)
+    // A field that left the document in the meantime is not brought back.
+    b.store.actions.open()
+    b.rerender()
+    field.remove()
+    b.store.actions.close()
+    b.rerender()
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('jumps between populated groups but releases Tab to controls at either end', () => {
+    const b = ringBench()
+    const panel = screen.getByRole('region', { name: zh['panel.title'] })
+    expect(fireEvent.keyDown(panel, { key: 'Tab', shiftKey: true })).toBe(true)
+    b.press('Tab')
+    b.rerender()
+    expect(b.focusedId()).toBe('run')
+    expect(fireEvent.keyDown(panel, { key: 'Tab' })).toBe(true)
+    expect(b.focusedId()).toBe('run')
+    b.press('Tab', { shiftKey: true })
+    b.rerender()
+    expect(b.focusedId()).toBe('first')
+    // A focused button keeps Tab for the browser's own focus order.
+    const button = screen.getAllByRole('button', { name: zh['card.open'] })[0]!
+    button.focus()
+    const tab = fireEvent.keyDown(button, { key: 'Tab' })
+    expect(tab).toBe(true)
+    b.rerender()
+    expect(b.focusedId()).toBe('first')
+  })
+
+  it('presses the buttons with the digits, ahead of a rival document listener, and leaves running rows and modified keys alone', () => {
+    const b = ringBench()
+    // The sidebar's pinned area answers bare digits on the same document; the panel takes them first while open.
+    const rival = vi.fn((event: KeyboardEvent) => { if (!event.defaultPrevented) throw new Error('digit leaked') })
+    document.addEventListener('keydown', rival)
+    b.press('3')
+    expect(b.setHandled).toHaveBeenCalledWith('first', true)
+    b.press('4')
     expect(b.fileTodo).toHaveBeenCalledTimes(1)
-    b.press('p')
+    b.press('5')
     expect(b.setPinned).toHaveBeenCalledWith('first', true)
-    b.press('s')
+    b.press('6')
     expect(b.snooze).toHaveBeenCalledTimes(1)
-    b.press('e', { metaKey: true })
+    b.press('2')
+    expect(b.continueSession).toHaveBeenCalledWith('first', '接着上面的工作继续：\n修一下登录的 bug')
+    b.store.actions.open()
+    b.rerender()
+    b.press('1')
+    expect(b.openSession).toHaveBeenCalledWith('first')
+    expect(rival).toHaveBeenCalledTimes(6)
+    document.removeEventListener('keydown', rival)
+    b.store.actions.open()
+    b.rerender()
+    b.press('3', { metaKey: true })
     b.press('x')
+    b.press('7')
+    b.press('0')
     expect(b.setHandled).toHaveBeenCalledTimes(1)
     b.press('j')
     b.press('j')
     b.rerender()
     expect(b.focusedId()).toBe('run')
-    b.press('e')
-    b.press('s')
+    b.press('2')
+    b.press('3')
+    b.press('6')
+    expect(b.continueSession).toHaveBeenCalledTimes(1)
     expect(b.setHandled).toHaveBeenCalledTimes(1)
     expect(b.snooze).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs the configured action on Enter, opens on Shift+Enter, and opens where the card lacks the action', () => {
+    const b = ringBench({ enterAction: 'handled' })
+    b.press('Enter')
+    expect(b.setHandled).toHaveBeenCalledWith('first', true)
+    expect(b.openSession).not.toHaveBeenCalled()
+    b.press('Enter', { shiftKey: true })
+    expect(b.openSession).toHaveBeenCalledWith('first')
+    b.store.actions.open()
+    b.rerender()
+    b.press('End')
+    b.rerender()
+    expect(b.focusedId()).toBe('run')
+    // A running row cannot be handled, so Enter opens it instead.
+    b.press('Enter')
+    expect(b.setHandled).toHaveBeenCalledTimes(1)
+    expect(b.openSession).toHaveBeenLastCalledWith('run')
+  })
+
+  it('keeps every desktop button digit visible while keys act only on the selected card', () => {
+    const b = ringBench({ enterAction: 'continue' })
+    const keycaps = (id: string): string[] =>
+      [...document.querySelector(`[data-session-id="${id}"]`)!.querySelectorAll('kbd')].map(cap => cap.textContent ?? '')
+    expect(keycaps('first')).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect(keycaps('second')).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect(keycaps('run')).toEqual(['1', '4', '5'])
+    // The keycap is decoration: the button keeps its plain name.
+    expect(within(document.querySelector<HTMLElement>('[data-session-id="first"]')!).getByRole('button', { name: zh['card.open'] })).toBeTruthy()
+    b.press('End')
+    b.rerender()
+    expect(keycaps('first')).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect(keycaps('run')).toEqual(['1', '4', '5'])
+    b.press('4')
+    expect(b.fileTodo).toHaveBeenCalledOnce()
+    expect(b.fileTodo.mock.calls[0]?.[0]).toMatchObject({ sessionId: 'run' })
+    expect(screen.getByText(/Enter 继续 · Shift\+Enter 打开会话 · 1–6 按钮 · Esc 关闭 · Ctrl\+1 开关面板/)).toBeTruthy()
   })
 
   it('ignores keys typed into editable controls and outside the inbox tab', () => {
     const b = ringBench()
     const input = document.createElement('input')
     document.body.appendChild(input)
-    fireEvent.keyDown(input, { key: 'e' })
+    fireEvent.keyDown(input, { key: '3' })
+    fireEvent.keyDown(input, { key: 'Enter' })
     expect(b.setHandled).not.toHaveBeenCalled()
+    expect(b.openSession).not.toHaveBeenCalled()
     input.remove()
     b.store.actions.setTab('todos')
     b.rerender()
-    b.press('e')
+    b.press('3')
     expect(b.setHandled).not.toHaveBeenCalled()
   })
 
   it('does nothing on an empty ring except closing, and skips contenteditable hosts', () => {
     const m = mountPanel({ rows: [] })
-    for (const key of ['j', 'k', 'Enter', 'e', 't', 'p', 's']) fireEvent.keyDown(document, { key })
+    for (const key of ['j', 'k', 'Enter', 'Tab', 'ArrowDown', '1', '3', '4']) fireEvent.keyDown(document, { key })
     expect(m.openSession).not.toHaveBeenCalled()
     expect(m.fileTodo).not.toHaveBeenCalled()
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -554,7 +739,7 @@ describe('DigestPanel keyboard ring', () => {
     const inner = document.createElement('span')
     host.appendChild(inner)
     document.body.appendChild(host)
-    fireEvent.keyDown(inner, { key: 'e' })
+    fireEvent.keyDown(inner, { key: '3' })
     expect(b.setHandled).not.toHaveBeenCalled()
     host.remove()
   })
@@ -586,7 +771,7 @@ describe('DigestPanel board layout and reply visibility', () => {
     row('ask', { pendingInteraction: { kind: 'question' } }),
   ]
 
-  it('lays the state columns side by side, newest first, with an empty slot for a state without rows', () => {
+  it('shares space between populated state columns, newest first, without reserving empty states', () => {
     const m = mountPanel({ rows: boardRows(), snapshot: inbox({ sessions: [mark('seen', { lastSeenSeq: 3 })] }) })
     expect(screen.getByRole('button', { name: zh['layout.sections'] }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: zh['layout.columns'] }))
@@ -594,13 +779,15 @@ describe('DigestPanel board layout and reply visibility', () => {
     expect(m.store.getSnapshot().layout).toBe('columns')
     expect(document.querySelector('[data-section]')).toBeNull()
     expect([...document.querySelectorAll<HTMLElement>('[data-column]')].map(el => el.dataset['column']))
-      .toEqual(['needsYou', 'finished', 'running', 'failed'])
+      .toEqual(['needsYou', 'finished', 'failed'])
     expect(column('needsYou').textContent).toContain('title-ask')
     expect([...column('finished').querySelectorAll<HTMLElement>('[data-session-id]')].map(el => el.dataset['sessionId'])).toEqual(['done', 'seen'])
     expect(column('finished').querySelector('h3')?.textContent).toBe(`${zh['column.finished']}2`)
-    expect(column('running').textContent).toContain(zh['column.empty'])
+    expect(document.querySelector('[data-column="running"]')).toBeNull()
     expect(column('failed').textContent).toContain('title-broken')
-    // The ring starts on the leftmost column and walks column by column.
+    // Changing layout preserves the selected Session; Home starts the board ring.
+    expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('done')
+    fireEvent.keyDown(document.body, { key: 'Home' })
     expect(document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']).toBe('ask')
     fireEvent.keyDown(document.body, { key: 'j' })
     m.rerender()
@@ -613,6 +800,44 @@ describe('DigestPanel board layout and reply visibility', () => {
     m.rerender()
     expect(document.querySelector('[data-column]')).toBeNull()
     expect(section('needsYou').textContent).toContain('title-ask')
+  })
+
+  it('keeps a vertical arrow inside its board column and crosses columns sideways', () => {
+    const m = mountPanel({ rows: boardRows(), snapshot: inbox({ sessions: [mark('seen', { lastSeenSeq: 3 })] }) })
+    m.store.actions.setLayout('columns')
+    m.rerender()
+    const focusedId = (): string | undefined => document.querySelector<HTMLElement>('[data-focused]')?.dataset['sessionId']
+    fireEvent.keyDown(document.body, { key: 'Home' })
+    expect(focusedId()).toBe('ask')
+    // The waiting column holds one short card; the finished column beside it holds two, the second reaching lower.
+    layOut({ ask: [0, 0, 200, 120], done: [216, 0, 200, 120], seen: [216, 132, 200, 400], broken: [648, 0, 200, 120] })
+    // Down at the end of a column stays put even though a lower card sits in the next column.
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    m.rerender()
+    expect(focusedId()).toBe('ask')
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' })
+    m.rerender()
+    expect(focusedId()).toBe('done')
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    m.rerender()
+    expect(focusedId()).toBe('seen')
+    // Right from the tall card skips the empty running column to the failed one beside it.
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' })
+    m.rerender()
+    expect(focusedId()).toBe('seen')
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' })
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' })
+    m.rerender()
+    expect(focusedId()).toBe('broken')
+    expect(fireEvent.keyDown(document.body, { key: 'Tab' })).toBe(true)
+    expect(focusedId()).toBe('broken')
+    fireEvent.keyDown(document.body, { key: 'Tab', shiftKey: true })
+    m.rerender()
+    expect(focusedId()).toBe('done')
+    fireEvent.keyDown(document.body, { key: 'Tab', shiftKey: true })
+    m.rerender()
+    expect(focusedId()).toBe('ask')
+    expect(screen.getByText(/Enter 打开会话 · Shift\+Enter 打开会话/)).toBeTruthy()
   })
 
   it('hides the reply on request in both layouts while keeping the question and the actions', () => {
@@ -630,9 +855,8 @@ describe('DigestPanel board layout and reply visibility', () => {
     expect(within(card).getByRole('button', { name: zh['card.handled'] })).toBeTruthy()
     m.store.actions.setLayout('columns')
     m.rerender()
-    // Nothing waits on the user, so the board opens on the three standing columns.
     expect([...document.querySelectorAll<HTMLElement>('[data-column]')].map(el => el.dataset['column']))
-      .toEqual(['finished', 'running', 'failed'])
+      .toEqual(['finished'])
     expect(column('finished').textContent).not.toContain('已修复')
     expect(within(column('finished')).getByRole('button', { name: zh['card.open'] })).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox', { name: zh['panel.showReply'] }))
@@ -924,7 +1148,7 @@ describe('DigestNavEntry', () => {
     const store = createDigestStore().create()
     const settings: NavSettingsView = {
       status: 'ready', writable: true, navBadges: true, navFinishedBadge: false,
-      navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1',
+      navBadgeOrder: ['waiting', 'unread', 'running', 'failed'], toggleShortcut: 'Ctrl+1', enterAction: 'open',
       readAcknowledgement: 'automatic', readGraceSeconds: 5, ...over.settings,
     }
     const rows = over.rows ?? [row('a')]

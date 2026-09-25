@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-20-configurable-digest-toggle-shortcut.md
-2026-09-20-configurable-digest-toggle-shortcut.md: d66c06e6fe70697f4cf9f10e8c2566291b08eee6
-2026-09-20-configurable-digest-toggle-shortcut.zh.md: 6a8547c22c7d4c375fdb79b768e500de91c8c2c0
+2026-09-20-configurable-digest-toggle-shortcut.md: 45a84cc1e67bee85b946af9b30c9ee1298a560a3
+2026-09-20-configurable-digest-toggle-shortcut.zh.md: 894807f54d3ed6a1473a2116d3017dba36771dfd

@@ -28,7 +28,7 @@ describe('selectInbox classification', () => {
       row('open', { projectionValues: { sessionDigest: digest({ outcome: null, reply: null, replySeq: null }) } }),
       row('running', { running: true }),
       row('bare', { running: true, projectionValues: {} }),
-      row('waiting', { pendingInteraction: { kind: 'approval' } as never }),
+      row('waiting', { pendingInteraction: { kind: 'approval' } }),
       row('blank', { blank: true }),
       row('sub', { origin: 'subagent' }),
       row('empty', { projectionValues: { sessionDigest: digest({ question: null }) } }),
@@ -108,7 +108,7 @@ describe('selectInbox classification', () => {
 })
 
 describe('selectColumns', () => {
-  it('regroups the sections into four fixed columns, newest first within each, pinned and handled rows by state', () => {
+  it('regroups populated states, newest first within each, with pinned and handled rows by state', () => {
     const rows = [
       row('seenOld', { updatedAt: NOW - 5 * HOUR }),
       row('unreadNew', { updatedAt: NOW }),
@@ -132,20 +132,19 @@ describe('selectColumns', () => {
     expect(columns.map(column => `${column.key}:${column.items.map(item => item.sessionId).join(',')}`)).toEqual([
       'needsYou:waiting',
       'finished:unreadNew,seenNew,handledDone,seenOld',
-      'running:',
       'failed:failedNew,pinnedFailed,handledFailed',
     ])
-    expect(columns[3]?.items[1]).toMatchObject({ pinned: true, category: 'failed' })
+    expect(columns[2]?.items[1]).toMatchObject({ pinned: true, category: 'failed' })
   })
 
-  it('keeps the finished, running, and failed columns when empty but lists the waiting column only with rows', () => {
-    expect(selectColumns([]).map(column => [column.key, column.items.length])).toEqual([
-      ['finished', 0], ['running', 0], ['failed', 0],
-    ])
+  it('allocates columns only to states with admitted sessions', () => {
+    expect(selectColumns([])).toEqual([])
     const waiting = selectInbox([row('ask', { pendingInteraction: { kind: 'question' } })], [], inbox(), options({
       pendingSessionIds: new Set(['ask' as SessionId]),
     }))
-    expect(selectColumns(waiting.sections).map(column => column.key)).toEqual(['needsYou', 'finished', 'running', 'failed'])
+    expect(selectColumns(waiting.sections).map(column => column.key)).toEqual(['needsYou'])
+    const running = selectInbox(Array.from({ length: 8 }, (_, index) => row(`run-${index}`, { running: true })), [], inbox(), options())
+    expect(selectColumns(running.sections).map(column => [column.key, column.items.length])).toEqual([['running', 8]])
   })
 })
 

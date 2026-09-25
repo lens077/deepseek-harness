@@ -26,7 +26,7 @@ In the inbox, the **置顶** section moves to the front: a pinned Session is the
 
 ### One settings page, three switches and a size
 
-A **置顶** settings page (`settings.section` id `session-pins`, right after **项目待办**) owns the durable `session-pins` namespace: `enabled` (default on), `sidebarArea` (default on), `sidebarRows` (default 5, 1–20 or `auto`), `autoPinStatuses` (default running and completed), and `digestSection` (default on). The master switch hides every pin affordance — the menu items, the sidebar area, the card action and its `p` key, and the digest section; the two finer switches remove one surface each while the mark itself stays durable, so re-enabling restores the same pinned set.
+A **置顶** settings page (`settings.section` id `session-pins`, right after **项目待办**) owns the durable `session-pins` namespace: `enabled` (default on), `sidebarArea` (default on), `sidebarRows` (default 5, 1–20 or `auto`), `autoPinStatuses` (default running and completed), and `digestSection` (default on). The master switch hides every pin affordance — the menu items, the sidebar area, the card action and its `5` key, and the digest section; the two finer switches remove one surface each while the mark itself stays durable, so re-enabling restores the same pinned set.
 
 ## Alternatives considered
 

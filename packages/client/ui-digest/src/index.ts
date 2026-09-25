@@ -12,7 +12,7 @@ import { SESSION_PINS_SETTINGS_NAMESPACE, SessionPinsSettingsSchema } from './pi
 
 export {
   DEFAULT_DIGEST_SETTINGS, DIGEST_SETTINGS_NAMESPACE, NAV_BADGE_STATES,
-  type DigestSettings, type NavBadgeState,
+  type CardAction, type DigestSettings, type NavBadgeState,
 } from './nav-settings.ts'
 export {
   DEFAULT_SESSION_PINS_SETTINGS, SESSION_PINS_SETTINGS_NAMESPACE,

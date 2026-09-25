@@ -9,6 +9,8 @@
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { InboxWindow } from './select.ts'
+import type { WorkspaceRows } from './workspace-layout.ts'
+import type { CardColumns } from './card-layout.ts'
 
 /** The panel's four surfaces. */
 export type InboxTab = 'inbox' | 'todos' | 'projects' | 'timeline'
@@ -32,6 +34,10 @@ type InboxViewState = {
   layout: InboxLayout
   /** Whether cards show the closing reply; off keeps the question and actions. */
   showReply: boolean
+  /** Workspace strip row cap; expansion is temporary component state. */
+  workspaceRows: WorkspaceRows
+  /** Preferred card tracks per state group; narrower containers may fit fewer. */
+  cardColumns: CardColumns
 }
 
 /**
@@ -48,6 +54,8 @@ type InboxViewActions = {
   toggleShowHandled: (draft: InboxViewState) => void
   setLayout: (draft: InboxViewState, layout: InboxLayout) => void
   toggleShowReply: (draft: InboxViewState) => void
+  setWorkspaceRows: (draft: InboxViewState, rows: WorkspaceRows) => void
+  setCardColumns: (draft: InboxViewState, columns: CardColumns) => void
 }
 
 /**
@@ -64,9 +72,9 @@ export function createDigestStore(): EngineStoreHandle<InboxViewState, InboxView
       showHandled: false,
       layout: 'sections',
       showReply: true,
+      workspaceRows: 'single',
+      cardColumns: 5,
     }),
-    // Rehydration replaces the whole value, so a stored v2 document (which
-    // predates layout and showReply) is left behind rather than merged.
     persist: 'dsh.digest.view.v3',
     actions: {
       toggle: (d) => { d.open = !d.open },
@@ -81,6 +89,8 @@ export function createDigestStore(): EngineStoreHandle<InboxViewState, InboxView
       toggleShowHandled: (d) => { d.showHandled = !d.showHandled },
       setLayout: (d, layout: InboxLayout) => { d.layout = layout },
       toggleShowReply: (d) => { d.showReply = !d.showReply },
+      setWorkspaceRows: (d, rows: WorkspaceRows) => { d.workspaceRows = rows },
+      setCardColumns: (d, columns: CardColumns) => { d.cardColumns = columns },
     },
   })
 }

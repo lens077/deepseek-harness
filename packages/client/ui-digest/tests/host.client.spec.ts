@@ -44,7 +44,10 @@ describe('ui-digest host', () => {
     const ns = DIGEST_SETTINGS_NAMESPACE
     expect(ctx.settings.get(ns)).toEqual(DEFAULT_DIGEST_SETTINGS)
     await ctx.settings.update(ns, { navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
-    expect(ctx.settings.get(ns)).toEqual({ ...DEFAULT_DIGEST_SETTINGS, navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I' })
+    expect(ctx.settings.get(ns)).toEqual({ navBadges: true, navFinishedBadge: true, navBadgeOrder: ['failed', 'running', 'unread', 'waiting'], toggleShortcut: 'Ctrl+Shift+I', enterAction: 'open', readAcknowledgement: 'automatic', readGraceSeconds: 5 })
+    await ctx.settings.update(ns, { enterAction: 'continue' })
+    expect(ctx.settings.get(ns)).toMatchObject({ enterAction: 'continue' })
+    await expect(ctx.settings.update(ns, { enterAction: 'archive' })).rejects.toThrow()
     await expect(ctx.settings.update(ns, { navBadgeOrder: ['nope'] })).rejects.toThrow()
     await expect(ctx.settings.update(ns, { navBadges: 'yes' })).rejects.toThrow()
     // Noncanonical modifier order and unsupported keys never reach the document.

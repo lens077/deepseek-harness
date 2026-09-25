@@ -21,7 +21,7 @@ import type { ProjectDocumentResult, ProjectTodosView } from '../projects-contro
 import type { ProjectSettingsView } from '../project-settings.ts'
 import type { PinsSettingsView } from '../pins-settings-policy.ts'
 import type { NavSettingsView } from '../nav-settings-policy.ts'
-import type { DigestSettings, NavBadgeState } from '../../nav-settings.ts'
+import type { CardAction, DigestSettings, NavBadgeState } from '../../nav-settings.ts'
 import type { ToggleShortcut } from '../../toggle-shortcut.ts'
 import type { createDigestStore } from '../stores.ts'
 
@@ -139,6 +139,8 @@ export interface DigestSettingsInjected {
   setNavBadgeOrder: (order: readonly NavBadgeState[]) => Promise<void>
   /** Replace the panel's toggle chord with one the recorder accepted. */
   setToggleShortcut: (shortcut: ToggleShortcut) => Promise<void>
+  /** Replace the card action plain Enter runs on the focused inbox card. */
+  setEnterAction: (action: CardAction) => Promise<void>
   /** Choose automatic exposure acknowledgement or explicit confirmation only. */
   setReadAcknowledgement: (mode: DigestSettings['readAcknowledgement']) => Promise<void>
   /** Replace the continuous foreground exposure interval in seconds. */
@@ -148,6 +150,7 @@ export interface DigestSettingsInjected {
 /** Full props of the digest panel settings section: the settings view, its writers, and copy. */
 export type DigestSettingsSectionProps =
   PropsRuntime<'settings.section'>
+  & PropsStore<ReturnType<typeof createDigestStore>>
   & InjectFace<DigestSettingsInjected>
   & PropsLocale<'digest'>
 
@@ -170,6 +173,12 @@ export interface PinsSettingsInjected {
 export type PinsSettingsSectionProps =
   PropsRuntime<'settings.section'>
   & InjectFace<PinsSettingsInjected>
+  & PropsLocale<'digest'>
+
+/** Layout-row props sharing the panel's browser-local viewing preferences. */
+export type DigestLayoutRowProps =
+  PropsRuntime<'settings.layout.item'>
+  & PropsStore<ReturnType<typeof createDigestStore>>
   & PropsLocale<'digest'>
 
 /** Full props of the panel: the shared store, the global session/workspace hooks, the inbox, and copy. */

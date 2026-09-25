@@ -6,6 +6,8 @@
  */
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionJob } from '@deepseek-ai/dsh-api-session-controller/types'
+import { workSummaryOf, type DigestWork } from './work-summary.ts'
 import type { WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionDigestOutcome, SessionDigestView } from '@deepseek-ai/dsh-session-digest/client'
 import type { InboxSessionState, InboxSnapshot, InboxTodo } from '@deepseek-ai/dsh-session-inbox/types'
@@ -57,6 +59,8 @@ export interface InboxItem {
   unread: boolean
   snoozedUntil: number | null
   category: InboxCategory
+  /** Live task facts and explicitly cumulative work; absent for settled cards. */
+  work: DigestWork | null
 }
 
 /** One rendered section of items. */
@@ -110,6 +114,8 @@ export interface InboxSelection {
 export interface InboxSelectOptions {
   /** Sessions whose UI is waiting for a user response. */
   pendingSessionIds?: ReadonlySet<SessionId>
+  /** Host-pushed visible jobs; reading these never opens a Session history. */
+  jobsBySession?: Readonly<Record<SessionId, readonly SessionJob[]>>
   now: number
   window: InboxWindow
   /** Restrict to one workspace id, `null` for ungrouped only, `undefined` for every workspace. */
@@ -316,6 +322,7 @@ function buildItems(
   now: number,
   ungroupedLabel: string,
   pendingSessionIds?: ReadonlySet<SessionId>,
+  jobsBySession?: Readonly<Record<SessionId, readonly SessionJob[]>>,
 ): InboxItem[] {
   const index = indexWorkspaces(workspaces)
   const marks = new Map<SessionId, InboxSessionState>()
@@ -350,6 +357,7 @@ function buildItems(
       unread: classified.unread,
       snoozedUntil: mark?.snoozedUntil ?? null,
       category: classified.category,
+      work: summary.running ? workSummaryOf(summary, jobsBySession?.[summary.id] ?? []) : null,
     })
   }
   items.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -382,7 +390,9 @@ export function selectInbox(
   inbox: InboxSnapshot,
   options: InboxSelectOptions,
 ): InboxSelection {
-  const items = buildItems(sessions, workspaces, inbox, options.now, options.ungroupedLabel, options.pendingSessionIds)
+  const items = buildItems(
+    sessions, workspaces, inbox, options.now, options.ungroupedLabel, options.pendingSessionIds, options.jobsBySession,
+  )
   const since = windowSince(options.window, options.now, inbox.reviewedAt)
   const pinnedSection = options.pinnedSection ?? true
 
@@ -481,12 +491,9 @@ function columnOf(item: InboxItem): InboxColumnKey {
 }
 
 /**
- * Regroup the sections into the board columns. The finished, running, and
- * failed columns are always present so each keeps a fixed place on the board;
- * the waiting column leads only while the agent is actually waiting on the
- * user, since an empty slot for an uncommon state would cost the others a
- * quarter of the width. Within a column items are ordered by last activity,
- * newest first, whatever section they came from.
+ * Regroup admitted sessions into populated board columns in decision order.
+ * Empty states reserve no space. Items keep the same newest-first order
+ * within their column, whatever section they came from.
  * @param sections - the sections `selectInbox` produced.
  * @returns the columns in board order.
  */
@@ -497,7 +504,7 @@ export function selectColumns(sections: readonly InboxSection[]): InboxColumn[] 
   }
   return COLUMN_ORDER
     .map(key => ({ key, items: (buckets.get(key) as InboxItem[]).sort((a, b) => b.updatedAt - a.updatedAt) }))
-    .filter(column => column.key !== 'needsYou' || column.items.length > 0)
+    .filter(column => column.items.length > 0)
 }
 
 /**

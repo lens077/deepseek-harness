@@ -1,9 +1,10 @@
 /**
  * The digest entry's preferences, stored in the Host user-settings document:
  * whether the sidebar entry shows the state badges at all, whether a grey
- * finished badge joins them, the order the state badges take, and the chord
- * that toggles the panel. Shared by the Host schema registration and the
- * browser scope, so both validate one declaration.
+ * finished badge joins them, the order the state badges take, the chord
+ * that toggles the panel, and the card action Enter runs on the focused
+ * inbox card. Shared by the Host schema registration and the browser scope,
+ * so both validate one declaration.
  */
 
 import z from '@deepseek-ai/schemastery'
@@ -21,6 +22,16 @@ export const NAV_BADGE_STATES = ['waiting', 'unread', 'running', 'failed'] as co
 /** One orderable badge state. */
 export type NavBadgeState = typeof NAV_BADGE_STATES[number]
 
+/**
+ * The actions an inbox card offers, in the order its buttons take: open the
+ * session, continue it, mark it handled, file a todo, pin, snooze until
+ * tomorrow. The panel's digit keys `1`–`6` follow this order.
+ */
+export const CARD_ACTIONS = ['open', 'continue', 'handled', 'todo', 'pin', 'snooze'] as const
+
+/** One inbox card action. */
+export type CardAction = typeof CARD_ACTIONS[number]
+
 /** Durable digest section shared by the Host schema and the browser scope. */
 export interface DigestSettings {
   /** Whether the sidebar entry shows the state badges. */
@@ -31,6 +42,8 @@ export interface DigestSettings {
   navBadgeOrder: NavBadgeState[]
   /** Canonical chord that toggles the panel from anywhere; see `toggle-shortcut.ts`. */
   toggleShortcut: ToggleShortcut
+  /** The card action plain Enter runs on the focused inbox card; the panel falls back to `open` where the card lacks it. */
+  enterAction: CardAction
   /** Whether viewing an answer acknowledges it automatically or requires an explicit action. */
   readAcknowledgement: 'automatic' | 'manual'
   /** Foreground-visible answer time before automatic acknowledgement, in whole seconds from 1 to 60. */
@@ -43,6 +56,7 @@ export const DEFAULT_DIGEST_SETTINGS: DigestSettings = {
   navFinishedBadge: false,
   navBadgeOrder: [...NAV_BADGE_STATES],
   toggleShortcut: DEFAULT_TOGGLE_SHORTCUT,
+  enterAction: 'open',
   readAcknowledgement: 'automatic',
   readGraceSeconds: 5,
 }
@@ -53,6 +67,7 @@ export const DigestSettingsSchema: z<DigestSettings> = z.object({
   navFinishedBadge: z.boolean().default(DEFAULT_DIGEST_SETTINGS.navFinishedBadge),
   navBadgeOrder: z.array(z.union([...NAV_BADGE_STATES])).default([...NAV_BADGE_STATES]),
   toggleShortcut: z.string().pattern(TOGGLE_SHORTCUT_PATTERN).default(DEFAULT_TOGGLE_SHORTCUT),
+  enterAction: z.union([...CARD_ACTIONS]).default(DEFAULT_DIGEST_SETTINGS.enterAction),
   readAcknowledgement: z.union(['automatic', 'manual']).default(DEFAULT_DIGEST_SETTINGS.readAcknowledgement),
   readGraceSeconds: z.number().step(1).min(1).max(60).default(DEFAULT_DIGEST_SETTINGS.readGraceSeconds),
 })

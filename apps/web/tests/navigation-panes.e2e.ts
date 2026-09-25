@@ -354,6 +354,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await digest.getByText(PROMPT_TURN2, { exact: true }).waitFor({ timeout: 15_000 })
     await digest.locator('span').filter({ hasText: /^## Navigation Summary/ }).waitFor({ timeout: 15_000 })
     await digest.getByText('1 to handle', { exact: true }).waitFor({ timeout: 15_000 })
+    const card = digest.locator('article')
+    expect(await card.locator('kbd').allTextContents()).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect(await card.evaluate(element => getComputedStyle(element.parentElement!).gridTemplateColumns.split(/\s+/u).length)).toBe(5)
     const snapshot = (await captureStableAria(page, '[data-digest-panel]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(DIGEST_EXPECTED, snapshot, MODE)
@@ -362,6 +365,34 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await expect.poll(() => digest.count(), { timeout: 5_000 }).toBe(0)
     await page.getByRole('heading', { name: 'Navigation Summary' }).waitFor({ timeout: 15_000 })
   }, 60_000)
+
+  it.skipIf(MODE === 'record')('fits three Chinese card actions per row and wraps them by available width', async () => {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'English', exact: true }).click()
+    await page.getByRole('menuitem', { name: '中文', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
+    await page.getByRole('button', { name: /^汇总/ }).click()
+    const card = page.locator('[data-digest-panel] article').first()
+    await card.getByRole('button', { name: '标记已处理', exact: true }).waitFor()
+    const measure = () => card.locator('[data-card-actions]').evaluate((element) => {
+      const area = element.getBoundingClientRect()
+      const buttons = [...element.querySelectorAll('button')].map(button => button.getBoundingClientRect())
+      return {
+        rows: [...new Set(buttons.map(button => button.y))].map(y => buttons.filter(button => button.y === y).length),
+        fits: buttons.every(button => button.left >= area.left && button.right <= area.right + 1),
+        keys: [...element.querySelectorAll('kbd')].map(key => key.textContent),
+      }
+    })
+    expect(await measure()).toEqual({ rows: [3, 3], fits: true, keys: ['1', '2', '3', '4', '5', '6'] })
+    await page.setViewportSize({ width: 1580, height: 1000 })
+    const narrow = await measure()
+    expect(narrow.fits).toBe(true)
+    expect(narrow.rows).toEqual([2, 2, 2])
+    await page.setViewportSize({ width: 2560, height: 1000 })
+    const wide = await measure()
+    expect(wide.fits).toBe(true)
+    expect(wide.rows[0]).toBeGreaterThan(3)
+  })
 
   it.skipIf(MODE === 'record')('clicking the selected sidebar session dismisses the digest', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-digest-selected-session'))

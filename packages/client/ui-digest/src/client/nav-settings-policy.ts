@@ -1,6 +1,6 @@
 /**
  * The digest entry's preferences as the browser sees them: the durable
- * `ui-digest` section (badges and the panel's toggle chord) mirrored into one
+ * `ui-digest` section (badges, the panel's toggle chord, and the Enter action) mirrored into one
  * reactive view the sidebar entry reads and the settings page writes through. The view exists before any settings
  * scope does, carrying the defaults, so the entry renders the same whether or
  * not this composition serves settings.
@@ -10,7 +10,7 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  DEFAULT_DIGEST_SETTINGS, normalizeBadgeOrder, type DigestSettings, type NavBadgeState,
+  DEFAULT_DIGEST_SETTINGS, normalizeBadgeOrder, type CardAction, type DigestSettings, type NavBadgeState,
 } from '../nav-settings.ts'
 import { validateToggleShortcut, type ToggleShortcut } from '../toggle-shortcut.ts'
 
@@ -24,6 +24,8 @@ export interface NavSettingsView {
   navBadgeOrder: readonly NavBadgeState[]
   /** Canonical chord that toggles the panel; a reserved stored chord reads as the default. */
   toggleShortcut: ToggleShortcut
+  /** The card action plain Enter runs on the focused inbox card. */
+  enterAction: CardAction
   /** Whether viewing an answer acknowledges it automatically or requires an explicit action. */
   readAcknowledgement: DigestSettings['readAcknowledgement']
   /** Foreground-visible answer time before automatic acknowledgement, in whole seconds from 1 to 60. */
@@ -38,6 +40,7 @@ const INITIAL: NavSettingsView = Object.freeze({
   navFinishedBadge: DEFAULT_DIGEST_SETTINGS.navFinishedBadge,
   navBadgeOrder: Object.freeze([...DEFAULT_DIGEST_SETTINGS.navBadgeOrder]),
   toggleShortcut: DEFAULT_DIGEST_SETTINGS.toggleShortcut,
+  enterAction: DEFAULT_DIGEST_SETTINGS.enterAction,
   readAcknowledgement: DEFAULT_DIGEST_SETTINGS.readAcknowledgement,
   readGraceSeconds: DEFAULT_DIGEST_SETTINGS.readGraceSeconds,
   writable: false,
@@ -110,6 +113,15 @@ export class NavSettingsPolicy {
   }
 
   /**
+   * Replace the card action plain Enter runs.
+   * @param action - the card action.
+   * @returns settlement of the durable write.
+   */
+  setEnterAction(action: CardAction): Promise<void> {
+    return this.write('enterAction', action)
+  }
+
+  /**
    * Choose automatic or explicit acknowledgement of viewed answers.
    * @param mode - when an answer is marked viewed.
    * @returns settlement of the durable write.
@@ -148,6 +160,7 @@ export class NavSettingsPolicy {
       toggleShortcut: section === undefined
         ? current.toggleShortcut
         : validateToggleShortcut(section.toggleShortcut) ? section.toggleShortcut : DEFAULT_DIGEST_SETTINGS.toggleShortcut,
+      enterAction: section?.enterAction ?? current.enterAction,
       readAcknowledgement: section?.readAcknowledgement ?? current.readAcknowledgement,
       readGraceSeconds: section?.readGraceSeconds ?? current.readGraceSeconds,
       writable: snapshot.writable,

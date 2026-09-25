@@ -36,6 +36,12 @@
       "path": "../../session/session-digest"
     },
     {
+      "path": "../../session/session-stats"
+    },
+    {
+      "path": "../../todo/tool-todo"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {

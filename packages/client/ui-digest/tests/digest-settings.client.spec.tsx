@@ -2,15 +2,16 @@
 /**
  * The digest panel settings: the policy standing on defaults until a scope
  * binds it, mirroring the scope while bound, and routing repaired writes; and
- * the settings page over direct props — the chord recorder, the two toggles,
- * the order list reordered by drag and by buttons, the resets, and the
- * disabled and failure states.
+ * the settings page over direct props — the chord recorder, the Enter action
+ * choice, the two toggles, the order list reordered by drag and by buttons,
+ * the resets, and the disabled and failure states.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import type { DigestSettings, NavBadgeState } from '../src/nav-settings.ts'
+import type { CardAction, DigestSettings, NavBadgeState } from '../src/nav-settings.ts'
 import { NavSettingsPolicy, type NavSettingsView } from '../src/client/nav-settings-policy.ts'
+import { createDigestStore } from '../src/client/stores.ts'
 import { DigestSettingsSection } from '../src/client/DigestSettingsSection.tsx'
 import type { DigestSettingsSectionProps } from '../src/client/contract/slots.ts'
 import { zh } from '../src/client/locales.ts'
@@ -27,21 +28,21 @@ describe('NavSettingsPolicy', () => {
   it('stands on defaults unbound, mirrors a bound scope, and returns to defaults when detached', () => {
     const policy = new NavSettingsPolicy()
     expect(policy.view.getSnapshot()).toEqual({
-      status: 'unavailable', navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', writable: false,
+      status: 'unavailable', navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', enterAction: 'open', writable: false,
       readAcknowledgement: 'automatic', readGraceSeconds: 5,
     })
     const stub = stubSettingsScope<DigestSettings>()
     const detach = policy.bind(stub.scope)
     expect(policy.view.getSnapshot()).toMatchObject({ status: 'loading', navBadges: true })
-    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'failed'], toggleShortcut: 'Alt+D', readAcknowledgement: 'manual', readGraceSeconds: 12 } })
+    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'failed'], toggleShortcut: 'Alt+D', enterAction: 'continue', readAcknowledgement: 'manual', readGraceSeconds: 12 } })
     // A repeated or missing state in the document is repaired for display.
     expect(policy.view.getSnapshot()).toEqual({
-      status: 'ready', writable: true, navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'Alt+D',
+      status: 'ready', writable: true, navBadges: false, navFinishedBadge: true, navBadgeOrder: ['failed', 'waiting', 'unread', 'running'], toggleShortcut: 'Alt+D', enterAction: 'continue',
       readAcknowledgement: 'manual', readGraceSeconds: 12,
     })
     // A hand-written chord the schema pattern admits but editing owns reads as the default.
-    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+C', readAcknowledgement: 'automatic', readGraceSeconds: 20 } })
-    expect(policy.view.getSnapshot()).toMatchObject({ toggleShortcut: 'Ctrl+1' })
+    stub.publish({ status: 'ready', writable: true, value: { navBadges: false, navFinishedBadge: true, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+C', enterAction: 'open', readAcknowledgement: 'automatic', readGraceSeconds: 20 } })
+    expect(policy.view.getSnapshot()).toMatchObject({ toggleShortcut: 'Ctrl+1', enterAction: 'open' })
     stub.publish({ status: 'unavailable', value: undefined, writable: false })
     expect(policy.view.getSnapshot()).toMatchObject({ status: 'unavailable', navBadges: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', readAcknowledgement: 'automatic', readGraceSeconds: 20 })
     detach()
@@ -60,10 +61,11 @@ describe('NavSettingsPolicy', () => {
     await policy.setNavFinishedBadge(true)
     await policy.setNavBadgeOrder(['running', 'waiting'])
     await policy.setToggleShortcut('F2')
+    await policy.setEnterAction('handled')
     await policy.setReadAcknowledgement('manual')
     await policy.setReadGraceSeconds(12)
     expect(stub.set.mock.calls).toEqual([
-      ['navBadges', false], ['navFinishedBadge', true], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'F2'],
+      ['navBadges', false], ['navFinishedBadge', true], ['navBadgeOrder', ['running', 'waiting', 'unread', 'failed']], ['toggleShortcut', 'F2'], ['enterAction', 'handled'],
       ['readAcknowledgement', 'manual'], ['readGraceSeconds', 12],
     ])
   })
@@ -74,23 +76,28 @@ type SectionCalls = {
   setNavFinishedBadge: ReturnType<typeof vi.fn<(show: boolean) => Promise<void>>>
   setNavBadgeOrder: ReturnType<typeof vi.fn<(order: readonly NavBadgeState[]) => Promise<void>>>
   setToggleShortcut: ReturnType<typeof vi.fn<(shortcut: string) => Promise<void>>>
+  setEnterAction: ReturnType<typeof vi.fn<(action: CardAction) => Promise<void>>>
   setReadAcknowledgement: ReturnType<typeof vi.fn<(mode: DigestSettings['readAcknowledgement']) => Promise<void>>>
   setReadGraceSeconds: ReturnType<typeof vi.fn<(seconds: number) => Promise<void>>>
 }
 
 function mount(view: Partial<NavSettingsView> = {}, over: Partial<SectionCalls> = {}) {
-  const state: NavSettingsView = { status: 'ready', writable: true, navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', readAcknowledgement: 'automatic', readGraceSeconds: 5, ...view }
+  const state: NavSettingsView = { status: 'ready', writable: true, navBadges: true, navFinishedBadge: false, navBadgeOrder: DEFAULT_ORDER, toggleShortcut: 'Ctrl+1', enterAction: 'open', readAcknowledgement: 'automatic', readGraceSeconds: 5, ...view }
   const calls: SectionCalls = {
     setNavBadges: vi.fn<(show: boolean) => Promise<void>>(async () => undefined),
     setNavFinishedBadge: vi.fn<(show: boolean) => Promise<void>>(async () => undefined),
     setNavBadgeOrder: vi.fn<(order: readonly NavBadgeState[]) => Promise<void>>(async () => undefined),
     setToggleShortcut: vi.fn<(shortcut: string) => Promise<void>>(async () => undefined),
+    setEnterAction: vi.fn<(action: CardAction) => Promise<void>>(async () => undefined),
     setReadAcknowledgement: vi.fn<(mode: DigestSettings['readAcknowledgement']) => Promise<void>>(async () => undefined),
     setReadGraceSeconds: vi.fn<(seconds: number) => Promise<void>>(async () => undefined),
     ...over,
   }
+  const store = createDigestStore().create()
   const props = {
     close: vi.fn(),
+    useStore: (selector: (state: ReturnType<typeof store.getSnapshot>) => unknown) => selector(store.getSnapshot()),
+    actions: store.actions,
     useNavSettings: ((selector: (s: NavSettingsView) => unknown) => selector(state)),
     ...calls,
     t,
@@ -98,6 +105,8 @@ function mount(view: Partial<NavSettingsView> = {}, over: Partial<SectionCalls> 
   const rendered = render(<DigestSettingsSection {...props} />)
   return {
     ...calls,
+    store,
+    rerender: () => { rendered.rerender(<DigestSettingsSection {...props} />) },
     update(next: Partial<NavSettingsView>): void {
       Object.assign(state, next)
       rendered.rerender(<DigestSettingsSection {...props} />)
@@ -111,6 +120,23 @@ function rows(): string[] {
 }
 
 describe('DigestSettingsSection', () => {
+  it('offers one through eight card columns with five by default and saves the browser preference', () => {
+    localStorage.clear()
+    const c = mount({ writable: false })
+    const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '每行卡片数' })
+    expect(select.value).toBe('5')
+    expect(select.disabled).toBe(false)
+    expect([...select.options].map(option => option.value)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
+    for (const value of ['1', '3', '8', '5']) {
+      fireEvent.change(select, { target: { value } })
+      c.rerender()
+      expect(select.value).toBe(value)
+      expect(c.store.getSnapshot().cardColumns).toBe(Number(value))
+      expect(createDigestStore().create().getSnapshot().cardColumns).toBe(Number(value))
+    }
+    localStorage.clear()
+  })
+
   it('records the toggle chord from a press, refuses owned and unsupported keys, and resets to the default', () => {
     const c = mount({ toggleShortcut: 'F2' })
     const field = screen.getByLabelText(zh['digestSettings.shortcut']) as HTMLInputElement
@@ -137,8 +163,18 @@ describe('DigestSettingsSection', () => {
     expect(c.setToggleShortcut).toHaveBeenLastCalledWith('Ctrl+1')
     cleanup()
     mount()
-    expect((screen.getByRole('button', { name: '恢复默认 Ctrl+1' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '恢复默认 Ctrl+1' }).disabled).toBe(true)
     expect(screen.queryByText(zh['digestSettings.shortcut.plain'])).toBeNull()
+  })
+
+  it('offers every card action for Enter with its digit, marks the stored one, and writes the chosen one', () => {
+    const c = mount({ enterAction: 'continue' })
+    const radios = screen.getAllByRole('radio') as HTMLInputElement[]
+    expect(radios.map(radio => radio.value)).toEqual(['open', 'continue', 'handled', 'todo', 'pin', 'snooze'])
+    expect(radios.map(radio => radio.checked)).toEqual([false, true, false, false, false, false])
+    expect(screen.getByLabelText('标记已处理（数字键 3）')).toBe(radios[2])
+    fireEvent.click(radios[5]!)
+    expect(c.setEnterAction).toHaveBeenCalledWith('snooze')
   })
 
   it('offers automatic and manual acknowledgement and explains foreground-visible time without implying handled', () => {
@@ -308,7 +344,8 @@ describe('DigestSettingsSection', () => {
     mount({ status: 'loading' })
     expect(screen.getByText(zh['settings.loading'])).toBeTruthy()
     for (const box of screen.getAllByRole('checkbox') as HTMLInputElement[]) expect(box.disabled).toBe(true)
-    expect((screen.getByLabelText(zh['digestSettings.shortcut']) as HTMLInputElement).disabled).toBe(true)
+    for (const radio of screen.getAllByRole('radio') as HTMLInputElement[]) expect(radio.disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(zh['digestSettings.shortcut']).disabled).toBe(true)
     cleanup()
     mount({ writable: false })
     expect(screen.getByText(zh['settings.unavailable'])).toBeTruthy()
@@ -335,5 +372,10 @@ describe('DigestSettingsSection', () => {
     fireEvent.keyDown(screen.getByLabelText(zh['digestSettings.shortcut']), { key: 'F2', code: 'F2' })
     await act(async () => { await Promise.resolve() })
     expect(screen.getByRole('alert').textContent).toBe('保存失败：denied')
+    cleanup()
+    mount({}, { setEnterAction: vi.fn<(action: CardAction) => Promise<void>>(async () => { throw new Error('refused') }) })
+    fireEvent.click(screen.getAllByRole('radio')[1]!)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByRole('alert').textContent).toBe('保存失败：refused')
   })
 })

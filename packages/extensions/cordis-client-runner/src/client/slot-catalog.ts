@@ -1919,6 +1919,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     slotInject: '',
     declaredBy: 'an entry in \'settings.section\' (client-ui-settings-general), so it exists while that entry is mounted',
     occupants: [
+      'client-ui-digest DigestLayoutRow id \'digest-workspaces\'',
       'client-ui-session-files FilesVisibilityRow id \'session-files-visibility\'',
       'client-ui-session-files DiffExpansionRow id \'session-files-diff-expansion\'',
       'client-ui-theme MobileAppearanceRows id \'appearance-density\'',

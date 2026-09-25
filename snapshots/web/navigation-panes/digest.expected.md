@@ -15,8 +15,13 @@
     - button "Last 7 days"
     - button "All"
   - text: since {{date}}, {{clock}} 1 to handle
+  - checkbox "Show results" [checked]
+  - text: Show results
   - checkbox "Show handled"
   - text: Show handled
+  - group "Layout":
+    - button "Sections" [pressed]
+    - button "Board"
   - heading "Finished 1" [level=3]
   - article:
     - text: "Finished NavScenario: first run bash to Ungrouped Question Reply in markdown with: a level-2 heading \"Navigation Summary\", a bulleted list of exactly two items, and a fenced code block containing echo WATERFALL. Then stop. Result ## Navigation Summary - alpha nav - beta nav ``` echo WATERFALL ```"
@@ -26,4 +31,4 @@
     - button "Add todo"
     - button "Pin"
     - button "Tomorrow"
-  - paragraph: j/k move · Enter open · e handled · t todo · p pin · s snooze until tomorrow · Ctrl+1 toggle
+  - text: Arrows pick a card · Tab next section · Enter Open session · Shift+Enter open · 1–6 buttons · Esc close · Ctrl+1 toggle

@@ -12,7 +12,7 @@ Status: implemented
 
 `ui-digest` 设置节新增 `toggleShortcut`，一个规范形式为 `[Ctrl+][Meta+][Alt+][Shift+]Key` 的字符串，默认 `Ctrl+1`，在 **汇总面板** 设置页的只读输入框里按下组合键即录制并立即保存。[开关快捷键库](../../../../packages/client/ui-digest/src/toggle-shortcut.ts)提供 Host 模式校验、录制器、匹配器与命令修饰键判断；[包 README](../../../../packages/client/ui-digest/README.zh.md) 负责面向用户的行为说明。
 
-快捷键可以不含任何修饰键。这是它与发送快捷键的区别：发送快捷键住在输入框里，因此必须带 Ctrl、Meta 或 Alt；开关监听器挂在 document 上，所以单个按键或 Shift 组合也被接受，然后由面板单字母键盘环用的同一个判断在可编辑区域里保持沉默；而含 Ctrl、Meta 或 Alt 的组合键在任何位置都生效——这正是固定组合键原有的"打到一半也能打开收件箱"行为。设置页会说明当前快捷键属于哪一种。
+快捷键可以不含任何修饰键。这是它与发送快捷键的区别：发送快捷键住在输入框里，因此必须带 Ctrl、Meta 或 Alt；开关监听器挂在 document 上，所以单个按键或 Shift 组合也被接受，然后由面板分诊按键用的同一个判断在可编辑区域里保持沉默；而含 Ctrl、Meta 或 Alt 的组合键在任何位置都生效——这正是固定组合键原有的"打到一半也能打开收件箱"行为。设置页会说明当前快捷键属于哪一种。
 
 支持的按键是字母、数字、F1–F12、方向键、Home、End、PageUp、PageDown；物理 `KeyX`/`DigitN` 编码优先于产生的字符，所以数字行被 Shift 改写的键盘布局仍能触达。录制器拒绝编辑键（Tab、Backspace、Delete、Enter、Space、Escape），以及在无 Alt 的 Ctrl 或 Meta 下属于编辑或浏览器的字母（剪贴板、撤销、全选、查找、标签页与窗口控制、文本样式切换）——一个在输入框里也会触发的组合键会劫持这些操作，而不只是遮住某个页面快捷键。Host 模式校验强制规范的修饰键顺序与按键集合；浏览器侧策略把录制器会拒绝的存储值按默认值读取，因此手改 `settings.yaml` 也无法绑上 `Ctrl+C`。
 

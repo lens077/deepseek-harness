@@ -6,6 +6,13 @@
   height: 100%;
   min-height: 0;
   background: var(--dsw-alias-bg-base);
+  container-type: size;
+}
+
+/* The panel takes focus on open so keys reach it; the focused card, not the
+   whole surface, is the visible target. */
+.panel:focus {
+  outline: none;
 }
 
 .header {
@@ -104,8 +111,25 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 20px 24px;
+  padding: 16px 20px;
   container-type: size;
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.sectionsSingle > .section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sectionsSingle > .section > .grid {
+  flex: 1;
 }
 
 .section + .section {
@@ -130,28 +154,31 @@
   font-size: 11px;
 }
 
-/* Left-to-right card flow: cards fill the row, then wrap. The panel owns the
-   whole center column, so the grid gets real horizontal space. Cards align
-   to the row's top rather than stretching to its tallest member: one long
-   reply must not pad every neighbour with empty space. */
+/* The preference caps the count; narrow groups keep each card readable. */
 .grid {
+  --digest-card-gap: 12px;
+  --digest-card-track: max(240px, calc((100% - (var(--digest-card-columns, 5) - 1) * var(--digest-card-gap)) / var(--digest-card-columns, 5)));
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-  align-items: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--digest-card-track)), 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--digest-card-gap);
+  align-items: stretch;
 }
 
-/* The board: one column per state, left to right in decision order (the
-   agent waiting on the user first, only while it is). Columns are equal
-   width and share the whole row, three or four of them. The board fills the
-   body's height and each column scrolls on its own, so a long finished
-   column never pushes the failed column off screen. */
+/* Populated states share the board width. Each column owns its scrolling. */
+.boardWrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 .board {
+  flex: 1;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 16px;
-  height: 100%;
   min-height: 0;
 }
 
@@ -208,25 +235,25 @@
   border-color: currentcolor;
 }
 
-/* An empty column keeps a dashed slot rather than collapsing: the place a
-   state's rows will land is part of what the board tells the user. */
-.columnEmpty {
-  margin: 0;
-  padding: 18px 12px;
-  border: 1px dashed var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  font-size: 12px;
-  color: var(--dsw-alias-label-tertiary);
-  text-align: center;
+.columnListSingle {
+  display: grid;
+}
+
+.board:has(> .column:only-child) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* Narrow center column: two columns side by side and the body scrolls as a
    whole, since four 180px columns would wrap every action row. */
 @container (max-width: 920px) {
+  .boardWrap {
+    height: auto;
+  }
+
   .board {
+    flex: none;
     grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    height: auto;
   }
 
   .columnList {
@@ -247,10 +274,9 @@
   background: var(--dsw-alias-bg-layer-1);
   text-align: left;
   overflow: hidden;
-  /* Never taller than the body's visible height less the section label
-     above the grid, so a card's action row is always on screen. */
   box-sizing: border-box;
-  max-height: calc(100cqh - 36px);
+  min-width: 0;
+  max-height: max(240px, calc(100cqh - 36px));
 }
 
 /* The scrolling middle of a card, between the pinned head and actions. A
@@ -270,6 +296,10 @@
   overscroll-behavior: contain;
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.cardBody > * {
+  flex-shrink: 0;
 }
 
 .success {
@@ -514,65 +544,6 @@
   cursor: pointer;
 }
 
-/* Workspace chips: one per workspace with work to show, each carrying its
-   attention count so the scattered picture reads at a glance. */
-.chips {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 20px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-}
-
-.chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
-  corner-shape: round;
-  padding: 3px 10px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.chip:hover {
-  color: var(--dsw-alias-label-primary);
-}
-
-.chipActive {
-  background: var(--dsw-alias-interactive-bg-hover);
-  border-color: transparent;
-  color: var(--dsw-alias-label-primary);
-  font-weight: 500;
-}
-
-.chipCount {
-  min-width: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--dsw-alias-state-warn-secondary);
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 16px;
-  text-align: center;
-}
-
-.chipRunning {
-  min-width: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--dsw-alias-interactive-bg-active);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-}
-
 .errorBar {
   flex: none;
   display: flex;
@@ -678,17 +649,50 @@
   flex: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .cardActions .openSession {
   margin-top: 0;
 }
 
+.cardActions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 4px;
+  line-height: 16px;
+}
+
+/* Every desktop button shows its digit; the card outline identifies the key target. */
+.keycap {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  min-width: 16px;
+  margin-right: 4px;
+  padding: 0 2px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-tertiary);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .keys {
-  margin: 16px 0 0;
+  flex: none;
+  margin: 0;
+  padding: 8px 20px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
   font-size: 11px;
+  line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
   text-align: center;
 }
@@ -1151,6 +1155,9 @@
 @media (max-width: 767px) {
   :global([data-mobile-layout="small"]) .compactToolbar {
     display: flex;
+  }
+
+  .compactToolbar {
     align-items: center;
     gap: var(--dsh-mobile-row-gap, 3px);
     padding: 2px var(--dsh-mobile-page-padding, 8px);
@@ -1215,7 +1222,7 @@
     min-height: var(--dsh-mobile-control-size, 44px);
   }
 
-  .tab, .groupButton, .chip, .action, .showHandled, .counts,
+  .tab, .groupButton, .action, .showHandled, .counts,
   .fieldLabel, .files, .cardWorkspace, .replyEmpty, .truncated,
   .todoMeta, .emptyBody {
     font-size: var(--dsh-mobile-meta-size, 13px);
@@ -1294,6 +1301,7 @@
 
   .grid {
     grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
     gap: 0;
   }
 
@@ -1337,22 +1345,16 @@
   .todoActions {
     width: 100%;
   }
+}
 
-  /* Workspace filter chips are labels, not chrome controls: each box hugs
-     its text with a 2px margin, so the strip stays one text line tall and
-     scrolls sideways instead of filling the viewport with 44px pills. */
-  .chips {
-    padding: 6px var(--dsh-mobile-page-padding, 12px);
-    gap: 0;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+/* Short phones need the same condensed controls as Small density. */
+@media (max-width: 767px) and (max-height: 500px) {
+  .compactToolbar {
+    display: flex;
   }
 
-  .chip {
-    flex-shrink: 0;
-    white-space: nowrap;
-    margin: 2px;
-    padding: 2px 8px;
-    line-height: 1.4;
+  .tabs,
+  .overviewToolbar {
+    display: none;
   }
 }

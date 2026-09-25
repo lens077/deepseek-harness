@@ -26,7 +26,7 @@ Status: implemented
 
 ### 一个设置页、三个开关和一个尺寸
 
-一个 **置顶** 设置页（`settings.section` id `session-pins`，紧跟在 **项目待办** 之后）拥有持久化的 `session-pins` 命名空间：`enabled`（默认开）、`sidebarArea`（默认开）、`sidebarRows`（默认 5，范围 1–20 或 `auto`）、`autoPinStatuses`（默认进行中和已完成）和 `digestSection`（默认开）。总开关隐藏所有置顶入口——菜单项、侧栏置顶区、卡片动作及其 `p` 键、汇总分组；两个细粒度开关各自移除一个界面，而标记本身保持持久化，因此重新启用后恢复同一置顶集合。
+一个 **置顶** 设置页（`settings.section` id `session-pins`，紧跟在 **项目待办** 之后）拥有持久化的 `session-pins` 命名空间：`enabled`（默认开）、`sidebarArea`（默认开）、`sidebarRows`（默认 5，范围 1–20 或 `auto`）、`autoPinStatuses`（默认进行中和已完成）和 `digestSection`（默认开）。总开关隐藏所有置顶入口——菜单项、侧栏置顶区、卡片动作及其 `5` 键、汇总分组；两个细粒度开关各自移除一个界面，而标记本身保持持久化，因此重新启用后恢复同一置顶集合。
 
 ## 备选方案
 

@@ -38,6 +38,7 @@
     "tests/plan-review.e2e.ts",
     "tests/steering.e2e.ts",
     "tests/navigation-panes.e2e.ts",
+    "tests/digest-layout.e2e.ts",
     "tests/session-reading-grace.e2e.ts",
     "tests/chat-scroll-fixture.ts",
     "tests/trajectory-virtualization.e2e.ts",

@@ -63,6 +63,7 @@ import { PinsSettingsSection } from './PinsSettingsSection.tsx'
 import { SESSION_PINS_SETTINGS_NAMESPACE, SessionPinsSettingsSchema, type SessionPinsSettings } from '../pins-settings.ts'
 import { DigestNavEntry } from './DigestNavEntry.tsx'
 import { DigestPanel } from './DigestPanel.tsx'
+import { DigestLayoutRow } from './DigestLayoutRow.tsx'
 import { createDigestStore } from './stores.ts'
 import { questionSeqOf, selectFinishedUnhandled, selectInbox } from './select.ts'
 import { en, NS, zh, type DigestKey } from './locales.ts'
@@ -79,7 +80,7 @@ export type { ProjectDocumentResult, ProjectTodosRemote, ProjectTodosView } from
 export type { ProjectSettingsView } from './project-settings.ts'
 export type { NavSettingsView } from './nav-settings-policy.ts'
 export type { PinsSettingsView } from './pins-settings-policy.ts'
-export type { DigestSettings, NavBadgeState } from '../nav-settings.ts'
+export type { CardAction, DigestSettings, NavBadgeState } from '../nav-settings.ts'
 export type { SessionPinsSettings } from '../pins-settings.ts'
 export type { ToggleShortcut } from '../toggle-shortcut.ts'
 export { createDigestStore } from './stores.ts'
@@ -184,12 +185,14 @@ export function apply(ctx: ClientContext): void {
       order: 44,
       locale: NS,
       label: () => translate('digestSettings.nav'),
+      store,
       inject: (): DigestSettingsInjected => ({
         hooks: { navSettings: navSettings.view },
         setNavBadges: show => navSettings.setNavBadges(show),
         setNavFinishedBadge: show => navSettings.setNavFinishedBadge(show),
         setNavBadgeOrder: order => navSettings.setNavBadgeOrder(order),
         setToggleShortcut: shortcut => navSettings.setToggleShortcut(shortcut),
+        setEnterAction: action => navSettings.setEnterAction(action),
         setReadAcknowledgement: mode => navSettings.setReadAcknowledgement(mode),
         setReadGraceSeconds: seconds => navSettings.setReadGraceSeconds(seconds),
       }),
@@ -417,6 +420,14 @@ export function apply(ctx: ClientContext): void {
     if (scope === undefined || conversation === undefined) return
     conversation.input.for(scope).setDraft(text)
   }
+
+  ctx.slots.inject('settings.layout.item', () => ctx.slots.register({
+    name: 'settings.layout.item',
+    id: 'digest-workspaces',
+    order: 30,
+    locale: NS,
+    store,
+  }, DigestLayoutRow))
 
   ctx.slots.inject('sidebar.nav.entry', () => ctx.slots.register({
     name: 'sidebar.nav.entry',
