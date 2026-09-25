@@ -294,8 +294,8 @@ function sessionSnapshot(running: boolean): SessionSnapshot {
   return { sessionId: 's1', running } as SessionSnapshot
 }
 
-function dockProps(snapshot: FlowSnapshot, running = true) {
-  const store = createTaskFlowDockStore().create('s1')
+function dockProps(snapshot: FlowSnapshot, running = true, scopeKey = 's1') {
+  const store = createTaskFlowDockStore().create(scopeKey)
   const style = createSnapshotStore({ dock: 'rail' as const, canvas: 'cards' as const, fontSize: 11 })
   const actions = { stop: vi.fn(), openCanvas: vi.fn(), inspect: vi.fn(), setDockVariant: vi.fn() }
   const props = {
@@ -380,6 +380,32 @@ describe('TaskFlowDock', () => {
 
     act(() => { vi.advanceTimersByTime(2_000) })
     expect(view.getByText('本轮 1分41秒')).toBeTruthy()
+  })
+
+  it.each([true, false])('keeps the expanded=%s toggle labelled without a hover or focus tooltip', (expanded) => {
+    vi.useFakeTimers()
+    const { props, store } = dockProps(sample(), true, `toggle-tooltip-${expanded}`)
+    try {
+      store.actions.setExpanded(expanded)
+      const view = render(<TaskFlowDock {...props} />)
+      const toggle = view.getByRole('button', { name: expanded ? '折叠流程图' : '展开流程图' })
+
+      expect(toggle.getAttribute('aria-expanded')).toBe(String(expanded))
+      expect(toggle.hasAttribute('title')).toBe(false)
+      fireEvent.mouseEnter(toggle)
+      act(() => { vi.advanceTimersByTime(1_000) })
+      expect(view.queryByRole('tooltip')).toBeNull()
+      fireEvent.mouseLeave(toggle)
+      fireEvent.focus(toggle)
+      expect(view.queryByRole('tooltip')).toBeNull()
+
+      fireEvent.click(toggle)
+      view.rerender(<TaskFlowDock {...props} />)
+      expect(view.getByRole('button', { name: expanded ? '展开流程图' : '折叠流程图' }).getAttribute('aria-expanded')).toBe(String(!expanded))
+      expect(view.queryByRole('region', { name: '任务流程图' }) !== null).toBe(!expanded)
+    } finally {
+      store.clearPersisted()
+    }
   })
 
   it('hides the stop action while the session is idle and reports a resolved latest interjection', () => {

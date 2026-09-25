@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import clsx from 'clsx'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
-  IconChevronDownOutline14, IconChevronRightOutline14, IconFullscreenOutline16, IconStopFill16, Menu, Tooltip,
+  IconChevronDownOutline14, IconChevronRightOutline14, IconFullscreenOutline16, IconStopFill16, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import { FLOW_VARIANTS, type FlowVariant } from '../settings.ts'
@@ -172,17 +172,15 @@ export function TaskFlowDock({
     <div className={css.dock} style={{ '--dsh-task-flow-font-size': `${fontSize}px` } as CSSProperties} data-task-flow-dock data-mobile-enabled={mobileDock || undefined}>
       <div className={css.panel}>
         <div className={css.head}>
-          <Tooltip label={expanded ? t('action.collapse') : t('action.expand')} side="bottom" delayMs={500}>
-            <button
-              type="button"
-              className={clsx(css.btn, css.icon, css.toggle)}
-              aria-label={expanded ? t('action.collapse') : t('action.expand')}
-              aria-expanded={expanded}
-              onClick={() => { actions.setExpanded(!expanded) }}
-            >
-              {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-            </button>
-          </Tooltip>
+          <button
+            type="button"
+            className={clsx(css.btn, css.icon, css.toggle)}
+            aria-label={expanded ? t('action.collapse') : t('action.expand')}
+            aria-expanded={expanded}
+            onClick={() => { actions.setExpanded(!expanded) }}
+          >
+            {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+          </button>
           <span className={css.title}>
             {snapshot.summary.running ? <span className={css.spinner} aria-hidden="true" /> : null}
             {t('title')}
