@@ -15,11 +15,11 @@ import type {} from '@deepseek-ai/dsh-agent/types'
 import type {} from '@deepseek-ai/dsh-tool-todo/client'
 import {
   TASK_FLOW_TARGET, type FlowAgentContribution, type FlowContribution, type FlowConversationViewNode,
-  type FlowInboxContribution, type FlowPromptContribution, type FlowTodoContribution,
+  type FlowInboxContribution, type FlowPromptContribution, type FlowPromptOrigin, type FlowTodoContribution,
 } from './flow-contract.ts'
 
-/** Longest prompt preview kept on a node, in code units. */
-const PREVIEW_LIMIT = 80
+/** Longest prompt or delegated-agent label kept in a rendered node, in code units. */
+const DISPLAY_LIMIT = 4_096
 
 /** Argument fields read, in order, for a delegated-agent node title. */
 const AGENT_NAME_FIELDS = ['description', 'label', 'objective', 'text_prompt', 'prompt'] as const
@@ -32,25 +32,42 @@ function turnOf(location: ConversationLocation): number | null {
   return location.kind === 'turn' || location.kind === 'step' ? location.turn.turn : null
 }
 
-/**
- * Collapse content blocks to one bounded single-line preview.
- * @param content - user message blocks.
- * @returns the joined text blocks, whitespace-normalized and capped.
- */
-export function previewText(content: readonly ContentBlock[]): string {
-  const text = content
+/** Joined text blocks, whitespace-normalized and unbounded: the retry identity of a prompt. */
+function normalizedText(content: readonly ContentBlock[]): string {
+  return content
     .flatMap(block => block.type === 'text' ? [block.text] : [])
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return text.length > PREVIEW_LIMIT ? `${text.slice(0, PREVIEW_LIMIT - 1)}…` : text
+}
+
+/** Prompt and delegated-agent labels share normalized text capped at the display limit. */
+function displayText(content: readonly ContentBlock[]): string {
+  const text = normalizedText(content)
+  return text.length > DISPLAY_LIMIT ? `${text.slice(0, DISPLAY_LIMIT - 1)}…` : text
+}
+
+/** The goal round driver's `MessageSourceMap` merge, read structurally so this package needs no goal dependency. */
+interface GoalPromptSource {
+  readonly kind: 'goal'
+  readonly goalId: string
+  readonly revision: number
+  readonly round: number
+}
+
+/** Prompt origin for a `user/message`: a user question, a goal-owned continuation round, or neither (drawn as nothing). */
+function promptOrigin(source: { readonly kind: string }): FlowPromptOrigin | undefined {
+  if (source.kind === 'user') return { origin: 'user' }
+  if (source.kind !== 'goal') return undefined
+  const goal = source as GoalPromptSource
+  return { origin: 'continuation', goalId: goal.goalId, goalRevision: goal.revision, goalRound: goal.round }
 }
 
 /**
  * Pick the delegated-agent title from its raw tool arguments.
  * @param argsRaw - JSON arguments as logged.
  * @param fallback - title when no known field carries text.
- * @returns the first non-empty label field, bounded like a prompt preview.
+ * @returns the first non-empty label field, bounded like a displayed prompt.
  */
 export function agentLabel(argsRaw: string, fallback: string): string {
   let parsed: unknown
@@ -65,13 +82,13 @@ export function agentLabel(argsRaw: string, fallback: string): string {
   for (const field of AGENT_NAME_FIELDS) {
     const value = record[field]
     if (typeof value === 'string' && value.trim() !== '') {
-      return previewText([{ type: 'text', text: value }])
+      return displayText([{ type: 'text', text: value }])
     }
   }
   const meta = record['meta']
   if (typeof meta === 'object' && meta !== null) {
     const name = (meta as Record<string, unknown>)['name']
-    if (typeof name === 'string' && name.trim() !== '') return previewText([{ type: 'text', text: name }])
+    if (typeof name === 'string' && name.trim() !== '') return displayText([{ type: 'text', text: name }])
   }
   return fallback
 }
@@ -96,20 +113,25 @@ function flowNode(
 export const promptDefinition: ConversationNodeDefinition<FlowPromptContribution> = {
   kind: 'task-flow-prompt',
   target: TASK_FLOW_TARGET,
-  match: event => event.type === 'user/message'
-    && isAppendSurfaceEvent(event)
-    && event.data.source.kind === 'user'
-    ? { id: String(event.data.id), role: 'start' }
-    : null,
+  match: (event) => {
+    if (event.type !== 'user/message' || !isAppendSurfaceEvent(event)) return null
+    return promptOrigin(event.data.source) === undefined ? null : { id: String(event.data.id), role: 'start' }
+  },
   start: (_context, match) => {
     if (match.event.type !== 'user/message') throw new Error('task-flow-prompt start requires user/message')
+    const origin = promptOrigin(match.event.data.source)
+    /* v8 ignore start -- match() admits only the two origins promptOrigin resolves */
+    if (origin === undefined) throw new Error('task-flow-prompt start requires user or goal source')
+    /* v8 ignore stop */
     return {
       kind: 'prompt',
       messageId: String(match.event.data.id),
       seq: match.event.seq,
       time: match.event.time,
       turn: turnOf(match.location),
-      text: previewText(match.event.data.content),
+      ...origin,
+      text: displayText(match.event.data.content),
+      identityText: normalizedText(match.event.data.content),
     }
   },
   update: context => context.state,
@@ -167,7 +189,14 @@ function settleAgent(state: FlowAgentContribution, match: ConversationMatch): Fl
   if (match.event.type !== 'tool/result') return state
   const data = match.event.data
   const isError = data.error !== undefined || data.message.content[0].isError === true
-  return { ...state, endTime: match.event.time, ...isError ? { isError: true } : {} }
+  const failureMessage = isError && data.error?.code !== 'AUTH' ? normalizedText(data.message.content[0].content) : ''
+  return {
+    ...state,
+    endTime: match.event.time,
+    ...isError ? { isError: true } : {},
+    ...data.error === undefined ? {} : { failureCode: data.error.code },
+    ...failureMessage === '' ? {} : { failureMessage },
+  }
 }
 
 /**

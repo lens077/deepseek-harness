@@ -98,6 +98,38 @@ async function bench() {
 }
 
 describe('ui-task-flow browser plugin', () => {
+  it('keeps goal continuations and tool framework errors in the assembled snapshot', async () => {
+    const b = await bench()
+    const events: readonly SessionLiveEventEntry[] = [
+      at(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [{ id: 'g1', role: 'user', content: [], source: { kind: 'goal' } }] }),
+      at(2, 'turn/start', { turn: 1 }),
+      at(3, 'user/message', {
+        id: 'g1', role: 'user', content: [{ type: 'text', text: 'continue implementation' }],
+        source: { kind: 'goal', goalId: 'goal-1', revision: 2, round: 1 },
+      }, { surfaceOp: 'append' }),
+      at(4, 'step/start', { turn: 1, step: 1 }),
+      at(5, 'tool/call', { turn: 1, step: 1, callId: 'g-call', name: 'subagent', arguments: JSON.stringify({ description: 'worker' }) }),
+      at(6, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          role: 'user',
+          source: { kind: 'tool', callId: 'g-call' },
+          content: [{ type: 'tool-result', toolCallId: 'g-call', isError: true, content: [{ type: 'text', text: 'framework failed to resume child worker' }] }],
+        },
+        error: { name: 'FrameworkError', code: 'DSH_CHILD_RESUME' },
+      }),
+      at(7, 'step/end', { turn: 1, step: 1 }),
+      at(8, 'turn/end', { turn: 1, reason: { kind: 'error', error: { code: 'UNKNOWN', message: 'turn failed' } } }),
+    ]
+    await b.runtime.sessions.replaceEvents(ROOT, events)
+    const source = b.runtime.ctx.uiConversation.binding(ROOT).target('task-flow')
+    source.subscribe(() => {})
+    const snapshot = source.getSnapshot() as FlowSnapshot
+    expect(snapshot.lanes[0]).toMatchObject({ label: 'continue implementation' })
+    expect(snapshot.nodes.get('agent:g-call')).toMatchObject({ failureCode: 'DSH_CHILD_RESUME', failureMessage: 'framework failed to resume child worker' })
+  })
+
   it('registers Definitions, the view target, the dock entry, the Flow tab, and two Settings rows', async () => {
     const b = await bench()
     const kinds = b.runtime.ctx.uiConversation.events.entries().map(definition => definition.kind)

@@ -7,11 +7,11 @@ import { useMemo } from 'react'
 import clsx from 'clsx'
 import type { FlowVariant } from '../settings.ts'
 import type { FlowLane, FlowNode, FlowSnapshot, FlowStatus } from './flow-contract.ts'
-import { columnsOf, DOCK_METRICS, layoutFlow, splitHistory, type FlowLayoutMetrics } from './flow-layout.ts'
+import { cardHeightOf, columnsOf, DOCK_METRICS, layoutFlow, splitHistory, type FlowLayoutMetrics } from './flow-layout.ts'
 import { isTerminal } from './flow-model.ts'
 import {
-  formatDuration, historyLabel, laneAnchorLabel, laneKind, laneKindLabel, laneProgress, nodeDetail, nodeTitle, spanOf,
-  statusLabel, terminalReason, type TaskFlowTranslate,
+  formatDuration, historyLabel, laneAnchorLabel, laneKind, laneKindLabel, laneProgress, nodeDetail, nodeTitle, nodeTooltip, spanOf,
+  statusLabel, type TaskFlowTranslate,
 } from './format.ts'
 import css from './FlowGraph.module.css'
 
@@ -34,6 +34,8 @@ export interface FlowGraphProps {
   onInspect?: ((callId: string) => void) | undefined
   /** Card metrics for the `cards` variant. */
   metrics?: FlowLayoutMetrics | undefined
+  /** Card font size in CSS pixels, sizing wrapped titles in the `cards` variant. */
+  fontSize?: number | undefined
   /** Fold earlier turns behind a chip; absent on drawings that always show the whole flow. */
   history?: FlowHistoryControl | undefined
 }
@@ -73,8 +75,14 @@ type DrawingProps = Omit<FlowGraphProps, 'variant'> & { laneTable: readonly Flow
 
 /* ---------- cards ---------- */
 
-function FlowCards({ snapshot, laneTable, now, t, onInspect, metrics = DOCK_METRICS }: DrawingProps) {
-  const layout = useMemo(() => layoutFlow(snapshot, metrics), [snapshot, metrics])
+/** Font size assumed when the caller supplies none, matching the stylesheet fallback. */
+const DEFAULT_FONT_SIZE = 11
+
+function FlowCards({ snapshot, laneTable, now, t, onInspect, metrics = DOCK_METRICS, fontSize = DEFAULT_FONT_SIZE }: DrawingProps) {
+  const layout = useMemo(
+    () => layoutFlow(snapshot, metrics, node => cardHeightOf(node, nodeTitle(t, node), metrics, fontSize)),
+    [snapshot, metrics, fontSize, t],
+  )
   const laneById = useMemo(() => new Map(snapshot.lanes.map(lane => [lane.id, lane])), [snapshot])
   return (
     <div className={clsx(css.graph, css.cards)} style={{ width: layout.width, height: layout.height }} data-flow-variant="cards">
@@ -111,7 +119,7 @@ function FlowCards({ snapshot, laneTable, now, t, onInspect, metrics = DOCK_METR
             className={clsx(css.card, css[node.status], css[node.kind], inspect !== undefined && css.clickable)}
             style={{ left: card.x, top: card.y, width: card.width, height: card.height }}
             onClick={inspect}
-            title={inspect === undefined ? terminalReason(t, node) : t('action.inspect')}
+            title={nodeTooltip(t, node, inspect !== undefined)}
             data-flow-node={node.id}
           >
             <span className={css.cardTitle}>
@@ -146,14 +154,17 @@ function Chip({ node, lane, lanes, now, t, onInspect }: {
   const Tag = inspect === undefined ? 'span' : 'button'
   const time = elapsed(t, node, now)
   const detail = nodeDetail(t, node)
-  const retry = node.kind === 'prompt' && lane?.retryOfLaneId !== undefined ? laneKind(t, lane, lanes) : undefined
-  const meta = [time, node.kind === 'terminal' ? undefined : detail, retry].filter(value => value !== undefined).join(' · ')
+  // A prompt chip captions the relation the lane records: a retry of, or a continuation of, an earlier route.
+  const relation = node.kind === 'prompt' && lane !== undefined && (lane.retryOfLaneId !== undefined || lane.continuationOfLaneId !== undefined)
+    ? laneKind(t, lane, lanes)
+    : undefined
+  const meta = [time, node.kind === 'terminal' ? undefined : detail, relation].filter(value => value !== undefined).join(' · ')
   return (
     <Tag
       type={inspect === undefined ? undefined : 'button'}
       className={clsx(css.chip, css[node.status], node.kind === 'prompt' && css.prompt, inspect !== undefined && css.clickable)}
       onClick={inspect}
-      title={inspect === undefined ? terminalReason(t, node) : t('action.inspect')}
+      title={nodeTooltip(t, node, inspect !== undefined)}
       data-flow-node={node.id}
     >
       {node.kind === 'prompt' && lane !== undefined ? <span className={css.ordinal}>{ordinalOf(t, lane)}</span> : <StatusGlyph status={node.status} />}
@@ -243,7 +254,7 @@ function Block({ node, now, t, onInspect }: { node: FlowNode; now: number; t: Ta
       type={inspect === undefined ? undefined : 'button'}
       className={clsx(css.block, css[node.status], inspect !== undefined && css.clickable)}
       onClick={inspect}
-      title={inspect === undefined ? terminalReason(t, node) : t('action.inspect')}
+      title={nodeTooltip(t, node, inspect !== undefined)}
       data-flow-node={node.id}
     >
       <StatusGlyph status={node.status} />
@@ -265,14 +276,14 @@ function FlowLanes({ snapshot, laneTable, now, t, onInspect }: DrawingProps) {
         const anchor = laneAnchorLabel(t, lane, snapshot.nodes)
         return (
           <div key={lane.id} className={clsx(css.lane, lane.kind === 'main' && css.main)} data-flow-lane={lane.id}>
-            <div className={css.laneName}>
+            <div className={css.laneName} data-flow-lane-label={lane.id}>
               <span className={css.ordinal}>{ordinalOf(t, lane)}</span>
               <span>{laneKind(t, lane, laneTable)}</span>
               <span className={css.laneSub}>{anchor ?? lane.label}</span>
             </div>
             <div className={css.blocks}>
               {columns.map((column, index) => (
-                <span key={column[0].id} className={css.blocks}>
+                <span key={column[0].id} className={css.step}>
                   {index > 0 && <span className={css.arrow}>▶</span>}
                   {column.length === 1
                     ? <Block node={column[0]} now={now} t={t} onInspect={onInspect} />

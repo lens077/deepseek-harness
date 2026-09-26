@@ -8,11 +8,75 @@ import type { FlowLane, FlowNode, FlowSnapshot } from './flow-contract.ts'
 /** Card metrics in CSS pixels. */
 export interface FlowLayoutMetrics {
   readonly nodeWidth: number
+  /** Smallest card height; a card grows past it for wrapped title lines. */
   readonly nodeHeight: number
   readonly gapX: number
   readonly gapY: number
   readonly rowGap: number
   readonly padding: number
+  /** The card's own horizontal and vertical padding, matching `.card` in the stylesheet. */
+  readonly cardPadX: number
+  readonly cardPadY: number
+}
+
+/**
+ * Longest title a card draws before the stylesheet clamps it. The prompt label
+ * is capped at 4 096 code units upstream, so only a pathological prompt reaches
+ * this bound; the complete text stays on the tooltip.
+ */
+export const CARD_TITLE_MAX_LINES = 40
+
+/** Line height ratio shared with the stylesheet's `line-height: 1.45`. */
+const LINE_HEIGHT = 1.45
+/** Width of one Latin glyph at 600 weight, as a fraction of the font size. */
+const LATIN_EM = 0.6
+/** Width of one CJK or fullwidth glyph as a fraction of the font size. */
+const WIDE_EM = 1
+/** Slack for word boundaries and CJK line-end prohibitions the greedy estimate cannot see; calibrated in the browser e2e. */
+const WRAP_SLACK = 1.2
+/** Space the prompt ordinal tag and its gap take from the first title row. */
+const ORDINAL_TAG_WIDTH = 34
+/** Space between the title block and the meta row, matching `.card { gap }`. */
+const CARD_GAP = 2
+
+/**
+ * One East Asian wide or fullwidth glyph: Hangul Jamo, CJK and Yi, Hangul
+ * syllables, compatibility forms, fullwidth forms, and the astral CJK planes.
+ */
+const WIDE_GLYPH = new RegExp(
+  '^(?:[\\u1100-\\u115F\\u2E80-\\uA4CF\\uAC00-\\uD7A3\\uF900-\\uFAFF\\uFE30-\\uFE4F\\uFF00-\\uFF60\\uFFE0-\\uFFE6]'
+  + '|[\\u{20000}-\\u{3FFFF}])$',
+  'u',
+)
+
+/**
+ * Estimate how many lines a title wraps to inside a card of the given metrics.
+ * @param title - drawn title text.
+ * @param widthPx - width available to the text.
+ * @param fontSize - card font size in CSS pixels.
+ * @param leadingPx - width taken from the first line by an inline tag.
+ * @returns at least one line, at most {@link CARD_TITLE_MAX_LINES}.
+ */
+export function estimateTitleLines(title: string, widthPx: number, fontSize: number, leadingPx = 0): number {
+  let width = leadingPx
+  for (const char of title) width += (WIDE_GLYPH.test(char) ? WIDE_EM : LATIN_EM) * fontSize
+  const lines = Math.ceil(width * WRAP_SLACK / Math.max(1, widthPx))
+  return Math.min(CARD_TITLE_MAX_LINES, Math.max(1, lines))
+}
+
+/**
+ * Height of one card: its padding, the wrapped title, and one meta row, never below the metric minimum.
+ * @param node - drawn node.
+ * @param title - the title text the card draws.
+ * @param metrics - card metrics.
+ * @param fontSize - card font size in CSS pixels.
+ * @returns the card height in CSS pixels.
+ */
+export function cardHeightOf(node: FlowNode, title: string, metrics: FlowLayoutMetrics, fontSize: number): number {
+  const lineHeight = Math.ceil(fontSize * LINE_HEIGHT)
+  const inner = metrics.nodeWidth - 2 * metrics.cardPadX - 2
+  const lines = estimateTitleLines(title, inner, fontSize, node.kind === 'prompt' ? ORDINAL_TAG_WIDTH : 0)
+  return Math.max(metrics.nodeHeight, 2 * metrics.cardPadY + 2 + lines * lineHeight + CARD_GAP + lineHeight)
 }
 
 /** One positioned card. */
@@ -53,8 +117,11 @@ export interface FlowLayout {
 
 /** Default card metrics for the resident strip. */
 export const DOCK_METRICS: FlowLayoutMetrics = {
-  nodeWidth: 156, nodeHeight: 58, gapX: 24, gapY: 6, rowGap: 28, padding: 20,
+  nodeWidth: 196, nodeHeight: 54, gapX: 24, gapY: 8, rowGap: 32, padding: 20, cardPadX: 8, cardPadY: 4,
 }
+
+/** Resolve one card's height; the default is the metric minimum for every node. */
+export type FlowCardHeight = (node: FlowNode) => number
 
 /** A drawing column: at least one node. */
 export type FlowColumn = [FlowNode, ...FlowNode[]]
@@ -132,43 +199,47 @@ export function columnsOf(lane: FlowLane, nodes: ReadonlyMap<string, FlowNode>):
 }
 
 /**
- * Lay out the card graph.
+ * Lay out the card graph. Cards in one column stack top to bottom at their own
+ * heights; a row is as tall as its tallest column and every column is centred in it.
  * @param snapshot - assembled task flow.
  * @param metrics - card metrics.
+ * @param heightOf - card height per node; defaults to the metric minimum.
  * @returns positioned cards, connectors, and row captions.
  */
-export function layoutFlow(snapshot: FlowSnapshot, metrics: FlowLayoutMetrics): FlowLayout {
+export function layoutFlow(
+  snapshot: FlowSnapshot,
+  metrics: FlowLayoutMetrics,
+  heightOf: FlowCardHeight = () => metrics.nodeHeight,
+): FlowLayout {
   const placed = new Map<string, FlowLayoutNode>()
   const nodes: FlowLayoutNode[] = []
   const edges: FlowLayoutEdge[] = []
   const rows: FlowLayoutRow[] = []
   const stepX = metrics.nodeWidth + metrics.gapX
-  const stepY = metrics.nodeHeight + metrics.gapY
   let rowTop = metrics.padding
   let width = 0
+  const columnHeight = (column: FlowColumn): number =>
+    column.reduce((sum, node) => sum + heightOf(node), 0) + (column.length - 1) * metrics.gapY
 
   /**
    * Place one row of columns from `originX`, chaining solid edges between
    * neighbouring columns; returns the left-middle point of the row's first card.
    */
   const placeRow = (lane: FlowLane, columns: readonly [FlowColumn, ...FlowColumn[]], originX: number): { x: number; y: number } => {
-    const stack = Math.max(...columns.map(column => column.length))
-    const rowHeight = stack * stepY - metrics.gapY
+    const rowHeight = Math.max(...columns.map(columnHeight))
     const centerY = rowTop + rowHeight / 2
     rows.push({ lane, y: rowTop })
-    const entry = { x: originX, y: centerY - (columns[0].length * stepY - metrics.gapY) / 2 + metrics.nodeHeight / 2 }
+    const entry = { x: originX, y: centerY - columnHeight(columns[0]) / 2 + heightOf(columns[0][0]) / 2 }
     let previous: FlowLayoutNode[] = []
     for (const [index, column] of columns.entries()) {
       const x = originX + index * stepX
-      const top = centerY - (column.length * stepY - metrics.gapY) / 2
-      const current: FlowLayoutNode[] = column.map((node, at) => ({
-        id: node.id,
-        node,
-        x,
-        y: top + at * stepY,
-        width: metrics.nodeWidth,
-        height: metrics.nodeHeight,
-      }))
+      let y = centerY - columnHeight(column) / 2
+      const current: FlowLayoutNode[] = column.map((node) => {
+        const height = heightOf(node)
+        const card = { id: node.id, node, x, y, width: metrics.nodeWidth, height }
+        y += height + metrics.gapY
+        return card
+      })
       for (const card of current) {
         placed.set(card.id, card)
         nodes.push(card)

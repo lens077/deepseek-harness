@@ -16,11 +16,11 @@ import { FlowStyleRow, type FlowStyleRowProps } from '../src/client/FlowStyleRow
 import { TaskFlowDock, type TaskFlowDockProps } from '../src/client/TaskFlowDock.tsx'
 import { TaskFlowView, type TaskFlowViewProps } from '../src/client/TaskFlowView.tsx'
 import type { FlowLane, FlowNode, FlowSnapshot } from '../src/client/flow-contract.ts'
-import { DOCK_METRICS, layoutFlow, splitHistory } from '../src/client/flow-layout.ts'
+import { CARD_TITLE_MAX_LINES, cardHeightOf, DOCK_METRICS, estimateTitleLines, layoutFlow, splitHistory } from '../src/client/flow-layout.ts'
 import { EMPTY_FLOW_SNAPSHOT } from '../src/client/flow-model.ts'
 import {
-  countsFact, currentFact, elapsedFact, formatDuration, laneAnchorLabel, laneKindLabel, nodeDetail, nodeTitle, terminalLabel,
-  terminalReason,
+  countsFact, currentFact, elapsedFact, formatDuration, laneAnchorLabel, laneKindLabel, nodeDetail, nodeTitle, nodeTooltip,
+  terminalLabel, terminalReason,
 } from '../src/client/format.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { createTaskFlowDockStore } from '../src/client/stores.ts'
@@ -112,6 +112,29 @@ describe('FlowGraph drawings', () => {
     expect(sparse.container.querySelectorAll('[data-flow-lane]')).toHaveLength(1)
     expect(sparse.getByText('free agent')).toBeTruthy()
     expect(sparse.getByText('重试 #3')).toBeTruthy()
+    const { retryOfLaneId: _retry, ...unretried } = retry
+    const continued: FlowLane = { ...unretried, id: 'turn:11', ordinal: 11, continuationOfLaneId: 'turn:8', nodeIds: ['prompt:m11'] }
+    nodes.set('prompt:m11', node({ id: 'prompt:m11', kind: 'prompt', laneId: 'turn:11', title: '继续', turn: 11 }))
+    const goal = render(<FlowGraph snapshot={{ ...sample(), lanes: [loose, continued], nodes }} variant="rail" now={NOW} t={t} />)
+    expect(goal.getByText('继续执行 #8')).toBeTruthy()
+  })
+
+  it('keeps long prompts and framework errors readable in every rail chip', () => {
+    const prompt = '继续实现任务：修复系统错误、模型错误和 DSH 框架错误，并保留用户中断后的恢复上下文'.repeat(2)
+    const error = 'DSH framework error: the task state could not be resumed after the user interruption; retry the current task.'
+    const base = sample()
+    const nodes = new Map(base.nodes)
+    nodes.set('prompt:m3', { ...nodes.get('prompt:m3')!, title: prompt })
+    nodes.set('steps:3', { ...nodes.get('steps:3')!, status: 'error', detail: error })
+    const view = render(<FlowGraph snapshot={{ ...base, nodes }} variant="rail" now={NOW} t={t} onInspect={() => {}} />)
+    // The complete prompt is rendered text, not an ellipsized clip; the failed steps chip carries the full cause as its tooltip.
+    expect(view.getByText(prompt).closest('[data-flow-node="prompt:m3"]')?.getAttribute('title')).toBe(prompt)
+    expect(view.getByText('出错').closest('[data-flow-node="steps:3"]')?.getAttribute('title')).toBe(`出错 · ${error}`)
+    // Inspectable agents name themselves in the tooltip beside the inspect hint; the lane board does the same.
+    expect(view.getByText('案卷作者').closest('button')?.getAttribute('title')).toBe('案卷作者 · 在轨迹中查看')
+    const lanes = within(render(<FlowGraph snapshot={{ ...base, nodes }} variant="lanes" now={NOW} t={t} onInspect={() => {}} />).container)
+    expect(lanes.getByText('案卷作者').closest('button')?.getAttribute('title')).toBe('案卷作者 · 在轨迹中查看')
+    expect(lanes.getByText('汇总').closest('[data-flow-node]')?.getAttribute('title')).toBe('汇总')
   })
 
   it('draws lanes with per-route progress and localized status', () => {
@@ -199,6 +222,42 @@ describe('card layout', () => {
     expect(layoutFlow(EMPTY_FLOW_SNAPSHOT, DOCK_METRICS)).toMatchObject({ width: DOCK_METRICS.padding, height: 0, nodes: [], edges: [] })
   })
 
+  it('sizes each card for its wrapped title and stacks a column at those heights', () => {
+    const inner = DOCK_METRICS.nodeWidth - 2 * DOCK_METRICS.cardPadX - 2
+    expect(estimateTitleLines('规划', inner, 11)).toBe(1)
+    expect(estimateTitleLines('', inner, 11)).toBe(1)
+    // 40 CJK glyphs at 11px need 440px plus slack: three 178px lines; the prompt tag's 34px pushes them onto a fourth.
+    expect(estimateTitleLines('测'.repeat(40), inner, 11)).toBe(3)
+    expect(estimateTitleLines('测'.repeat(40), inner, 11, 34)).toBe(4)
+    expect(estimateTitleLines('x'.repeat(4_096), inner, 11)).toBe(CARD_TITLE_MAX_LINES)
+    // Hangul, fullwidth punctuation, and astral CJK count as wide; Latin glyphs are narrower at the same size.
+    expect(estimateTitleLines('한'.repeat(40), inner, 11)).toBe(3)
+    expect(estimateTitleLines('，'.repeat(40), inner, 11)).toBe(3)
+    expect(estimateTitleLines('\u{20000}'.repeat(40), inner, 11)).toBe(3)
+    expect(estimateTitleLines('a'.repeat(40), inner, 11)).toBeLessThan(estimateTitleLines('测'.repeat(40), inner, 11))
+    const short = node({ id: 's', kind: 'todo', laneId: 'l', title: '规划' })
+    const long = node({ id: 'p', kind: 'prompt', laneId: 'l', title: '测'.repeat(60) })
+    expect(cardHeightOf(short, '规划', DOCK_METRICS, 11)).toBe(DOCK_METRICS.nodeHeight)
+    const tall = cardHeightOf(long, long.title, DOCK_METRICS, 11)
+    expect(tall).toBeGreaterThan(DOCK_METRICS.nodeHeight)
+    expect(cardHeightOf(long, long.title, DOCK_METRICS, 16)).toBeGreaterThan(tall)
+
+    // Two agents of different heights stack without overlapping, and the row centres on the tallest column.
+    const base = sample()
+    const nodes = new Map(base.nodes)
+    nodes.set('agent:c1', { ...nodes.get('agent:c1')!, title: '规'.repeat(80) })
+    const layout = layoutFlow({ ...base, nodes }, DOCK_METRICS, card => cardHeightOf(card, card.title, DOCK_METRICS, 11))
+    const at = (id: string) => layout.nodes.find(card => card.id === id)!
+    expect(at('agent:c1').height).toBeGreaterThan(at('agent:c2').height)
+    expect(at('agent:c2').y).toBe(at('agent:c1').y + at('agent:c1').height + DOCK_METRICS.gapY)
+    const column = at('agent:c1').height + DOCK_METRICS.gapY + at('agent:c2').height
+    const rowTop = layout.rows[0]!.y
+    expect(at('agent:c1').y).toBe(rowTop)
+    expect(at('todo:1:0').y).toBe(rowTop + (column - at('todo:1:0').height) / 2)
+    const edge = layout.edges.find(candidate => candidate.id === 'todo:1:0->agent:c2')!
+    expect(edge.y2).toBe(at('agent:c2').y + at('agent:c2').height / 2)
+  })
+
   it('draws loose agents after the prompt and skips unknown node ids', () => {
     const lane: FlowLane = { id: 'turn:1', kind: 'main', turn: 1, ordinal: 1, label: 'x', status: 'running', nodeIds: ['prompt:m1', 'agent:c9', 'missing'], startTime: 1 }
     const nodes = new Map<string, FlowNode>([
@@ -238,11 +297,36 @@ describe('format helpers', () => {
     expect(terminalReason(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'error', detail: 'boom' }))).toBe('boom')
     expect(terminalReason(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'done' }))).toBeUndefined()
     expect(nodeTitle(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'aborted', detail: 'user' }))).toBe('已中止')
+    // Turn failures carry a non-UNKNOWN code beside the message; an UNKNOWN code adds nothing; a code alone still names itself.
+    const coded = node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'error', detail: 'rate limited', failureCode: 'RATE_LIMIT' })
+    expect(terminalLabel(t, coded)).toBe('出错 [RATE_LIMIT] · rate limited')
+    expect(terminalReason(t, coded)).toBe('rate limited [RATE_LIMIT]')
+    expect(terminalLabel(t, node({ ...coded, failureCode: 'UNKNOWN' }))).toBe('出错 · rate limited')
+    expect(terminalLabel(t, node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'error', failureCode: 'BLOCKED_BY_POLICY' }))).toBe('出错 [BLOCKED_BY_POLICY]')
+    expect(terminalReason(t, node({ id: 'e', kind: 'terminal', laneId: 'l', status: 'error', failureCode: 'BLOCKED_BY_POLICY' }))).toBe('BLOCKED_BY_POLICY')
+    // A delegated agent's tool failure joins its tool name in the detail line; the message wins over the code when present.
+    const failed = node({ id: 'a', kind: 'agent', laneId: 'l', title: '案卷作者', status: 'error', detail: 'subagent', failureCode: 'DSH_CHILD_RESUME', failureMessage: 'worker crashed' })
+    expect(nodeDetail(t, failed)).toBe('subagent · worker crashed')
+    const auth = node({ ...failed, failureCode: 'AUTH', failureMessage: 'credential=fixture-private-token' })
+    expect(nodeDetail(t, auth)).toBe('subagent · API 密钥无效')
+    expect(nodeTooltip(t, auth, true)).toBe('案卷作者 · API 密钥无效 · 在轨迹中查看')
+    expect(nodeDetail(t, node({ id: 'a', kind: 'agent', laneId: 'l', status: 'error', failureCode: 'DSH_CHILD_RESUME' }))).toBe('DSH_CHILD_RESUME')
+    expect(terminalReason(t, failed)).toBe('worker crashed [DSH_CHILD_RESUME]')
+    // Tooltips: title, a delegated agent's recorded failure (never its bare tool name), then the inspect hint.
+    expect(nodeTooltip(t, failed, true)).toBe('案卷作者 · worker crashed [DSH_CHILD_RESUME] · 在轨迹中查看')
+    expect(nodeTooltip(t, node({ id: 'a', kind: 'agent', laneId: 'l', title: '案卷作者', status: 'error', detail: 'subagent' }), true)).toBe('案卷作者 · 在轨迹中查看')
+    expect(nodeTooltip(t, coded, false)).toBe('出错 [RATE_LIMIT] · rate limited')
+    expect(nodeTooltip(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'aborted', detail: 'user' }), false)).toBe('已中止 · 手动停止')
+    expect(nodeTooltip(t, node({ id: 's', kind: 'steps', laneId: 'l', status: 'running' }), false)).toBe('执行')
+    expect(nodeTooltip(t, node({ id: 'p', kind: 'prompt', laneId: 'l', title: '写一本小说' }), false)).toBe('写一本小说')
     const lane: FlowLane = { id: 'x', kind: 'interjection', turn: 2, ordinal: 2, label: '', status: 'done', anchorNodeId: 'gone', nodeIds: [], startTime: 1 }
     expect(laneAnchorLabel(t, lane, new Map())).toBeUndefined()
     expect(laneKindLabel(t, { ...lane, kind: 'main', ordinal: 1 }, [])).toBe('#1 主线')
     expect(laneKindLabel(t, lane, [])).toBe('#2 插话')
     expect(laneKindLabel(t, { ...lane, kind: 'sequel', retryOfLaneId: 'gone' }, [])).toBe('#2 后续')
+    const main: FlowLane = { ...lane, id: 'turn:1', kind: 'main', ordinal: 1 }
+    expect(laneKindLabel(t, { ...lane, kind: 'sequel', continuationOfLaneId: 'turn:1' }, [main])).toBe('#2 继续执行 #1')
+    expect(laneKindLabel(t, { ...lane, kind: 'sequel', continuationOfLaneId: 'gone' }, [main])).toBe('#2 后续')
     const { anchorNodeId: _anchor, ...unanchored } = lane
     expect(laneAnchorLabel(t, unanchored, new Map())).toBeUndefined()
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())

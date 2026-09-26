@@ -76,9 +76,11 @@ export function statusLabel(t: TaskFlowTranslate, status: FlowStatus): string {
  */
 export function terminalReason(t: TaskFlowTranslate, node: FlowNode): string | undefined {
   if (node.failureCode === 'AUTH') return t('failure.auth')
-  if (node.detail === undefined) return undefined
-  const key = ABORT_KEYS[node.detail]
-  return key === undefined ? node.detail : t(key)
+  const detail = node.failureMessage ?? node.detail
+  if (detail === undefined) return node.failureCode
+  const key = ABORT_KEYS[detail]
+  if (key !== undefined) return t(key)
+  return node.failureCode !== undefined && node.failureCode !== 'UNKNOWN' ? `${detail} [${node.failureCode}]` : detail
 }
 
 /**
@@ -90,9 +92,31 @@ export function terminalReason(t: TaskFlowTranslate, node: FlowNode): string | u
 export function terminalLabel(t: TaskFlowTranslate, node: FlowNode): string {
   const status = statusLabel(t, node.status)
   if (node.failureCode === 'AUTH') return `${status} · ${t('failure.auth')}`
-  if (node.detail === undefined) return status
-  const key = ABORT_KEYS[node.detail]
-  return key === undefined ? `${status} · ${node.detail}` : `${status}（${t(key)}）`
+  const detail = node.failureMessage ?? node.detail
+  if (detail === undefined) return node.failureCode === undefined ? status : `${status} [${node.failureCode}]`
+  const key = ABORT_KEYS[detail]
+  if (key !== undefined) return `${status}（${t(key)}）`
+  const code = node.failureCode !== undefined && node.failureCode !== 'UNKNOWN' ? ` [${node.failureCode}]` : ''
+  return `${status}${code} · ${detail}`
+}
+
+/**
+ * Hover text of one drawn node: its complete title; the recorded cause for a
+ * stopped steps node or a delegated agent's tool failure (a terminal title
+ * already names its cause); and the inspect hint when the node opens in Trajectory.
+ * @param t - namespace translator.
+ * @param node - drawn node.
+ * @param inspectable - whether the node opens its call in the Trajectory view.
+ * @returns the tooltip, joined with middle dots.
+ */
+export function nodeTooltip(t: TaskFlowTranslate, node: FlowNode, inspectable: boolean): string {
+  const withCause = (node.kind === 'steps' && isTerminal(node.status))
+    || (node.kind === 'agent' && (node.failureCode !== undefined || node.failureMessage !== undefined))
+  const parts = [nodeTitle(t, node)]
+  const reason = withCause ? terminalReason(t, node) : undefined
+  if (reason !== undefined) parts.push(reason)
+  if (inspectable) parts.push(t('action.inspect'))
+  return parts.join(' · ')
 }
 
 /**
@@ -122,6 +146,10 @@ export function nodeTitle(t: TaskFlowTranslate, node: FlowNode): string {
 export function nodeDetail(t: TaskFlowTranslate, node: FlowNode): string | undefined {
   if (node.kind === 'steps') return t('node.stepCount', { count: node.stepCount ?? 0 })
   if (node.kind === 'terminal') return undefined
+  if (node.kind === 'agent' && node.failureCode !== undefined) {
+    const failure = node.failureCode === 'AUTH' ? t('failure.auth') : node.failureMessage ?? node.failureCode
+    return node.detail === undefined ? failure : `${node.detail} · ${failure}`
+  }
   return node.detail
 }
 
@@ -135,6 +163,8 @@ export function nodeDetail(t: TaskFlowTranslate, node: FlowNode): string | undef
 export function laneKind(t: TaskFlowTranslate, lane: FlowLane, lanes: readonly FlowLane[]): string {
   const retried = lane.retryOfLaneId === undefined ? undefined : lanes.find(entry => entry.id === lane.retryOfLaneId)
   if (retried !== undefined) return t('lane.retryOf', { ordinal: t('lane.ordinal', { ordinal: retried.ordinal }) })
+  const continued = lane.continuationOfLaneId === undefined ? undefined : lanes.find(entry => entry.id === lane.continuationOfLaneId)
+  if (continued !== undefined) return t('lane.continuationOf', { ordinal: t('lane.ordinal', { ordinal: continued.ordinal }) })
   switch (lane.kind) {
     case 'main': return t('lane.main')
     case 'interjection': return t('lane.interjection')

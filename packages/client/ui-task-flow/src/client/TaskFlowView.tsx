@@ -36,7 +36,7 @@ export type TaskFlowViewProps = ConvViewProps & InjectFace<TaskFlowViewInjected>
 
 /** Larger card metrics for the canvas. */
 const CANVAS_METRICS: FlowLayoutMetrics = {
-  nodeWidth: 200, nodeHeight: 68, gapX: 56, gapY: 14, rowGap: 48, padding: 40,
+  nodeWidth: 236, nodeHeight: 60, gapX: 56, gapY: 16, rowGap: 52, padding: 40, cardPadX: 10, cardPadY: 7,
 }
 
 const MIN_SCALE = 0.4
@@ -146,7 +146,15 @@ export function TaskFlowView({
               className={clsx(css.stage, variant === 'lanes' && css.laneBoard)}
               style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
             >
-              <FlowGraph snapshot={snapshot} variant={variant} now={now} t={t} onInspect={onInspect} metrics={CANVAS_METRICS} />
+              <FlowGraph
+                snapshot={snapshot}
+                variant={variant}
+                now={now}
+                t={t}
+                onInspect={onInspect}
+                metrics={CANVAS_METRICS}
+                fontSize={fontSize}
+              />
             </div>
           </div>
         )}

@@ -11,7 +11,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import {
-  agentLabel, createAgentDefinition, inboxDefinition, previewText, promptDefinition, todoDefinition,
+  agentLabel, createAgentDefinition, inboxDefinition, promptDefinition, todoDefinition,
 } from '../src/client/flow-definitions.ts'
 import { flowViewDefinition } from '../src/client/flow-view.ts'
 import { buildFlowSnapshot, EMPTY_FLOW_SNAPSHOT } from '../src/client/flow-model.ts'
@@ -37,6 +37,9 @@ function at(seq: number, type: string, data: unknown, extra: Record<string, unkn
 
 const user = (seq: number, id: string, text: string) => at(seq, 'user/message', {
   id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' },
+}, { surfaceOp: 'append' })
+const continuation = (seq: number, id: string, text: string, goalId = 'goal-1', revision = 1, round = 1) => at(seq, 'user/message', {
+  id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'goal', goalId, revision, round },
 }, { surfaceOp: 'append' })
 const spliced = (seq: number, ids: readonly string[], target = 'next-turn') => at(seq, 'agent/inbox/spliced', {
   target, start: 0, inserted: ids.map(id => ({ id, role: 'user', content: [], source: { kind: 'user' } })),
@@ -156,6 +159,98 @@ describe('task-flow fold', () => {
     expect(completed.lanes[1]!.retryOfLaneId).toBeUndefined()
   })
 
+  it('keeps automatic goal continuations in the flow and distinguishes them from a new follow-up', () => {
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), continuation(3, 'm1', 'implement the plan', 'goal-1', 2, 1), turnEnd(4, 1, { kind: 'completed' }),
+      turnStart(5, 2), continuation(6, 'm2', 'implement the plan', 'goal-1', 2, 2), turnEnd(7, 2, { kind: 'completed' }),
+      turnStart(8, 3), user(9, 'm3', 'ask an unrelated question'),
+    ]))
+    expect(snapshot.lanes.map(lane => [lane.kind, lane.continuationOfLaneId, lane.label])).toEqual([
+      ['main', undefined, 'implement the plan'],
+      ['sequel', 'turn:1', 'implement the plan'],
+      ['sequel', undefined, 'ask an unrelated question'],
+    ])
+    // A goal's first round after a user prompt continues that prompt's line.
+    const afterUser = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'do it'), turnEnd(4, 1, { kind: 'aborted', reason: { kind: 'user' } }),
+      turnStart(5, 2), continuation(6, 'm2', 'do it'),
+    ]))
+    expect(afterUser.lanes[1]).toMatchObject({ kind: 'sequel', continuationOfLaneId: 'turn:1' })
+    expect(afterUser.lanes[1]!.retryOfLaneId).toBeUndefined()
+    expect(snapshot.nodes.get('prompt:m2')?.title).toBe('implement the plan')
+  })
+
+  it('draws no lane for a plugin-sourced user message and caps the drawn label without capping identity', () => {
+    const plugin = at(3, 'user/message', {
+      id: 'p1', role: 'user', content: [{ type: 'text', text: 'injected' }], source: { kind: 'plugin', plugin: 'goal' },
+    }, { surfaceOp: 'append' })
+    expect(snapshotOf(assemble([spliced(1, ['p1']), turnStart(2, 1), plugin])).lanes).toEqual([])
+    const long = 'y'.repeat(5_000)
+    const snapshot = snapshotOf(assemble([spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', long)]))
+    expect(snapshot.lanes[0]!.label).toHaveLength(4_096)
+    expect(snapshot.lanes[0]!.label.endsWith('…')).toBe(true)
+  })
+
+  it('uses full prompt identity when detecting retries instead of a truncated preview', () => {
+    const prefix = 'x'.repeat(100)
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', `${prefix}A`), turnEnd(4, 1, { kind: 'aborted', reason: { kind: 'user' } }),
+      turnStart(5, 2), user(6, 'm2', `${prefix}B`),
+    ]))
+    expect(snapshot.lanes[1]?.retryOfLaneId).toBeUndefined()
+    // The same 100-character prompt re-sent verbatim is still a retry even though the 80-character preview would have matched both.
+    const same = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', `${prefix}A`), turnEnd(4, 1, { kind: 'aborted', reason: { kind: 'user' } }),
+      turnStart(5, 2), user(6, 'm2', `${prefix}A`),
+    ]))
+    expect(same.lanes[1]?.retryOfLaneId).toBe('turn:1')
+  })
+
+  it('retains the structured tool failure on a delegated agent and its at-risk parent', () => {
+    const failure = at(8, 'tool/result', {
+      turn: 1, step: 1,
+      message: {
+        role: 'user', source: { kind: 'tool', callId: 'c1' },
+        content: [{ type: 'tool-result', toolCallId: 'c1', isError: true, content: [{ type: 'text', text: 'worker  crashed\nresuming' }] }],
+      },
+      error: { name: 'FrameworkError', code: 'DSH_CHILD_RESUME' },
+    }, { surfaceOp: 'append' })
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'go'), stepStart(4, 1, 1),
+      todo(5, [['A', 'in_progress']]), call(6, 'c1', 'subagent', { description: 'worker' }, 1), failure,
+    ]))
+    expect(snapshot.nodes.get('agent:c1')).toMatchObject({
+      status: 'error', failureCode: 'DSH_CHILD_RESUME', failureMessage: 'worker crashed resuming', parentId: 'todo:1:0',
+    })
+    // A tool error block without text keeps the code alone; a plain isError result keeps neither field.
+    const bare = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'go'), stepStart(4, 1, 1),
+      call(5, 'c1', 'subagent', { description: 'worker' }, 1), result(6, 'c1', true),
+    ]))
+    expect(bare.nodes.get('agent:c1')).toMatchObject({ status: 'error' })
+    expect(bare.nodes.get('agent:c1')?.failureCode).toBeUndefined()
+    expect(bare.nodes.get('agent:c1')?.failureMessage).toBeUndefined()
+  })
+
+  it('omits AUTH tool-result text from delegated-agent snapshots', () => {
+    const message = 'Authentication failed; credential=fixture-private-token'
+    const failure = at(6, 'tool/result', {
+      turn: 1, step: 1,
+      message: {
+        role: 'user', source: { kind: 'tool', callId: 'c1' },
+        content: [{ type: 'tool-result', toolCallId: 'c1', isError: true, content: [{ type: 'text', text: message }] }],
+      },
+      error: { name: 'LlmError', code: 'AUTH' },
+    }, { surfaceOp: 'append' })
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'go'), stepStart(4, 1, 1),
+      call(5, 'c1', 'subagent', { description: 'worker' }, 1), failure,
+    ]))
+    expect(snapshot.nodes.get('agent:c1')).toMatchObject({ status: 'error', failureCode: 'AUTH' })
+    expect(snapshot.nodes.get('agent:c1')?.failureMessage).toBeUndefined()
+    expect(JSON.stringify([...snapshot.nodes.values()])).not.toContain(message)
+  })
+
   it('produces the same snapshot for live append as for whole replace', () => {
     const replaced = snapshotOf(assemble(SCENARIO))
     const assembler = assemble(SCENARIO.slice(0, 4))
@@ -237,7 +332,7 @@ describe('task-flow fold', () => {
       [{ kind: 'blocked' }, 'error', 'blocked'],
       [{ kind: 'max-tokens' }, 'error', 'max-tokens'],
       [{ kind: 'aborted', reason: { kind: 'legacy' } }, 'aborted', 'legacy'],
-      [{ kind: 'unknown-future' }, 'done', undefined],
+      [{ kind: 'unknown-future' }, 'error', 'unknown-future'],
     ]
     for (const [reason, status, detail] of outcomes) {
       const snapshot = snapshotOf(assemble([...base, turnEnd(6, 1, reason)]))
@@ -381,9 +476,28 @@ describe('task-flow Definition guards', () => {
 })
 
 describe('task-flow text helpers', () => {
-  it('previews text blocks and bounds them', () => {
-    expect(previewText([{ type: 'text', text: ' a \n b ' }, { type: 'image', attachment: {} } as never])).toBe('a b')
-    expect(previewText([{ type: 'text', text: 'x'.repeat(100) }])).toHaveLength(80)
+  it('joins prompt text without including image content in its label', () => {
+    const prompt = at(3, 'user/message', {
+      id: 'm1', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: ' a \n b ' }, { type: 'image', attachment: {} }],
+    }, { surfaceOp: 'append' })
+    const snapshot = snapshotOf(assemble([spliced(1, ['m1']), turnStart(2, 1), prompt]))
+    expect(snapshot.nodes.get('prompt:m1')?.title).toBe('a b')
+  })
+
+  it('retains long delegated labels up to the same display bound as prompts', () => {
+    const label = 'Review task-flow state coverage against the durable session log and report every gap'
+    expect(label.length).toBeGreaterThan(80)
+    expect(agentLabel(JSON.stringify({ description: label }), 'subagent')).toBe(label)
+    expect(agentLabel(JSON.stringify({ meta: { name: label } }), 'workflow')).toBe(label)
+    const bounded = agentLabel(JSON.stringify({ prompt: 'x'.repeat(5_000) }), 'subagent')
+    expect(bounded).toHaveLength(4_096)
+    expect(bounded.endsWith('…')).toBe(true)
+    const snapshot = snapshotOf(assemble([
+      spliced(1, ['m1']), turnStart(2, 1), user(3, 'm1', 'go'), stepStart(4, 1, 1),
+      call(5, 'c1', 'subagent', { description: label }, 1),
+    ]))
+    expect(snapshot.nodes.get('agent:c1')?.title).toBe(label)
   })
 
   it('titles agents from the first known argument field, then workflow meta, then the tool name', () => {

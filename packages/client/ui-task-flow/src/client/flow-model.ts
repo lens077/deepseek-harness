@@ -65,7 +65,7 @@ function terminalStatusOf(reason: TurnEndReason): FlowStatus | null {
     case 'error': return 'error'
     case 'max-tokens': return 'error'
     case 'interrupted': return 'interrupted'
-    default: return null
+    default: return 'error'
   }
 }
 
@@ -74,7 +74,8 @@ function abortDetail(reason: TurnEndReason): string | undefined {
   if (reason.kind === 'error') return reason.error.code === 'AUTH' ? undefined : reason.error.message
   if (reason.kind === 'max-tokens') return 'max-tokens'
   if (reason.kind === 'blocked') return 'blocked'
-  return undefined
+  if (reason.kind === 'interrupted') return undefined
+  return reason.kind
 }
 
 /** Status of work that was still running when its turn ended. */
@@ -129,6 +130,7 @@ interface LaneDraft {
   readonly lane: Omit<FlowLane, 'nodeIds' | 'status' | 'endTime'>
   /** The lane's opening prompt node, always its first node. */
   readonly prompt: FlowNode
+  readonly promptIdentityText: string
   readonly nodes: FlowNode[]
   readonly outcome: TurnOutcome
 }
@@ -182,6 +184,8 @@ export function buildFlowSnapshot(
   const line: LaneDraft[] = []
   /** The turn lane opened by the previous prompt, whatever its kind: the lane a retry re-sends. */
   let previousTurnLane: LaneDraft | undefined
+  /** Goal-owned lanes keyed by goal id, so continuation rounds keep an explicit relation. */
+  const laneByGoalId = new Map<string, LaneDraft>()
 
   const place = (draft: LaneDraft, node: FlowNode): void => {
     draft.nodes.push(node)
@@ -255,6 +259,7 @@ export function buildFlowSnapshot(
           startTime: prompt.time,
         },
         prompt: steerPrompt,
+        promptIdentityText: prompt.identityText,
         nodes: [],
         outcome,
       }
@@ -279,12 +284,16 @@ export function buildFlowSnapshot(
       parent = lineTail
       anchor = tailNodeOf(lineTail)
     }
-    const retryOf = kind === 'sequel'
+    const retryOf = prompt.origin === 'user' && kind === 'sequel'
       && previousTurnLane !== undefined
-      && prompt.text !== ''
-      && prompt.text === previousTurnLane.lane.label
+      && prompt.identityText !== ''
+      && prompt.identityText === previousTurnLane.promptIdentityText
       && terminalStatus(previousTurnLane.outcome.reason) !== null
       ? previousTurnLane
+      : undefined
+    // A goal round continues the goal's previous round, else the line it was admitted onto.
+    const continuationOf = prompt.origin === 'continuation'
+      ? laneByGoalId.get(prompt.goalId) ?? parent
       : undefined
     const laneId = `turn:${turn}`
     const lanePrompt: FlowNode = { ...promptNode, laneId }
@@ -298,14 +307,17 @@ export function buildFlowSnapshot(
         ...parent === undefined ? {} : { parentLaneId: parent.lane.id },
         ...anchor === undefined ? {} : { anchorNodeId: anchor.id },
         ...retryOf === undefined ? {} : { retryOfLaneId: retryOf.lane.id },
+        ...continuationOf === undefined ? {} : { continuationOfLaneId: continuationOf.lane.id },
         startTime: outcome.startTime ?? prompt.time,
       },
       prompt: lanePrompt,
+      promptIdentityText: prompt.identityText,
       nodes: [],
       outcome,
     }
     place(draft, lanePrompt)
     laneByTurn.set(turn, draft)
+    if (prompt.origin === 'continuation') laneByGoalId.set(prompt.goalId, draft)
     drafts.push(draft)
     previousTurnLane = draft
     if (kind !== 'interjection') line.push(draft)
@@ -346,6 +358,8 @@ export function buildFlowSnapshot(
         status,
         startTime: agent.startTime,
         ...agent.endTime === undefined ? {} : { endTime: agent.endTime },
+        ...agent.failureCode === undefined ? {} : { failureCode: agent.failureCode },
+        ...agent.failureMessage === undefined ? {} : { failureMessage: agent.failureMessage },
         anchorSeq: agent.seq,
         turn,
         ...served === undefined ? {} : { parentId: `todo:${turn}:${served}` },

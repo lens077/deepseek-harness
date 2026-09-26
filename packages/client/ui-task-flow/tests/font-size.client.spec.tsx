@@ -72,5 +72,9 @@ it('bounds mini graph scrolling and isolates every graph text size from global t
     expect(sizes.length).toBeGreaterThan(0)
     expect(sizes.every(size => size === 'inherit' || size === 'var(--dsh-task-flow-font-size, 11px)')).toBe(true)
   }
-  expect(source('FlowGraph.module.css')).toContain(':global([data-task-flow-dock]) .rail')
+  const graph = source('FlowGraph.module.css')
+  expect(graph).toContain(':global([data-task-flow-dock]) .rail')
+  expect(graph).toContain('overflow-wrap: anywhere')
+  expect(graph).toContain('white-space: normal')
+  expect(graph).toContain('flex-wrap: wrap')
 })

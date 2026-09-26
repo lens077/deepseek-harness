@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package draws the task execution flow of a session in the Web GUI. When visible, a resident strip above the composer shows lane counts, elapsed time, the prompt whose turn is open, and the latest interjection, and expands into a left-to-right flow graph; the `Flow` Conversation view enlarges the same graph on a pan/zoom canvas. Both surfaces fold the durable session log only: user prompts open routes, inbox admissions classify a route as an interjection hanging off the running node or a sequel continuing the line, whole-list todo snapshots form the spine, delegated-agent tool calls fan out from the todo they served, and each `turn/end` reason decides the terminal state, so a manual stop draws as a stopped route. Three drawing variants (card graph, step rail, lane board) are selectable independently for the strip and the canvas; the strip defaults to the step rail and the canvas to the card graph.
+Inspect a session's task progress in a compact strip above the composer or in the pan-and-zoom Flow view. Both show prompts, interjections, follow-ups, todo progress, delegated agents, and turn outcomes from the loaded session history, including manual stops and failures. The strip summarizes counts, elapsed time, and current activity before expanding into the graph. Choose card, rail, or lane layouts independently: the strip defaults to rail and the canvas to cards. Older unloaded history is not shown.
 
 ## Table of Contents
 
@@ -33,18 +33,19 @@ Below 768px, the composer strip is hidden unless General settings enables **Show
 
 | Element | Meaning |
 |---|---|
-| Route `#n` | One user prompt, numbered from 1 in prompt order: `Main line` for the first, `Interjection` when admitted while a turn was running (hanging off the node that was running), `Follow-up` when sent after the previous turn closed (continuing the line after its last node). A follow-up that re-sends the previous prompt verbatim after that turn stopped is labelled `Retry of #n`. A steer inside an open turn draws as an interjection with only its prompt node. |
+| Route `#n` | One admitted prompt, numbered from 1 in prompt order: `Main line` for the first, `Interjection` when admitted while a turn was running (hanging off the node that was running), and `Follow-up` when a new user question is sent after the previous turn closed. A goal-owned automatic continuation is labelled `Continue #n`; a user follow-up that re-sends the previous prompt verbatim after that turn stopped is labelled `Retry of #n`. A steer inside an open turn draws as an interjection with only its prompt node. |
 | Spine node | One item of the latest `todo/write` in that turn, in list order, with the item's first in-progress and completed times; a turn without todos or agents draws one `Execution` node covering its steps, which itself names the terminal state (`Stopped`, `Failed`, `Interrupted`) when the turn did not complete, with the recorded cause as its tooltip. |
 | Fan-out | Delegated-agent calls (`subagent`, `subagent_fork`, `workflow`, `ralph` by default) stacked after the todo that was in progress when they were called; a failed agent marks that todo `At risk`. Clicking an agent opens its call in the Trajectory view. |
 | Terminal node | Present only when a turn with a todo spine did not complete: `Stopped (stopped manually)` for a user cancel, other cancel causes, `Failed`, or `Interrupted` for a crash-closed turn. A cancel draws in neutral tones; failures and crashes draw in the error color. Prompt nodes are always neutral: only their lane's running state colors them. |
 | History chip | The strip leads with the newest route on the line and folds every earlier route (and the interjections hanging off them) into one `History n · …` chip with their state counts; clicking it shows the whole flow, and `Hide earlier turns` folds it again. The canvas never folds. |
 | Header | Route counts by state (`running`, `done`, `stopped`), elapsed time — the open turn's span while one runs, otherwise the sum of closed turn spans without idle time between turns — the open route's ordinal and clipped prompt with its running spine node and step count or spine progress, and the latest interjection other than the open route, with its status. The interjection fact shrinks before the current fact on narrow layouts. |
+| Long labels | Prompt, todo, delegated-agent, and terminal-error labels wrap inside their nodes instead of being ellipsized. The card graph sizes each card for its wrapped title (estimated from glyph widths at the current font size, clamped at 40 lines) and stacks a column at those heights; the rail is content-sized so its chips never shrink into one another, and the strip body or canvas pan absorbs the width; the lane board wraps arrow-plus-block units per route. Prompt and delegated-agent labels share a 4,096-code-unit display limit; every node's tooltip carries its full display label and, for a stopped execution or a failed delegated agent, the recorded cause. |
 
 ### Controls
 
 The collapse toggle sits before the strip title, exposes its action and expanded state to assistive technology, and shows no tooltip on hover or focus. The style menu switches the strip variant; `Open in canvas` selects the `Flow` view, whose toolbar offers the same counts, elapsed time, stop, style, and `Back to chat` controls, plus zoom buttons and `Fit to view`. `Stop task` (visible while the session runs) is the last header action; it cancels the running turn and keeps the queue. Both variant choices persist in the Host settings document and also appear in General settings. `Task-flow font size` controls text in the strip and canvas independently of body text size: 11px by default, adjustable from 10px to 16px in General settings. The expanded strip's graph body scrolls internally above 160px; its header wraps on narrow layouts.
 
-Authentication failures (`AUTH`) omit the raw provider error message from task-flow snapshots and display a localized API-key-invalid message instead. Other error messages retain their existing presentation; Session logs and model-visible data are unchanged by this display policy.
+Authentication failures (`AUTH`) omit the raw provider error message from task-flow snapshots and display a localized API-key-invalid message instead. Other turn failures retain their message and non-`UNKNOWN` code, and delegated-tool failures retain the structured result code and text in the node details and tooltip. Session logs and model-visible data are unchanged by this display policy.
 
 ### Configuration
 
@@ -81,11 +82,19 @@ Read these pages when the flow surface is not enough. They move from the browser
 <a id="model-experience"></a>
 ## Model Experience
 
-None. The package reads the session log and issues the same cancel the composer's stop button issues; it adds no prompt sections, tools, or messages.
+### Task-flow presentation and controls
+
+#### What the model sees
+
+None. The package reads existing Session events, including `user/message` and `turn/end`, and registers no prompt sections, tools, or model-visible messages; its stop action invokes the existing conversation cancellation operation.
+
+#### Token effect
+
+None. Drawing the flow and changing its layout add no model-input tokens or inference requests.
 
 #### KV Cache effect
 
-None.
+None. The package does not modify request messages or their cached prefix.
 
 ## Known Limitations and Deferred Work
 

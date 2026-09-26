@@ -9,16 +9,26 @@ import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/client'
 /** Conversation view target owned by this package. */
 export const TASK_FLOW_TARGET = 'task-flow'
 
-/** One user prompt that opens or steers a turn. */
-export interface FlowPromptContribution {
+/**
+ * Where an admitted `user/message` came from: a question the user typed, or a
+ * goal-owned automatic continuation round carrying its goal identity.
+ */
+export type FlowPromptOrigin =
+  | { readonly origin: 'user' }
+  | { readonly origin: 'continuation'; readonly goalId: string; readonly goalRevision: number; readonly goalRound: number }
+
+/** One user prompt or goal-owned continuation that opens or steers a turn. */
+export type FlowPromptContribution = FlowPromptOrigin & {
   readonly kind: 'prompt'
   readonly messageId: string
   readonly seq: number
   readonly time: number
   /** Turn the prompt was logged in; null while its boundary is outside the loaded window. */
   readonly turn: number | null
-  /** Plain-text preview of the prompt content. */
+  /** Plain-text label drawn in flow nodes, capped at the display limit. */
   readonly text: string
+  /** Complete normalized text: the retry identity, never truncated. */
+  readonly identityText: string
 }
 
 /** One durable inbox splice that admitted user messages. */
@@ -52,6 +62,9 @@ export interface FlowAgentContribution {
   readonly startTime: number
   readonly endTime?: number
   readonly isError?: boolean
+  /** Structured tool failure identity retained for the flow tooltip. */
+  readonly failureCode?: string
+  readonly failureMessage?: string
 }
 
 /** Target-owned Node payload union. */
@@ -86,8 +99,10 @@ export interface FlowNode {
   /** Verbatim user or model text; empty for `steps` and `terminal` nodes, whose copy is locale-owned. */
   readonly title: string
   readonly detail?: string
-  /** Terminal failure category; authentication errors never retain provider message text. */
+  /** Terminal or tool failure category; authentication errors never retain provider message text. */
   readonly failureCode?: string
+  /** Failure text retained for display when the source provided it. */
+  readonly failureMessage?: string
   /** Agent steps covered by a `steps` node. */
   readonly stepCount?: number
   readonly status: FlowStatus
@@ -116,6 +131,8 @@ export interface FlowLane {
   readonly anchorNodeId?: string
   /** Lane whose prompt this sequel re-sent verbatim after that lane stopped. */
   readonly retryOfLaneId?: string
+  /** Lane continued by a goal-owned automatic continuation. */
+  readonly continuationOfLaneId?: string
   /** Node ids in drawing order: prompt, spine nodes, optional terminal. */
   readonly nodeIds: readonly string[]
   readonly startTime: number

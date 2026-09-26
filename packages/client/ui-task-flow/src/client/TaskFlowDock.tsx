@@ -202,7 +202,7 @@ export function TaskFlowDock({
         </div>
         {expanded && (
           <div className={css.body} role="region" aria-label={t('graph.label')} tabIndex={0}>
-            <FlowGraph snapshot={snapshot} variant={variant} now={now} t={t} onInspect={inspect} history={history} />
+            <FlowGraph snapshot={snapshot} variant={variant} now={now} t={t} onInspect={inspect} history={history} fontSize={fontSize} />
           </div>
         )}
       </div>

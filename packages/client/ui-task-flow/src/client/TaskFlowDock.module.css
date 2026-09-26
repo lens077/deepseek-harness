@@ -45,7 +45,6 @@
   font-size: var(--dsh-task-flow-font-size, 11px);
   line-height: 1.45;
   color: var(--dsw-alias-label-secondary);
-  white-space: nowrap;
 }
 
 .title {
@@ -62,13 +61,15 @@
 
 .fact {
   flex: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .fact.current {
   flex: 0 1 auto;
   min-width: min(14em, 100%);
+  max-width: 100%;
 }
 
 .fact.branch {
@@ -81,8 +82,8 @@
 .fact.branch .clip {
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .fact.branch .statusText { flex: none; }
@@ -90,10 +91,11 @@
 .facts {
   display: flex;
   flex: 1 1 180px;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .actions {
@@ -174,3 +176,9 @@
 .statusText.error,
 .statusText.interrupted { color: var(--dsw-alias-state-error-primary); }
 .statusText.pending { color: var(--dsw-alias-label-tertiary); }
+
+@media (max-width: 720px) {
+  .head { align-items: flex-start; }
+  .facts { flex-basis: 100%; order: 3; }
+  .actions { margin-left: auto; }
+}

@@ -31,6 +31,7 @@
     "apps/web/tests/steering.e2e.ts",
     "apps/web/tests/navigation-panes.e2e.ts",
     "apps/web/tests/digest-layout.e2e.ts",
+    "apps/web/tests/task-flow-long-text.e2e.ts",
     "apps/web/tests/session-reading-grace.e2e.ts",
     "apps/web/tests/chat-scroll-fixture.ts",
     "apps/web/tests/trajectory-virtualization.e2e.ts",

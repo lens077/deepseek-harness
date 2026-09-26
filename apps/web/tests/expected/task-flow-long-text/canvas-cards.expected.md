@@ -1,0 +1,13 @@
+- img
+- text: "Main line 解决画布文字过长问题被隐藏的问题，考虑做成多行，但你同时要考虑到图2在多任务多流程时的展示问题。可能需要重新改成多行显示，但你也要处理断点（系统（包括模型自身错误，DSH框架错误）错误，用户中断，继续实现，或者已完成的当前任务，用户继续提问跟当前主线无关的问题（你同时需要判断）），解决这些问题 and keep the resident strip readable while the canvas keeps every route on one line. #1 Your task 确认 task-flow 文本隐藏与断点状态的当前数据/渲染路径 Done {{duration}} 补充系统/框架错误、中断、继续、完成、无关提问的可见性回归测试 and verify each drawing in a real browser Stopped {{duration}}"
+- button "Review task-flow state coverage against the durable session log and report every gap Failed {{duration}}"
+- text: "更新 package 文档与 Agent Note，整理变更 Pending Stopped（stopped manually） 继续实现 rail、cards、lanes 的长文本多行与响应式布局 #2 Continue #1 Failed 1 steps {{duration}} 换个话题：这个仓库的发布流程是什么？ #3 Follow-up Execution Done {{duration}} 1 done · 2 stopped · Elapsed {{duration}}"
+- button "Switch style":
+  - text: Card graph
+  - img
+- button "Back to chat"
+- button "Zoom out": −
+- button "120%"
+- button "Zoom in": ＋
+- button "Fit to view"
+- text: Drag to pan · Scroll to zoom

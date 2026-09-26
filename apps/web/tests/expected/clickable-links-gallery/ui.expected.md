@@ -236,7 +236,7 @@
 - button "Open in canvas":
   - img
   - text: Open in canvas
-- region "Task flow graph": "#1 Assemble the link gallery: write the report and styles, inspect the sources, an… Execution {{duration}} · 2 steps"
+- region "Task flow graph": "#1 Assemble the link gallery: write the report and styles, inspect the sources, and summarize. Execution {{duration}} · 2 steps"
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Commands":
   - img
