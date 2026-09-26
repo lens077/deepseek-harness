@@ -53,7 +53,8 @@ describe('ui-layout client apply', () => {
       setSidebar: vi.fn(), setDetails: vi.fn(), toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(),
     }
     const injected = (slots.entries('root')[0]!.inject as (actions: never) => object)(actions as never)
-    expect(injected).toMatchObject({ hooks: { badge: expect.any(Object), mobileAppearance: expect.any(Object) } })
+    expect(injected).toHaveProperty('hooks.badge.getSnapshot')
+    expect(injected).toHaveProperty('hooks.mobileAppearance.getSnapshot')
     const layout = ctx.get('layout') as LayoutController
     layout.toggleSidebar()
     expect(actions.toggleSidebar).toHaveBeenCalledOnce()

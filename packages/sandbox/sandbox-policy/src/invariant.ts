@@ -22,7 +22,7 @@ function validateEvent(session: Session, fallbackRoot: string, event: SessionEve
   }
   if (event.type !== 'session/directories') return
   const value: unknown = event.data.additionalDirectories
-  if (!Array.isArray(value) || !value.every(path => typeof path === 'string' && isAbsolute(path))) {
+  if (!Array.isArray(value) || !value.every((path): path is string => typeof path === 'string' && isAbsolute(path))) {
     fail('session/directories must carry only absolute path strings')
     return
   }

@@ -101,7 +101,7 @@ describe('phone appearance preferences', () => {
     const host = stubSettingsScope<ThemeSettings>()
     const policy = new MobileAppearancePolicy(host.scope)
     const useMobileAppearance: ComponentProps<typeof MobileAppearanceRows>['useMobileAppearance'] = selector =>
-      selector(useSyncExternalStore(policy.appearance.subscribe, policy.appearance.getSnapshot))
+      selector(useSyncExternalStore(listener => policy.appearance.subscribe(listener), () => policy.appearance.getSnapshot()))
     const props = {
       useMobileAppearance,
       setMobileFontSize: (value: number) => { policy.setFontSize(value) },

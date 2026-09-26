@@ -273,8 +273,6 @@ function groupByWorkspace(
     groups.push(buildGroup(
       workspace.workspaceId, workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members, 'account',
-      // Wire defense: a view produced before the field existed nests nothing.
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- the wire type requires the field; a pre-field host's view does not
       workspace.nestedUnder ?? {},
     ))
   }

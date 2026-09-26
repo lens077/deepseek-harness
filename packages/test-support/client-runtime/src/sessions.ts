@@ -520,7 +520,7 @@ export class TestSessions implements ISessions {
   async directories(sessionId: SessionId): ReturnType<ISessions['directories']> {
     this.calls.push({ method: 'directories', args: [sessionId] })
     const summary = this.require(sessionId).summary
-    return { primaryDirectory: summary.cwd ?? '/', additionalDirectories: [] }
+    return await Promise.resolve({ primaryDirectory: summary.cwd ?? '/', additionalDirectories: [] })
   }
 
   async replaceDirectories(
@@ -529,7 +529,7 @@ export class TestSessions implements ISessions {
   ): ReturnType<ISessions['replaceDirectories']> {
     this.calls.push({ method: 'replaceDirectories', args: [sessionId, additionalDirectories] })
     const summary = this.require(sessionId).summary
-    return { primaryDirectory: summary.cwd ?? '/', additionalDirectories: [...additionalDirectories] }
+    return await Promise.resolve({ primaryDirectory: summary.cwd ?? '/', additionalDirectories: [...additionalDirectories] })
   }
 
   async delete(sessionId: SessionId): ReturnType<ISessions['delete']> {

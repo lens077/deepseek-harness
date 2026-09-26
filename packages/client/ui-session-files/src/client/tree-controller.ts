@@ -126,7 +126,7 @@ export class SessionTreeController {
     ancestry: readonly string[],
   ): Promise<boolean> {
     const result = await this.api.list(parentSessionId, signal)
-    if (!result.ok) throw new Error(result.error?.message ?? 'subagent.list failed')
+    if (!result.ok) throw new Error(result.error.message)
     let partial = false
     for (const [index, entry] of result.value.entries.entries()) {
       if (entry.kind !== 'child') { partial = true; continue }

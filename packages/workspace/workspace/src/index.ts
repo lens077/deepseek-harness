@@ -154,7 +154,7 @@ export class WorkspaceRegistry extends Service {
     table: () => this.requireTable(),
     sessionPath: id => this.sessionPaths.get(id),
     readSessionHeader: id => this.readSessionHeader(id),
-    assertSessionAttachable: id => this.assertSessionAttachable(id),
+    assertSessionAttachable: (id) => { this.assertSessionAttachable(id) },
     rememberSessionPath: (id, path) => {
       this.sessionPaths.set(id, path)
       this.invalidSessionPaths.delete(id)

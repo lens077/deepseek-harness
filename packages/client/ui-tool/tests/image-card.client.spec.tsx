@@ -275,7 +275,7 @@ describe('ReadImageRow keyed toolview', () => {
 
   const rowProps = (
     block: RunningToolCall | ToolResultNode,
-    renderSlot?: PropsRenderSlots<'tool.call.images'>['renderSlot'],
+    renderSlot: PropsRenderSlots<'tool.call.images'>['renderSlot'] = () => null,
     loader: MessageImageLoader = loadImage,
   ): Parameters<typeof ReadImageRow>[0] => ({
     callId: 'c1', toolName: 'read_image', block, openFile: vi.fn(), renderSlot, loadImage: loader,
@@ -336,7 +336,7 @@ describe('ReadImageRow keyed toolview', () => {
     expect(view.container.textContent).toContain('image/png image, 1496x260 px')
   })
 
-  it('degrades to the text body when neither the slot nor the loader is supplied', () => {
+  it('keeps the text body when the attachment renderer is not configured', () => {
     const view = render(<ReadImageRow {...rowProps(settled(), undefined)} />)
     toggleRow(view)
     expect(view.container.querySelector('[data-images]')).toBeNull()

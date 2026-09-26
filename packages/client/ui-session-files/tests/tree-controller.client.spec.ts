@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { SessionTreeController, type SubagentApi } from '../src/client/tree-controller.ts'
 import type { TreeHistoryEntry } from '../src/client/tree-files.ts'
 
@@ -60,7 +61,7 @@ function bench(options: BenchOptions = {}) {
   const pages = options.pages ?? {}
   const cursors = new Map<string, number>()
   const list = vi.fn((parentSessionId: SessionId) => Promise.resolve(options.listFails === true
-    ? { ok: false as const, error: { message: 'catalog unavailable' } }
+    ? { ok: false as const, error: new RemoteError('gateway/internal', 'catalog unavailable', {}) }
     : { ok: true as const, value: { entries: (catalogs[String(parentSessionId)] ?? []) as never[] } }))
   const follow = vi.fn(async function*({ address }: { address: { childSessionId: SessionId } }) {
     if (options.historyFails === true) throw new Error('gone')
@@ -223,13 +224,13 @@ describe('SessionTreeController lifecycle', () => {
     expect(entryOf(b.controller)).toMatchObject({ status: 'error', error: 'gone' })
   })
 
-  it('names the RPC when a failure carried no message, on either call', async () => {
+  it('preserves the Remote failure message and reports an empty history stream', async () => {
     const listApi = {
-      list: () => Promise.resolve({ ok: false, error: {} }),
+      list: () => Promise.resolve({ ok: false, error: new RemoteError('gateway/internal', 'catalog read rejected', {}) }),
     } as unknown as SubagentApi
     const onList = new SessionTreeController(listApi)
     await onList.refresh(ROOT, false)
-    expect(entryOf(onList)?.error).toBe('subagent.list failed')
+    expect(entryOf(onList)?.error).toBe('catalog read rejected')
 
     const historyApi = {
       list: () => Promise.resolve({ ok: true, value: { entries: [child('a')] } }),

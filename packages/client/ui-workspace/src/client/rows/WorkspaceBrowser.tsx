@@ -900,7 +900,7 @@ function SessionTree({
                       onOpen: rowSelection.activate,
                       onContextMenu: onSessionContextMenu,
                       onRename: onSessionRename,
-                      onFork: forkSession,
+                      onFork: (id, placement) => { void forkSession(id, placement) },
                       onDirectories: onSessionDirectories,
                       onArchive: onSessionArchive,
                       onDelete: onSessionDelete,
@@ -1063,7 +1063,7 @@ function FlatList({
               onOpen={rowSelection.activate}
               onContextMenu={onSessionContextMenu}
               onRename={onSessionRename}
-              onFork={forkSession}
+              onFork={(id, placement) => { void forkSession(id, placement) }}
               onDirectories={onSessionDirectories}
               onArchive={onSessionArchive}
               onDelete={onSessionDelete}
@@ -1471,7 +1471,7 @@ function DesktopWorkspaceBrowser({
     const ungrouped = !workspaces.some(workspace => workspace.sessionIds.includes(sessionId))
     const childId = await forkSession(sessionId, placement)
     if (childId !== undefined && placement === 'nested' && ungrouped) {
-      actions.setUngroupedNesting(childId as string, sessionId as string)
+      actions.setUngroupedNesting(childId, sessionId)
     }
     return childId
   }, [actions, forkSession, workspaces])

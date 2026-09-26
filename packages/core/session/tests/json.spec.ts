@@ -65,8 +65,8 @@ describe('snapshotJsonValue', () => {
   })
 
   it('accepts Firefox whitespace in native container constructors', () => {
-    const nativeToString = Function.prototype.toString
-    const toString = vi.spyOn(Function.prototype, 'toString').mockImplementation(function (this: Function) {
+    const nativeToString = Object.getOwnPropertyDescriptor(Function.prototype, 'toString')!.value as (this: unknown) => string
+    const toString = vi.spyOn(Function.prototype, 'toString').mockImplementation(function (this: unknown) {
       return nativeToString.call(this).replace(' { [native code] }', ' {\n    [native code]\n}')
     })
     try {

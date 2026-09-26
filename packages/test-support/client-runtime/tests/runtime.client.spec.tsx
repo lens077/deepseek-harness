@@ -121,6 +121,44 @@ describe('sessions', () => {
     await runtime.dispose()
   })
 
+  it('resolves directory reads from the fixture and copies replacement roots', async () => {
+    const runtime = await SlotTestRuntime.create()
+    try {
+      const id = await runtime.sessions.add({ id: 's1', summary: { cwd: '/projects/one' } })
+      const fallbackId = await runtime.sessions.add({ id: 's2' })
+      await expect(runtime.sessions.directories(id)).resolves.toEqual({
+        primaryDirectory: '/projects/one', additionalDirectories: [],
+      })
+      await expect(runtime.sessions.directories(fallbackId)).resolves.toEqual({
+        primaryDirectory: '/', additionalDirectories: [],
+      })
+      const directories = ['/projects/shared']
+      const replaced = await runtime.sessions.replaceDirectories(id, directories)
+      expect(replaced).toEqual({ primaryDirectory: '/projects/one', additionalDirectories: directories })
+      expect(replaced.additionalDirectories).not.toBe(directories)
+      expect(runtime.sessions.calls).toEqual([
+        { method: 'directories', args: [id] },
+        { method: 'directories', args: [fallbackId] },
+        { method: 'replaceDirectories', args: [id, directories] },
+      ])
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it.each(['directories', 'replaceDirectories'] as const)('rejects %s for an unknown session without throwing synchronously', async (method) => {
+    const runtime = await SlotTestRuntime.create()
+    try {
+      const id = 'ghost' as SessionId
+      const result = method === 'directories'
+        ? runtime.sessions.directories(id)
+        : runtime.sessions.replaceDirectories(id, [])
+      await expect(result).rejects.toThrow('test session "ghost" is not added')
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   it('mints REAL-tag scopes lazily and resolves them through the production scopeOf; bindings expose the behavior face', async () => {
     const runtime = await runtimeWithFrame()
     const prompt = vi.fn()
