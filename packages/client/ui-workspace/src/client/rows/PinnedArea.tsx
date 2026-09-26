@@ -13,8 +13,8 @@ import {
 import { SessionNodeItem, type SessionRowContext } from './Rows.tsx'
 import css from './PinnedArea.module.css'
 
-/** Row counts the ⋯ menu offers beside `auto`; the settings page accepts the full schema range. */
-const ROW_OPTIONS: readonly number[] = Array.from({ length: 16 }, (_, index) => index + 5)
+/** Row counts the ⋯ menu offers beside `auto`, matching the settings page. */
+const ROW_OPTIONS: readonly number[] = Array.from({ length: 20 }, (_, index) => index + 1)
 
 /** Status rows in the ⋯ menu, in the order the settings page lists them. */
 const STATUS_OPTIONS: readonly SessionAutoPinStatus[] = ['running', 'completed', 'failed']

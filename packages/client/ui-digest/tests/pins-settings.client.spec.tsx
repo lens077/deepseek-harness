@@ -113,7 +113,7 @@ describe('PinsSettingsSection', () => {
     expect(screen.getByLabelText<HTMLSelectElement>(zh['pinsSettings.sidebarRows']).disabled).toBe(true)
   })
 
-  it('offers the row count as adaptive or 1–20 and follows the sidebar switch', () => {
+  it('offers the same adaptive or 1–20 row counts as the pinned-area menu and follows the sidebar switch', () => {
     const c = mount()
     const rows = screen.getByLabelText<HTMLSelectElement>(zh['pinsSettings.sidebarRows'])
     expect(rows.value).toBe('5')

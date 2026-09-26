@@ -1985,6 +1985,8 @@ describe('pinned sessions', () => {
     const checked = () => screen.getAllByRole('menuitem').filter(item => item.querySelector('svg') !== null)
       .map(item => item.textContent)
     expect(checked()).toEqual(['5', zh['pinned.auto.running'], zh['pinned.shortcuts.enabled']])
+    expect(screen.getByRole('menuitem', { name: '1' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '20' })).toBeTruthy()
     // Escape closes the list without writing.
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menuitem', { name: zh['pinned.rows.auto'] })).toBeNull()
