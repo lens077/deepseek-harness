@@ -58,10 +58,10 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * @param props.align - list alignment against the anchor (default 'start').
  * @param props.side - open below (`bottom`, default) or above (`top`) the anchor.
  * @param props.portal - render the list into document.body, fixed-positioned
- * from the anchor rect (repositions on scroll/resize while open). Use when an
- * ancestor's overflow clipping would crop the in-place list; default false
- * keeps the pure-CSS in-place behavior.
- * @param props.closeOnPointerLeave - close the list once the pointer has left
+ * from the anchor rect, tracking scroll, viewport resize, and list-size changes
+ * while open. Use when an ancestor's overflow clipping would crop the in-place
+ * list; default false keeps the pure-CSS in-place behavior.
+ * @param props.closeOnPointerLeave - close the list once a non-touch pointer has left
  * both trigger and list for the pointer grace (default false keeps it open
  * until outside click/Escape/selection). The grace makes the 4px trigger->list
  * gap and a brief overshoot survivable; coming back cancels the close.
@@ -71,8 +71,8 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * directly (e.g. from a host-owned trigger button) instead of measuring the
  * Menu's own wrapper span. Required when the wrapper isn't itself laid out at
  * the trigger (render-prop anchors, effect-positioned proxies — measuring the
- * wrapper there races the host's layout effects). Called on open and on every
- * scroll/resize; return null to skip placement for that frame.
+ * wrapper there races the host's layout effects). Called on open, scroll,
+ * viewport resize, and list-size changes; return null to skip placement for that frame.
  * @param props.footer - rows pinned below the scrolling items area, separated
  * by a hairline; they stay visible while the items above scroll.
  * @param props.selection - how a selected row is marked: a trailing check
@@ -153,7 +153,14 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
     place()
     window.addEventListener('scroll', place, true)
     window.addEventListener('resize', place)
+    const list = listRef.current
+    let observer: ResizeObserver | undefined
+    if (typeof ResizeObserver !== 'undefined' && list !== null) {
+      observer = new ResizeObserver(place)
+      observer.observe(list)
+    }
     return () => {
+      observer?.disconnect()
       window.removeEventListener('scroll', place, true)
       window.removeEventListener('resize', place)
     }
@@ -288,7 +295,7 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
       ref={rootRef}
       className={clsx(css.root, className)}
       onPointerEnter={closeOnPointerLeave ? cancelClose : undefined}
-      onPointerLeave={closeOnPointerLeave ? () => { if (open) armClose() } : undefined}
+      onPointerLeave={closeOnPointerLeave ? (event) => { if (open && event.pointerType !== 'touch') armClose() } : undefined}
     >
       {anchor}
       {portal ? (list !== false && createPortal(list, document.body)) : list}

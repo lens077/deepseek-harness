@@ -88,6 +88,35 @@ describe('question search entry', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('closes history from its own button and returns focus to the search entry', () => {
+    renderNavigator()
+    fireEvent.click(searchEntry())
+    const panel = screen.getByRole('dialog', { name: zh['chat.questions.history'] })
+    const close = within(panel).getByRole('button', { name: commonZh.close })
+    close.focus()
+    fireEvent.click(close)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(searchEntry())
+  })
+
+  it.each([
+    { width: 390, staysOpen: false },
+    { width: 767, staysOpen: false },
+    { width: 768, staysOpen: true },
+    { width: 1440, staysOpen: true },
+  ])('reveals a selected question at $width px while preserving the desktop panel', ({ width, staysOpen }) => {
+    vi.stubGlobal('innerWidth', width)
+    try {
+      const { props } = renderNavigator()
+      fireEvent.click(searchEntry())
+      fireEvent.click(screen.getByText('第二个提问'))
+      expect(props.onSelect).toHaveBeenCalledWith(1)
+      expect(screen.queryByRole('dialog') !== null).toBe(staysOpen)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('keeps load-all usable before the loaded window contains a question', () => {
     const { props } = renderNavigator({ questions: [], hasMore: true })
     const search = searchEntry() as HTMLButtonElement

@@ -694,6 +694,102 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+:global([data-mobile]) .root {
+  --dsh-session-list-edge-inset: var(--dsh-mobile-page-padding);
+  min-width: 0;
+  padding-inline: var(--dsh-mobile-page-padding);
+}
+
+:global([data-mobile]) .sectionHeader {
+  min-height: var(--dsh-mobile-control-size);
+  height: auto;
+  padding-left: 0;
+  margin-right: 0;
+}
+
+:global([data-mobile]) .iconButton,
+:global([data-mobile]) .searchButton,
+:global([data-mobile]) .searchExpanded .searchButton,
+:global([data-mobile]) .clearButton,
+:global([data-mobile]) .selectionClear {
+  width: var(--dsh-mobile-control-size);
+  height: var(--dsh-mobile-control-size);
+}
+
+:global([data-mobile]) .searchSlot {
+  max-width: var(--dsh-mobile-control-size);
+}
+
+:global([data-mobile]) .searchSlotExpanded {
+  max-width: 100%;
+}
+
+:global([data-mobile]) .search,
+:global([data-mobile]) .searchExpanded {
+  height: var(--dsh-mobile-control-size);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+:global([data-mobile]) .searchExpanded {
+  height: calc(var(--dsh-mobile-control-size) + 2px);
+}
+
+:global([data-mobile]) .searchInput {
+  margin-left: 0;
+  font-size: max(16px, var(--dsh-mobile-font-size));
+  line-height: 1.5;
+}
+
+:global([data-mobile]) .searchExpanded:focus-within {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+:global([data-mobile]) .headerActions {
+  max-width: calc(2 * var(--dsh-mobile-control-size) + 4px);
+}
+
+:global([data-mobile]) .headerActionsHidden {
+  max-width: 0;
+}
+
+:global([data-mobile]) .list {
+  overscroll-behavior: contain;
+}
+
+:global([data-mobile]) .sessionOverflowButton,
+:global([data-mobile]) .selectionActions button {
+  min-height: var(--dsh-mobile-control-size);
+  height: auto;
+}
+
+:global([data-mobile]) .selectionActions {
+  flex-wrap: wrap;
+}
+
+:global([data-mobile]) .selectionActions .selectionPlacement {
+  flex: 1 1 100%;
+}
+
+@media (max-width: 767px) {
+  /* Rename and directory forms render in body portals, outside the frame. */
+  .renameInput {
+    font-size: 16px;
+  }
+
+  .directoryRemove {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .directoryPath {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wide {
     animation: none;

@@ -492,9 +492,42 @@
   box-shadow: var(--dsw-elevation-prominent);
 }
 
-.questionSearch {
+.questionSearchHeader {
   display: flex;
   flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.questionClose {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.questionClose:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.questionSearch:focus-within,
+.questionClose:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.questionSearch {
+  display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -504,6 +537,7 @@
 
 .questionSearch input {
   width: 100%;
+  min-width: 0;
   border: 0;
   outline: 0;
   color: var(--dsw-alias-label-primary);
@@ -718,6 +752,7 @@
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .questionCopy > span {
@@ -781,7 +816,7 @@
   transform: translateX(-50%);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   /* The column parks above the composer instead of beside the transcript, so
      a phone keeps its full reading width and reserves no side gutter. */
   .root {
@@ -796,22 +831,89 @@
     bottom: calc(var(--dsh-composer-height, 152px) + var(--mobile-nav-height, 0px) + 16px);
   }
 
-  /* Pure UI parks its 44px composer button in the same corner; the rail
-     stacks above it whether the composer is folded (button at the floor) or
-     revealed (button riding the composer's top edge). */
-  /* The panel rises from the raised column, so its ceiling gives the tab bar
-     back as well. */
+  .questionArrow,
+  .questionLoadAll,
+  .questionSearchEntry {
+    width: max(var(--dsh-chat-action-size), var(--dsh-mobile-control-size, 44px));
+    height: max(var(--dsh-chat-action-size), var(--dsh-mobile-control-size, 44px));
+  }
+
+  /* History owns the phone's reading area instead of competing with the
+     floating controls and composer for a narrow side column. */
   .questionPanel {
-    max-height: calc(
-      var(--dsh-conversation-viewport-height, 100dvh) - var(--dsh-composer-height, 152px)
-      - var(--mobile-nav-height, 0px) - 32px
-    );
+    position: fixed;
+    z-index: 1;
+    inset: calc(var(--mobile-header-height, 0px) + 8px) 8px auto;
+    box-sizing: border-box;
+    width: auto;
+    max-height: calc(100dvh - var(--mobile-header-height, 0px) - var(--mobile-nav-height, 0px) - 16px);
+    padding: 12px;
+    font-size: var(--dsh-mobile-font-size, 16px);
+    line-height: 1.5;
+  }
+
+  .questionSearch {
+    box-sizing: border-box;
+    min-height: var(--dsh-mobile-control-size, 44px);
+  }
+
+  .questionSearch input {
+    font: inherit;
+    font-size: max(16px, var(--dsh-mobile-font-size, 16px));
+  }
+
+  .questionClose,
+  .questionRowRemove {
+    width: var(--dsh-mobile-control-size, 44px);
+    min-height: var(--dsh-mobile-control-size, 44px);
+    height: auto;
+  }
+
+  .questionClose {
+    height: var(--dsh-mobile-control-size, 44px);
+  }
+
+  .questionRowRemove {
+    opacity: 1;
+    margin: 0;
+  }
+
+  .questionRowMain,
+  .questionRemovalAction {
+    min-height: var(--dsh-mobile-control-size, 44px);
+  }
+
+  .questionRemovalAction {
+    height: auto;
+    padding-block: 8px;
+    white-space: normal;
+  }
+
+  .questionSelectHint,
+  .questionRemovalHint {
+    display: none;
+  }
+
+  .questionMeta {
+    flex-wrap: wrap;
   }
 
   :global([data-pure-ui]) .questionNavigator {
     bottom: calc(var(--dsh-composer-height, 0px) + var(--mobile-nav-height, 0px) + 76px);
   }
+}
 
+@media (max-width: 767px) and (max-height: 600px) {
+  .questionNavigator {
+    flex-direction: row;
+    gap: 4px;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .questionRowRemove {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

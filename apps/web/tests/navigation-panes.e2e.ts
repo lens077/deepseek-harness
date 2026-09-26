@@ -32,6 +32,7 @@ const DIGEST_LAYOUT_EXPECTED = join(SNAPSHOT_DIR, 'digest-layout.expected.md')
 const MOBILE_EXPECTED = join(SNAPSHOT_DIR, 'mobile-navigation.expected.md')
 const MOBILE_PENDING_EXPECTED = join(SNAPSHOT_DIR, 'mobile-pending-list.expected.md')
 const MOBILE_SMALL_EXPECTED = join(SNAPSHOT_DIR, 'mobile-small-layout.expected.md')
+const MOBILE_SEARCH_EXPECTED = join(SNAPSHOT_DIR, 'mobile-search-history.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'navigation-panes-web-e2e'
 const EXPORTED_LOG_FILE = `session.v${SESSION_FORMAT_VERSION}.jsonl`
@@ -233,6 +234,120 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await page.setViewportSize({ width: 1440, height: 900 })
     await nav.waitFor({ state: 'detached' })
+  })
+
+  it.skipIf(MODE === 'record')('touch search and history controls fit phones without hover', async () => {
+    const touch = await browser.newPage({
+      viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true,
+      locale: 'en-US', timezoneId: 'Asia/Shanghai',
+    })
+    const console = watchConsole(touch)
+    const assertFits = async (locator: ReturnType<Page['locator']>): Promise<void> => {
+      const box = await locator.boundingBox()
+      const viewport = touch.viewportSize()!
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.y).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
+    }
+    const assertTouchTarget = async (locator: ReturnType<Page['locator']>): Promise<void> => {
+      await assertFits(locator)
+      const box = (await locator.boundingBox())!
+      expect(box.width).toBeGreaterThanOrEqual(44)
+      expect(box.height).toBeGreaterThanOrEqual(44)
+    }
+    try {
+      await touch.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+      const nav = touch.getByRole('navigation', { name: 'Mobile navigation' })
+      await nav.getByRole('button', { name: 'Workspaces', exact: true }).tap()
+      await touch.getByRole('button', { name: 'Search & manage', exact: true }).tap()
+      const searchButton = touch.getByRole('button', { name: 'Search sessions', exact: true })
+      await assertTouchTarget(searchButton)
+      await searchButton.tap()
+      const search = touch.getByPlaceholder('Search sessions...', { exact: true })
+      expect(await search.evaluate(input => Number.parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16)
+      await search.fill('WATERFALL')
+      const results = touch.getByRole('tree', { name: 'Search results' })
+      await expect.poll(() => results.getByRole('treeitem').count()).toBe(1)
+      await assertFits(results)
+      await assertTouchTarget(touch.getByRole('button', { name: 'Clear search', exact: true }))
+      await results.getByRole('treeitem').tap()
+      await touch.locator('[data-mobile-view="conversation"]').waitFor()
+      await touch.getByRole('heading', { name: 'Navigation Summary', exact: true }).waitFor()
+
+      await nav.getByRole('button', { name: 'Workspaces', exact: true }).tap()
+      const session = touch.locator(`[data-managing] [data-session-id="${SEED_ID}"]`).first()
+      const actions = session.getByRole('button', { name: /^Session actions for / })
+      await assertTouchTarget(actions)
+      await actions.tap()
+      const menu = touch.getByRole('menu')
+      await assertFits(menu)
+      await assertTouchTarget(menu.getByRole('menuitem', { name: 'Rename', exact: true }))
+      const menuSnapshot = await captureStableAria(touch, '[role="menu"]', scaffold.workspaceCwd)
+      await menu.getByRole('menuitem', { name: 'Rename', exact: true }).tap()
+      const rename = touch.getByRole('dialog', { name: 'Rename session', exact: true })
+      await assertFits(rename)
+      expect(await rename.getByRole('textbox').evaluate(input => Number.parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16)
+      await assertTouchTarget(rename.getByRole('button', { name: 'Cancel', exact: true }))
+      await rename.getByRole('button', { name: 'Cancel', exact: true }).tap()
+      const options = touch.getByRole('button', { name: 'View options', exact: true })
+      await assertTouchTarget(options)
+      await options.tap()
+      await assertFits(touch.getByRole('menu'))
+      await touch.getByRole('menuitem', { name: 'Archived', exact: true }).tap()
+      expect(await touch.getByText('No archived sessions', { exact: true }).isVisible()).toBe(true)
+      await options.tap()
+      await touch.getByRole('menuitem', { name: 'WorkSpace', exact: true }).tap()
+      await session.tap()
+      await touch.locator('[data-mobile-view="conversation"]').waitFor()
+
+      const questions = touch.getByRole('button', { name: 'Search questions', exact: true })
+      await assertTouchTarget(questions)
+      await questions.tap()
+      const panel = touch.getByRole('dialog', { name: 'Question history', exact: true })
+      await assertFits(panel)
+      const close = panel.getByRole('button', { name: 'Close', exact: true })
+      await assertTouchTarget(close)
+      const input = panel.getByRole('textbox', { name: 'Search questions', exact: true })
+      expect(await input.evaluate(element => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16)
+      expect(await panel.getByRole('button', { name: new RegExp(PROMPT_TURN1.slice(0, 15)) }).count()).toBe(1)
+      const remove = panel.getByRole('button', { name: 'Remove this question from context', exact: true }).first()
+      await assertTouchTarget(remove)
+      expect(await remove.evaluate(element => getComputedStyle(element).opacity)).toBe('1')
+      const historySnapshot = await captureStableAria(touch, '[role="dialog"][aria-label="Question history"]', scaffold.workspaceCwd)
+      await input.fill('WATERFALL')
+      await expect.poll(() => panel.locator('button[title]').filter({ hasText: 'NavScenario' }).count()).toBe(0)
+      await panel.locator('button[title]').filter({ hasText: 'Navigation Summary' }).waitFor()
+      await input.fill('')
+      await panel.getByRole('button', { name: 'Select', exact: true }).tap()
+      await assertTouchTarget(panel.getByRole('button', { name: 'Select all', exact: true }))
+      await assertFits(panel)
+      await panel.getByRole('button', { name: 'Cancel selection', exact: true }).tap()
+      await close.tap()
+      for (const viewport of [{ width: 390, height: 844 }, { width: 667, height: 375 }, { width: 320, height: 480 }]) {
+        await touch.setViewportSize(viewport)
+        await assertTouchTarget(questions)
+        await questions.tap()
+        await assertFits(panel)
+        await assertTouchTarget(close)
+        expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+        await close.tap()
+      }
+      expect(await panel.count()).toBe(0)
+      expect(await questions.evaluate(element => document.activeElement === element)).toBe(true)
+      await questions.tap()
+      await panel.locator('button[title]').filter({ hasText: 'Navigation Summary' }).tap()
+      expect(await panel.count()).toBe(0)
+      await compareOrRefreshGolden(MOBILE_SEARCH_EXPECTED,
+        `# Touch session actions\n\n${menuSnapshot}\n\n# Phone question history\n\n${historySnapshot}`, MODE)
+      expect(console).toEqual({ pageErrors: [], warnings: [] })
+    } catch (error) {
+      await saveFailureShot(touch, 'web-e2e-mobile-search-history')
+      throw error
+    } finally {
+      await touch.close()
+    }
   })
 
   it.skipIf(MODE === 'record')('phone appearance settings preserve font size across layouts without changing desktop', async () => {
@@ -778,7 +893,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       'session.v3.jsonl', 'search-results.expected.md', 'trajectory.expected.md',
       'terminal-card.expected.md', 'digest.expected.md', 'digest-layout.expected.md',
       'mobile-navigation.expected.md', 'mobile-pending-list.expected.md',
-      'mobile-small-layout.expected.md',
+      'mobile-small-layout.expected.md', 'mobile-search-history.expected.md',
     ])
   })
 })

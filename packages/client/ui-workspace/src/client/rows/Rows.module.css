@@ -327,7 +327,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-bottom-width: 2px;
   border-radius: 5px;
   background: var(--dsw-alias-bg-layer-1);
@@ -554,6 +554,81 @@
   width: 1.5px;
   border-radius: 1px;
   background: var(--dsw-alias-border-l2);
+}
+
+:global([data-mobile]) .projectRow,
+:global([data-mobile]) .sessionRow,
+:global([data-mobile]) .searchResultRow {
+  min-height: var(--dsh-mobile-control-size);
+  height: auto;
+}
+
+:global([data-mobile]) .projectRow .rowActions,
+:global([data-mobile]) .rowActions {
+  display: inline-flex;
+  height: auto;
+  gap: 0;
+}
+
+:global([data-mobile]) .iconButton,
+:global([data-mobile]) .branchChevron {
+  width: var(--dsh-mobile-control-size);
+  height: var(--dsh-mobile-control-size);
+}
+
+:global([data-mobile]) .title,
+:global([data-mobile]) .searchResultTitle {
+  font-size: var(--dsh-mobile-font-size);
+  line-height: 1.45;
+}
+
+:global([data-mobile]) .searchResultRow {
+  padding-block: var(--dsh-mobile-row-gap);
+}
+
+:global([data-mobile]) .searchResultMeta {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:global([data-mobile]) .searchResultWorkspace {
+  max-width: 100%;
+}
+
+:global([data-mobile]) .searchResultSnippet {
+  display: -webkit-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+:global([data-mobile]) .time,
+:global([data-mobile]) .keycap,
+:global([data-mobile]) .projectRow .folder {
+  display: none;
+}
+
+:global([data-mobile]) .projectRow .chevron {
+  display: inline-flex;
+}
+
+:global([data-mobile]) .iconButton:focus-visible,
+:global([data-mobile]) .branchChevron:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .rowActions {
+    display: inline-flex;
+  }
+
+  .sessionRow .time,
+  .archivedSessionRow .time {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

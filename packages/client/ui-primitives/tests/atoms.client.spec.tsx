@@ -202,6 +202,30 @@ describe('Menu', () => {
     }
   })
 
+  it('keeps the menu actionable after a touch leaves the trigger, while a mouse leave still closes it', () => {
+    vi.useFakeTimers()
+    try {
+      const onClose = vi.fn()
+      const onSelect = vi.fn()
+      render(
+        <Menu open portal closeOnPointerLeave anchor={<button type="button">trigger</button>} items={items} onSelect={onSelect} onClose={onClose} />)
+      const wrapper = screen.getByRole('button', { name: 'trigger' }).parentElement as HTMLElement
+      fireEvent.pointerLeave(wrapper, { pointerType: 'touch' })
+      act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS) })
+      expect(onClose).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Alpha' }))
+      expect(onSelect).toHaveBeenCalledWith('a')
+
+      fireEvent.pointerLeave(wrapper, { pointerType: 'mouse' })
+      act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS - 1) })
+      expect(onClose).not.toHaveBeenCalled()
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(onClose).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('coming back inside the grace keeps the list open (trigger and list are one region)', () => {
     vi.useFakeTimers()
     try {
@@ -296,6 +320,49 @@ describe('Menu', () => {
     expect(onSelect).toHaveBeenCalledWith('ok')
     fireEvent.mouseLeave(wrap)
     expect(screen.queryByRole('menuitem', { name: 'Create ok' })).toBeNull()
+  })
+
+  it('observes an open portal menu and repositions it when an inline submenu increases its height', () => {
+    let resize: (() => void) | undefined
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback }
+      observe = observe
+      disconnect = disconnect
+    })
+    const measuredHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.querySelector('[role="menu"]') === null ? 100 : 200
+      })
+    try {
+      const bottom = window.innerHeight - 12
+      const props = {
+        anchor: <span>trigger</span>,
+        getAnchorRect: () => new DOMRect(20, bottom - 44, 44, 44),
+        items: [{ id: 'parent', label: 'Parent', submenu: [{ id: 'child', label: 'Child' }] }],
+        onSelect: () => {},
+        onClose: () => {},
+      }
+      const view = render(<Menu {...props} open={false} portal />)
+      expect(observe).not.toHaveBeenCalled()
+      view.rerender(<Menu {...props} open />)
+      expect(observe).not.toHaveBeenCalled()
+      view.rerender(<Menu {...props} open portal />)
+      const menu = screen.getByRole('menu')
+      expect(menu.style.top).toBe(`${bottom - 100}px`)
+      expect(observe).toHaveBeenCalledWith(menu)
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Parent' }))
+      expect(screen.getByRole('menuitem', { name: 'Child' })).toBeDefined()
+      act(() => { resize?.() })
+      expect(menu.style.top).toBe(`${bottom - 200}px`)
+      view.rerender(<Menu {...props} open={false} portal />)
+      expect(disconnect).toHaveBeenCalledOnce()
+    } finally {
+      cleanup()
+      measuredHeight.mockRestore()
+      vi.unstubAllGlobals()
+    }
   })
 
   it('portal mode prefers getAnchorRect over measuring its own wrapper', () => {

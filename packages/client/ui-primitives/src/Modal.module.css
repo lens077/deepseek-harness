@@ -101,3 +101,81 @@
   gap: 8px;
   padding: 0 24px;
 }
+
+@media (max-width: 767px) {
+  .root {
+    box-sizing: border-box;
+    padding:
+      max(12px, env(safe-area-inset-top, 0px))
+      max(12px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
+  }
+
+  .dialog {
+    box-sizing: border-box;
+    max-width: 100%;
+    max-height: calc(
+      100dvh - max(12px, env(safe-area-inset-top, 0px))
+      - max(12px, env(safe-area-inset-bottom, 0px))
+    );
+    gap: 16px;
+    padding-bottom: 16px;
+  }
+
+  .content {
+    --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+    --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .header,
+  .description,
+  .body,
+  .footer {
+    flex-shrink: 0;
+  }
+
+  .header {
+    padding: 12px 12px 8px 16px;
+  }
+
+  .title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .description,
+  .body,
+  .footer {
+    padding-inline: 16px;
+  }
+
+  .description {
+    overflow-wrap: anywhere;
+  }
+
+  .footer {
+    flex-wrap: wrap;
+  }
+
+  .footer button {
+    box-sizing: border-box;
+    min-width: 44px;
+    max-width: 100%;
+    min-height: 44px;
+    height: auto;
+    padding-block: 10px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font: var(--dsw-font-base-16);
+  }
+}

@@ -33,7 +33,7 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  Button, IconCheckOutline14, IconChevronDownOutline14, IconChevronUpOutline14, IconDownloadOutline16,
+  Button, IconCheckOutline14, IconChevronDownOutline14, IconChevronUpOutline14, IconCloseOutline16, IconDownloadOutline16,
   IconLoadingOutline16, IconSearchOutline16, IconTrashOutline16, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -134,6 +134,7 @@ export function QuestionNavigator({
   // commits by dropping it.
   const rangeBase = useRef<ReadonlySet<number> | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const searchEntryRef = useRef<HTMLButtonElement | null>(null)
   const panelId = useId()
   // The column's height moves when its entries change (load-all arriving or
   // leaving) and when the size preference changes; both are resizes of this
@@ -426,15 +427,28 @@ export function QuestionNavigator({
     <div className={css.questionNavigator} ref={panelRef}>
       {stepping && open && (
         <div className={css.questionPanel} id={panelId} role="dialog" aria-label={t('chat.questions.history')}>
-          <label className={css.questionSearch}>
-            <IconSearchOutline16 aria-hidden="true" />
-            <input
-              value={query}
-              onChange={(event) => { setQuery(event.target.value) }}
-              placeholder={t('chat.questions.search')}
-              aria-label={t('chat.questions.search')}
-            />
-          </label>
+          <div className={css.questionSearchHeader}>
+            <label className={css.questionSearch}>
+              <IconSearchOutline16 aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(event) => { setQuery(event.target.value) }}
+                placeholder={t('chat.questions.search')}
+                aria-label={t('chat.questions.search')}
+              />
+            </label>
+            <button
+              type="button"
+              className={css.questionClose}
+              aria-label={t('close')}
+              onClick={() => {
+                setOpen(false)
+                searchEntryRef.current?.focus({ preventScroll: true })
+              }}
+            >
+              <IconCloseOutline16 />
+            </button>
+          </div>
           {notice !== null && (
             <p className={css.questionSearchNotice} role="status" aria-live="polite">{notice}</p>
           )}
@@ -546,6 +560,8 @@ export function QuestionNavigator({
               const navigate = (): void => {
                 if (row.index === undefined) onSelectSeq(row.seq)
                 else onSelect(row.index)
+                // The phone panel covers the destination; desktop keeps the list beside it.
+                if (window.innerWidth < 768) setOpen(false)
               }
               return (
                 <div
@@ -622,6 +638,7 @@ export function QuestionNavigator({
               list only on request, so nothing is redrawn while the reader steps. */}
           <button
             type="button"
+            ref={searchEntryRef}
             className={css.questionSearchEntry}
             data-panel-open={open || undefined}
             disabled={!hasQuestions}

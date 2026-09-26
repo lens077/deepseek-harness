@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-06-phone-four-entry-navigation.md
-2026-09-06-phone-four-entry-navigation.md: 02c4a67874bddbb1e8a698fcd324b62fde9ae5d1
-2026-09-06-phone-four-entry-navigation.zh.md: fa07eee91f76352d51ae24481016fb63cc2d4bac
+2026-09-06-phone-four-entry-navigation.md: f17821f9e988fea4e553655f590e88b1598f93e3
+2026-09-06-phone-four-entry-navigation.zh.md: 804f3d8297b253f5dc33a00a72af2eee723ed257

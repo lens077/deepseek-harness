@@ -26,7 +26,9 @@ Overview and Pending initially show compact session titles, with one expandable 
 
 The [informational welcome notice](../../../../packages/client/ui-settings-models/README.md) skips phone presentation without recording acknowledgement or writing settings. Security and permission confirmations retain their own behavior.
 
-[Phone appearance](../../../../packages/client/ui-theme/README.md) separates layout density from font size and desktop typography, so a denser layout does not discard a reader's text-size choice. Small layout reduces visible navigation labels while retaining accessible names and groups Overview filters into native selects and More. The [task-flow strip](../../../../packages/client/ui-task-flow/README.md) is opt-in on phones; its explicit Flow view remains available. Host scopes persist these preferences in their existing namespaces; remote memory scopes persist only the phone preferences in origin-local browser storage with schema-validated hydration.
+[Phone appearance](../../../../packages/client/ui-theme/README.md) separates phone layout density from phone font size and the independently persisted [desktop density](2026-09-26-shared-layout-settings-and-desktop-density.md), so a denser layout does not discard a reader's text-size choice. Small layout reduces visible navigation labels while retaining accessible names and groups Overview filters into native selects and More. The [task-flow strip](../../../../packages/client/ui-task-flow/README.md) is opt-in on phones; its explicit Flow view remains available. Host scopes persist these preferences in their existing namespaces; remote memory scopes persist only the phone preferences in origin-local browser storage with schema-validated hydration.
+
+Phone search and history reuse the desktop operations with touch-sized controls. Workspace and Session action buttons remain visible without hover; the pinned list is height-bounded so history keeps its own scrolling region. Question history uses the available phone width between the header and navigation, with an explicit close action, instead of sharing a side column with floating controls. Body-portaled menus and confirmations use viewport media queries because they do not inherit the frame's mobile selector.
 
 ## Alternatives considered
 
@@ -40,6 +42,8 @@ The [informational welcome notice](../../../../packages/client/ui-settings-model
 
 **Keep desktop directory columns and automatic diffs on phones.** Rejected because off-screen columns obscure directory choices and expanded comparisons displace the conversation. Breadcrumbs and explicit file disclosure preserve access without those defaults.
 
+**Keep hover-only actions and a side-anchored history panel.** Rejected because touch has no persistent hover and a control column subtracts too much width from a phone's search results. The shared actions remain intact; phone presentation exposes them directly and scrolls long content.
+
 ## Consequences
 
 Phone navigation changes presentation, not Host storage, Session logs, or the meaning of personal todos. Feature plugins still own their operations, and phone and desktop layouts read the same data. Phone navigation is transient rather than a durable preference.
@@ -47,5 +51,7 @@ Phone navigation changes presentation, not Host storage, Session logs, or the me
 The durable-inbox note remains active because it owns persistence and unread derivation; this note owns the phone navigation decision rather than replacing those rules.
 
 ## Verification
+
+[Recorded navigation tests](../../../../apps/web/tests/navigation-panes.e2e.ts) exercise touch search, hover-independent Session actions, rename cancellation, archive browsing, and question search at 320px and across short phone viewports. [Whole-history browser coverage](../../../../apps/web/tests/question-panel-load-all.e2e.ts) checks the scrolling list and reachable close control. Component tests preserve mouse dismissal while rejecting touch-release dismissal and verify menu re-placement after a size change.
 
 [Mobile Workspace browser tests](../../../../apps/web/tests/mobile-workspace.e2e.ts) exercise direct creation in the browsed directory, 320px nested-directory navigation, long-list scrolling, new-folder selection, and keyboard focus. [Recorded edit rendering](../../../../apps/web/tests/mobile-produced-files.e2e.ts) verifies closed and manually opened file comparisons plus the phone/desktop breakpoint. Component tests cover arrivals, preference updates, separate manual choices, and media-listener disposal.

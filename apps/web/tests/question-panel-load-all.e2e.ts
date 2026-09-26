@@ -43,6 +43,7 @@ function buildSeed(turns: number): string {
   }
   for (let turn = 1; turn <= turns; turn++) {
     at({ type: 'turn/start', data: { turn } })
+    at({ type: 'step/start', data: { turn, step: 1 } })
     const directQuestion = turn <= QUESTION_TURNS
     at({
       type: 'user/message',
@@ -52,7 +53,6 @@ function buildSeed(turns: number): string {
       },
       surfaceOp: 'append',
     })
-    at({ type: 'step/start', data: { turn, step: 1 } })
     at({
       type: 'assistant/message',
       data: {
@@ -96,8 +96,8 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     await scaffold?.close()
   })
 
-  /** The panel's question rows: the buttons carrying a question as their title. */
-  const questionRows = () => page.locator('[role="dialog"][aria-label="Question history"] button[title]')
+  /** Question navigation buttons exclude the separately named per-row removal controls. */
+  const questionRows = () => page.locator('[role="dialog"][aria-label="Question history"] button[title]:not([aria-label])')
 
   it('keeps load-all usable before any question is loaded, then enables the complete panel', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-question-panel-load-all'))
@@ -135,7 +135,7 @@ describe('web e2e: the question panel loads the whole history on request', () =>
         }
       }
     }
-    await assertRailPlacement(8, true)
+    await assertRailPlacement(12, true)
 
     await page.setViewportSize({ width: 600, height: 900 })
     await page.locator('[data-mobile-view="overview"]').waitFor()
@@ -144,8 +144,8 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     await expect.poll(async () => {
       const narrowBox = await search.boundingBox()
       return narrowBox === null ? null : Math.round(600 - narrowBox.x - narrowBox.width)
-    }).toBe(8)
-    await assertRailPlacement(8, false)
+    }).toBe(12)
+    await assertRailPlacement(12, false)
     await page.setViewportSize({ width: 1680, height: 1000 })
 
     await loadAll.click()
@@ -161,6 +161,30 @@ describe('web e2e: the question panel loads the whole history on request', () =>
     expect(await questionRows().count()).toBe(QUESTION_TURNS)
     // The transcript's own paging offer is gone with the last page.
     expect(await page.getByRole('button', { name: 'Load earlier' }).count()).toBe(0)
+    for (const viewport of [
+      { width: 320, height: 640 }, { width: 390, height: 844 },
+      { width: 667, height: 375 }, { width: 767, height: 600 },
+    ]) {
+      await page.setViewportSize(viewport)
+      const bounds = (await panel.boundingBox())!
+      expect(bounds.x).toBeGreaterThanOrEqual(0)
+      expect(bounds.y).toBeGreaterThanOrEqual(0)
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width)
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height)
+      const list = questionRows().first().locator('..').locator('..')
+      expect(await list.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true)
+      await questionRows().filter({ hasText: 'question 35' }).scrollIntoViewIfNeeded()
+      const last = (await questionRows().filter({ hasText: 'question 35' }).boundingBox())!
+      expect(last.y + last.height).toBeLessThanOrEqual(bounds.y + bounds.height)
+      const close = (await panel.getByRole('button', { name: 'Close', exact: true }).boundingBox())!
+      expect(close.height).toBeGreaterThanOrEqual(44)
+      expect(close.y).toBeGreaterThanOrEqual(bounds.y)
+      await questionRows().filter({ hasText: 'question 35' }).click()
+      expect(await panel.count()).toBe(0)
+      await search.click()
+      await panel.waitFor()
+    }
+    await page.setViewportSize({ width: 1680, height: 1000 })
   }, 90_000)
 
   it('matches the loaded panel aria golden', async () => {

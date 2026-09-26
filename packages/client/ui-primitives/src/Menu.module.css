@@ -246,3 +246,52 @@
   left: -10px;
   width: 10px;
 }
+
+@media (max-width: 767px) {
+  .list,
+  .list.compactList {
+    min-width: min(218px, calc(100vw - 24px));
+    max-width: min(360px, calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+  }
+
+  .viewport {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .itemWrap,
+  .footer {
+    flex: none;
+  }
+
+  .item,
+  .denseList .item,
+  .compactList .item {
+    min-height: 44px;
+    padding: 10px 12px;
+    font: var(--dsw-font-base-16);
+  }
+
+  .itemLabel {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .submenu,
+  .submenu.compactList {
+    position: static;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0 4px 4px 12px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .submenu::before {
+    display: none;
+  }
+}
