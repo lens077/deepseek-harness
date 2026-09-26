@@ -46,6 +46,14 @@ kind: "package-reference"
 
 路由键精确匹配 `provider/model`。精确路由优先；唯一的模型名匹配可以覆盖 `-high`、`-thinking` 等提供方后缀，存在歧义或未知模型时保持未定价。每条路由声明未缓存输入、缓存读取、缓存写入和输出价格。可选 `tiers` 在互不重叠的 UTC 星期／小时窗口内对四项价格应用倍率，其余时间使用基础价格。Web bundle 包含当前 Claude、GPT 和 DeepSeek 路由的一组显式 USD 初始价格，但不设置金额预算。同时启用 `assumeMissingCacheBucketsZero`，按 TokenTracker 的方式将缺失的可选缓存价格视为零。未知路由保持未定价，不会被猜测。初始价格参考 [TokenTracker 的 curated pricing 方案](https://github.com/xiufengsun/TokenTracker/tree/main/src/lib/pricing)：显式匹配优先，无法解析的模型保持未定价。可通过 profile patch 替换或扩展价格表。[配置目录](../../../docs/config-catalog.zh.md)说明各字段。
 
+### 日历用量
+
+可选的 `calendarTimeZone` 指定按日期记录本会话请求时使用的 IANA 时区；省略时使用 `UTC`，无效时区或数字偏移量无法通过校验。使用中国标准时间的部署设置 `calendarTimeZone: Asia/Shanghai`。价格分层仍按 UTC 小时计算，与日历设置相互独立。
+
+可选的 `usageLedger.calendar` 包含 `timeZone` 和按日期升序排列的 `days`。每个日期行包含公历 `YYYY-MM-DD`、token 分桶、上报用量的请求数、不完整／未上报／未定价计数，以及以账本币种表示的可选费用；[公开类型](src/types.ts)定义具体字段。Assistant 结算使用结算事件时间，压缩请求使用摘要事件时间，未结算的已关闭步骤在关闭事件日期披露缺失用量。每次重试结算和压缩请求只计一次；fork 继承事件不贡献用量。累计记账保持既有含义。
+
+[小助手预览](../../client/ui-chat/README.zh.md#session-usage-and-cost)从这些日期中选择今天、周一开始的本周或本月。没有日历意味着按日期组织的历史不可用，而非零用量。冷快照可能仍缺失或使用不同的时区；预览会披露这些情况，不查询后端总量或回填历史。
+
 ### 理解数据
 
 计费输入等于未缓存输入、缓存读取与缓存写入之和。推理 token 是已观察到的输出子集，不会重复累加或单独计费。每条持久 Assistant 结算事件只贡献该请求的最终样本，不会把嵌入样本再加到组装样本上。失败尝试和已上报用量的压缩摘要请求分别贡献流量。压缩摘要增加请求数，但不增加逻辑 agent 步数。
@@ -70,7 +78,7 @@ Web 用量抽屉可聚合本会话、本会话及其子代理后代，或当前�
 
 两个值都是由 Session 投影注册表驱动的同步投影单元。卸载插件会移除两项注册。[账本折叠](src/usage-ledger.ts)在初始化时读取不可变的继承前缀长度，保留继承请求的上下文以便归属，只累计 Session 自身工作。请求头和系统消息变化在账本数字变化前不会发布新的客户端值。
 
-账本保存按路由划分的 UTC 周内小时 token 分桶、工具聚合和有限的生命周期状态，不保存逐步骤时间线。它保留活动系统节点与工具 schema 的哈希，不保留原始内容。价格在生成视图时计算，因此恢复的 token 检查点使用当前配置的价格表。循环小时分桶不保留历史价格生效日期。[配置校验与定价](src/usage-config.ts)独立于[既有生命周期折叠](src/projection.ts)。
+账本为累计总量和按日期划分的总量保存按路由划分的 UTC 周内小时 token 分桶、工具聚合和有限的生命周期状态，不保存逐步骤时间线。日历存储随产生用量的日期增加。账本检查点使用 `stateVersion: 3` 并保留记账时区；其他时区的检查点会被拒绝，以便通过源事件重放重建日期。它保留活动系统节点与工具 schema 的哈希，不保留原始内容。价格在生成视图时计算，因此恢复的 token 检查点使用当前配置的价格表。循环小时分桶不保留历史价格生效日期。[配置校验与定价](src/usage-config.ts)独立于[既有生命周期折叠](src/projection.ts)。
 
 注册表校验持久状态和 wire 输出。wire 校验拒绝没有币种的成本、分桶不完整的路由成本，以及遗漏未知或未定价尝试的总额。[投影测试](tests/usage-ledger.spec.ts)与[真实 Loader 装配](tests/loader-composition.spec.ts)固定用量归属、定价、缺失报告、重放和配置行为。不发布运行时不变式伴生入口，因为该纯折叠没有独立可变的第二份观测可供比较。
 
@@ -84,6 +92,7 @@ Web 用量抽屉可聚合本会话、本会话及其子代理后代，或当前�
 - [Session 投影](../../../docs/subsystems/session-projection.zh.md)——投递、持久检查点和冷快照。
 - [Web 聊天](../../client/ui-chat/README.zh.md)——用量控件与范围选择。
 - [用量治理决策](../../../.agents/notes/implemented/feature/2026-09-12-own-request-usage-governance.zh.md)——计费归属与明确限制。
+- [日历用量决策](../../../.agents/notes/implemented/feature/2026-09-26-companion-calendar-usage.zh.md)——按日期记录本会话请求与紧凑预览。
 
 -----
 

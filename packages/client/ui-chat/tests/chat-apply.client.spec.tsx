@@ -103,6 +103,17 @@ describe('Chat apply wiring', () => {
     expect(exposure.getSnapshot()).toBeNull()
   })
 
+  it('contributes usage only while the companion declares its optional panel slot', async () => {
+    const b = await bench()
+    b.runtime.root.release()
+    await b.runtime.root.declare({ 'companion.usage.panel': { kind: 'single', scope: 'session-maybe' } },
+      (_props: { renderSlot?: unknown }) => null)
+    expect(b.runtime.slots.entries('companion.usage.panel')).toHaveLength(1)
+    await b.chat.dispose()
+    expect(b.runtime.slots.entries('companion.usage.panel')).toHaveLength(0)
+    await b.runtime.dispose()
+  })
+
   it('contributes Chat View, node renderers, and stats', async () => {
     const b = await bench()
     const views = b.runtime.slots.entries('conversation.view')
@@ -118,7 +129,8 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
       .toEqual([
         'transcript-view', 'action-control-size', 'turn-rail-layout',
-        'transcript-leading-pad', 'composer-enter', 'content-width', 'question-shortcuts',
+        'transcript-leading-pad', 'composer-enter', 'content-width', 'home-end-caret',
+        'question-shortcuts',
       ])
     await b.runtime.dispose()
   })

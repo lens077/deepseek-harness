@@ -8,8 +8,8 @@ import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type {} from '@deepseek-ai/dsh-compaction/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import { priceUsage, resolveRoutePrice, usageGovernanceSchema } from './usage-config.ts'
-import type { UsageActivity, UsageBuckets, UsageLedgerProjection, UsageStatsConfig } from './types.ts'
+import { calendarTimeZoneSchema, priceUsage, resolveRoutePrice, usageGovernanceSchema } from './usage-config.ts'
+import type { UsageActivity, UsageBuckets, UsageCalendarDay, UsageLedgerModelRow, UsageLedgerProjection, UsageStatsConfig } from './types.ts'
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const duration = z.number().nonnegative()
@@ -31,6 +31,13 @@ const activitySchema = z.object({
   retries: count, retryDelayMs: duration, turnErrors: count, interruptions: count,
 }).strict()
 const cacheSchema = z.object({ total: count, systemChanged: count, toolsChanged: count, routeChanged: count }).strict()
+const calendarDaySchema = bucketsSchema.extend({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  requests: count, incompleteRequests: count, unreportedAttempts: count, unpricedRequests: count,
+  estimatedCost: duration.optional(), observedCost: duration.optional(),
+}).strict().refine(day => day.estimatedCost === undefined || (day.requests > 0
+  && day.incompleteRequests === 0 && day.unreportedAttempts === 0 && day.unpricedRequests === 0),
+'Calendar cost requires complete priced usage')
 
 /** Wire completeness prevents unknown traffic or unpriced rows masquerading as a complete total. */
 export const usageLedgerViewSchema = z.object({
@@ -38,8 +45,10 @@ export const usageLedgerViewSchema = z.object({
   cacheBreaks: cacheSchema, unreportedAttempts: count,
   currency: z.string().regex(/^[A-Z]{3}$/).optional(), estimatedCost: duration.optional(), observedCost: duration.optional(),
   governance: usageGovernanceSchema.optional(),
+  calendar: z.object({ timeZone: calendarTimeZoneSchema, days: z.array(calendarDaySchema) }).strict().optional(),
 }).strict().superRefine((view, ctx) => {
   const costs = view.models.some(row => row.estimatedCost !== undefined) || view.estimatedCost !== undefined
+    || view.calendar?.days.some(day => day.estimatedCost !== undefined || day.observedCost !== undefined) === true
   if (costs && view.currency === undefined) ctx.addIssue({ code: 'custom', message: 'Cost requires currency' })
   if (view.models.some(row => row.incompleteRequests > 0 && row.estimatedCost !== undefined)) {
     ctx.addIssue({ code: 'custom', message: 'Incomplete route usage cannot carry cost' })
@@ -51,13 +60,18 @@ export const usageLedgerViewSchema = z.object({
 })
 
 const prefixSchema = z.object({ system: z.string(), tools: z.string(), route: z.string() }).strict()
-const dataSchema = z.object({
+const totalsSchema = z.object({
   models: z.record(z.string(), rowSchema.omit({ estimatedCost: true }).extend({
     hours: z.record(z.string(), bucketsSchema),
   })),
-  tools: z.record(z.string(), toolSchema),
-  activity: activitySchema, cacheBreaks: cacheSchema, unreportedAttempts: count,
+  unreportedAttempts: count,
 }).strict()
+const dataSchema = totalsSchema.extend({
+  tools: z.record(z.string(), toolSchema),
+  activity: activitySchema, cacheBreaks: cacheSchema,
+  calendar: z.object({ timeZone: z.string(), days: z.record(z.string(), totalsSchema) }).strict(),
+}).strict()
+type UsageTotals = z.infer<typeof totalsSchema>
 const stateSchema = z.object({
   inheritedEventCount: count,
   data: dataSchema,
@@ -138,14 +152,14 @@ function updateSystems(state: LedgerState, event: SessionEvent): LedgerState['sy
   return [...nodes.slice(0, insertion), node, ...nodes.slice(insertion)]
 }
 
-function recordUsage(
-  data: LedgerState['data'],
+function recordTotals(
+  data: UsageTotals,
   sample: ReturnType<typeof normalizeUsage>,
   provider: string,
   model: string,
   time: number,
   countStep: boolean,
-): LedgerState['data'] {
+): UsageTotals {
   if (sample === null) return { ...data, unreportedAttempts: data.unreportedAttempts + 1 }
   const key = routeKey(provider, model)
   const prior = data.models[key]
@@ -162,10 +176,56 @@ function recordUsage(
   } } }
 }
 
+function recordUsage(
+  data: LedgerState['data'], sample: ReturnType<typeof normalizeUsage>, provider: string, model: string,
+  time: number, countStep: boolean, dateFormat: Intl.DateTimeFormat,
+): LedgerState['data'] {
+  const parts = dateFormat.formatToParts(time)
+  const date = ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-')
+  const prior = data.calendar.days[date] ?? { models: {}, unreportedAttempts: 0 }
+  return { ...data, ...recordTotals(data, sample, provider, model, time, countStep),
+    calendar: { ...data.calendar, days: { ...data.calendar.days,
+      [date]: recordTotals(prior, sample, provider, model, time, countStep),
+    } },
+  }
+}
+
+function modelRows(data: UsageTotals, config: UsageStatsConfig): UsageLedgerModelRow[] {
+  return Object.values(data.models).map(({ hours, reasoningTokens, ...row }) => {
+    const price = resolveRoutePrice(config.pricing, row.provider, row.model)
+    return { ...row,
+      ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
+      ...(price === undefined || row.incompleteRequests > 0 ? {} : {
+        estimatedCost: Object.entries(hours).reduce((sum, [hour, buckets]) => sum + priceUsage(buckets, price, Number(hour)), 0),
+      }),
+    }
+  })
+}
+
+function calendarDay(date: string, data: UsageTotals, config: UsageStatsConfig): UsageCalendarDay {
+  const rows = modelRows(data, config)
+  const day: UsageCalendarDay = { date, ...emptyBuckets(), requests: 0, incompleteRequests: 0,
+    unreportedAttempts: data.unreportedAttempts, unpricedRequests: 0 }
+  let observedCost: number | undefined
+  for (const row of rows) {
+    Object.assign(day, addBuckets(day, row))
+    day.requests += row.requests
+    day.incompleteRequests += row.incompleteRequests
+    if (row.estimatedCost === undefined) day.unpricedRequests += row.requests
+    else observedCost = (observedCost ?? 0) + row.estimatedCost
+  }
+  if (observedCost !== undefined) {
+    day.observedCost = observedCost
+    if (day.unpricedRequests === 0 && day.unreportedAttempts === 0) day.estimatedCost = observedCost
+  }
+  return day
+}
+
 function settle(
   state: LedgerState,
   event: SessionEvent<'assistant/message' | 'assistant/attempt'>,
   assumeMissingCacheBucketsZero: boolean,
+  dateFormat: Intl.DateTimeFormat,
 ): LedgerState {
   const { turn, step } = event.data
   const matching = state.step?.turn === turn && state.step.step === step ? state.step : null
@@ -190,7 +250,7 @@ function settle(
     ? event.data.usage ?? lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
     : lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
   const normalized = normalizeUsage(usage, assumeMissingCacheBucketsZero)
-  data = recordUsage(data, normalized, provider, model, event.time, matching?.countedUsage !== true)
+  data = recordUsage(data, normalized, provider, model, event.time, matching?.countedUsage !== true, dateFormat)
   // Direct recovery retries have no recorded start; do not reuse a prior attempt's timing interval.
   if (matching !== null && !matching.settled) {
     const activity = { ...data.activity, llmMs: data.activity.llmMs + Math.max(0, event.time - matching.attemptStart) }
@@ -216,13 +276,20 @@ function settle(
  * @returns a synchronous replayable projection; inherited events supply prefix context but no spend.
  */
 export function createUsageLedgerProjection(config: UsageStatsConfig = {}): UsageLedgerDefinition {
+  const timeZone = calendarTimeZoneSchema.parse(config.calendarTimeZone ?? 'UTC')
+  const dateFormat = new Intl.DateTimeFormat('en', {
+    timeZone, calendar: 'gregory', numberingSystem: 'latn', year: 'numeric', month: '2-digit', day: '2-digit',
+  })
   const views = new WeakMap<LedgerState['data'], UsageLedgerProjection>()
   return {
-    key: 'usageLedger', stateVersion: 2, stateSchema,
+    key: 'usageLedger', stateVersion: 3,
+    stateSchema: stateSchema.refine(state => state.data.calendar.timeZone === timeZone,
+      'Calendar timezone changed; replay the source events'),
     init: (_header, inheritedEventCount) => ({
       inheritedEventCount,
       data: { models: {}, tools: {}, activity: emptyActivity(),
-        cacheBreaks: { total: 0, systemChanged: 0, toolsChanged: 0, routeChanged: 0 }, unreportedAttempts: 0 },
+        cacheBreaks: { total: 0, systemChanged: 0, toolsChanged: 0, routeChanged: 0 }, unreportedAttempts: 0,
+        calendar: { timeZone, days: {} } },
       route: null, systems: [], prefix: null, step: null, turnStart: null, lastCountedTurn: null, pendingCalls: {},
     }),
     apply: (state, event) => {
@@ -233,15 +300,18 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
         return { ...state, route: { provider: route.provider, model: route.model, tools: hash(tools ?? []) } }
       }
       if (event.type === 'assistant/message' || event.type === 'assistant/attempt') {
-        return settle(state, event, config.pricing?.assumeMissingCacheBucketsZero === true)
+        return settle(state, event, config.pricing?.assumeMissingCacheBucketsZero === true, dateFormat)
       }
       if (event.seq < state.inheritedEventCount) return state
-      const data = state.data
+      const data = (event.type === 'step/end' || event.type === 'turn/end') && state.step?.settled === false
+        ? recordUsage(state.data, null, '', '', event.time, false, dateFormat)
+        : state.data
       switch (event.type) {
         case 'compaction/summary':
           return event.data.usage === undefined && event.data.llmStreamCall !== true ? state : { ...state,
             data: recordUsage(data, normalizeUsage(event.data.usage,
-              config.pricing?.assumeMissingCacheBucketsZero === true), event.data.provider, event.data.model, event.time, false),
+              config.pricing?.assumeMissingCacheBucketsZero === true),
+            event.data.provider, event.data.model, event.time, false, dateFormat),
           }
         case 'turn/start':
           return { ...state, turnStart: { turn: event.data.turn, time: event.time } }
@@ -254,13 +324,11 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
           return state.step === null ? state : { ...state, step: { ...state.step, attemptStart: event.time, settled: false } }
         case 'step/end':
           return { ...state, step: null, lastCountedTurn: event.data.turn, data: { ...data,
-            unreportedAttempts: data.unreportedAttempts + Number(state.step?.settled === false),
             activity: { ...data.activity, steps: data.activity.steps + 1,
               turns: data.activity.turns + Number(state.lastCountedTurn !== event.data.turn) },
           } }
         case 'turn/end':
           return { ...state, turnStart: null, step: null, pendingCalls: {}, data: { ...data,
-            unreportedAttempts: data.unreportedAttempts + Number(state.step?.settled === false),
             activity: { ...data.activity,
               turnMs: data.activity.turnMs
                 + (state.turnStart?.turn === event.data.turn ? Math.max(0, event.time - state.turnStart.time) : 0),
@@ -301,15 +369,7 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
         const cached = views.get(state.data)
         if (cached !== undefined) return cached
         const { data } = state
-        const models = Object.values(data.models).map(({ hours, reasoningTokens, ...row }) => {
-          const price = resolveRoutePrice(config.pricing, row.provider, row.model)
-          return { ...row,
-            ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
-            ...(price === undefined || row.incompleteRequests > 0 ? {} : {
-              estimatedCost: Object.entries(hours).reduce((sum, [hour, buckets]) => sum + priceUsage(buckets, price, Number(hour)), 0),
-            }),
-          }
-        })
+        const models = modelRows(data, config)
         const observedCost = models.reduce((sum, row) => sum + (row.estimatedCost ?? 0), 0)
         const hasObservedCost = models.some(row => row.estimatedCost !== undefined)
         const total = models.reduce<number | undefined>((sum, row) =>
@@ -319,6 +379,8 @@ export function createUsageLedgerProjection(config: UsageStatsConfig = {}): Usag
         const view: UsageLedgerProjection = {
           models, tools: Object.values(data.tools), activity: data.activity, cacheBreaks: data.cacheBreaks,
           unreportedAttempts: data.unreportedAttempts,
+          calendar: { timeZone, days: Object.entries(data.calendar.days).sort(([left], [right]) => left.localeCompare(right))
+            .map(([date, totals]) => calendarDay(date, totals, config)) },
           ...(config.pricing === undefined ? {} : { currency: config.pricing.currency }),
           ...(estimatedCost === undefined ? {} : { estimatedCost }),
           ...(config.pricing === undefined || !hasObservedCost ? {} : { observedCost }),

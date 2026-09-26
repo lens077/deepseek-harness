@@ -22,7 +22,7 @@ export type * from './types.ts'
 export type Config = UsageStatsConfig
 
 /** Loader configuration; detailed numeric and cross-field checks run before registration. */
-export const Config: z<Config> = z.object({ pricing: z.any(), governance: z.any() })
+export const Config: z<Config> = z.object({ pricing: z.any(), governance: z.any(), calendarTimeZone: z.string() })
 
 /** Cordis plugin name. */
 export const name = 'session-stats'

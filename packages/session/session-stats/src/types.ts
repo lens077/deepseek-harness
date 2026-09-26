@@ -105,6 +105,30 @@ export interface UsageActivity {
   interruptions: number
 }
 
+/** Own-request totals on one calendar date; costs use the parent ledger's currency. */
+export interface UsageCalendarDay extends UsageBuckets {
+  /** Gregorian YYYY-MM-DD in the calendar's explicit timezone. */
+  date: string
+  /** Attempts with a usable usage sample. */
+  requests: number
+  incompleteRequests: number
+  unreportedAttempts: number
+  /** Reported requests lacking a complete route price, including incomplete samples. */
+  unpricedRequests: number
+  /** Present only when every observed attempt on this date is completely priced. */
+  estimatedCost?: number
+  /** Sum of completely priced route totals on this date, even when other traffic is unknown. */
+  observedCost?: number
+}
+
+/** Calendar dates derived from durable settlement or unresolved-step closing event times. */
+export interface UsageCalendar {
+  /** Explicit IANA timezone used to assign every event to its date. */
+  timeZone: string
+  /** All contributing dates, ascending; an absent date has no recorded own-request usage. */
+  days: UsageCalendarDay[]
+}
+
 /** Latest durable own-session diagnostic snapshot, not a provider invoice. */
 export interface UsageLedgerProjection {
   models: UsageLedgerModelRow[]
@@ -119,6 +143,8 @@ export interface UsageLedgerProjection {
   /** Sum of known priced requests, present even when unknown traffic suppresses the complete total. */
   observedCost?: number
   governance?: UsageGovernancePolicy
+  /** Absent in older snapshots; absence is unavailable history, not zero usage. */
+  calendar?: UsageCalendar
 }
 
 /** UTC recurring half-open hourly window. Sunday is 0, Saturday is 6. */
@@ -203,6 +229,8 @@ export interface UsageGovernancePolicy {
 
 /** Plugin configuration; no prices or budgets are inferred when absent. */
 export interface UsageStatsConfig {
+  /** IANA zone for event-date accounting; omitted configuration selects UTC. */
+  calendarTimeZone?: string
   /** Deployment price table; omit to display tokens without monetary estimates. */
   pricing?: UsagePricingTable
   /** Optional advisory budgets and diagnostic thresholds exposed with each ledger. */

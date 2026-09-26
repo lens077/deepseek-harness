@@ -22,6 +22,16 @@ function tree() {
 }
 
 describe('usage scope aggregation', () => {
+  it('aggregates known sessions without a current session or invented governance policy', () => {
+    const totals = rollupUsage('all', undefined, undefined, usageList({ root: usageLedger(), other: usageLedger() }))
+    expect(new Set(totals.sessionIds)).toEqual(new Set([ROOT, 'other']))
+    expect(totals.missingSessions).toBe(0)
+    expect(totals.estimatedCost).toBe(0.04)
+    expect(usageAdvice(totals, 'all')).toEqual({ findings: [], wasteState: 'unconfigured' })
+    expect(rollupUsage('all', undefined, undefined, usageList({})).sessionIds).toEqual([])
+    expect(rollupUsage('session', undefined, undefined, usageList({ root: usageLedger() })).sessionIds).toEqual([])
+  })
+
   it('deduplicates catalog and list identities and follows only subagent tree edges', () => {
     const { ledger, list } = tree()
     const session = rollupUsage('session', ROOT, ledger, list)

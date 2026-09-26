@@ -14,7 +14,7 @@ The [rest companion](../../../../packages/client/ui-companion/README.md) starts 
 
 One plugin-owned presentation store holds the click-driven `idle → greeting → sleeping → idle` cycle, minimization, and manual motion preference. Responsive remounts retain that state; page reload resets it. Compact layouts and hidden pages pause motion, and reduced-motion preferences disable animation. Minimization in the expanded sidebar leaves a restore button; compact navigation buttons keep the mood cycle instead of opening an overlay.
 
-The package makes no model calls, writes no session events, and supplies no sound, timer, or notifications. Two locally processed WebP assets from the user-supplied blue chibi maid whale reference are embedded in the browser bundle rather than fetched from an external image service. The [web-app row](../../../../packages/bundle/web-app/cordis.patch.yml) is disabled by default so deployment activation remains explicit.
+The package makes no model calls, writes no session events, and supplies no sound, timer, or notifications. Two locally processed WebP assets from the user-supplied blue chibi maid whale reference are embedded in the browser bundle rather than fetched from an external image service. The [web-app row](../../../../packages/bundle/web-app/cordis.patch.yml) is disabled by default so deployment activation remains explicit. The [usage-menu enhancement](2026-09-26-companion-usage-menu.md) adds a separate entry to existing usage views without changing these guarantees or the character's interactions.
 
 ## Alternatives considered
 

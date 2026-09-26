@@ -7,8 +7,24 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { Companion } from './Companion.tsx'
 import { createCompanionStore } from './store.ts'
 import { en, zh, type CompanionKey } from './locales.ts'
+import awake from './assets/awake.webp'
+import sleeping from './assets/sleeping.webp'
+
+/** Usage audience requested by a companion menu item. */
+export type CompanionUsageScope = 'today' | 'week' | 'month' | 'session' | 'tree' | 'all'
+
+/** The usage provider owns accounting and the dialog; the companion owns dismissal state. */
+export interface CompanionUsageOwnerProps {
+  initialScope: CompanionUsageScope
+  onScope: (scope: CompanionUsageScope) => void
+  onClose: () => void
+}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    /** Optional usage dialog supplied by the existing accounting UI. */
+    'companion.usage.panel': { kind: 'single'; scope: 'session-maybe'; owner: CompanionUsageOwnerProps }
+  }
   interface LocaleNamespaceMap {
     /** Quiet companion controls and status. */
     companion: CompanionKey
@@ -35,7 +51,8 @@ export function apply(ctx: Context): void {
     id: 'rest-companion',
     order: 100,
     locale: 'companion',
+    children: { 'companion.usage.panel': { kind: 'single', scope: 'session-maybe' } },
     store,
-    inject: () => ({ hooks: { pageVisible } }),
+    inject: () => ({ hooks: { pageVisible }, artwork: { awake, sleeping } }),
   }, Companion))
 }

@@ -57,8 +57,21 @@ export const usageGovernanceSchema = z.object({
   }).strict().optional(),
 }).strict()
 
+/** IANA timezone accepted by the runtime; numeric offsets are not calendar-zone identities. */
+export const calendarTimeZoneSchema = z.string().min(1).refine((timeZone) => {
+  if (/^[+-]/.test(timeZone)) return false
+  try {
+    new Intl.DateTimeFormat('en', { timeZone })
+    return true
+  } catch (error) {
+    if (error instanceof RangeError) return false
+    throw error
+  }
+}, 'Calendar timezone must be a valid IANA timezone')
+
 /** Strict load-time validation; unknown routes never acquire inferred prices. */
 export const usageConfigSchema = z.object({
+  calendarTimeZone: calendarTimeZoneSchema.optional(),
   pricing: z.object({
     currency: z.string().regex(/^[A-Z]{3}$/, 'Currency must be an uppercase ISO 4217 code'),
     routes: z.record(z.string().regex(/^[^/]+\/.+$/, 'Price key must be provider/model'), routePriceSchema),

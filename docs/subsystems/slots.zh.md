@@ -113,6 +113,7 @@ root
 │  ├─ sidebar.brand.mark
 │  ├─ sidebar.brand.name
 │  ├─ sidebar.footer.action
+│  │  └─ companion.usage.panel
 │  ├─ sidebar.workspaces
 │  │  └─ sidebar.workspaces.directoryFlow
 │  └─ sidebar.settings

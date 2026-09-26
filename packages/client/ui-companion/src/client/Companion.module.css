@@ -41,6 +41,13 @@
   flex: none;
 }
 
+.unavailable {
+  max-width: 240px;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .dragHelp {
   position: absolute;
   width: 1px;
@@ -48,6 +55,59 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.menu {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+}
+
+.menuButton {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.menuButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.menuButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.root[data-compact] .menu {
+  position: static;
+}
+
+.root[data-compact] .menuButton {
+  width: 44px;
+  height: 44px;
+}
+
+.root[data-compact] .stage {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+}
+
+.root[data-floating][data-compact] .stage {
+  flex-direction: row;
+}
+
+@media (max-width: 767px) {
+  .root[data-compact] .stage {
+    flex-direction: row;
+  }
 }
 
 .stage {
@@ -188,8 +248,13 @@
   }
 
   .root:not([data-compact]) .stage {
-    width: 44px;
-    flex: 0 0 44px;
+    width: 80px;
+    flex: 0 0 80px;
+    display: flex;
+  }
+
+  .root .menu {
+    position: static;
   }
 
   .character {

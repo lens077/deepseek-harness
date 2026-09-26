@@ -46,6 +46,14 @@ This tested configuration uses example prices per million tokens and example cum
 
 Route keys match `provider/model` exactly. Exact routes are preferred; a unique model-only match may cover provider suffixes such as `-high` and `-thinking`, while ambiguous or unknown models remain unpriced. Each route declares uncached input, cache-read, cache-write, and output prices. Optional `tiers` multiply all four rates during non-overlapping UTC weekday/hour windows; the base rate applies otherwise. The Web bundle includes a small explicit USD seed for the current Claude, GPT, and DeepSeek routes and no monetary budget. It also enables `assumeMissingCacheBucketsZero`, matching TokenTracker's treatment of absent optional cache rates. Unknown routes remain unpriced instead of being guessed. The seed follows the [TokenTracker curated pricing approach](https://github.com/xiufengsun/TokenTracker/tree/main/src/lib/pricing): curated exact entries take precedence, while unresolved models remain unpriced. Replace or extend the table through the profile patch. The [config catalog](../../../docs/config-catalog.md) describes the fields.
 
+### Calendar usage
+
+Optional `calendarTimeZone` selects the IANA timezone used for dated own-request accounting; omission selects `UTC`, and invalid zones or numeric offsets fail validation. A deployment using China Standard Time sets `calendarTimeZone: Asia/Shanghai`. Pricing tiers still use UTC hours, independently of this calendar setting.
+
+The optional `usageLedger.calendar` contains `timeZone` and ascending `days`. Each day carries a Gregorian `YYYY-MM-DD`, token buckets, reporting requests, incomplete/unreported/unpriced counts, and optional costs in the ledger's currency; the [public types](src/types.ts) define the fields. Assistant settlements use the settlement event time, compaction requests use the summary event time, and unresolved closed steps disclose missing usage on their closing event date. Each retry settlement and compaction request counts once; fork-inherited events contribute nothing. Cumulative accounting keeps its existing meaning.
+
+The [companion preview](../../client/ui-chat/README.md#session-usage-and-cost) selects today, Monday-based week, or month from these dates. An absent calendar means unavailable dated history, not zero usage. Cold snapshots may remain absent or belong to a different timezone; the preview discloses them without querying backend totals or backfilling history.
+
 ### Interpret the figures
 
 Billing input is uncached input plus cache reads plus cache writes. Reasoning tokens are an observed subset of output and are never added or priced separately. Each durable Assistant settlement contributes one request's final sample; an embedded sample is not added to the assembled sample. Failed attempts and reported compaction-summary requests contribute their own traffic. Compaction summaries add requests, not logical agent steps.
@@ -70,7 +78,7 @@ The Web usage drawer aggregates this session, this session plus its subagent des
 
 Both values are synchronous projection units driven by the Session projection registry. Unloading the plugin removes both registrations. [The ledger fold](src/usage-ledger.ts) reads the immutable inherited-prefix count at initialization, retains inherited request context for attribution, and accumulates only Session-owned work. Header and system changes do not publish a new client value until accounting changes.
 
-The ledger stores per-route UTC hour-of-week token buckets, tool aggregates, and bounded lifecycle state rather than a per-step timeline. It keeps hashes of active system nodes and tool schemas, not their content. Prices are evaluated when producing the view, so a restored token checkpoint uses the currently configured table. Recurring hour buckets do not preserve historical price effective dates. [Configuration validation and pricing](src/usage-config.ts) are independent of the [existing lifecycle fold](src/projection.ts).
+The ledger stores per-route UTC hour-of-week token buckets for cumulative and dated totals, tool aggregates, and bounded lifecycle state rather than a per-step timeline. Calendar storage grows with contributing dates. Ledger checkpoints use `stateVersion: 3` and retain the accounting timezone; a checkpoint from another zone is rejected so source-event replay can rebuild the dates. It keeps hashes of active system nodes and tool schemas, not their content. Prices are evaluated when producing the view, so a restored token checkpoint uses the currently configured table. Recurring hour buckets do not preserve historical price effective dates. [Configuration validation and pricing](src/usage-config.ts) are independent of the [existing lifecycle fold](src/projection.ts).
 
 The registry validates persisted state and wire output. Wire validation rejects cost without currency, route cost on incomplete buckets, and totals that omit unknown or unpriced attempts. [Projection tests](tests/usage-ledger.spec.ts) and [real Loader composition](tests/loader-composition.spec.ts) pin ownership, pricing, incomplete reports, replay, and configuration. No runtime invariant companion is published: there is no independently mutable second observation to compare with this pure fold.
 
@@ -84,6 +92,7 @@ The registry validates persisted state and wire output. Wire validation rejects 
 - [Session projections](../../../docs/subsystems/session-projection.md) — delivery, persisted checkpoints, and cold snapshots.
 - [Web chat](../../client/ui-chat/README.md) — usage controls and scope selection.
 - [Usage governance decision](../../../.agents/notes/implemented/feature/2026-09-12-own-request-usage-governance.md) — accounting ownership and deliberate limits.
+- [Calendar-usage decision](../../../.agents/notes/implemented/feature/2026-09-26-companion-calendar-usage.md) — dated own requests and compact previews.
 
 -----
 

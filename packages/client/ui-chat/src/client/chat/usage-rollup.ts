@@ -52,18 +52,19 @@ export function usageInput(usage: UsageBuckets): number {
  * Select an audience from the list and discovered catalogs, deduplicating identities.
  * Current-session projection data supersedes its possibly stale list hint.
  * @param scope - requested audience.
- * @param currentId - selected Session.
+ * @param currentId - selected Session, absent for global usage without a selection.
  * @param current - latest selected Session ledger, if served.
  * @param list - framework Session list and parent-addressed catalogs.
  * @returns observed totals with explicit incompleteness and currency information.
  */
 export function rollupUsage(
   scope: UsageScope,
-  currentId: SessionId,
+  currentId: SessionId | undefined,
   current: UsageLedgerProjection | undefined,
   list: SessionListState,
 ): UsageRollup {
-  const ids = new Set<SessionId>([...list.ids, currentId])
+  const ids = new Set<SessionId>(list.ids)
+  if (currentId !== undefined) ids.add(currentId)
   const children = new Map<SessionId, Set<SessionId>>()
   const addChild = (parent: SessionId, child: SessionId): void => {
     ids.add(child)
@@ -78,7 +79,7 @@ export function rollupUsage(
     for (const row of catalog.entries) addChild(parent as SessionId, row.id)
   }
   const selected = new Set<SessionId>()
-  const pending = scope === 'all' ? [...ids] : [currentId]
+  const pending = scope === 'all' ? [...ids] : currentId === undefined ? [] : [currentId]
   for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
     if (selected.has(id)) continue
     selected.add(id)

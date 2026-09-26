@@ -1,0 +1,13 @@
+.panel {
+  position: fixed;
+  z-index: 60;
+  width: min(312px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 16px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-elevation-prominent);
+}

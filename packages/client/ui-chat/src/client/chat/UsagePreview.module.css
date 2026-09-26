@@ -1,0 +1,88 @@
+.content {
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.header strong {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.close {
+  width: 28px;
+  padding: 0;
+}
+
+.periods {
+  display: flex;
+  gap: 4px;
+}
+
+.periods button {
+  flex: 1;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1.1fr .8fr 1.1fr;
+  gap: 8px;
+  margin: 18px 0 12px;
+}
+
+.metrics dt {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.metrics dd {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.metrics div:last-child dd {
+  font-size: 14px;
+}
+
+.status {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.status p {
+  margin: 3px 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.footer button {
+  flex: none;
+  font-size: 11px;
+}

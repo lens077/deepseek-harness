@@ -85,6 +85,7 @@ describe('real Loader composition', () => {
       "- name: '@deepseek-ai/dsh-session-projection'",
       "- name: '@deepseek-ai/dsh-session-stats'",
       '  config:',
+      '    calendarTimeZone: Asia/Shanghai',
       '    pricing:',
       '      currency: USD',
       '      routes:',
@@ -104,6 +105,7 @@ describe('real Loader composition', () => {
     expect(loaded.sessionProjections.snapshot(session).values.usageLedger).toMatchObject({
       estimatedCost: 4, currency: 'USD', models: [{ requests: 1, steps: 1 }],
       governance: { budgets: { session: 5, warningRatio: 0.8 } },
+      calendar: { timeZone: 'Asia/Shanghai', days: [{ requests: 1, estimatedCost: 4 }] },
     })
   })
 

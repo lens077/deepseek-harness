@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-让蓝色小鲸鱼停靠在导航旁，或将它移动到自行选择的位置。点击角色可以打招呼、让它休息或叫醒它；需要减少干扰时，可以暂停动效或收起角色。手机和折叠导航栏显示静止、可点击的角色。这项可选装饰不调用模型，页面重新加载后会重置状态。
+让蓝色小鲸鱼停靠在导航旁，或将它移动到自行选择的位置。点击角色可以打招呼、让它休息或叫醒它；需要减少干扰时，可以暂停动效或收起角色。打开**用量速览**，无需离开对话即可查看今天、本周或本月的用量。手机和折叠导航栏显示静止、可点击的角色，并提供同一用量入口。小助手不调用模型，页面重新加载后会重置交互状态。
 
 ## 目录
 
@@ -39,6 +39,12 @@ kind: "package-reference"
 
 高度不超过 600px 的窗口使用静止的矮行，并保留动效与收起控件。小助手初始停靠在桌面端设置入口上方预留的 `sidebar.footer.action` 空间。侧边栏在手机顶部栏渲染同一 slot，并传入 `wide: false`。停靠位置不会遮挡对话或输入区。
 
+### 用量速览
+
+独立的**用量速览**按钮直接打开紧凑的非模态浮层，提供**今天**、**本周**和**本月**选项 pill。浮层显示已发现会话的 token、上报用量的请求数和估算费用，无需选中会话。预览展示记账时区与日期范围；历史缺失和用量不完整会明确披露，不会变成虚构的零值或完整费用。
+
+在浮层外操作指针、按 Escape 或点击关闭均可收起浮层，不会使应用背景 inert，也不会限制 Tab 焦点范围。浮层宽高适配视口，在桌面与手机布局之间切换时保留已打开的视图。**查看详情**以「全部会话」范围打开 [Chat 拥有的用量抽屉](../ui-chat/README.zh.md#session-usage-and-cost)；选中会话后也可选择「本会话」和「会话树」。关闭抽屉后，焦点回到持续存在的用量按钮。未加载用量提供方时，预览会说明面板不可用，而不是显示虚构的总量。
+
 ### 移动与归位
 
 使用鼠标主键、笔或触摸拖动角色。移动至少 6 个 CSS 像素后，角色脱离停靠区域，悬浮在相对于视口的位置；结束拖动不会触发角色的点击动作。普通点击仍用于状态循环或恢复展开。角色获得焦点时，方向键每次移动 16 个 CSS 像素，**Home** 键将角色放回导航；这些快捷键不处理与 Alt、Ctrl 或 Meta 的组合。
@@ -54,6 +60,8 @@ kind: "package-reference"
 <summary>实现细节 — 点击展开</summary>
 
 [浏览器入口](src/client/index.ts)拥有一个[交互状态存储](src/client/store.ts)、本地化文案和页面可见性观测。感知 slot 声明的注册方式让侧边栏负责布局尺寸，[组件](src/client/Companion.tsx)负责渲染控件。插件 dispose（资源释放）会移除其注册内容、语言字典和可见性监听器。
+
+小助手声明 `companion.usage.panel` 子 slot，其基数为 `single`、作用域为 `session-maybe`。[Owner props](src/client/index.ts)传递所需日历周期或详细范围、范围切换回调与关闭回调。小助手仅在用量视图打开时渲染该 slot，并负责锚定浮层。[ui-chat](../ui-chat/README.zh.md#session-usage-and-cost)提供私有适配器，负责日历汇总、预览内容、详细抽屉和警告；两个功能包都不导入对方的运行时值。
 
 [打包配置](tsdown.config.ts)将 [awake.webp](src/client/assets/awake.webp) 和 [sleeping.webp](src/client/assets/sleeping.webp) 嵌入为 data URL。渲染不会向外部请求图片。
 
@@ -72,6 +80,7 @@ kind: "package-reference"
 - [Web-app 组合包](../../bundle/web-app/README.zh.md) — 部署组合配置。
 - [休息小助手 Agent Note](../../../.agents/notes/implemented/feature/2026-09-26-rest-companion.zh.md) — 理由与备选方案。
 - [可拖动小助手 Agent Note](../../../.agents/notes/implemented/feature/2026-09-26-draggable-rest-companion.zh.md) — 用户控制位置与归位。
+- [日历用量 Agent Note](../../../.agents/notes/implemented/feature/2026-09-26-companion-calendar-usage.zh.md) — 直接预览、日历记账与详细抽屉所有权。
 
 -----
 
@@ -88,9 +97,10 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-小助手仅提供本地装饰。
+角色仍为本地装饰；用量是由其提供方拥有的只读视图。
 
-- 不提供声音、计时器、通知、会话状态集成或持久化偏好存储。
+- 不提供声音、休息计时器、通知、随会话状态自动变化的行为或持久化偏好存储。
+- 用量需要面板提供方；缺少提供方时显示不可用提示，不显示用量总计。提供方用于日期更新的分钟时钟仅在日历预览挂载时运行。
 - 内置图片由用户提供的蓝色 Q 版女仆鲸鱼参考图在本地处理而成。该来源说明不代表已取得上游角色授权；再分发前需要单独核实相关权利。
 
 <a id="dev-note"></a>

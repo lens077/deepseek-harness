@@ -9,6 +9,7 @@
     { "path": "../ui-primitives" },
     { "path": "../ui-renderer" },
     { "path": "../ui-sidebar" },
+    { "path": "../ui-session" },
     { "path": "../ui-slots" }
   ]
 }

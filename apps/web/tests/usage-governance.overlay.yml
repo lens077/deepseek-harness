@@ -1,3 +1,6 @@
+- id: ui-companion
+  disabled: false
+
 # Deterministic prices and advisory budgets for the usage-governance browser fixture.
 # This row replaces the shipped session-stats config, so every active field is
 # repeated here instead of inheriting a partial configuration.

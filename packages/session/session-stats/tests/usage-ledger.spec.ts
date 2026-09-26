@@ -1,5 +1,7 @@
 /** Request-attempt, fork ownership, billing completeness, and persisted replay regressions. */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { createAssistantMessage, createSystemMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
@@ -265,6 +267,143 @@ describe('usage ledger', () => {
     expect(usageLedgerViewSchema.safeParse({ ...view, unreportedAttempts: 1 }).success).toBe(false)
     expect(usageLedgerViewSchema.safeParse({ ...view, models: [{ ...view.models[0], estimatedCost: undefined }] }).success).toBe(false)
     expect(usageLedgerViewSchema.safeParse({ ...view, models: [{ ...view.models[0], incompleteRequests: 1 }] }).success).toBe(false)
+  })
+})
+
+describe('usage calendar', () => {
+  const dated = (event: SessionEvent, time: string): SessionEvent => ({ ...event, time: Date.parse(time) })
+
+  it('uses settlement dates in the configured zone rather than creation or latest activity dates', () => {
+    const { view } = run([
+      dated(message(0), '2026-09-06T15:59:59Z'),
+      dated(message(1), '2026-09-06T16:00:00Z'),
+      dated(message(2), '2026-10-06T16:00:00Z'),
+    ], { ...CONFIG, calendarTimeZone: 'Asia/Shanghai' })
+    expect(view.calendar).toMatchObject({ timeZone: 'Asia/Shanghai', days: [
+      { date: '2026-09-06', requests: 1, uncachedInputTokens: 100, cacheReadTokens: 200, cacheWriteTokens: 10, outputTokens: 20 },
+      { date: '2026-09-07', requests: 1 },
+      { date: '2026-10-07', requests: 1 },
+    ] })
+  })
+
+  it.each([
+    ['Asia/Kathmandu', '2026-09-06T18:14:59Z', '2026-09-06T18:15:00Z', '2026-09-06', '2026-09-07'],
+    ['America/New_York', '2026-03-08T04:59:59Z', '2026-03-09T03:59:59Z', '2026-03-07', '2026-03-08'],
+  ])('uses local calendar boundaries in %s', (calendarTimeZone, before, after, firstDate, secondDate) => {
+    const { view } = run([dated(message(0), before), dated(message(1), after)], { ...CONFIG, calendarTimeZone })
+    expect(view.calendar?.days.map(day => day.date)).toEqual([firstDate, secondDate])
+  })
+
+  it('retains original UTC price-tier hours within a local calendar date and reprices checkpoints', () => {
+    const config: UsageStatsConfig = { calendarTimeZone: 'Asia/Shanghai', pricing: { currency: 'USD', routes: {
+      'test/m': { input: 1, cacheRead: 0.1, cacheWrite: 2, output: 3,
+        tiers: [{ multiplier: 0.5, windows: [{ weekdaysUtc: [0], hoursUtc: [16, 17] }] }] },
+    } } }
+    const { state, view } = run([
+      dated(message(0), '2026-09-06T16:00:00Z'), dated(message(1), '2026-09-06T17:00:00Z'),
+    ], config)
+    expect(view.calendar?.days).toMatchObject([{ date: '2026-09-07', requests: 2, incompleteRequests: 0, unreportedAttempts: 0, unpricedRequests: 0 }])
+    expect(view.calendar?.days[0]?.estimatedCost).toBeCloseTo(0.0003)
+    const repriced = createUsageLedgerProjection({ ...CONFIG, calendarTimeZone: 'Asia/Shanghai' })
+    const restored = repriced.stateSchema.parse(JSON.parse(JSON.stringify(state)))
+    expect(repriced.wire.view(restored).calendar?.days[0]?.estimatedCost).toBeCloseTo(0.0004)
+    expect(createUsageLedgerProjection(CONFIG).stateSchema.safeParse(state).success).toBe(false)
+  })
+
+  it('dates failed attempts and summaries, excludes inherited spend, and keeps missing usage local', () => {
+    const { view } = run([
+      header(0), dated(message(1), '2026-09-01T12:00:00Z'),
+      start(2), dated(attempt(3, USAGE), '2026-09-07T12:00:00Z'),
+      dated(at(4, 'compaction/summary', { provider: 'test', model: 'm', usage: USAGE }), '2026-09-08T12:00:00Z'),
+      dated(attempt(5), '2026-09-08T12:00:01Z'), end(6),
+      start(7, 2), dated(end(8, 2), '2026-09-09T12:00:00Z'),
+      start(9, 3), dated(at(10, 'turn/end', { turn: 1, reason: { kind: 'interrupted' } }), '2026-09-10T12:00:00Z'),
+    ], CONFIG, 2)
+    expect(view.calendar?.days).toMatchObject([
+      { date: '2026-09-07', requests: 1, unreportedAttempts: 0, estimatedCost: 0.0002 },
+      { date: '2026-09-08', requests: 1, unreportedAttempts: 1, observedCost: 0.0002 },
+      { date: '2026-09-09', requests: 0, unreportedAttempts: 1 },
+      { date: '2026-09-10', requests: 0, unreportedAttempts: 1 },
+    ])
+    expect(view.calendar?.days.slice(1).every(day => day.estimatedCost === undefined)).toBe(true)
+    expect(view.unreportedAttempts).toBe(3)
+  })
+
+  it('keeps incomplete and unpriced routes from hiding complete costs on other dates', () => {
+    const { view } = run([
+      dated(message(0), '2026-09-01T12:00:00Z'),
+      dated(message(1, { inputTokens: 10, outputTokens: 1 }), '2026-09-02T12:00:00Z'),
+      dated(message(2, USAGE, 'unknown'), '2026-09-03T12:00:00Z'),
+      dated(at(3, 'compaction/summary', { provider: 'test', model: 'm', llmStreamCall: true }), '2026-09-04T12:00:00Z'),
+    ])
+    expect(view.calendar?.days).toMatchObject([
+      { date: '2026-09-01', requests: 1, unpricedRequests: 0, estimatedCost: 0.0002 },
+      { date: '2026-09-02', requests: 1, incompleteRequests: 1, unpricedRequests: 1 },
+      { date: '2026-09-03', requests: 1, incompleteRequests: 0, unpricedRequests: 1 },
+      { date: '2026-09-04', requests: 0, unreportedAttempts: 1 },
+    ])
+    expect(view.calendar?.days.slice(1).every(day => day.estimatedCost === undefined)).toBe(true)
+    expect(run([], {}).view.calendar).toEqual({ timeZone: 'UTC', days: [] })
+    expect(run([message(0)], {}).view.calendar?.days[0]).toMatchObject({ unpricedRequests: 1 })
+  })
+
+  it('omits old checkpoint hints and rebuilds calendar state by full historical replay', async () => {
+    const context = new Context()
+    try {
+      await context.plugin(SessionProjectionRegistry)
+      const events = [header(), dated(message(1), '2026-09-07T23:00:00Z')]
+      const { definition, state } = run(events)
+      context.sessionProjections.register(definition)
+      const legacy = { usageLedger: { ver: 2, seq: events[1]!.seq, val: state } }
+      expect(context.sessionProjections.viewCheckpoint(legacy)).toEqual({})
+      const restored = context.sessionProjections.restore(legacy, events, SessionLogOffset(0), META, SessionLogOffset(0))
+      expect(restored.snapshot.values.usageLedger?.calendar).toMatchObject({ timeZone: 'UTC', days: [{ date: '2026-09-07', requests: 1 }] })
+      const differentZone = run(events, { ...CONFIG, calendarTimeZone: 'Asia/Shanghai' }).state
+      expect(context.sessionProjections.viewCheckpoint({ usageLedger: { ver: 3, seq: events[1]!.seq, val: differentZone } })).toEqual({})
+    } finally {
+      await context.fiber.dispose()
+    }
+  })
+
+  it('rejects a complete daily cost when daily accounting is incomplete', () => {
+    const { view } = run([message(0)])
+    const day = view.calendar!.days[0]!
+    for (const incomplete of [{ incompleteRequests: 1 }, { unreportedAttempts: 1 }, { unpricedRequests: 1 }, { requests: 0 }]) {
+      expect(usageLedgerViewSchema.safeParse({ ...view, calendar: {
+        timeZone: 'UTC', days: [{ ...day, ...incomplete }],
+      } }).success).toBe(false)
+    }
+    const unpriced = run([message(0)], {}).view
+    expect(usageLedgerViewSchema.safeParse({ ...unpriced, calendar: {
+      timeZone: 'UTC', days: [{ ...unpriced.calendar!.days[0], observedCost: 1 }],
+    } }).success).toBe(false)
+  })
+
+  it.each(['+08:00', '-05:30'])('rejects numeric timezone %s rather than treating an offset as an IANA zone', (calendarTimeZone) => {
+    const result = usageConfigSchema.safeParse({ calendarTimeZone })
+    expect(result.success).toBe(false)
+    if (result.success) throw new Error('Expected numeric timezone rejection')
+    expect(result.error.issues).toMatchObject([{ path: ['calendarTimeZone'], message: 'Calendar timezone must be a valid IANA timezone' }])
+  })
+
+  it('propagates an unexpected Intl failure rather than misreporting an invalid timezone', () => {
+    const failure = new Error('Intl formatter unavailable')
+    const formatter = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function () { throw failure })
+    try {
+      expect(() => usageConfigSchema.safeParse({ calendarTimeZone: 'UTC' })).toThrow(failure)
+    } finally {
+      formatter.mockRestore()
+    }
+    expect(usageConfigSchema.safeParse({ calendarTimeZone: 'UTC' }).success).toBe(true)
+  })
+
+  it('validates deployment zones and keeps old wire snapshots readable without invented calendar rows', () => {
+    expect(usageConfigSchema.safeParse({ calendarTimeZone: 'Asia/Shanghai' }).success).toBe(true)
+    expect(usageConfigSchema.safeParse({ calendarTimeZone: 'invalid/time-zone' }).success).toBe(false)
+    const { calendar: _calendar, ...legacy } = run([message(0)]).view
+    expect(usageLedgerViewSchema.safeParse(legacy).success).toBe(true)
+    const { definition } = run([])
+    expect(definition.stateVersion).toBe(3)
   })
 })
 

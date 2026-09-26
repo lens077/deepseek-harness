@@ -72,6 +72,9 @@
       "path": "../ui-approval"
     },
     {
+      "path": "../ui-companion"
+    },
+    {
       "path": "../ui-conversation"
     },
     {

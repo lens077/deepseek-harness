@@ -1,6 +1,12 @@
 /** Companion copy; the Chinese dictionary owns the key set. */
 export const zh = {
   'name': '休息小助手',
+  'menu': '用量速览',
+  'usage.session': '本会话用量',
+  'usage.tree': '会话树用量',
+  'usage.all': '全部会话用量',
+  'usage.unavailable': '当前界面未加载用量面板。',
+  'close': '关闭',
   'hint.idle': '我在这里陪你',
   'hint.greeting': '辛苦啦，一起歇一会儿？',
   'hint.sleeping': '小憩中，点我叫醒',
@@ -23,6 +29,12 @@ export type CompanionKey = keyof typeof zh
 /** English copy mirrors every Chinese key. */
 export const en: Record<CompanionKey, string> = {
   'name': 'Rest companion',
+  'menu': 'Usage overview',
+  'usage.session': 'This session usage',
+  'usage.tree': 'Session tree usage',
+  'usage.all': 'All sessions usage',
+  'usage.unavailable': 'The usage panel is not loaded in this interface.',
+  'close': 'Close',
   'hint.idle': 'Here to keep you company',
   'hint.greeting': 'Good work. Shall we take a break?',
   'hint.sleeping': 'Taking a nap. Tap to wake me',

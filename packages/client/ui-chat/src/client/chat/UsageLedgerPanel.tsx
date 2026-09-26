@@ -64,7 +64,7 @@ export function UsageLedgerPill(props: LedgerPillProps) {
         {cacheLabel !== null && <span className={css.triggerDetail}>{cacheLabel}</span>}
         {average !== null && <span className={css.triggerWide}>{average}</span>}
       </button>
-      {open && <UsageLedgerDrawer {...props} trigger={trigger} />}
+      {open && <UsageLedgerDrawer {...props} initialScope="session" onClose={() => { setOpen(false) }} trigger={trigger} />}
     </span>
   )
 }
@@ -85,13 +85,25 @@ function Finding({ finding, t }: { finding: UsageFinding; t: Translate }) {
   )
 }
 
-function UsageLedgerDrawer({ ledger, sessionId, useSessions, t, setOpen, trigger }: LedgerPillProps & {
+/** Inputs shared by the composer pill and companion usage entry. */
+export type UsageLedgerDrawerProps = Pick<StatsPillsProps, 'useSessions' | 't'> & {
+  sessionId: StatsPillsProps['sessionId'] | undefined
+  ledger: UsageLedgerProjection | undefined
+  initialScope: UsageScope
+  onClose: () => void
   trigger: RefObject<HTMLButtonElement>
-}) {
+}
+
+/** Render the existing accounting drawer from either entry point.
+ * @param props - selected projection, requested audience and close/focus controls.
+ * @returns the shared usage drawer with explicit incomplete-data disclosure.
+ */
+export function UsageLedgerDrawer({ ledger, sessionId, useSessions, t, onClose, trigger, initialScope }: UsageLedgerDrawerProps) {
   const list = useSessions(value => value)
-  const [scope, setScope] = useState<UsageScope>('session')
+  const [requestedScope, setScope] = useState<UsageScope>(initialScope)
+  const scope = sessionId === undefined ? 'all' : requestedScope
   const totals = useMemo(() => rollupUsage(scope, sessionId, ledger, list), [scope, sessionId, ledger, list])
-  const advice = useMemo(() => usageAdvice(totals, scope, ledger.governance), [totals, scope, ledger.governance])
+  const advice = useMemo(() => usageAdvice(totals, scope, ledger?.governance), [totals, scope, ledger?.governance])
   const content = useUsageDialog(trigger)
   const tokens = (n: number): string => t('message.turnUsage.count', { count: formatExactTokens(n, t) })
   const duration = (ms: number): string => formatDuration(ms, t)
@@ -99,17 +111,18 @@ function UsageLedgerDrawer({ ledger, sessionId, useSessions, t, setOpen, trigger
   const cache = formatCacheHitPercent(totals.cacheReadTokens, input)
   const displayCost = totals.estimatedCost ?? totals.observedCost
   return (
-    <Modal open headless title={t('usage.title')} onClose={() => { setOpen(false) }} className={css.drawer ?? ''}>
+    <Modal open headless title={t('usage.title')} onClose={onClose} className={css.drawer ?? ''}>
       <div ref={content} className={css.content} data-usage-panel data-usage-scope={scope}>
         <header className={css.header}>
           <h2>{t('usage.title')}</h2>
-          <Button className={css.close} aria-label={t('usage.close')} onClick={() => { setOpen(false) }}>
+          <Button className={css.close} aria-label={t('usage.close')} onClick={onClose}>
             <IconCloseOutline16 />
           </Button>
         </header>
         <div className={css.scopes} role="group" aria-label={t('usage.scope')}>
           {(['session', 'tree', 'all'] as const).map(value => (
-            <Pill key={value} active={scope === value} aria-pressed={scope === value} onClick={() => { setScope(value) }}>
+            <Pill key={value} active={scope === value} aria-pressed={scope === value}
+              disabled={sessionId === undefined && value !== 'all'} onClick={() => { setScope(value) }}>
               {t(`usage.scope.${value}`)}
             </Pill>
           ))}

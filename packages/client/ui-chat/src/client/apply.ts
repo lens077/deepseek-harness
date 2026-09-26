@@ -27,6 +27,7 @@ import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
 import { ChatView } from './chat/ChatView.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
+import { CompanionUsage } from './chat/CompanionUsage.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { en, NS, zh } from './locale.ts'
 import {
@@ -281,6 +282,10 @@ export function apply(ctx: Context): void {
     }, ChatView)
     return disposeView
   })
+
+  ctx.slots.inject('companion.usage.panel', () => ctx.slots.register({
+    name: 'companion.usage.panel', locale: NS,
+  }, CompanionUsage))
 
   ctx.slots.inject('conversation.composer.dock', () =>
     ctx.slots.register({

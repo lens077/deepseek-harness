@@ -1,0 +1,23 @@
+- dialog "Usage overview":
+  - banner:
+    - strong: Usage overview
+    - button "Close usage panel":
+      - img
+  - group "Usage scope":
+    - button "Today"
+    - button "This week"
+    - button "This month" [pressed]
+  - term: Tokens
+  - definition: "545"
+  - term: Requests
+  - definition: "3"
+  - term: Est. cost
+  - definition: —
+  - status:
+    - paragraph: Partial data · 3/4 sessions
+    - paragraph: Includes unreported or incomplete billing inputs.
+    - paragraph: 2026-07-01 — 2026-07-25
+    - paragraph: UTC · Week starts Monday
+  - contentinfo:
+    - text: Reported usage from loaded sessions, not an invoice.
+    - button "View details"
