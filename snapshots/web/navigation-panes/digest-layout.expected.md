@@ -1,0 +1,6 @@
+- Sections, results shown: content-sized card; body fits; actions follow content and remain inside.
+- Sections, short window: body scrolls; all six actions remain inside the card.
+- Sections, results hidden: content-sized card; body fits; actions follow content and remain inside.
+- Board, results shown: content-sized card; body fits; actions follow content and remain inside.
+- Board, short window: body scrolls; all six actions remain inside the card.
+- Board, results hidden: content-sized card; body fits; actions follow content and remain inside.

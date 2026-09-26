@@ -14,7 +14,7 @@ Status: implemented
 
 ## 决定
 
-**卡片上限。** `DigestPanel.module.css` 中的 `.body` 是尺寸查询容器（`container-type: size`；这个盒子的尺寸由 flex 列而非内容决定）。`.card` 采用 `box-sizing: border-box`，`max-height: calc(100cqh - 36px)`——主体可见内容高度减去网格上方的分区标签。`InboxCard` 渲染三个 flex 子元素：固定的头部（`.cardHead`，`flex: none`）、滚动的中部（`.cardBody`，`flex: 1 1 auto; min-height: 0; overflow-y: auto`，带 `data-card-body` 与 l2 滚动条令牌，因为它在 layer-1 卡片表面上滚动）、固定的操作行（`.cardActions`，`flex: none`）。网格行里被拉伸的卡片仍把操作行留在底部，因为中部吸收了多余高度。
+**卡片上限。** `DigestPanel.module.css` 中的 `.body` 是尺寸查询容器（`container-type: size`；这个盒子的尺寸由 flex 列而非内容决定）。`.card` 采用 `box-sizing: border-box`，`max-height: max(240px, calc(100cqh - 36px))`——主体可见内容高度减去网格上方的分区标签，并以 240px 作为上限下界以适应短窗口。`InboxCard` 渲染三个 flex 子元素：固定的头部（`.cardHead`，`flex: none`）、滚动的中部（`.cardBody`，`flex: 1 1 auto; min-height: 0; overflow-y: auto`，带 `data-card-body` 与 l2 滚动条令牌，因为它在 layer-1 卡片表面上滚动）、固定的操作行（`.cardActions`，`flex: none`）。[按内容适配行高决策](2026-09-26-digest-content-sized-card-rows.zh.md)负责行高并移除正文独立上限；中部吸收同一行卡片的内容高度差，使操作行保持对齐。
 
 **侧栏揭示。** `WorkspaceBrowser.tsx` 中的 `SessionTree` 把列表 `ready` 之后 `current` 的变化视为一次导航并记录为 `pendingReveal`；加载时恢复的会话只用来初始化引用，不触发揭示。第二个 effect 每次渲染只解开一层，因为折叠的分组不派生任何行，截断与分支只有在分组展开后才能读到：它把分组加入临时的 `revealedGroups` 列表（[折叠持久化](2026-09-18-workspace-fold-persistence.zh.md)），当 `locateSession`（`tree.ts`）把该行定位到 `collapsedLimit` 或之后时把分组加入临时的全部展开列表，从 `collapsedBranches` 中移除该行的祖先，最后用 `block: 'nearest'` 把该行（每个会话行都带 `data-session-id`）滚动到可见区域。每一步展开都有守卫，树无法显示的行会静止下来而不会循环。
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-03-inbox-card-cap-and-sidebar-reveal.md
-2026-09-03-inbox-card-cap-and-sidebar-reveal.md: c22948a4be9f212a8c87791ffee332fbe2430483
-2026-09-03-inbox-card-cap-and-sidebar-reveal.zh.md: ceb352c20b7de9769e80b8433a72fda02fd580a7
+2026-09-03-inbox-card-cap-and-sidebar-reveal.md: 7ca1a89bd7cdcf7aa720fdea12faf79e884f5e4f
+2026-09-03-inbox-card-cap-and-sidebar-reveal.zh.md: 611e14250acbc968a76a51b203fba42a31ba7b48

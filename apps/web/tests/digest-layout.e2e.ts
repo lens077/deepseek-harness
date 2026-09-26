@@ -80,12 +80,19 @@ interface Box { x: number; y: number; width: number; height: number }
 interface Geometry {
   width: number
   body: Box
-  bottomInset: number
   section: Box
   legend: Box
   legendOutside: boolean
   overflow: number
-  cards: { box: Box; actions: Box; questionHeight: number; questionLineHeight: number }[]
+  cards: {
+    box: Box
+    content: Box
+    contentHeight: number
+    scrollHeight: number
+    actions: Box
+    questionHeight: number
+    questionLineHeight: number
+  }[]
 }
 
 /** Measures actual painted boxes; no mocked rectangles or CSS-class expectations. */
@@ -101,12 +108,14 @@ async function geometry(panel: Locator): Promise<Geometry> {
     const style = getComputedStyle(body)
     return {
       width: body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-      body: box(body), bottomInset: parseFloat(style.paddingBottom), section: box(section), legend: box(legend),
+      body: box(body), section: box(section), legend: box(legend),
       legendOutside: !body.contains(legend), overflow: document.documentElement.scrollWidth - innerWidth,
       cards: [...body.querySelectorAll<HTMLElement>('article[data-session-id]')].map((card) => {
-        const question = card.querySelector<HTMLElement>('[data-card-body] > span[title]')!
+        const content = card.querySelector<HTMLElement>('[data-card-body]')!
+        const question = content.querySelector<HTMLElement>(':scope > span[title]')!
         return {
-          box: box(card), actions: box(card.querySelector('[data-card-actions]')!),
+          box: box(card), content: box(content), contentHeight: content.clientHeight, scrollHeight: content.scrollHeight,
+          actions: box(card.querySelector('[data-card-actions]')!),
           questionHeight: question.getBoundingClientRect().height,
           questionLineHeight: parseFloat(getComputedStyle(question).lineHeight),
         }
@@ -129,12 +138,16 @@ function assertAligned(value: Geometry, columns: number): void {
       expect(Math.abs(card.box.width - first.box.width)).toBeLessThanOrEqual(TOLERANCE)
       expect(card.questionHeight, 'The task question retains at least one full text line').toBeGreaterThanOrEqual(card.questionLineHeight)
       expect(card.actions.y + card.actions.height).toBeLessThanOrEqual(card.box.y + card.box.height + TOLERANCE)
+      expect(card.actions.y - card.content.y - card.content.height, 'Actions follow the card body without a blank gulf').toBeLessThanOrEqual(8)
+    }
+    if (offset > 0) {
+      const previous = value.cards[offset - columns]!
+      expect(row[0]!.box.y - previous.box.y - previous.box.height, 'Rows retain a compact gap instead of sharing viewport height').toBeLessThanOrEqual(12 + TOLERANCE)
     }
   }
   const completeRow = value.cards.slice(0, columns)
   const span = completeRow.at(-1)!.box.x + completeRow.at(-1)!.box.width - first.box.x
   expect(span).toBeGreaterThanOrEqual(value.width - 12)
-  expect(value.section.y + value.section.height).toBeGreaterThanOrEqual(value.body.y + value.body.height - value.bottomInset - TOLERANCE)
   expect(value.legendOutside).toBe(true)
   expect(value.legend.y).toBeGreaterThanOrEqual(value.body.y + value.body.height - TOLERANCE)
 }
@@ -277,7 +290,11 @@ describe('web e2e: populated Digest layout and workspace strip', () => {
     await panel.getByRole('button', { name: 'Board', exact: true }).click()
     expect(await panel.locator('section[data-column]').count()).toBe(1)
     expect(await panel.locator('section[data-column]').getAttribute('data-column')).toBe('running')
-    assertAligned(await geometry(panel), 5)
+    const boardRows = await geometry(panel)
+    assertAligned(boardRows, 5)
+    for (const card of boardRows.cards) {
+      expect(card.scrollHeight, 'A multi-row board scrolls between cards instead of compressing fitting summaries').toBeLessThanOrEqual(card.contentHeight + TOLERANCE)
+    }
     await panel.getByRole('button', { name: 'Sections', exact: true }).click()
 
     const columns = await settingSelect(page, 'Digest panel', 'Cards per row')
@@ -297,7 +314,10 @@ describe('web e2e: populated Digest layout and workspace strip', () => {
     expect(await persisted.inputValue()).toBe('3')
     await persisted.selectOption('1')
     await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
-    assertAligned(await geometry(panel), 1)
+    const singleColumn = await geometry(panel)
+    assertAligned(singleColumn, 1)
+    const rowHeights = singleColumn.cards.map(card => card.box.height)
+    expect(Math.max(...rowHeights) - Math.min(...rowHeights), 'Shorter rows keep their own height instead of inheriting the longest row').toBeGreaterThan(16)
     await page.setViewportSize({ width: 2560, height: 1000 })
     await chooseSetting(page, 'Digest panel', 'Cards per row', '8')
     assertAligned(await geometry(panel), 8)
@@ -339,6 +359,42 @@ describe('web e2e: populated Digest layout and workspace strip', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(TOLERANCE)
     await overview.locator('[data-digest-body]').evaluate((element) => { element.scrollTo({ top: 0 }) })
     await saveFailureShot(page, 'digest-layout-mobile')
+  })
+
+  it('sizes sparse rows to their content and scrolls only when a short viewport bounds the card', async () => {
+    const panel = page.locator('[data-digest-panel]')
+    await page.setViewportSize({ width: 2560, height: 1400 })
+    await chooseSetting(page, 'Digest panel', 'Cards per row', '8')
+    for (const layout of ['Sections', 'Board']) {
+      await panel.getByRole('button', { name: layout, exact: true }).click()
+      const spacious = await geometry(panel)
+      assertAligned(spacious, 8)
+      expect(spacious.cards[0]!.box.height, `${layout}: one row does not expand to the viewport`).toBeLessThan(spacious.body.height / 2)
+      expect(Math.max(...spacious.cards.map(card => card.contentHeight)), 'Recorded work can use more than the former 264px body cap').toBeGreaterThan(264)
+      for (const card of spacious.cards) expect(card.scrollHeight).toBeLessThanOrEqual(card.contentHeight + TOLERANCE)
+
+      await page.setViewportSize({ width: 2560, height: 440 })
+      const short = await geometry(panel)
+      assertAligned(short, 8)
+      expect(short.cards.some(card => card.scrollHeight > card.contentHeight + TOLERANCE)).toBe(true)
+      expect(short.cards[0]!.box.height).toBeLessThan(spacious.cards[0]!.box.height)
+      const first = panel.locator('article').first()
+      const content = first.locator('[data-card-body]')
+      const actionsBefore = await first.locator('[data-card-actions]').boundingBox()
+      await content.evaluate((element) => { element.scrollTop = element.scrollHeight })
+      expect(await content.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+      expect(await first.locator('[data-card-actions]').boundingBox()).toEqual(actionsBefore)
+      await page.setViewportSize({ width: 2560, height: 1400 })
+
+      const filter = page.locator('[data-workspace-filter]')
+      await filter.getByRole('button', { name: WORK[0]!.workspace, exact: false }).click()
+      await expect.poll(() => panel.locator('article').count()).toBe(1)
+      const single = await geometry(panel)
+      expect(single.cards[0]!.box.height, `${layout}: filtering to one Session keeps its intrinsic height`).toBeLessThan(single.body.height / 2)
+      expect(single.cards[0]!.scrollHeight).toBeLessThanOrEqual(single.cards[0]!.contentHeight + TOLERANCE)
+      await filter.getByRole('button', { name: 'All workspaces', exact: true }).click()
+      await expect.poll(() => panel.locator('article').count()).toBe(8)
+    }
   })
 
   it('persists row limits without empty height and separates expansion, drag scrolling, and filtering', async () => {

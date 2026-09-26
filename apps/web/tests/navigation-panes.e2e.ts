@@ -28,6 +28,7 @@ const TRAJECTORY_EXPECTED = join(SNAPSHOT_DIR, 'trajectory.expected.md')
 const SEARCH_EXPECTED = join(SNAPSHOT_DIR, 'search-results.expected.md')
 const TERMINAL_EXPECTED = join(SNAPSHOT_DIR, 'terminal-card.expected.md')
 const DIGEST_EXPECTED = join(SNAPSHOT_DIR, 'digest.expected.md')
+const DIGEST_LAYOUT_EXPECTED = join(SNAPSHOT_DIR, 'digest-layout.expected.md')
 const MOBILE_EXPECTED = join(SNAPSHOT_DIR, 'mobile-navigation.expected.md')
 const MOBILE_PENDING_EXPECTED = join(SNAPSHOT_DIR, 'mobile-pending-list.expected.md')
 const MOBILE_SMALL_EXPECTED = join(SNAPSHOT_DIR, 'mobile-small-layout.expected.md')
@@ -360,6 +361,46 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     const snapshot = (await captureStableAria(page, '[data-digest-panel]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(DIGEST_EXPECTED, snapshot, MODE)
+    const layoutStates: string[] = []
+    for (const layout of ['Sections', 'Board']) {
+      await digest.getByRole('button', { name: layout, exact: true }).click()
+      for (const results of [true, false]) {
+        await digest.getByRole('checkbox', { name: 'Show results', exact: true }).setChecked(results)
+        const measured = await card.evaluate((element) => {
+          const content = element.querySelector<HTMLElement>('[data-card-body]')!
+          const actions = element.querySelector<HTMLElement>('[data-card-actions]')!
+          const bounds = element.getBoundingClientRect()
+          return {
+            compact: content.getBoundingClientRect().bottom - content.lastElementChild!.getBoundingClientRect().bottom <= 1,
+            bodyFits: content.scrollHeight <= content.clientHeight + 1,
+            actionsFollowBody: actions.getBoundingClientRect().top - content.getBoundingClientRect().bottom <= 8,
+            actionsInside: actions.getBoundingClientRect().bottom <= bounds.bottom,
+          }
+        })
+        expect(measured, `${layout}, results ${String(results)}`).toEqual({ compact: true, bodyFits: true, actionsFollowBody: true, actionsInside: true })
+        layoutStates.push(`- ${layout}, results ${results ? 'shown' : 'hidden'}: content-sized card; body fits; actions follow content and remain inside.`)
+        if (results) {
+          await page.setViewportSize({ width: 1680, height: 440 })
+          const short = await card.evaluate((element) => {
+            const content = element.querySelector<HTMLElement>('[data-card-body]')!
+            const actions = element.querySelector<HTMLElement>('[data-card-actions]')!
+            const bounds = element.getBoundingClientRect()
+            return {
+              bodyScrolls: content.scrollHeight > content.clientHeight,
+              actionCount: actions.querySelectorAll('button').length,
+              actionsInside: [...actions.querySelectorAll('button')].every((button) => {
+                const rect = button.getBoundingClientRect()
+                return rect.top >= bounds.top && rect.bottom <= bounds.bottom && rect.left >= bounds.left && rect.right <= bounds.right
+              }),
+            }
+          })
+          expect(short).toEqual({ bodyScrolls: true, actionCount: 6, actionsInside: true })
+          layoutStates.push(`- ${layout}, short window: body scrolls; all six actions remain inside the card.`)
+          await page.setViewportSize({ width: 1680, height: 1000 })
+        }
+      }
+    }
+    await compareOrRefreshGolden(DIGEST_LAYOUT_EXPECTED, layoutStates.join('\n'), MODE)
 
     await digest.getByRole('button', { name: 'Open session', exact: true }).click()
     await expect.poll(() => digest.count(), { timeout: 5_000 }).toBe(0)
@@ -735,7 +776,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
   it.skipIf(MODE === 'record')('keeps the recorded fixture inventory exact', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'session.v3.jsonl', 'search-results.expected.md', 'trajectory.expected.md',
-      'terminal-card.expected.md',
+      'terminal-card.expected.md', 'digest.expected.md', 'digest-layout.expected.md',
+      'mobile-navigation.expected.md', 'mobile-pending-list.expected.md',
+      'mobile-small-layout.expected.md',
     ])
   })
 })

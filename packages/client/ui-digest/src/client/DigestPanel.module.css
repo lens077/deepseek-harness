@@ -154,14 +154,16 @@
   font-size: 11px;
 }
 
-/* The preference caps the count; narrow groups keep each card readable. */
+/* Columns follow the width preference; rows use their content height even
+   when a sole section or board column fills the viewport. */
 .grid {
   --digest-card-gap: 12px;
   --digest-card-track: max(240px, calc((100% - (var(--digest-card-columns, 5) - 1) * var(--digest-card-gap)) / var(--digest-card-columns, 5)));
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--digest-card-track)), 1fr));
-  grid-auto-rows: 1fr;
+  grid-auto-rows: max-content;
   gap: var(--digest-card-gap);
+  align-content: start;
   align-items: stretch;
 }
 
@@ -279,16 +281,12 @@
   max-height: max(240px, calc(100cqh - 36px));
 }
 
-/* The scrolling middle of a card, between the pinned head and actions. A
-   fixed cap keeps every card a glanceable preview whatever the column count
-   — a long reply scrolls here instead of turning its row into a page — while
-   the card's own viewport cap above still wins on a short window. It scrolls
-   on the layer-1 card surface, so its thumb takes the l2 elevation tokens
-   (see ui-theme styles/scrollbar.css). */
+/* The card's viewport cap bounds this scrolling body; a separate body cap
+   would leave usable card space empty. The head and actions stay outside it.
+   Layer-1 card surfaces use the l2 scrollbar tokens. */
 .cardBody {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 264px;
   display: flex;
   flex-direction: column;
   gap: 4px;
