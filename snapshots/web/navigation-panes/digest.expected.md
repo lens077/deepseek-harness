@@ -31,4 +31,4 @@
     - button "Add todo"
     - button "Pin"
     - button "Tomorrow"
-  - text: Arrows pick a card · Tab next section · Enter Open session · Shift+Enter open · 1–6 buttons · Esc close · Ctrl+1 toggle
+  - text: Arrows pick a card · Tab next section · Enter Open session · Shift+Enter open · 1–6 buttons · Ctrl + 1–4 switch tabs · Esc close

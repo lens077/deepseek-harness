@@ -151,6 +151,56 @@ function section(key: string): HTMLElement {
   return element
 }
 
+describe('DigestPanel tab shortcuts', () => {
+  it('opens each named tab with Ctrl+1–4, keeps it open, and displays matching key hints', () => {
+    const m = mountPanel({ open: false })
+    const keys = ['inbox', 'todos', 'projects', 'timeline'] as const
+    keys.forEach((key, index) => {
+      const event = { key: String(index + 1), code: `Digit${index + 1}`, ctrlKey: true }
+      expect(fireEvent.keyDown(document, event)).toBe(false)
+      m.rerender()
+      expect(m.store.getSnapshot()).toMatchObject({ open: true, tab: key })
+      const tab = screen.getByRole('tab', { name: new RegExp(`^${zh[`tab.${key}`]}`) })
+      expect(tab.getAttribute('aria-selected')).toBe('true')
+      expect(tab.getAttribute('aria-keyshortcuts')).toBe(`Control+${index + 1}`)
+      expect(within(tab).getByText(`Ctrl + ${index + 1}`)).toBeTruthy()
+      fireEvent.keyDown(document, event)
+      m.rerender()
+      expect(m.store.getSnapshot()).toMatchObject({ open: true, tab: key })
+    })
+    expect(m.ensureProjects).toHaveBeenCalled()
+  })
+
+  it('leaves text editing, overlays, modified chords, IME and key repeats untouched', () => {
+    const m = mountPanel({ open: false })
+    const field = document.createElement('textarea')
+    const modal = document.createElement('div')
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    document.body.append(field)
+    try {
+      expect(fireEvent.keyDown(field, { key: '2', ctrlKey: true })).toBe(true)
+      for (const extra of [{ shiftKey: true }, { altKey: true }, { metaKey: true }, { isComposing: true }, { repeat: true }]) {
+        expect(fireEvent.keyDown(document, { key: '2', ctrlKey: true, ...extra })).toBe(true)
+      }
+      document.body.append(modal)
+      expect(fireEvent.keyDown(modal, { key: '2', ctrlKey: true })).toBe(true)
+      expect(m.store.getSnapshot().open).toBe(false)
+    } finally {
+      field.remove()
+      modal.remove()
+    }
+  })
+
+  it('switches phone overview tabs without replacing the desktop tab preference', () => {
+    const m = mountPanel({ mobileView: 'overview' })
+    fireEvent.keyDown(document, { key: '3', ctrlKey: true })
+    expect(screen.getByRole('tab', { name: zh['tab.projects'] }).getAttribute('aria-selected')).toBe('true')
+    expect(m.store.getSnapshot().tab).toBe('inbox')
+    expect(m.navigateMobile).toHaveBeenCalledWith('overview')
+  })
+})
+
 describe('DigestPanel phone surfaces', () => {
   it('shares compact surface and time selectors with existing viewing state and keeps extra actions reachable', () => {
     const m = mountPanel({ mobileView: 'overview', rows: [row('unread'), row('running', { running: true })] })
@@ -720,7 +770,7 @@ describe('DigestPanel keyboard ring', () => {
     b.press('4')
     expect(b.fileTodo).toHaveBeenCalledOnce()
     expect(b.fileTodo).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'run' }))
-    expect(screen.getByText(/Enter 继续 · Shift\+Enter 打开会话 · 1–6 按钮 · Esc 关闭 · Ctrl\+1 开关面板/)).toBeTruthy()
+    expect(screen.getByText(/Enter 继续 · Shift\+Enter 打开会话 · 1–6 按钮 · Ctrl \+ 1–4 切换页签 · Esc 关闭/)).toBeTruthy()
   })
 
   it('ignores keys typed into editable controls and outside the inbox tab', () => {
@@ -1189,7 +1239,7 @@ describe('DigestNavEntry', () => {
   }
 
   it('renders phone destinations and excludes personal todos from the attention badge', () => {
-    const e = mountEntry({ mobileView: 'overview', rows: [], snapshot: inbox({ todos: [todo('manual', 'a')] }) })
+    const e = mountEntry({ mobileView: 'overview', rows: [], snapshot: inbox({ todos: [todo('manual', 'a')] }), settings: { toggleShortcut: 'F2' } })
     expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual([zh['mobile.overview'], zh['mobile.pending']])
     // The small layout hides these labels, so the two destinations must stay
     // distinguishable by glyph alone.
@@ -1199,7 +1249,7 @@ describe('DigestNavEntry', () => {
     fireEvent.click(screen.getByRole('button', { name: zh['mobile.pending'] }))
     expect(e.navigateMobile).toHaveBeenCalledWith('pending')
     expect(e.store.getSnapshot().open).toBe(false)
-    fireEvent.keyDown(document, { key: '1', code: 'Digit1', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'F2', code: 'F2' })
     expect(e.navigateMobile).toHaveBeenCalledWith('conversation')
   })
 
@@ -1214,19 +1264,15 @@ describe('DigestNavEntry', () => {
     expect(button.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('toggles the panel on Ctrl+1 from anywhere, including a focused text field', () => {
+  it('leaves reserved Ctrl+1–4 navigation to the panel instead of toggling it', () => {
     const e = mountEntry()
-    fireEvent.keyDown(document, { key: '1', code: 'Digit1', ctrlKey: true })
-    expect(e.store.getSnapshot().open).toBe(true)
-    // The chord carries a modifier, so it stays live while the composer has focus.
-    const input = document.createElement('input')
-    document.body.appendChild(input)
-    fireEvent.keyDown(input, { key: '1', code: 'Digit1', ctrlKey: true })
+    for (const key of ['1', '2', '3', '4']) {
+      expect(fireEvent.keyDown(document, { key, code: `Digit${key}`, ctrlKey: true })).toBe(true)
+    }
     expect(e.store.getSnapshot().open).toBe(false)
-    // A layout reporting no code still reaches the digit.
+    e.store.actions.open('todos')
     fireEvent.keyDown(document, { key: '1', ctrlKey: true })
-    expect(e.store.getSnapshot().open).toBe(true)
-    input.remove()
+    expect(e.store.getSnapshot()).toMatchObject({ open: true, tab: 'todos' })
   })
 
   it('ignores near-miss chords and stops listening once unmounted', () => {

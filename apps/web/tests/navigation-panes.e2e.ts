@@ -476,6 +476,26 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     const snapshot = (await captureStableAria(page, '[data-digest-panel]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(DIGEST_EXPECTED, snapshot, MODE)
+    const tabs = digest.getByRole('tablist')
+    const tabNames = ['Inbox', 'Todos', 'Project todos', 'Timeline']
+    for (const [index, name] of tabNames.entries()) {
+      await page.keyboard.press(`Control+${index + 1}`)
+      const tab = tabs.getByRole('tab', { name: new RegExp(`^${name}`) })
+      await expect.poll(() => tab.getAttribute('aria-selected')).toBe('true')
+      expect(await tab.getAttribute('aria-keyshortcuts')).toBe(`Control+${index + 1}`)
+      expect(await tab.locator('kbd').innerText()).toBe(`Ctrl + ${index + 1}`)
+      const style = await tab.evaluate(element => ({
+        color: getComputedStyle(element).color,
+        background: getComputedStyle(element).backgroundColor,
+        marker: getComputedStyle(element, '::after').height,
+      }))
+      expect(style.color).not.toBe(style.background)
+      expect(style.marker).toBe('2px')
+      await page.keyboard.press(`Control+${index + 1}`)
+      expect(await digest.isVisible()).toBe(true)
+    }
+    await page.keyboard.press('Control+1')
+    await expect.poll(() => tabs.getByRole('tab', { name: /^Inbox/ }).getAttribute('aria-selected')).toBe('true')
     const layoutStates: string[] = []
     for (const layout of ['Sections', 'Board']) {
       await digest.getByRole('button', { name: layout, exact: true }).click()

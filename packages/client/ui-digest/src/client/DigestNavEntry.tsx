@@ -16,6 +16,7 @@ import type { DigestNavEntryProps } from './contract/slots.ts'
 import type { NavBadgeState } from '../nav-settings.ts'
 import { hasCommandModifier, matchesToggleShortcut } from '../toggle-shortcut.ts'
 import { isEditableTarget } from './editable-target.ts'
+import { digestTabShortcut } from './tab-shortcuts.ts'
 import { selectInbox } from './select.ts'
 import css from './DigestNavEntry.module.css'
 
@@ -83,6 +84,7 @@ export function DigestNavEntry({
   useEffect(() => {
     const live = hasCommandModifier(toggleShortcut)
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || digestTabShortcut(event) !== undefined) return
       if (!matchesToggleShortcut(toggleShortcut, event)) return
       if (!live && isEditableTarget(event.target)) return
       event.preventDefault()
@@ -122,7 +124,7 @@ export function DigestNavEntry({
   return (
     // The tooltip states the shortcut in both column states: railed it also
     // names the entry, wide it carries the one fact the row cannot show.
-    <Tooltip label={`${label} · ${toggleShortcut}`} delayMs={500}>
+    <Tooltip label={`${label} · ${toggleShortcut === 'Ctrl+1' ? t('tab.shortcutHint', { tab: t('tab.inbox'), shortcut: t('tab.shortcut', { n: 1 }) }) : toggleShortcut}`} delayMs={500}>
       <button
         type="button"
         className={clsx(css.entry, !wide && css.rail, open && css.active)}

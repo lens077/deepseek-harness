@@ -33,6 +33,7 @@ import { ProjectTodos, type ProjectTodosActions } from './ProjectTodos.tsx'
 import { Timeline } from './Timeline.tsx'
 import { TodoList } from './TodoList.tsx'
 import { isEditableTarget } from './editable-target.ts'
+import { DIGEST_TAB_KEYS, TAB_SHORTCUTS, digestTabShortcut } from './tab-shortcuts.ts'
 import css from './DigestPanel.module.css'
 
 const DAY_MS = 86_400_000
@@ -43,7 +44,6 @@ const CLOCK_MS = 60_000
 /** Longest question kept in an automatically worded todo. */
 const TODO_QUESTION_CHARS = 120
 
-const TAB_KEYS: readonly InboxTab[] = ['inbox', 'todos', 'projects', 'timeline']
 const WINDOWS: readonly InboxWindow[] = ['sinceReview', 'today', 'week', 'all']
 const SECTION_KEYS: readonly InboxSectionKey[] = ['pinned', 'unread', 'seen', 'running', 'needsYou', 'failed', 'handled']
 const LAYOUTS: readonly InboxLayout[] = ['sections', 'columns']
@@ -119,6 +119,35 @@ export function DigestPanel(props: DigestPanelProps) {
   const [now, setNow] = useState(() => Date.now())
   const [focusedSession, setFocusedSession] = useState<SessionId | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || isEditableTarget(event.target)
+        || document.querySelector('[role="dialog"][aria-modal="true"], dialog[open], [role="menu"]') !== null) return
+      const target = digestTabShortcut(event)
+      if (target === undefined) return
+      event.preventDefault()
+      if (mobileView === undefined) actions.open(target)
+      else {
+        setMobileTab(target)
+        navigateMobile?.('overview')
+      }
+      panelRef.current?.focus({ preventScroll: true })
+    }
+    const onEscape = (event: KeyboardEvent): void => {
+      if (!open || tab === 'inbox' || event.defaultPrevented || event.key !== 'Escape'
+        || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || isEditableTarget(event.target)
+        || document.querySelector('[role="dialog"][aria-modal="true"], dialog[open], [role="menu"]') !== null) return
+      closePanel()
+      event.preventDefault()
+    }
+    document.addEventListener('keydown', onKey, true)
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [actions, mobileView, navigateMobile, open, tab, closePanel])
 
   useEffect(() => {
     if (!open) return
@@ -400,13 +429,15 @@ export function DigestPanel(props: DigestPanelProps) {
       <header className={css.header}>
         <h2 className={css.title}>{t(mobilePending ? 'mobile.pending' : mobileView === 'overview' ? 'mobile.overview' : 'panel.title')}</h2>
         {!mobilePending && <span className={css.tabs} role="tablist">
-          {TAB_KEYS.map(key => (
+          {DIGEST_TAB_KEYS.map((key, index) => (
             <button
               key={key}
               type="button"
               role="tab"
               className={clsx(css.tab, tab === key && css.tabActive)}
               aria-selected={tab === key}
+              aria-keyshortcuts={TAB_SHORTCUTS[key].replace('Ctrl', 'Control')}
+              title={t('tab.shortcutHint', { tab: t(`tab.${key}`), shortcut: t('tab.shortcut', { n: index + 1 }) })}
               onClick={() => { if (mobileView === undefined) actions.setTab(key); else setMobileTab(key) }}
             >
               {t(`tab.${key}`)}
@@ -419,6 +450,7 @@ export function DigestPanel(props: DigestPanelProps) {
               {key === 'projects' && projectsView.snapshot.projects.length > 0 && (
                 <span className={css.tabCount}>{projectsView.snapshot.projects.reduce((sum, project) => sum + project.open, 0)}</span>
               )}
+              {mobileView === undefined && <kbd className={css.tabShortcut} aria-hidden="true">{t('tab.shortcut', { n: index + 1 })}</kbd>}
             </button>
           ))}
         </span>}
@@ -451,7 +483,7 @@ export function DigestPanel(props: DigestPanelProps) {
             value={tab}
             onChange={(event) => { setMobileTab(event.currentTarget.value as InboxTab) }}
           >
-            {TAB_KEYS.map(key => <option key={key} value={key}>{t(`tab.${key}`)}</option>)}
+            {DIGEST_TAB_KEYS.map(key => <option key={key} value={key}>{t(`tab.${key}`)}</option>)}
           </select>
           <select
             className={css.compactSelect}
@@ -673,7 +705,7 @@ export function DigestPanel(props: DigestPanelProps) {
           <Timeline days={timeline} now={now} t={t} openQuestion={openAt} />
         )}
       </div>
-      {mobileView === undefined && tab === 'inbox' && ring.length > 0 && <footer className={css.keys} data-digest-keys="">{legend}</footer>}
+      {mobileView === undefined && <footer className={css.keys} data-digest-keys="">{tab === 'inbox' && ring.length > 0 ? legend : t('tab.navigationKeys')}</footer>}
     </div>
   )
 }
