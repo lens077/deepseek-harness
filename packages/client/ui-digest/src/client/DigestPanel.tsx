@@ -183,6 +183,11 @@ export function DigestPanel(props: DigestPanelProps) {
   )
 
   useEffect(() => {
+    if (!open || mobileView !== undefined) return
+    setFocusedSession(ring[0]?.sessionId ?? null)
+  }, [open, mobileView])
+
+  useEffect(() => {
     if (!ring.some(item => item.sessionId === focusedSession)) setFocusedSession(ring[0]?.sessionId ?? null)
   }, [ring, focusedSession])
 

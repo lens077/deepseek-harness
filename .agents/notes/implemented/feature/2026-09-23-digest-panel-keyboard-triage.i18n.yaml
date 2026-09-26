@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-23-digest-panel-keyboard-triage.md
-2026-09-23-digest-panel-keyboard-triage.md: 7fbcd119584f887183275deb5393c83c52da8202
-2026-09-23-digest-panel-keyboard-triage.zh.md: 212daae7426f2ad238536e540db0f933cb64773c
+2026-09-23-digest-panel-keyboard-triage.md: 28829d7e5b9626a99a5fc9b230510d818eeda75d
+2026-09-23-digest-panel-keyboard-triage.zh.md: f4a5335c59f8b86958ce9ecff40156b8cb69feaf

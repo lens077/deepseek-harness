@@ -524,6 +524,19 @@ describe('DigestPanel keyboard ring', () => {
     return { ...m, focusedId, press }
   }
 
+  it('selects the first visible session every time the panel opens', () => {
+    const b = ringBench()
+    expect(b.focusedId()).toBe('first')
+    b.press('j')
+    b.rerender()
+    expect(b.focusedId()).toBe('second')
+    b.store.actions.close()
+    b.rerender()
+    b.store.actions.open()
+    b.rerender()
+    expect(b.focusedId()).toBe('first')
+  })
+
   it('moves with j/k, Home/End, and arrows without layout, opens with Enter, and closes with Escape', () => {
     const b = ringBench()
     // Finished rows lead, so the ring starts on the newest finished row.
