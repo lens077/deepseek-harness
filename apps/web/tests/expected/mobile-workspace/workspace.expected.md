@@ -1,0 +1,10 @@
+- banner:
+  - button "Back to workspaces":
+    - img
+    - text: Workspaces
+  - heading "game" [level=2]
+  - text: {{cwd}}/game
+  - button "New session in game":
+    - img
+    - text: New Session
+  - searchbox "Filter by name"

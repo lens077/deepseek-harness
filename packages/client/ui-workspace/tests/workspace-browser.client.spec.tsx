@@ -97,7 +97,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     searchResultLimit: 20,
     renameSession: vi.fn(async () => {}),
     sessionDirectories: vi.fn(async () => ({ primaryDirectory: '/', additionalDirectories: [] })),
-    replaceSessionDirectories: vi.fn(async (_id, directories) => ({
+    replaceSessionDirectories: vi.fn<WorkspaceBrowserProps['replaceSessionDirectories']>(async (_id, directories) => ({
       primaryDirectory: '/', additionalDirectories: [...directories],
     })),
     forkSession: vi.fn(),
@@ -106,13 +106,13 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     archiveSession: vi.fn(async () => {}),
     archiveSessions: vi.fn(async () => {}),
     unarchiveSession: vi.fn(async () => {}),
-    deleteSession: vi.fn(async id => [id]),
+    deleteSession: vi.fn<WorkspaceBrowserProps['deleteSession']>(async id => [id]),
     addTodos: vi.fn(),
     todosAvailable: () => false,
     setPinned: vi.fn(async () => undefined),
     setPinnedSidebarRows: vi.fn(async () => undefined),
     setPinnedAutoStatuses: vi.fn(async () => undefined),
-    setSessionMembership: vi.fn(async (_workspaceId, sessionIds) => workspace('moved', [...sessionIds])),
+    setSessionMembership: vi.fn<WorkspaceBrowserProps['setSessionMembership']>(async (_workspaceId, sessionIds) => workspace('moved', [...sessionIds])),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
@@ -137,6 +137,41 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('mobile WorkspaceBrowser', () => {
+  it('starts a Session in the browsed Workspace rather than the current Session Workspace', () => {
+    const calls: string[] = []
+    mount({
+      mobile: true,
+      useSessions: hook(sessionState([summary('beta-s', 1)], { current: sid('beta-s') })),
+      useWorkspaces: hook(workspaceState([workspace('alpha', []), workspace('beta', ['beta-s'])])),
+      startSession: (id) => { calls.push(String(id)) },
+      onSessionOpened: () => { calls.push('opened') },
+    })
+    expect(screen.queryByRole('button', { name: '在“alpha”中新建会话' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
+    expect(screen.getByText('暂无会话')).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox', { name: '按名称筛选' }), { target: { value: 'missing' } })
+    const create = screen.getByRole('button', { name: '在“alpha”中新建会话' })
+    expect(create.textContent).toBe('新会话')
+    fireEvent.click(create)
+    expect(calls).toEqual(['alpha', 'opened'])
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+  })
+
+  it('starts an Ungrouped Session without inheriting the current Workspace', () => {
+    const onSessionOpened = vi.fn()
+    const b = mount({
+      mobile: true,
+      useSessions: hook(sessionState([summary('alpha-s', 2), summary('loose', 1)], { current: sid('alpha-s') })),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s'])])),
+      onSessionOpened,
+    })
+    fireEvent.click(screen.getByRole('button', { name: /未分组/ }))
+    fireEvent.click(screen.getByRole('button', { name: '在“未分组”中新建会话' }))
+    expect(b.props.startScratchSession).toHaveBeenCalledOnce()
+    expect(b.props.startSession).not.toHaveBeenCalled()
+    expect(onSessionOpened).toHaveBeenCalledOnce()
+  })
+
   it('filters names and preserves selected Workspace across full search and management', () => {
     mount({
       mobile: true,
@@ -202,7 +237,7 @@ describe('mobile WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: /alpha/ }))
     expect(screen.getByRole('button', { name: 'child' })).toBeTruthy()
     expect(screen.queryByText('archived')).toBeNull()
-    expect(screen.queryByText('新会话')).toBeNull()
+    expect(within(screen.getByRole('list', { name: '会话' })).queryByText('新会话')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '返回工作区列表' }))
     fireEvent.click(screen.getByRole('button', { name: /未分组/ }))
     expect(screen.getByRole('heading', { name: '未分组' })).toBeTruthy()

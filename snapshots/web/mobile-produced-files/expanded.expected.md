@@ -1,0 +1,15 @@
+- text: Produced
+- button "Open config.txt" [expanded]: config.txt
+- button "Open config.txt in the Sidebar"
+- text: config.txt Turn 1 · edit mode=DEBUG level=info mode=RELEASE level=info
+- button "Copy":
+  - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation":
+  - img
+- button:
+  - img
+- text: 7/6 {{clock}}

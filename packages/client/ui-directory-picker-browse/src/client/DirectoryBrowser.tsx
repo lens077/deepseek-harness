@@ -1,7 +1,7 @@
 /**
  * The in-app workspace-directory browser (figma Harness 813-23126 family): a
- * 680×500 dialog (clamped to short/narrow viewports — the Miller row scrolls
- * sideways, the columns scroll down) whose header carries the title, the selection-path
+ * desktop 680×500 dialog with scrollable columns. Phones show only the current
+ * directory level with breadcrumb navigation. Its header carries the title, the selection-path
  * breadcrumb, and a click-to-edit path zone; below it a Miller view — one
  * full-width level until a row is selected, then two columns splitting the
  * row evenly (256px floor; level | selected folder's children) around a
@@ -701,15 +701,25 @@ export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen,
     const trail = crumbTrailRef.current
     if (trail !== null) trail.scrollLeft = trail.scrollWidth
   }, [crumbTail])
-  // On viewports too narrow for both fixed panes the Miller row scrolls;
-  // whenever a child preview lands, pin it into view the way the crumb tail
-  // pins — otherwise descent is unreachable on a phone-width window.
+  // Narrow desktop dialogs scroll both columns; phones show the child level alone.
+  // A keyboard pick may leave focus in the parent column that the phone hides.
   const millerRowRef = useRef<HTMLDivElement | null>(null)
   const childPath = child?.path
   useEffect(() => {
     const row = millerRowRef.current
-    if (row !== null && childPath !== undefined) row.scrollLeft = row.scrollWidth
-  }, [childPath])
+    if (!open || row === null || childPath === undefined) return
+    row.scrollLeft = row.scrollWidth
+    const repairFocus = (): void => {
+      const parentColumn = row.querySelector<HTMLElement>('[role="list"]')
+      if (parentColumn !== null && getComputedStyle(parentColumn).display === 'none'
+        && (document.activeElement === document.body || parentColumn.contains(document.activeElement))) {
+        (pathInputRef.current ?? editZoneRef.current)?.focus()
+      }
+    }
+    repairFocus()
+    window.addEventListener('resize', repairFocus)
+    return () => { window.removeEventListener('resize', repairFocus) }
+  }, [open, childPath])
   // Every editor exit that would drop focus to body re-parks it after
   // commit, so keyboard traversal stays inside the dialog (the Modal has no
   // focus trap): a pick lands on the selection's row — aria-current in the
@@ -733,7 +743,9 @@ export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen,
       const row = rowHost.querySelector<HTMLButtonElement>('button[aria-current="true"]')
       /* v8 ignore next -- narrowing guard: the pick that set the flag just rendered its aria-current row. */
       if (row === null) return
-      row.focus()
+      const column = row.closest<HTMLElement>('[role="list"]')
+      if (column !== null && getComputedStyle(column).display === 'none') editZoneRef.current?.focus()
+      else row.focus()
       return
     }
     if (refocusEditZone.current) {

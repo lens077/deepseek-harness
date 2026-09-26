@@ -9,7 +9,7 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ChatFileDiffExpansion, ChatFileMentions } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -39,6 +39,13 @@ export const inject = ['slots', 'locale', 'uiConversation', 'remote', 'remote.se
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const media = matchMedia('(max-width: 767px)')
+  const mobile = createSnapshotStore(media.matches)
+  ctx.effect(() => {
+    const updateMobile = () => { mobile.set(media.matches) }
+    media.addEventListener('change', updateMobile)
+    return () => { media.removeEventListener('change', updateMobile) }
+  }, 'ui-deliverables: phone presentation')
   // The inline diff preference and recorded hunks come from ui-session-files
   // when it is composed in; without it every chip simply opens the file.
   const diffExpansion: ObservableSnapshot<ChatFileDiffExpansion> = {
@@ -55,7 +62,7 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: (sessionId: SessionId) => ({
         fileDiffs: (path: string) => ctx.get('chatFileDiffs')?.forPath(sessionId, path) ?? [],
-        hooks: { diffExpansion },
+        hooks: { diffExpansion, mobile },
       }),
     }, ProducedFiles),
   )

@@ -7,7 +7,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { SessionLiveEventEntry } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
   ConversationNodeAssembler, UiConversation,
@@ -23,6 +23,7 @@ import type {
   ChatFileDiffExpansion, ChatFileMentions, TurnTailOwnerProps,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { ProducedFiles, type ProducedFilesInjected, type ProducedFilesProps } from '../src/client/ProducedFiles.tsx'
 import {
   basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
@@ -412,9 +413,11 @@ describe('ProducedFiles row', () => {
   const diffs = (
     fileDiffs: ProducedFilesProps['fileDiffs'] = () => [],
     expansion: ChatFileDiffExpansion = 'all',
-  ): Pick<ProducedFilesProps, 'fileDiffs' | 'useDiffExpansion'> => ({
+    mobile = false,
+  ): Pick<ProducedFilesProps, 'fileDiffs' | 'useDiffExpansion' | 'useMobile'> => ({
     fileDiffs,
     useDiffExpansion: selector => selector(expansion),
+    useMobile: selector => selector(mobile),
   })
 
   const everyPathChanged: ProducedFilesProps['fileDiffs'] = path => [
@@ -494,6 +497,108 @@ describe('ProducedFiles row', () => {
     expect(many.queryByText('Turn 1 · Edit')).toBeNull()
   })
 
+  it.each(['all', 'single', 'none'] as const)(
+    'keeps mobile files collapsed under %s until manually expanded',
+    (expansion) => {
+      const view = render(
+        <ProducedFiles
+          matched={['a.md']}
+          openFile={() => {}}
+          {...diffs(everyPathChanged, expansion, true)}
+          t={t}
+        />,
+      )
+      const chip = view.getByRole('button', { name: '打开 a.md' })
+      expect(chip.getAttribute('aria-expanded')).toBe('false')
+      expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+      fireEvent.click(chip)
+      expect(chip.getAttribute('aria-expanded')).toBe('true')
+      expect(view.getByText('Turn 1 · Edit')).toBeTruthy()
+      fireEvent.click(chip)
+      expect(chip.getAttribute('aria-expanded')).toBe('false')
+      expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+    },
+  )
+
+  it('keeps manual expansion choices separate across mobile and desktop', () => {
+    const props = { matched: ['a.md'], openFile: () => {}, t }
+    const view = render(<ProducedFiles {...props} {...diffs(everyPathChanged, 'none')} />)
+    const chip = () => view.getByRole('button', { name: '打开 a.md' })
+    fireEvent.click(chip())
+    expect(chip().getAttribute('aria-expanded')).toBe('true')
+
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'all', true)} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('false')
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+    fireEvent.click(chip())
+    expect(chip().getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(chip())
+    expect(chip().getAttribute('aria-expanded')).toBe('false')
+
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'none')} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('true')
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'all', true)} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('keeps mobile files collapsed as hunks, paths, and preferences change', () => {
+    const props = { openFile: () => {}, t }
+    const created: ProducedFilesProps['fileDiffs'] = () => [
+      { label: 'Turn 1 · Create', oldText: null, newText: 'created' },
+    ]
+    const view = render(
+      <ProducedFiles {...props} matched={['a.md']} {...diffs(created, 'single', true)} />,
+    )
+    const chip = (path: string) => view.getByRole('button', { name: `打开 ${path}` })
+    expect(chip('a.md').getAttribute('aria-expanded')).toBe('false')
+    view.rerender(
+      <ProducedFiles {...props} matched={['a.md']} {...diffs(everyPathChanged, 'single', true)} />,
+    )
+    expect(chip('a.md').getAttribute('aria-expanded')).toBe('false')
+    expect(view.queryByText('Turn 1 · Edit')).toBeNull()
+
+    view.rerender(
+      <ProducedFiles {...props} matched={['a.md', 'b.md']} {...diffs(everyPathChanged, 'all', true)} />,
+    )
+    expect(chip('a.md').getAttribute('aria-expanded')).toBe('false')
+    expect(chip('b.md').getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(chip('a.md'))
+    const updated: ProducedFilesProps['fileDiffs'] = () => [
+      { label: 'Turn 2 · Edit', oldText: 'created', newText: 'updated' },
+    ]
+    view.rerender(
+      <ProducedFiles {...props} matched={['a.md', 'b.md']} {...diffs(updated, 'none', true)} />,
+    )
+    expect(chip('a.md').getAttribute('aria-expanded')).toBe('true')
+    expect(chip('b.md').getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText('Turn 2 · Edit')).toBeTruthy()
+
+    fireEvent.click(chip('a.md'))
+    view.rerender(
+      <ProducedFiles {...props} matched={['a.md', 'b.md', 'c.md']} {...diffs(updated, 'all', true)} />,
+    )
+    for (const path of ['a.md', 'b.md', 'c.md']) {
+      expect(chip(path).getAttribute('aria-expanded')).toBe('false')
+    }
+    expect(view.queryByText('Turn 2 · Edit')).toBeNull()
+  })
+
+  it('restores desktop defaults without inheriting manual mobile expansion', () => {
+    const props = { matched: ['a.md'], openFile: () => {}, t }
+    const view = render(<ProducedFiles {...props} {...diffs(everyPathChanged, 'all')} />)
+    const chip = () => view.getByRole('button', { name: '打开 a.md' })
+    expect(chip().getAttribute('aria-expanded')).toBe('true')
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'all', true)} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(chip())
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'none')} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('false')
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'none', true)} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('true')
+    view.rerender(<ProducedFiles {...props} {...diffs(everyPathChanged, 'all')} />)
+    expect(chip().getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('keeps changed files closed under none until their chips are clicked', () => {
     const view = render(
       <ProducedFiles
@@ -567,8 +672,17 @@ describe('producedFileMentions resolver', () => {
 
 
 describe('plugin registration', () => {
-  it('registers the tail entry and fiber disposal removes it', async () => {
+  it.each([false, true])('publishes mobile=%s and removes the tail entry and listener on disposal', async (initialMobile) => {
+    const listeners = new Set<() => void>()
+    const media = {
+      matches: initialMobile,
+      addEventListener: (_type: string, listener: () => void) => { listeners.add(listener) },
+      removeEventListener: (_type: string, listener: () => void) => { listeners.delete(listener) },
+    }
+    const matchMedia = vi.fn(() => media)
+    vi.stubGlobal('matchMedia', matchMedia)
     const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
     await ctx.plugin(SlotRegistry).await()
     new UiConversation(ctx, { binding: () => undefined } as never)
     // The owning view's child declaration, stood up by a bench root entry.
@@ -592,20 +706,46 @@ describe('plugin registration', () => {
     const [entry] = ctx.slots.entries('conversation.chat.turnTail')
     expect(entry).toBeDefined()
     const injected = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
+    expect(injected.hooks.mobile.getSnapshot()).toBe(initialMobile)
+    expect(matchMedia).toHaveBeenCalledWith('(max-width: 767px)')
+    expect(listeners.size).toBe(1)
+    const mobileChanges: boolean[] = []
+    const unsubscribe = injected.hooks.mobile.subscribe(() => {
+      mobileChanges.push(injected.hooks.mobile.getSnapshot())
+    })
+    onTestFinished(unsubscribe)
+    media.matches = !initialMobile
+    for (const listener of listeners) listener()
+    expect(injected.hooks.mobile.getSnapshot()).toBe(!initialMobile)
+    expect(mobileChanges).toEqual([!initialMobile])
     expect(injected.hooks.diffExpansion.getSnapshot()).toBe('none')
     expect(injected.fileDiffs('out/report.md')).toEqual([])
-    expect(injected.hooks.diffExpansion.subscribe(() => {})).toBeTypeOf('function')
+    const stopWithoutDiffs = injected.hooks.diffExpansion.subscribe(() => {})
+    expect(stopWithoutDiffs).toBeTypeOf('function')
+    stopWithoutDiffs()
 
+    const expansion = createSnapshotStore<ChatFileDiffExpansion>('single')
     ctx.provide('chatFileDiffs', {
-      expansion: { getSnapshot: () => 'single' as const, subscribe: () => () => {} },
+      expansion,
       forPath: (sessionId: SessionId, path: string) => sessionId === SESSION_ID && path === 'out/report.md'
         ? [{ label: 'Turn 2 · edit', oldText: 'a', newText: 'b' }]
         : [],
       forTurn: () => [],
     } as never)
     const withDiffs = (entry?.inject as unknown as (sessionId: SessionId) => ProducedFilesInjected)(SESSION_ID)
+    expect(withDiffs.hooks.mobile).toBe(injected.hooks.mobile)
     expect(withDiffs.hooks.diffExpansion.getSnapshot()).toBe('single')
     expect(withDiffs.fileDiffs('out/report.md')).toHaveLength(1)
+    const expansionChanges: ChatFileDiffExpansion[] = []
+    const stopWithDiffs = withDiffs.hooks.diffExpansion.subscribe(() => {
+      expansionChanges.push(withDiffs.hooks.diffExpansion.getSnapshot())
+    })
+    onTestFinished(stopWithDiffs)
+    expansion.set('all')
+    expect(expansionChanges).toEqual(['all'])
+    stopWithDiffs()
+    expansion.set('none')
+    expect(expansionChanges).toEqual(['all'])
 
     // The prose face is live while the plugin is: a produced turn yields a
     // resolver whose matches open through the owner-supplied opener.
@@ -624,6 +764,11 @@ describe('plugin registration', () => {
 
     await fiber.dispose()
     expect(ctx.slots.entries('conversation.chat.turnTail')).toHaveLength(0)
+    expect(listeners.size).toBe(0)
+    media.matches = initialMobile
+    for (const listener of listeners) listener()
+    expect(injected.hooks.mobile.getSnapshot()).toBe(!initialMobile)
+    expect(mobileChanges).toEqual([!initialMobile])
     // Fiber teardown retracts the service: the consumer's ctx.get sees the off state.
     expect((ctx as unknown as { get(name: string): unknown }).get('chatFileMentions')).toBeUndefined()
   })

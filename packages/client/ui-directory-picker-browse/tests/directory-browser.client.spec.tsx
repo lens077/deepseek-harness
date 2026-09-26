@@ -1746,6 +1746,55 @@ describe('DirectoryBrowser', () => {
     await waitFor(() => { expect(row.scrollLeft).toBe(640) })
   })
 
+  it.each(['row', 'body', 'footer'] as const)('keeps focus reachable when the phone hides the parent column with focus on %s', async (focus) => {
+    const b = mount()
+    await screen.findByText('Documents')
+    const column = columns()[0]!
+    const row = rowButton(within(column).getByRole('listitem'))
+    let resolve!: (listing: DirectoryListing) => void
+    b.listDirectory.mockReturnValueOnce(new Promise<DirectoryListing>((settle) => { resolve = settle }))
+    if (focus === 'row') row.focus()
+    fireEvent.click(row)
+    // jsdom has no responsive layout; hide the same parent column as the phone stylesheet.
+    column.style.display = 'none'
+    const footer = screen.getByRole('button', { name: 'browser.showHidden' })
+    if (focus === 'footer') footer.focus()
+    await act(async () => { resolve(listingFor(DOCS)) })
+    expect(document.activeElement).toBe(focus === 'footer' ? footer : screen.getByRole('button', { name: 'browser.editPath' }))
+  })
+
+  it('parks an editing-time pick on the path control when the selected row is hidden on a phone', async () => {
+    mount()
+    await screen.findByText('Documents')
+    fireEvent.click(screen.getByRole('button', { name: 'browser.editPath' }))
+    const column = columns()[0]!
+    const row = rowButton(within(column).getByRole('listitem'))
+    column.style.display = 'none'
+    fireEvent.click(row)
+    await waitFor(() => { expect(screen.getAllByRole('list', { hidden: true })).toHaveLength(2) })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'browser.editPath' }))
+  })
+
+  it.each([false, true])('repairs focus hidden by resizing with path editing=%s and releases its listener on close', async (editing) => {
+    const b = mount()
+    await screen.findByText('Documents')
+    fireEvent.click(rowButton(screen.getByRole('listitem')))
+    await waitFor(() => { expect(columns()).toHaveLength(2) })
+    if (editing) fireEvent.click(screen.getByRole('button', { name: 'browser.editPath' }))
+    const parent = columns()[0]!
+    rowButton(within(parent).getByRole('listitem')).focus()
+    parent.style.display = 'none'
+    fireEvent(window, new Event('resize'))
+    expect(document.activeElement).toBe(screen.getByRole(editing ? 'textbox' : 'button', { name: 'browser.editPath' }))
+    const removeListener = vi.spyOn(window, 'removeEventListener')
+    try {
+      b.view.rerender(<DirectoryBrowser {...b.props} open={false} />)
+      expect(removeListener).toHaveBeenCalledWith('resize', expect.any(Function))
+    } finally {
+      removeListener.mockRestore()
+    }
+  })
+
   it('starts back at home on reopen', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByRole('listitem')).toBeTruthy() })

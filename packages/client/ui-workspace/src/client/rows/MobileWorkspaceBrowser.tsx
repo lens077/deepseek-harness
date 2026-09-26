@@ -1,7 +1,7 @@
 /** Mobile Workspace drill-down using the desktop browser's Session projection. */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  IconChevronLeftOutline14, IconChevronRightOutline14, IconFolderOpenOutline16,
+  Button, IconChevronLeftOutline14, IconChevronRightOutline14, IconFolderOpenOutline16, IconPlusOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import { deriveGroups, UNGROUPED_KEY, type SessionNode } from '../tree.ts'
@@ -17,7 +17,8 @@ function flattenSessions(nodes: readonly SessionNode[]): SessionNode[] {
  * @returns Mobile browsing controls; opening a Session returns control to the owner.
  */
 export function MobileWorkspaceBrowser({
-  useSessions, useWorkspaces, useSessionPendingInteraction, useStore, open, onSessionOpened, t,
+  useSessions, useWorkspaces, useSessionPendingInteraction, useStore,
+  open, startSession, startScratchSession, onSessionOpened, t,
 }: WorkspaceBrowserProps) {
   const list = useSessions(state => state)
   const workspaces = useWorkspaces(state => state)
@@ -99,6 +100,21 @@ export function MobileWorkspaceBrowser({
           {selected === undefined ? t('section.workspaces') : label}
         </h2>
         {selected?.cwd !== undefined && <div className={css.path}>{selected.cwd}</div>}
+        {selected !== undefined && (
+          <Button
+            variant="outline"
+            className={css.newSession}
+            icon={<IconPlusOutline16 />}
+            aria-label={t('actions.newSession.aria', { name: label })}
+            onClick={() => {
+              if (selected.workspaceId === undefined) startScratchSession()
+              else startSession(selected.workspaceId)
+              onSessionOpened?.()
+            }}
+          >
+            {t('session.new')}
+          </Button>
+        )}
         <input
           type="search"
           className={css.filter}

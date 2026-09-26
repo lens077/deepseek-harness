@@ -1,0 +1,13 @@
+- text: Produced
+- button "Open config.txt": config.txt
+- button "Copy":
+  - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
+- button "Branch into a new conversation":
+  - img
+- button:
+  - img
+- text: 7/6 {{clock}}

@@ -43,6 +43,13 @@
   display: none;
 }
 
+.newSession.newSession {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  justify-content: center;
+}
+
 .filter {
   box-sizing: border-box;
   width: 100%;

@@ -17,8 +17,10 @@ export interface ProducedFilesInjected {
   /** Return this Session's recorded diff segments for one exact path. */
   fileDiffs(path: string): readonly ChatFileDiffSegment[]
   hooks: {
-    /** Reader preference controlling which inline file diffs open initially. */
+    /** Reader preference controlling which desktop inline file diffs open initially. */
     diffExpansion: ObservableSnapshot<ChatFileDiffExpansion>
+    /** Phone presentation suppresses automatic inline diff expansion. */
+    mobile: ObservableSnapshot<boolean>
   }
 }
 
@@ -46,16 +48,22 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
  * Render one turn's produced files as chips. A chip with recorded hunks
  * toggles an inline before/after comparison whose header opens the file
  * through the owner's `openFile`; a chip without hunks opens the file directly.
+ * Mobile diffs stay collapsed until a chip is toggled, regardless of updates
+ * or the desktop expansion preference.
  * @param props - selector-matched paths, the chat view's file opener, the
- *   injected diff facts, and the locale seat.
+ *   injected diff and mobile facts, and the locale seat.
  * @returns The produced-files row.
  */
-export function ProducedFiles({ matched: paths, openFile, fileDiffs, useDiffExpansion, t }: ProducedFilesProps) {
+export function ProducedFiles({ matched: paths, openFile, fileDiffs, useDiffExpansion, useMobile, t }: ProducedFilesProps) {
   const shown = paths.slice(0, SHOWN_LIMIT)
   const expansion = useDiffExpansion(value => value)
-  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const mobile = useMobile(value => value)
+  const [desktopToggled, setDesktopToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const [mobileToggled, setMobileToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const toggled = mobile ? mobileToggled : desktopToggled
+  const setToggled = mobile ? setMobileToggled : setDesktopToggled
   const isOpen = (path: string): boolean => toggled.get(path)
-    ?? (expandsByDefault(expansion, paths.length) && hasPriorContent(fileDiffs(path)))
+    ?? (!mobile && expandsByDefault(expansion, paths.length) && hasPriorContent(fileDiffs(path)))
   const opened = paths
     .filter(path => isOpen(path))
     .map(path => ({ path, segments: fileDiffs(path) }))

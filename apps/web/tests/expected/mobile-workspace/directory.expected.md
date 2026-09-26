@@ -1,0 +1,20 @@
+- dialog "Select Workspace Directory":
+  - heading "Select Workspace Directory" [level=2]
+  - navigation:
+    - button "Home"
+    - img
+    - button "game"
+  - button "Edit path":
+    - img
+  - list:
+    - listitem:
+      - button "harxx":
+        - img
+        - text: harxx
+        - img
+  - button "New folder":
+    - img
+    - text: New folder
+  - button "Show hidden files"
+  - button "Cancel"
+  - button "Open"

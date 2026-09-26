@@ -14,9 +14,11 @@ Status: implemented
 
 [待处理](../../../../packages/client/ui-digest/README.zh.md)将等待交互、完成未读的会话与既有个人待办列表放在一起。手动加入待办仍是由[持久化收件箱](2026-09-17-durable-session-inbox.zh.md)存储的用户决定，不是独立的手机任务域。项目待办文档与这些个人任务保持区分。
 
-[工作区浏览](../../../../packages/client/ui-workspace/README.zh.md)依次从 Workspace 列表进入一个 Workspace 的 Session 列表，再进入对话。手机端新会话明确创建未分组的临时 Session。桌面端新会话保留其 Workspace 选择规则。
+[工作区浏览](../../../../packages/client/ui-workspace/README.zh.md)依次从 Workspace 列表进入一个 Workspace 的 Session 列表，再进入对话。所选 Workspace 页面在目录信息旁保留新会话操作；它复用或创建该 Workspace 的空白 Session，而不继承其他已选 Session 的 Workspace。未分组页面与手机全局新会话入口明确启动未分组的临时 Session。桌面端新会话保留其 Workspace 选择规则。
 
-[对话 shell](../../../../packages/client/ui-conversation/README.zh.md)使用手机全宽，并将文件栏放在初始关闭的展开控件之后。临时 Session 已解析的 cwd 满足 composer 的目录前置条件，无需加入 Workspace；其他输入阻塞条件继续生效。[设置对话框](../../../../packages/client/ui-settings-general/README.zh.md)将分区导航放在内容上方的横向行中。这两种布局避免辅助导航占用主要内容宽度。
+[目录浏览器](../../../../packages/client/ui-directory-picker-browse/README.zh.md)在手机端以全宽单栏显示当前层级，通过面包屑返回上级，并将页脚操作限制在视口内。隐藏父级栏时，如果选中行消失，键盘焦点会返回路径控件。桌面端保留同时查看同级目录和子目录的双栏。
+
+[对话 shell](../../../../packages/client/ui-conversation/README.zh.md)使用手机全宽，并将文件栏放在初始关闭的展开控件之后。[产物文件对比](../../../../packages/client/ui-deliverables/README.zh.md)在手机端同样保持收起，直到用户手动展开；新增文件与桌面展开偏好不会使其重新打开。手机与桌面的手动展开选择各自独立。临时 Session 已解析的 cwd 满足 composer 的目录前置条件，无需加入 Workspace；其他输入阻塞条件继续生效。[设置对话框](../../../../packages/client/ui-settings-general/README.zh.md)将分区导航放在内容上方的横向行中。这两种布局避免辅助导航占用主要内容宽度。
 
 总览使用手机本地的标签选择状态，初始为收件箱；运行中的工作排在最前，计数提供只看运行中筛选。Workspace 筛选横向滚动，而不占用多行。
 
@@ -34,8 +36,16 @@ Status: implemented
 
 **把设置放在底部导航中。** 否决，改用顶部栏，使四个固定入口服务于主要工作任务。
 
+**从 Workspace 页面仍要求使用全局新会话流程。** 否决，因为页面已经明确目标目录；再次选择会增加导航步骤，还可能选错 Workspace。
+
+**手机端保留桌面目录分栏与自动展开 diff。** 否决，因为屏幕外的分栏使目录选项难以发现，展开的对比会挤占对话。面包屑与手动文件展开保留功能，而不沿用这些默认行为。
+
 ## 影响
 
 手机导航改变呈现方式，不改变 Host 存储、Session 日志或个人待办的含义。功能插件仍负责各自的操作，手机与桌面布局读取同一份数据。手机导航状态是临时状态，而非持久化偏好。
 
 持久化收件箱记录继续保持活跃，因为它负责持久化与未读状态推导；本记录负责手机导航决策，不替代这些规则。
+
+## 验证
+
+[手机 Workspace 浏览器测试](../../../../apps/web/tests/mobile-workspace.e2e.ts)覆盖在所浏览目录内直接创建会话、320px 嵌套目录导航、长列表滚动、新文件夹选择与键盘焦点。[已录制编辑的渲染测试](../../../../apps/web/tests/mobile-produced-files.e2e.ts)验证文件对比的收起与手动展开，以及手机与桌面断点。组件测试覆盖文件更新、偏好变化、独立的手动选择与媒体监听器释放。

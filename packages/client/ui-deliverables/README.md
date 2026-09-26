@@ -29,7 +29,7 @@ Mount this plugin alongside `ui-conversation`; a finished turn then ends with th
 
 ### The row
 
-The row uses CSS container-width bands to show a responsive prefix of up to six file chips. Flexbox shrinks and ellipsizes basename text, while CSS selects the matching localized `+ N files` label for omitted paths; the full path remains available as the title, and the chip lane performs no JavaScript layout observation or horizontal scrolling. The shared `all` / `single` / `none` preference opens every comparable file, only a one-file Turn, or none. A create stays closed because it has no prior side to compare.
+The row uses CSS container-width bands to show a responsive prefix of up to six file chips. Flexbox shrinks and ellipsizes basename text, while CSS selects the matching localized `+ N files` label for omitted paths; the full path remains available as the title, and the chip lane performs no JavaScript layout observation or horizontal scrolling. On desktop, the shared `all` / `single` / `none` preference opens every comparable file, only a one-file Turn, or none. Phones keep diffs collapsed until their chips are clicked; file and preference updates do not open collapsed diffs. Manual choices are separate for phone and desktop presentation. A create stays closed by default because it has no prior side to compare.
 
 ### Inline-code links
 

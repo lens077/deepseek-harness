@@ -27,7 +27,7 @@ kind: "package-reference"
 
 用侧边栏浏览 Workspace 及其 Session、重排它们并新建会话；Workspace 标题行上的 ＋ 在该 Workspace 内新建 Session，“未分组”标题行上的 ＋ 复用或创建一条不属于任何 Workspace 的空白 Session。在 Session Intent 主视觉区选择 Workspace，或不选文件夹直接开始。折叠的 Workspace 默认显示五条非空白 Session，并在首条提示词落地前把当前选中的空白**新会话**作为一条临时额外行。视图菜单与通用设置可以把数量设为 5 到 20，或使用自适应尺寸。**展开其余**会显示隐藏条目；关闭再打开 Workspace 会恢复折叠投影。
 
-手机端**工作区**打开全宽 Workspace 列表，并在存在未分组会话时显示未分组条目。选择 Workspace 后显示其 Session 列表；**返回**回到 Workspace 列表，选择 Session 则打开对话。逐层浏览使用共享的 Session 投影与排序，而不是另一份 Workspace 记账。顶部的纯图标**搜索与管理**控件打开共享管理浏览器；无障碍名称说明操作，不占用单独的文字行。
+手机端**工作区**打开全宽 Workspace 列表，并在存在未分组会话时显示未分组条目。选择 Workspace 后显示其 Session 列表与始终可见的**新会话**按钮；按钮在该 Workspace 内复用或创建空白 Session，无需再次选择目录。未分组页面则创建未分组 Session。**返回**回到 Workspace 列表，选择 Session 则打开对话。逐层浏览使用共享的 Session 投影与排序，而不是另一份 Workspace 记账。顶部的纯图标**搜索与管理**控件打开共享管理浏览器；无障碍名称说明操作，不占用单独的文字行。
 
 ### 重排序与视图选项
 

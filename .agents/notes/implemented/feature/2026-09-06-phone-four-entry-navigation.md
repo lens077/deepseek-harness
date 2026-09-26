@@ -14,9 +14,11 @@ Below 768px, the [layout](../../../../packages/client/ui-layout/README.md) prese
 
 [Pending](../../../../packages/client/ui-digest/README.md) groups waiting interactions and finished unread sessions with the existing personal todo list. Manual Add to todos remains a user decision stored by the [durable inbox](2026-09-17-durable-session-inbox.md), not a separate phone task domain. Project todo documents remain distinct from these personal tasks.
 
-[Workspace browsing](../../../../packages/client/ui-workspace/README.md) proceeds from the Workspace list to one Workspace's Sessions and then to a conversation. Phone New Session explicitly creates an ungrouped scratch Session. Desktop New Session retains its Workspace selection rules.
+[Workspace browsing](../../../../packages/client/ui-workspace/README.md) proceeds from the Workspace list to one Workspace's Sessions and then to a conversation. The selected Workspace page keeps a New Session action beside its directory context; it reuses or creates that Workspace's blank Session rather than inheriting another selected Session's Workspace. The Ungrouped page and the global phone New Session entry explicitly start an ungrouped scratch Session. Desktop New Session retains its Workspace selection rules.
 
-The [conversation shell](../../../../packages/client/ui-conversation/README.md) uses full phone width and places its file rail behind a disclosure that starts closed. A scratch Session's resolved cwd, not Workspace membership, satisfies the composer's directory prerequisite; other input blockers remain effective. The [Settings dialog](../../../../packages/client/ui-settings-general/README.md) places section navigation above its content in a horizontal row. Both arrangements keep auxiliary navigation from consuming the main content width.
+The [directory browser](../../../../packages/client/ui-directory-picker-browse/README.md) presents the current level as one full-width column on phones, with breadcrumb navigation to ancestors and a viewport-bounded action footer. Hiding the parent column also returns keyboard focus to the path control when the selected row disappears. Desktop keeps its two-column comparison of siblings and children.
+
+The [conversation shell](../../../../packages/client/ui-conversation/README.md) uses full phone width and places its file rail behind a disclosure that starts closed. [Produced-file comparisons](../../../../packages/client/ui-deliverables/README.md) also stay collapsed on phones until explicitly opened; file arrivals and desktop expansion preferences do not reopen them. Phone and desktop manual disclosure choices remain separate. A scratch Session's resolved cwd, not Workspace membership, satisfies the composer's directory prerequisite; other input blockers remain effective. The [Settings dialog](../../../../packages/client/ui-settings-general/README.md) places section navigation above its content in a horizontal row. Both arrangements keep auxiliary navigation from consuming the main content width.
 
 Overview has a phone-local tab selection initially set to Inbox, places running work first, and exposes a running-only count filter. Its Workspace filters scroll horizontally rather than consuming multiple rows.
 
@@ -34,8 +36,16 @@ The [informational welcome notice](../../../../packages/client/ui-settings-model
 
 **Put Settings in the bottom navigation.** Rejected in favor of the top header so the four persistent entries serve the primary work tasks.
 
+**Require the global New Session flow from a Workspace page.** Rejected because the page already identifies the intended directory; choosing it again adds navigation and can target the wrong Workspace.
+
+**Keep desktop directory columns and automatic diffs on phones.** Rejected because off-screen columns obscure directory choices and expanded comparisons displace the conversation. Breadcrumbs and explicit file disclosure preserve access without those defaults.
+
 ## Consequences
 
 Phone navigation changes presentation, not Host storage, Session logs, or the meaning of personal todos. Feature plugins still own their operations, and phone and desktop layouts read the same data. Phone navigation is transient rather than a durable preference.
 
 The durable-inbox note remains active because it owns persistence and unread derivation; this note owns the phone navigation decision rather than replacing those rules.
+
+## Verification
+
+[Mobile Workspace browser tests](../../../../apps/web/tests/mobile-workspace.e2e.ts) exercise direct creation in the browsed directory, 320px nested-directory navigation, long-list scrolling, new-folder selection, and keyboard focus. [Recorded edit rendering](../../../../apps/web/tests/mobile-produced-files.e2e.ts) verifies closed and manually opened file comparisons plus the phone/desktop breakpoint. Component tests cover arrivals, preference updates, separate manual choices, and media-listener disposal.
