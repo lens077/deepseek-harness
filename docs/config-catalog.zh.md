@@ -2242,6 +2242,8 @@ export type Config = UsageStatsConfig
 
 /** Plugin configuration; no prices or budgets are inferred when absent. */
 export interface UsageStatsConfig {
+  /** IANA zone for event-date accounting; omitted configuration selects UTC. */
+  calendarTimeZone?: string
   /** Deployment price table; omit to display tokens without monetary estimates. */
   pricing?: UsagePricingTable
   /** Optional advisory budgets and diagnostic thresholds exposed with each ledger. */
@@ -3799,6 +3801,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-brand-official`（[`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-chat`（[`packages/client/ui-chat/src/index.ts`](../packages/client/ui-chat/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-commands`（[`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-companion`（[`packages/client/ui-companion/src/index.ts`](../packages/client/ui-companion/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-conversation`（[`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-cordis`（[`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-deliverables` — 需要 `systemPrompt`（[`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts)）

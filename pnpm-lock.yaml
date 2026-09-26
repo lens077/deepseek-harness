@@ -2588,6 +2588,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-approval':
         specifier: workspace:^
         version: link:../ui-approval
+      '@deepseek-ai/dsh-client-ui-companion':
+        specifier: workspace:^
+        version: link:../ui-companion
       '@deepseek-ai/dsh-client-ui-conversation':
         specifier: workspace:^
         version: link:../ui-conversation
@@ -2597,9 +2600,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:^
         version: link:../ui-primitives
-      '@deepseek-ai/dsh-client-ui-companion':
-        specifier: workspace:^
-        version: link:../ui-companion
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: workspace:^
         version: link:../ui-renderer
@@ -2748,6 +2748,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: workspace:^
         version: link:../ui-renderer
+      '@deepseek-ai/dsh-client-ui-session':
+        specifier: workspace:^
+        version: link:../ui-session
       '@deepseek-ai/dsh-client-ui-sidebar':
         specifier: workspace:^
         version: link:../ui-sidebar
@@ -2757,9 +2760,9 @@ importers:
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
-      '@deepseek-ai/dsh-client-ui-session':
-        specifier: workspace:^
-        version: link:../ui-session
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.7(@types/react@18.3.31)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2769,9 +2772,6 @@ importers:
 
   packages/client/ui-conversation:
     dependencies:
-      '@types/react-dom':
-        specifier: ~18.3.0
-        version: 18.3.7(@types/react@18.3.31)
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -3428,6 +3428,9 @@ importers:
 
   packages/client/ui-model-selection:
     dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -3468,12 +3471,18 @@ importers:
       '@deepseek-ai/dsh-client-ui-session':
         specifier: workspace:^
         version: link:../ui-session
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:^
+        version: link:../ui-settings
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:^
         version: link:../ui-slots
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
@@ -3494,9 +3503,6 @@ importers:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-api-session-controller':
         specifier: workspace:^
@@ -3537,18 +3543,12 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
-      '@deepseek-ai/dsh-client-ui-settings':
-        specifier: workspace:^
-        version: link:../ui-settings
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
       react:
         specifier: ^18.2.0
         version: 18.3.1
-      '@deepseek-ai/dsh-settings':
-        specifier: workspace:^
-        version: link:../../settings/settings
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
