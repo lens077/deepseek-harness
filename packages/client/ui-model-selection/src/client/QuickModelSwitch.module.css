@@ -1,0 +1,127 @@
+/* Quick-switch strip: the last row of the composer context stack, sitting
+   directly above the composer card. Its column matches the other dock cards
+   (card cap minus four insets); the pills gather at the right edge so they
+   stand above the model seat they shortcut. */
+
+.dock {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: flex-end;
+  width: calc(
+    100% -
+    var(--dsh-composer-side-clearance) -
+    var(--dsh-composer-side-clearance) -
+    var(--dsh-composer-dock-inset) -
+    var(--dsh-composer-dock-inset) -
+    var(--dsh-composer-dock-inset) -
+    var(--dsh-composer-dock-inset)
+  );
+  margin: 0 auto;
+}
+
+/* One row that scrolls sideways when the pills outgrow it. The scrollbar is
+   hidden, and 2px of block padding keeps the pills' focus ring inside the
+   scrollport, which clips on both axes. */
+.strip {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+  max-width: calc(var(--dsh-composer-card-max-width) - 4 * var(--dsh-composer-dock-inset));
+  margin: 0 auto;
+  padding: 2px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* Right alignment through an auto margin rather than justify-content: the
+   margin collapses to zero once the pills overflow, so the overflow lies at
+   the end side where the scrollport can reach it (flex-end overflow at the
+   start side cannot be scrolled to). */
+.strip > :first-child {
+  margin-left: auto;
+}
+
+/* Same 13/20 medium secondary voice as the model seat's trigger, one size
+   down and framed by a hairline so a row of them reads as choices, not as
+   more toolbar chrome. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chip:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.chip:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+/* The current route: filled and primary, so the strip also answers "which
+   one am I on" without a glance at the seat. */
+.chipActive {
+  border-color: var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  cursor: default;
+}
+
+.chipActive:hover:not(:disabled) {
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.chipName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Effort beside the name in the caption tone; it yields first when the pill
+   runs out of width, as on the seat's trigger. */
+.chipEffort {
+  flex-shrink: 1000;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-caption);
+}
+
+:global([data-mobile]) .strip {
+  padding: 2px 0;
+  gap: 4px;
+}
+
+:global([data-mobile]) .chip {
+  max-width: 160px;
+}

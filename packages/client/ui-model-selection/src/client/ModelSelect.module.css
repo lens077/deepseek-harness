@@ -90,10 +90,13 @@
    A long name keeps its END visible — the version suffix is what tells two
    entries apart — by ellipsizing from the start: the box lays out
    right-to-left so the ellipsis lands at its start edge. The icon-only
-   floor above does not apply; the name is the identification. */
+   floor above does not apply; the name is the identification. The zero
+   width makes the chip's intrinsic contribution its 64px floor rather than
+   the full name, so the composer row wraps only when that floor cannot fit. */
 :global([data-mobile]) .root {
   flex: 1 1 auto;
-  min-width: 0;
+  width: 0;
+  min-width: 64px;
 }
 
 :global([data-mobile]) .trigger {

@@ -28,6 +28,11 @@ export const zh = {
   'empty.models': '没有可用的模型。',
   'blocked.composer': '当前模型不可用，请先选择模型',
   'empty.efforts': '当前模型未提供推理等级。',
+  'quick.aria': '常用模型快速切换',
+  'quick.chipAria': '切换到 {model}',
+  'quick.chipAriaEffort': '切换到 {model}，推理等级 {effort}',
+  'settings.quickSwitch.title': '常用模型快速切换',
+  'settings.quickSwitch.description': '在输入框上方显示最近使用过的模型，一次点击即可切换',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -53,4 +58,9 @@ export const en = {
   'empty.models': 'No models available.',
   'blocked.composer': 'This model is unavailable — select one to continue',
   'empty.efforts': 'This model provides no reasoning effort levels.',
+  'quick.aria': 'Quick model switch',
+  'quick.chipAria': 'Switch to {model}',
+  'quick.chipAriaEffort': 'Switch to {model}, reasoning effort {effort}',
+  'settings.quickSwitch.title': 'Quick model switch',
+  'settings.quickSwitch.description': 'Show recently used models above the composer for one-click switching',
 } satisfies Record<ModelKey, string>

@@ -1,12 +1,14 @@
 /**
  * ui-model-selection browser half on a real cordis Context with fake command/slots/
- * connection faces and real session scopes: the plugin mounts ModelDirectoryResolver
- * as `models`, the /model contribution and the conversation.input.model
- * seat both register, and BOTH entries resolve the SAME per-session
- * directory through the service — a selection submitted through the seat's
- * inject face is the current the popup's next options pass marks active
- * (and the reverse), the one-shared-state contract of the dual entry.
- * Scope disposal drops the directory (HMR safety).
+ * connection/settings faces and real session scopes: the plugin mounts
+ * ModelDirectoryResolver as `models`; the /model contribution, the
+ * conversation.input.model seat, the quick-switch dock strip, and its Settings
+ * row all register; and every entry resolves the SAME per-session directory
+ * through the service — a selection submitted through the seat's inject face
+ * is the current the popup's next options pass marks active (and the
+ * reverse), the one-shared-state contract of the multi entry. Each accepted
+ * selection lands in the durable recent list the strip reads. Scope disposal
+ * drops the directory (HMR safety).
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
@@ -14,10 +16,13 @@ import { createScope } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { TestRemote, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ModelSelection, ModelSelectionProjection } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { CommandContribution, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { ModelSelectionSettings } from '../src/model-selection-settings.ts'
 import type { ModelSelectInjected } from '../src/client/slots.ts'
+import type { QuickModelSwitchInjected } from '../src/client/QuickModelSwitch.tsx'
+import type { QuickSwitchRowInjected } from '../src/client/QuickSwitchRow.tsx'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -64,6 +69,8 @@ async function bench() {
   // Whether the Host reports an adapter for the current route; the composer
   // block follows this, never catalog membership.
   let routable = true
+  // Whether the Host refuses the next selectModel outright.
+  let refuseSelect = false
   const sessionRemote = {
     modelCatalog: () => {
       calls.models += 1
@@ -79,6 +86,9 @@ async function bench() {
     },
     selectModel: (payload: { sessionId: SessionId; provider: string; model: string; reasoningEffort?: string }) => {
       calls.select += 1
+      if (refuseSelect) {
+        return Promise.resolve({ ok: false as const, error: { code: 'llm/no-adapter', message: 'no adapter' } })
+      }
       selected = {
         provider: payload.provider,
         model: payload.model,
@@ -105,17 +115,28 @@ async function bench() {
       return () => { contribution = undefined }
     },
   })
-  const seats = new Map<string, {
-    inject: ((sessionId: SessionId) => ModelSelectInjected) | undefined
+  interface Seat<I> {
+    inject: ((sessionId: SessionId) => I) | undefined
     locale: string | undefined
-  }>()
+    id: string | undefined
+    order: number | undefined
+  }
+  const seats = new Map<string, Seat<unknown>>()
   ctx.provide('slots', {
     inject(_name: string, callback: () => () => void) { return callback() },
-    register(options: { name: string; locale?: string; inject?: (sessionId: SessionId) => ModelSelectInjected }) {
-      seats.set(options.name, { inject: options.inject, locale: options.locale })
+    register(options: {
+      name: string
+      id?: string
+      order?: number
+      locale?: string
+      inject?: (sessionId: SessionId) => unknown
+    }) {
+      seats.set(options.name, { inject: options.inject, locale: options.locale, id: options.id, order: options.order })
       return () => { seats.delete(options.name) }
     },
   })
+  const settings = stubSettingsScope<ModelSelectionSettings>()
+  ctx.provide('settingsScope', { bind: () => settings.scope })
   const localeRuntime = new LocaleRuntime(ctx)
   // This spec asserts the shipped Chinese copy. There is no jsdom `window` in
   // this lane, so browser-language detection never runs and the locale comes
@@ -155,14 +176,17 @@ async function bench() {
     return handle
   }
   return {
-    ctx, fiber, mint, calls, remote,
+    ctx, fiber, mint, calls, remote, settings,
     contribution: () => contribution!,
-    seat: () => seats.get('conversation.input.model')!,
+    seat: () => seats.get('conversation.input.model') as Seat<ModelSelectInjected>,
+    strip: () => seats.get('conversation.input.dock') as Seat<QuickModelSwitchInjected>,
+    row: () => seats.get('settings.general.item') as Seat<QuickSwitchRowInjected>,
     hostCurrent: () => selected,
     setHostCurrent: (selection: ModelSelection) => { defaultSelection = selection },
     setProjected: (id: SessionId, value: ModelSelectionProjection) => { projections.get(id)?.set(value) },
     address: (id: SessionId) => { addressed.add(id) },
     setRoutable: (next: boolean) => { routable = next },
+    refuseSelect: (next: boolean) => { refuseSelect = next },
     blockOf: (key: string) => blocks.get(sid(key)),
   }
 }
@@ -387,5 +411,77 @@ describe('ui-model-selection dual entry', () => {
     b.ctx.emit('connection/reset')
     await Promise.resolve()
     expect(b.calls).toEqual({ models: 2, select: 0 })
+  })
+})
+
+describe('ui-model-selection quick switch', () => {
+  const PRO: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max' }
+  const FLASH: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+
+  it('registers the dock strip last in the composer stack and the Settings row with the model copy', async () => {
+    const b = await bench()
+    expect(b.strip()).toMatchObject({ id: 'model-quick-switch', order: 50, locale: 'model' })
+    expect(b.row()).toMatchObject({ id: 'model-quick-switch', order: 16, locale: 'model' })
+    const row = b.row().inject!(sid('none'))
+    expect(row.hooks.quickSwitch.getSnapshot()).toEqual({ enabled: true, recent: [] })
+    row.setQuickSwitch(false)
+    expect(row.hooks.quickSwitch.getSnapshot().enabled).toBe(false)
+    expect(b.settings.set).toHaveBeenCalledWith('quickSwitch', false)
+  })
+
+  it('remembers a seat selection with the route it replaced; the strip and the popup read it next', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const seatFace = b.seat().inject!(sid('s1'))
+    const stripFace = b.strip().inject!(sid('s1'))
+    expect(stripFace.hooks.modelDirectory).toBe(seatFace.directory)
+    expect(stripFace.hooks.quickSwitch).toBe(b.row().inject!(sid('none')).hooks.quickSwitch)
+
+    await seatFace.select(PRO)
+    expect(stripFace.hooks.quickSwitch.getSnapshot().recent).toEqual([PRO, FLASH])
+    expect(b.settings.set).toHaveBeenCalledWith('recentModels', [PRO, FLASH])
+  })
+
+  it('remembers popup and strip selections through the same fold', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const stripFace = b.strip().inject!(sid('s1'))
+    const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
+    await b.contribution().ui.onSelect(options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Pro')!, projection('s1'))
+    const proDefault = { ...PRO, reasoningEffort: 'high' }
+    expect(stripFace.hooks.quickSwitch.getSnapshot().recent).toEqual([proDefault, FLASH])
+
+    await expect(stripFace.select(FLASH)).resolves.toEqual({ accepted: true })
+    expect(b.hostCurrent()).toEqual(FLASH)
+    expect(stripFace.hooks.quickSwitch.getSnapshot().recent).toEqual([FLASH, proDefault])
+  })
+
+  it('adopts the Host-persisted list so a fresh page offers the same pills', async () => {
+    const b = await bench()
+    b.settings.publish({ status: 'ready', value: { quickSwitch: true, recentModels: [PRO] }, revision: 1, writable: true })
+    b.mint('s1')
+    expect(b.strip().inject!(sid('s1')).hooks.quickSwitch.getSnapshot().recent).toEqual([PRO])
+  })
+
+  it('reports a refused strip selection with the directory failure text and remembers nothing', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const stripFace = b.strip().inject!(sid('s1'))
+    b.refuseSelect(true)
+    await expect(stripFace.select(PRO)).resolves.toEqual({ accepted: false, message: 'llm/no-adapter: no adapter' })
+    expect(stripFace.hooks.modelDirectory.getSnapshot().status).toBe('error')
+    expect(stripFace.hooks.quickSwitch.getSnapshot().recent).toEqual([])
+    expect(b.settings.set).not.toHaveBeenCalled()
+
+    // A refusal the directory raises before any wire call carries its own message.
+    b.mint('child')
+    b.address(sid('child'))
+    const childFace = b.strip().inject!(sid('child'))
+    expect(childFace.available).toBe(false)
+    await expect(childFace.select(PRO)).resolves.toEqual({
+      accepted: false,
+      message: 'model selection is unavailable for addressed subagent sessions',
+    })
+    expect(b.calls.select).toBe(1)
   })
 })
