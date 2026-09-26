@@ -39,15 +39,15 @@ describe('resolveSubmitMode', () => {
 })
 
 describe('ComposerSubmissionPolicy', () => {
-  it('defaults to Queue and publishes preference changes', () => {
+  it('defaults to Steer and publishes preference changes', () => {
     const policy = new ComposerSubmissionPolicy()
     expect(policy.busyEnter.getSnapshot()).toBe(DEFAULT_BUSY_ENTER_BEHAVIOR)
 
     const changed = vi.fn()
     policy.busyEnter.subscribe(changed)
-    policy.setBusyEnter('steer')
+    policy.setBusyEnter('queue')
     expect(changed).toHaveBeenCalledTimes(1)
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
+    expect(policy.busyEnter.getSnapshot()).toBe('queue')
   })
 
   it('requires the configured send gesture and keeps accelerated sending available', () => {
@@ -120,13 +120,13 @@ describe('ComposerSubmissionPolicy', () => {
     }
     const policy = new ComposerSubmissionPolicy(scope)
     liveBehavior = () => policy.busyEnter.getSnapshot()
-    policy.setBusyEnter('steer')
-    expect(observed).toEqual(['busyEnter=steer:steer'])
-    expect(host.set).toHaveBeenCalledWith('busyEnter', 'steer')
+    policy.setBusyEnter('queue')
+    expect(observed).toEqual(['busyEnter=queue:queue'])
+    expect(host.set).toHaveBeenCalledWith('busyEnter', 'queue')
     expect(host.set).toHaveBeenCalledOnce()
     liveBehavior = () => policy.sendShortcut.getSnapshot()
     policy.setSendShortcut('mod-enter')
-    expect(observed).toEqual(['busyEnter=steer:steer', 'sendShortcut=mod-enter:mod-enter'])
+    expect(observed).toEqual(['busyEnter=queue:queue', 'sendShortcut=mod-enter:mod-enter'])
     expect(host.set).toHaveBeenLastCalledWith('sendShortcut', 'mod-enter')
     expect(host.set).toHaveBeenCalledTimes(2)
     policy.setSendShortcut('Ctrl+Alt+S')
@@ -137,19 +137,19 @@ describe('ComposerSubmissionPolicy', () => {
   it('adopts a Host preference without writing it back and leaves an identical write untouched', () => {
     const host = stubSettingsScope<ConversationSettings>()
     const policy = new ComposerSubmissionPolicy(host.scope)
-    host.publish({ status: 'ready', value: { busyEnter: 'steer', sendShortcut: 'mod-enter', contentWidth: 'fill', questionNavigation: { previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right' } }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { busyEnter: 'steer', sendShortcut: 'mod-enter', contentWidth: 'fill', homeEndInTextFields: true, questionNavigation: { previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right' } }, revision: 1, writable: true })
     expect(policy.busyEnter.getSnapshot()).toBe('steer')
     expect(policy.sendShortcut.getSnapshot()).toBe('mod-enter')
     policy.setBusyEnter('steer')
     policy.setSendShortcut('mod-enter')
     expect(host.set).not.toHaveBeenCalled()
-    host.publish({ value: { busyEnter: 'steer', sendShortcut: 'mod-enter', contentWidth: 'fill', questionNavigation: { previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right' } }, revision: 2 })
+    host.publish({ value: { busyEnter: 'steer', sendShortcut: 'mod-enter', contentWidth: 'fill', homeEndInTextFields: true, questionNavigation: { previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right' } }, revision: 2 })
     expect(policy.busyEnter.getSnapshot()).toBe('steer')
   })
 
   it('adopts a section already standing at construction', () => {
     const host = stubSettingsScope<ConversationSettings>()
-    host.publish({ status: 'ready', value: { busyEnter: 'steer', sendShortcut: 'mod-enter', contentWidth: 'fill', questionNavigation: { previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right' } }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { busyEnter: 'steer', sendShortcut: 'mod-enter', contentWidth: 'fill', homeEndInTextFields: true, questionNavigation: { previousShortcut: 'Ctrl+ArrowUp', nextShortcut: 'Ctrl+ArrowDown', focusPolicy: 'editable', expandButtonSide: 'right' } }, revision: 1, writable: true })
     const policy = new ComposerSubmissionPolicy(host.scope)
     expect(policy.busyEnter.getSnapshot()).toBe('steer')
     expect(policy.sendShortcut.getSnapshot()).toBe('mod-enter')

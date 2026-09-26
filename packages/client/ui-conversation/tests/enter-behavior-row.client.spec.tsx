@@ -57,11 +57,11 @@ function mount() {
 }
 
 describe('EnterBehaviorRow', () => {
-  it('explains the busy-only scope over Enter and Send and shows Queue by default', () => {
+  it('explains the busy-only scope over Enter and Send and shows Steer by default', () => {
     mount()
     expect(screen.getByText('Send behavior while busy')).toBeDefined()
     expect(screen.getByText('What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior')).toBeDefined()
-    expect(screen.getByRole('button', { name: /Queue/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('button', { name: /Steer/ }).getAttribute('aria-expanded')).toBe('false')
   })
 
   it('selects the send shortcut independently and follows later preference changes', () => {
@@ -72,7 +72,7 @@ describe('EnterBehaviorRow', () => {
     expect(b.setBusyEnter).not.toHaveBeenCalled()
     expect(screen.queryByRole('menuitem', { name: 'Ctrl / Cmd + Enter' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Send message shortcut: Ctrl / Cmd + Enter' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Send behavior while busy: Queue' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Send behavior while busy: Steer' })).toBeDefined()
     expect(screen.getByText('Enter inserts a newline; Ctrl + Enter or Cmd + Enter sends. Shift + Enter also inserts a newline.')).toBeDefined()
     expect(screen.getByText('Busy only; Ctrl / Cmd + Enter uses the selected delivery mode.')).toBeDefined()
     expect(screen.queryByText('Busy only; Cmd/Ctrl+Enter uses the other behavior')).toBeNull()
@@ -85,19 +85,19 @@ describe('EnterBehaviorRow', () => {
     expect(screen.queryByRole('menuitem', { name: 'Ctrl / Cmd + Enter' })).toBeNull()
   })
 
-  it('selects Steer, follows later preference changes, and closes outside', () => {
+  it('selects Queue, follows later preference changes, and closes outside', () => {
     const b = mount()
-    const trigger = screen.getByRole('button', { name: /Queue/ })
+    const trigger = screen.getByRole('button', { name: /Steer/ })
     fireEvent.click(trigger)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Steer' }))
-    expect(b.setBusyEnter).toHaveBeenCalledWith('steer')
-    expect(screen.getByRole('button', { name: /Steer/ })).toBeDefined()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Queue' }))
+    expect(b.setBusyEnter).toHaveBeenCalledWith('queue')
+    expect(screen.getByRole('button', { name: /Queue/ })).toBeDefined()
 
-    act(() => { b.policy.setBusyEnter('queue') })
-    const queueTrigger = screen.getByRole('button', { name: /Queue/ })
-    fireEvent.click(queueTrigger)
-    expect(screen.getByRole('menuitem', { name: 'Steer' })).toBeDefined()
+    act(() => { b.policy.setBusyEnter('steer') })
+    const steerTrigger = screen.getByRole('button', { name: /Steer/ })
+    fireEvent.click(steerTrigger)
+    expect(screen.getByRole('menuitem', { name: 'Queue' })).toBeDefined()
     fireEvent.pointerDown(document.body)
-    expect(screen.queryByRole('menuitem', { name: 'Steer' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Queue' })).toBeNull()
   })
 })

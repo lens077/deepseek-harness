@@ -30,6 +30,10 @@ import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ContentWidthRow } from './settings/ContentWidthRow.tsx'
 import type { ContentWidthRowInjected } from './settings/ContentWidthRow.tsx'
 import { ContentWidthPolicy } from './settings/content-width-policy.ts'
+import { HomeEndCaretRow } from './settings/HomeEndCaretRow.tsx'
+import type { HomeEndCaretRowInjected } from './settings/HomeEndCaretRow.tsx'
+import { HomeEndCaretPolicy } from './settings/home-end-caret-policy.ts'
+import { registerTextFieldHomeEnd } from './input/text-field-home-end.ts'
 import { QuestionShortcutRow } from './settings/QuestionShortcutRow.tsx'
 import type { QuestionShortcutRowInjected } from './settings/QuestionShortcutRow.tsx'
 import { QuestionNavigationPolicy } from './input/question-navigation-policy.ts'
@@ -143,6 +147,11 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const contentWidthPolicy = new ContentWidthPolicy(conversationSettings)
   const questionNavigation = new QuestionNavigationPolicy(conversationSettings)
   ctx.provide('questionNavigation', questionNavigation)
+  const homeEndCaret = new HomeEndCaretPolicy(conversationSettings)
+  ctx.effect(
+    () => registerTextFieldHomeEnd(() => homeEndCaret.enabled.getSnapshot()),
+    'ui-conversation: Home/End in text fields',
+  )
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -166,6 +175,17 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       setContentWidthMode: (mode) => { contentWidthPolicy.setMode(mode) },
     }),
   }, ContentWidthRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'home-end-caret',
+    order: 27,
+    locale: NS,
+    inject: (): HomeEndCaretRowInjected => ({
+      hooks: { homeEndCaret: homeEndCaret.enabled },
+      setHomeEndCaret: (enabled) => { homeEndCaret.set(enabled) },
+    }),
+  }, HomeEndCaretRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -378,6 +398,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           stop: undefined,
           command: undefined,
           setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
+          setSendShortcut: (shortcut) => { submissionPolicy.setSendShortcut(shortcut) },
           hooks: {
             busyEnter: submissionPolicy.busyEnter,
             sendShortcut: submissionPolicy.sendShortcut,
@@ -432,6 +453,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           })
         },
         setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
+        setSendShortcut: (shortcut) => { submissionPolicy.setSendShortcut(shortcut) },
         command: async (line) => {
           const session = sessions.binding(sessionId)?.session
           if (session === undefined) return false

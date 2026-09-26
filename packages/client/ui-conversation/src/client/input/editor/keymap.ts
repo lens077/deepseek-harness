@@ -1,8 +1,8 @@
 /**
  * Composer keymap over the Lexical command layer: menu arbitration
- * (arrows/escape/enter), space adjudication, the Enter submit gesture, and
- * paste routing. Registered at CRITICAL priority so it decides before
- * @lexical/plain-text's own Enter/paste defaults; a handler returning false
+ * (arrows/escape/enter), space adjudication, the Enter submit gesture,
+ * Home/End caret motion, and paste routing. Registered at CRITICAL priority so
+ * it decides before @lexical/plain-text's own Enter/paste defaults; a handler returning false
  * falls through to those defaults (Shift+Enter's line break, ordinary
  * spaces, text paste the bar routes itself).
  *
@@ -18,6 +18,7 @@ import {
   KEY_DOWN_COMMAND, KEY_ESCAPE_COMMAND, KEY_SPACE_COMMAND, KEY_TAB_COMMAND, PASTE_COMMAND,
 } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
+import { $moveComposerCaret } from './caret-motion.ts'
 import type { ArbitrateKey, ArbitrateOutcome } from '../../contract/input.ts'
 import type { ComposerSubmitGesture } from '../../contract/composer-submission.ts'
 import type { ShortcutKeyEvent } from '../../../send-shortcut.ts'
@@ -84,6 +85,23 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     return true
   }
 
+  // Home/End: macOS binds them to document scrolling even while a
+  // contenteditable holds focus, so the composer claims them for the caret.
+  // Ctrl/Meta widens the reach to the whole draft and Shift extends the
+  // selection, matching the platform-independent text-field convention. Alt
+  // is left alone: the workspace pin shortcuts own Alt+Home.
+  const lineCaret = (event: KeyboardEvent): boolean => {
+    if (event.key !== 'Home' && event.key !== 'End') return false
+    if (event.altKey) return false
+    const moved = $moveComposerCaret(
+      event.key === 'Home' ? 'start' : 'end',
+      event.ctrlKey || event.metaKey ? 'buffer' : 'line',
+      event.shiftKey ? 'extend' : 'move',
+    )
+    if (moved) event.preventDefault()
+    return moved
+  }
+
   const arrow = (key: ArbitrateKey) => (event: KeyboardEvent | null): boolean => {
     const inComposition = event !== null && isComposingEvent(event, recentlyComposing)
     if (handlers.arbitrate(key, inComposition) !== 'pass') {
@@ -103,7 +121,9 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     editor.registerCommand(KEY_DOWN_COMMAND, (event) => {
       if (event.key === 'Enter' || isComposingEvent(event, recentlyComposing)) return false
       const gesture = resolveGesture(event)
-      return gesture === null ? false : submit(event, gesture)
+      // A send shortcut bound to Home/End keeps the key: submission is the
+      // gesture the user configured, caret motion is only the fallback.
+      return gesture === null ? lineCaret(event) : submit(event, gesture)
     }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow('up'), COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow('down'), COMMAND_PRIORITY_CRITICAL),

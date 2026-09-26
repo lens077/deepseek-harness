@@ -359,6 +359,12 @@
 .modeSelect:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .modeSelect:disabled { opacity: .55; cursor: default; }
 
+/* Send-gesture chip wrapper: layout-neutral on desktop; the phone toolbar
+   hides it (see the phone rules below). */
+.sendShortcut {
+  display: contents;
+}
+
 /* Primary send (figma IconButton 34:10465): 34px circle, #3964FE light /
    #679EFE dark — the info-fill pair (500→400), NOT button-primary (ink);
    white glyph; empty text = 0.4 opacity. */
@@ -410,9 +416,10 @@
 }
 
 /* Phone composer: as short as the draft allows. One 24px line plus 2px of
-   top pad is the resting floor, the toolbar keeps every control on ONE row
-   (the model chip yields width instead of wrapping), and the controls stay
-   touchable at 36px rather than the frame's 44px. */
+   top pad is the resting floor, the toolbar stays on ONE row while it fits
+   (the model chip yields width down to its floor), and the controls stay
+   touchable at 36px rather than the frame's 44px. Phone chips are
+   icon-only except the model name; the send-gesture chip is dropped. */
 :global([data-mobile]) .root {
   padding-bottom: 4px;
 }
@@ -450,8 +457,12 @@
   line-height: 1.4;
 }
 
+/* The row wraps only when the left group plus the trailing group's floor
+   (fixed controls and the model chip's minimum) exceed the card: the
+   trailing group then takes a full second line instead of overflowing
+   leftward over the left controls. */
 :global([data-mobile]) .row {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 0 6px 4px;
 }
@@ -471,6 +482,12 @@
   justify-content: flex-end;
   gap: 6px;
   margin-left: 0;
+}
+
+/* The send gesture is a hardware-keyboard preference; the phone sends with
+   the button, and Settings keeps the choice. */
+:global([data-mobile]) .sendShortcut {
+  display: none;
 }
 
 :global([data-mobile]) .add {

@@ -25,12 +25,12 @@ export type SendShortcutRecordResult =
 
 const MODIFIERS = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const
 const KEYS = [
-  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', ...'0123456789',
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), ...'0123456789'.split(''),
   'Enter', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'Home', 'End', 'PageUp', 'PageDown',
   ...Array.from({ length: 12 }, (_, index) => `F${index + 1}`),
 ]
-const EDITING_BROWSER_KEYS = new Set([...'ACVXZYRWTNLFPSOQHBIUK0', 'F4', 'F5', 'F6'])
+const EDITING_BROWSER_KEYS = new Set([...'ACVXZYRWTNLFPSOQHBIUK0'.split(''), 'F4', 'F5', 'F6'])
 
 function reserved(modifiers: readonly string[], key: string): boolean {
   if ((modifiers.includes('Ctrl') || modifiers.includes('Meta')) && !modifiers.includes('Alt')

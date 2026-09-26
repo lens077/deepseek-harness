@@ -42,3 +42,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Icon-only in a narrow composer row, at the permission chip's 460px cut
+   (anonymous container: ui-conversation InputBar .row); the switch keeps its
+   accessible name and title. */
+@container (max-width: 460px) {
+  .label {
+    display: none;
+  }
+}

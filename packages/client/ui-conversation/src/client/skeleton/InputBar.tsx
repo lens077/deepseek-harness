@@ -30,6 +30,7 @@ import type {} from '@deepseek-ai/dsh-goal/client'
 // api-remotes import already places it in every client program.
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerBarProps } from '../contract/slots.ts'
+import { SEND_SHORTCUT_PRESETS, sendShortcutLabel } from '../contract/send-shortcut-presets.ts'
 import { ComposerContentEditable } from '../input/editor/ComposerContentEditable.tsx'
 import { DecoratorPortals } from '../input/editor/DecoratorPortals.tsx'
 import { registerComposerKeymap } from '../input/editor/keymap.ts'
@@ -41,10 +42,50 @@ import css from './InputBar.module.css'
 
 export type InputBarProps = ComposerBarProps
 
+/** One toolbar chip that opens a menu and reports the picked option id. */
+function ChipSelect({ label, value, selected, options, onSelect, disabled, onMouseDown }: {
+  /** Accessible name prefix; the chip face carries only the selected option. */
+  label: string
+  value: string
+  /** Localized face of `value`; its owner supplies it because it may be a recorded chord. */
+  selected: string
+  options: readonly { id: string; label: string }[]
+  onSelect: (id: string) => void
+  disabled: boolean
+  onMouseDown: (event: MouseEvent<HTMLButtonElement>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Menu
+      open={open}
+      onClose={() => { setOpen(false) }}
+      items={options}
+      selectedId={value}
+      onSelect={(id) => { setOpen(false); onSelect(id) }}
+      align="end"
+      portal
+      anchor={(
+        <button
+          type="button"
+          className={css.modeSelect}
+          aria-label={`${label}: ${selected}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={disabled}
+          onMouseDown={onMouseDown}
+          onClick={() => { setOpen(current => !current) }}
+        >
+          {selected} <IconChevronDownOutline14 />
+        </button>
+      )}
+    />
+  )
+}
+
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
   retryFileUpload,
-  setBusyEnter, toggleCommandMenu, stop, command, t,
+  setBusyEnter, setSendShortcut, toggleCommandMenu, stop, command, t,
   renderSlot, useBusyEnter, useSendShortcut, useFileUploads, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -54,7 +95,6 @@ export const InputBar = memo(function InputBar({
   const notice = useNotices(s => s)
   const busyEnter = useBusyEnter(s => s)
   const sendShortcut = useSendShortcut(s => s)
-  const [modeMenuOpen, setModeMenuOpen] = useState(false)
   void useLexicon // hook seat stays bound by the inject compartment; text-ref decoration rides the shell's editor transforms
   const commandMenuOpen = useMenuLauncher(source => source === 'command')
   const promptError = useSession(s => s.promptError) ?? null
@@ -366,6 +406,14 @@ export const InputBar = memo(function InputBar({
     }
   }
 
+  // The send-gesture chip's face. A stored chord outside the offered presets
+  // keeps its recorded spelling, which is also the row that represents it in
+  // the menu, so the chip can always name the gesture actually in effect.
+  const shortcutPreset = SEND_SHORTCUT_PRESETS.find(preset => preset.id === sendShortcut)
+  const shortcutFace = shortcutPreset === undefined
+    ? t('settings.send.customValue', { shortcut: sendShortcutLabel(sendShortcut) })
+    : t(shortcutPreset.label)
+
   // The Access seat: the projection-fed permission chip (renders nothing
   // while the permissions key is absent — permission-less host or Draft —
   // or while the command face is absent with the session).
@@ -543,21 +591,39 @@ export const InputBar = memo(function InputBar({
               ? null
               : renderSlot('conversation.input.right', {})}
             {sessionId === undefined ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
-            {running && plainMessageDraft && <Menu
-              open={modeMenuOpen}
-              onClose={() => { setModeMenuOpen(false) }}
-              items={[{ id: 'steer', label: t('input.send.steer') }, { id: 'queue', label: t('input.send.queue') }]}
-              selectedId={busyEnter}
-              onSelect={(id) => { setModeMenuOpen(false); if (id === 'steer' || id === 'queue') setBusyEnter(id) }}
-              align="end"
-              portal
-              anchor={(
-                <button type="button" className={css.modeSelect} aria-label={`${t('input.send.steer')}/${t('input.send.queue')}`} aria-haspopup="menu" aria-expanded={modeMenuOpen} disabled={disabled || machineBusy} onMouseDown={keepFocus} onClick={() => { setModeMenuOpen(open => !open) }}>
-                  {t(busyEnter === 'steer' ? 'input.send.steer' : 'input.send.queue')} <IconChevronDownOutline14 />
-                </button>
-              )}
-            />}
+            {running && plainMessageDraft && (
+              <ChipSelect
+                label={t('settings.enter.title')}
+                value={busyEnter}
+                selected={t(busyEnter === 'steer' ? 'input.send.steer' : 'input.send.queue')}
+                options={[{ id: 'steer', label: t('input.send.steer') }, { id: 'queue', label: t('input.send.queue') }]}
+                onSelect={(id) => { if (id === 'steer' || id === 'queue') setBusyEnter(id) }}
+                disabled={disabled || machineBusy}
+                onMouseDown={keepFocus}
+              />
+            )}
             <ContextMeter useProjection={useProjection} t={t} />
+            {/* The send gesture, chosen per conversation from the same durable
+                preference the Settings row writes. A recorded custom chord is
+                offered as its own row so picking it back is not a dead end;
+                recording a new one stays in Settings. The phone toolbar
+                drops the chip (.sendShortcut) and keeps the Settings row. */}
+            {sessionId !== undefined && (
+              <span className={css.sendShortcut}>
+                <ChipSelect
+                  label={t('settings.send.title')}
+                  value={sendShortcut}
+                  selected={shortcutFace}
+                  options={[
+                    ...SEND_SHORTCUT_PRESETS.map(preset => ({ id: preset.id, label: t(preset.label) })),
+                    ...shortcutPreset === undefined ? [{ id: sendShortcut, label: shortcutFace }] : [],
+                  ]}
+                  onSelect={setSendShortcut}
+                  disabled={disabled || machineBusy}
+                  onMouseDown={keepFocus}
+                />
+              </span>
+            )}
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500} disabled={stop === undefined}>
                 <button

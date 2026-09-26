@@ -10,7 +10,7 @@
 
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { $getRoot, $isTextNode } from 'lexical'
 import {
   bindSnapshotSelector, conversationSnapshot as conversationFixture, makeTranslate, RemoteError,
@@ -202,6 +202,7 @@ function bench(over?: BenchOptions) {
     }),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     setBusyEnter: (behavior) => { policy.setBusyEnter(behavior) },
+    setSendShortcut: (shortcut) => { policy.setSendShortcut(shortcut) },
     useBusyEnter: bindSnapshotSelector(busyEnter),
     useSendShortcut: bindSnapshotSelector(policy.sendShortcut),
     useNotices: bindSnapshotSelector(shell.notices),
@@ -788,6 +789,50 @@ describe('configurable send shortcut', () => {
     const { button, sink } = bench({ draft: 'hello', sendShortcut: 'mod-enter' })
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+  })
+})
+
+describe('composer send-shortcut chip', () => {
+  it('picks a preset from the toolbar and the editor obeys it without a remount', async () => {
+    const { textarea, shell, sink, policy } = bench({ draft: 'hello' })
+    fireEvent.click(screen.getByRole('button', { name: '发送消息快捷键: Enter' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ctrl / Cmd + Enter' }))
+    expect(policy.sendShortcut.getSnapshot()).toBe('mod-enter')
+    expect(screen.getByRole('button', { name: '发送消息快捷键: Ctrl / Cmd + Enter' })).toBeDefined()
+
+    act(() => { shell.editor.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('hello\n') })
+    expect(sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledOnce()
+  })
+
+  it('follows a preference changed elsewhere and offers a recorded chord as its own row', () => {
+    const { policy } = bench({ draft: 'hello', sendShortcut: 'Ctrl+Alt+S' })
+    const trigger = screen.getByRole('button', { name: '发送消息快捷键: 自定义：Ctrl + Alt + S' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menuitem', { name: '自定义：Ctrl + Alt + S' })).toBeDefined()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Enter' }))
+    expect(policy.sendShortcut.getSnapshot()).toBe('enter')
+
+    act(() => { policy.setSendShortcut('Alt+Enter') })
+    expect(screen.getByRole('button', { name: '发送消息快捷键: Alt + Enter' })).toBeDefined()
+    expect(screen.queryByRole('menuitem', { name: /自定义/ })).toBeNull()
+  })
+
+  it('closes on an outside press without changing the preference', () => {
+    const { policy } = bench({ draft: 'hello' })
+    fireEvent.click(screen.getByRole('button', { name: '发送消息快捷键: Enter' }))
+    expect(screen.getByRole('menuitem', { name: 'Alt + Enter' })).toBeDefined()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menuitem', { name: 'Alt + Enter' })).toBeNull()
+    expect(policy.sendShortcut.getSnapshot()).toBe('enter')
+  })
+
+  it('locks the chip with the rest of the composer', () => {
+    bench({ draft: 'hello', disabled: true })
+    expect(screen.getByRole('button', { name: '发送消息快捷键: Enter' }).hasAttribute('disabled')).toBe(true)
   })
 })
 

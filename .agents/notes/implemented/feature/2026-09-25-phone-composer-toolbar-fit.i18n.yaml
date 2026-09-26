@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-25-phone-composer-toolbar-fit.md
+2026-09-25-phone-composer-toolbar-fit.md: 3d166454a9bedd4bcc48a7873afa878c0349886f
+2026-09-25-phone-composer-toolbar-fit.zh.md: 37db63465a01e5ac0c112dae243bd5e113972e2e

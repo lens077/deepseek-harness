@@ -71,6 +71,17 @@
   }
 }
 
+/* Phone: the glyph alone fills the 36px touch square, which keeps the
+   toolbar on one row down to 360px-wide screens. */
+:global([data-mobile]) .trigger:has(.triggerIcon) {
+  justify-content: center;
+  padding: 0;
+}
+
+:global([data-mobile]) .trigger:has(.triggerIcon) .chevron {
+  display: none;
+}
+
 .chevronOpen {
   transform: rotate(180deg);
 }

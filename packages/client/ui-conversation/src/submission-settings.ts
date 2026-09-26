@@ -18,7 +18,7 @@ export const BUSY_ENTER_BEHAVIORS = ['queue', 'steer'] as const
 /** Configurable meaning of plain Enter while the addressed agent is busy. */
 export type BusyEnterBehavior = typeof BUSY_ENTER_BEHAVIORS[number]
 
-/** Default preserves Enter-as-Queue for running conversations. */
+/** Default steers running conversations when the preferred send gesture is used. */
 export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'steer'
 
 /** Where a question-navigation shortcut is suppressed: editable regions, text inputs only, or nowhere. */
@@ -50,6 +50,17 @@ export const DEFAULT_QUESTION_NAVIGATION_SETTINGS: QuestionNavigationSettings = 
   expandButtonSide: 'right',
 }
 
+/** Field carrying the Home/End preference for text fields outside the composer. */
+export const HOME_END_CARET_FIELD = 'homeEndInTextFields'
+
+/**
+ * Whether Home/End move the caret in the GUI's other `<input>` and
+ * `<textarea>` fields. The composer always moves its own caret; this governs
+ * only the fields around it, where the alternative is the browser's default
+ * (document scrolling on macOS).
+ */
+export const DEFAULT_HOME_END_CARET: boolean = true
+
 /** Field carrying the conversation content-width mode. */
 export const CONTENT_WIDTH_FIELD = 'contentWidth'
 
@@ -71,6 +82,8 @@ export interface ConversationSettings {
   sendShortcut: SendShortcut
   /** Conversation content-column sizing mode. */
   contentWidth: ContentWidthMode
+  /** Whether Home/End move the caret in text fields outside the composer. */
+  homeEndInTextFields: boolean
   questionNavigation: QuestionNavigationSettings
 }
 
@@ -79,6 +92,7 @@ export const ConversationSettingsSchema: z<ConversationSettings> = z.object({
   [BUSY_ENTER_FIELD]: z.union([...BUSY_ENTER_BEHAVIORS]).default(DEFAULT_BUSY_ENTER_BEHAVIOR),
   sendShortcut: z.string().pattern(SEND_SHORTCUT_PATTERN).default('enter'),
   [CONTENT_WIDTH_FIELD]: z.union([...CONTENT_WIDTH_MODES]).default(DEFAULT_CONTENT_WIDTH_MODE),
+  [HOME_END_CARET_FIELD]: z.boolean().default(DEFAULT_HOME_END_CARET),
   questionNavigation: z.object({
     previousShortcut: z.string().default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.previousShortcut),
     nextShortcut: z.string().default(DEFAULT_QUESTION_NAVIGATION_SETTINGS.nextShortcut),

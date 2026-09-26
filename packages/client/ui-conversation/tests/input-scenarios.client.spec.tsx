@@ -137,6 +137,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
   const wiring = shell
   const sessionStore = createSnapshotStore<SessionSnapshot>(sessionSnapshot(sessionId))
   const busyEnter = createSnapshotStore<'queue' | 'steer'>('queue')
+  const sendShortcut = createSnapshotStore<string>('enter')
   const barProps: InputBarProps = {
     sessionId,
     SessionProvider: ({ children }) => children,
@@ -169,8 +170,9 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
       previewUrl: `blob:${id}`,
     })),
     setBusyEnter: (behavior) => { busyEnter.set(behavior) },
+    setSendShortcut: (shortcut) => { sendShortcut.set(shortcut) },
     useBusyEnter: bindSnapshotSelector(busyEnter),
-    useSendShortcut: bindSnapshotSelector(createSnapshotStore<'enter'>('enter')),
+    useSendShortcut: bindSnapshotSelector(sendShortcut),
     toggleCommandMenu: (selection) => {
       const snapshot = shell.snapshot
       controller.toggleSource('command', {

@@ -5,6 +5,7 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button, IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BusyEnterBehavior } from '../contract/composer-submission.ts'
+import { isSendShortcutPreset, SEND_SHORTCUT_PRESETS, sendShortcutLabel } from '../contract/send-shortcut-presets.ts'
 import type { SendShortcut } from '../../submission-settings.ts'
 import { recordSendShortcut } from '../../send-shortcut.ts'
 import type { ConversationKey } from '../locales.ts'
@@ -32,18 +33,6 @@ const DELIVERY_OPTIONS: readonly { id: BusyEnterBehavior; label: ConversationKey
   { id: 'queue', label: 'settings.enter.queue' },
   { id: 'steer', label: 'settings.enter.steer' },
 ]
-const SHORTCUT_OPTIONS: readonly { id: SendShortcut; label: ConversationKey }[] = [
-  { id: 'enter', label: 'settings.send.enter' },
-  { id: 'mod-enter', label: 'settings.send.modEnter' },
-  { id: 'Alt+Enter', label: 'settings.send.altEnter' },
-  { id: 'Ctrl+Shift+Enter', label: 'settings.send.ctrlShiftEnter' },
-  { id: 'Meta+Shift+Enter', label: 'settings.send.metaShiftEnter' },
-]
-
-function shortcutLabel(shortcut: string): string {
-  return shortcut.split('+').map(key => key === 'Meta' ? 'Cmd' : key).join(' + ')
-}
-
 function PreferenceRow<T extends string>({ title, description, value, options, onSelect, buttonRef }: {
   title: string
   description: string
@@ -107,13 +96,13 @@ export function EnterBehaviorRow({ useBusyEnter, useSendShortcut, setBusyEnter, 
   const helpId = useId()
   const errorId = useId()
   useEffect(() => { if (recording) recorder.current?.focus() }, [recording])
-  const preset = SHORTCUT_OPTIONS.some(option => option.id === shortcut)
-  const customLabel = preset ? t('settings.send.custom') : t('settings.send.customValue', { shortcut: shortcutLabel(shortcut) })
+  const preset = isSendShortcutPreset(shortcut)
+  const customLabel = preset ? t('settings.send.custom') : t('settings.send.customValue', { shortcut: sendShortcutLabel(shortcut) })
   const description = shortcut === 'enter'
     ? t('settings.send.enterDescription')
     : shortcut === 'mod-enter'
       ? t('settings.send.modEnterDescription')
-      : t('settings.send.customDescription', { shortcut: shortcutLabel(shortcut) })
+      : t('settings.send.customDescription', { shortcut: sendShortcutLabel(shortcut) })
 
   const cancel = (): void => {
     setRecording(false)
@@ -158,7 +147,7 @@ export function EnterBehaviorRow({ useBusyEnter, useSendShortcut, setBusyEnter, 
           buttonRef={shortcutButton}
           description={description}
           value={preset ? shortcut : 'custom'}
-          options={[...SHORTCUT_OPTIONS.map(option => ({ id: option.id, label: t(option.label) })), { id: 'custom', label: customLabel }]}
+          options={[...SEND_SHORTCUT_PRESETS.map(option => ({ id: option.id, label: t(option.label) })), { id: 'custom', label: customLabel }]}
           onSelect={(value) => {
             if (value === 'custom') {
               setCandidate(null)
@@ -179,7 +168,7 @@ export function EnterBehaviorRow({ useBusyEnter, useSendShortcut, setBusyEnter, 
                 ref={recorder}
                 className={css.recordInput}
                 readOnly
-                value={candidate === null ? '' : shortcutLabel(candidate)}
+                value={candidate === null ? '' : sendShortcutLabel(candidate)}
                 placeholder={t('settings.send.pressKeys')}
                 aria-describedby={`${helpId}${error === null ? '' : ` ${errorId}`}`}
                 aria-invalid={error !== null}

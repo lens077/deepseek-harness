@@ -360,6 +360,8 @@ export interface ComposerBarInjected {
   command: ((line: string) => Promise<boolean>) | undefined
   /** Persist the busy-state delivery mode used by the composer submit action. */
   setBusyEnter: (behavior: BusyEnterBehavior) => void
+  /** Persist the keyboard gesture that sends, shared with the Settings row. */
+  setSendShortcut: (shortcut: SendShortcut) => void
   hooks: {
     /**
      * Live busy-state submission preference: the delivery mode plain Enter

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-24-home-end-caret-in-text-fields.md
+2026-09-24-home-end-caret-in-text-fields.md: a80f65fad64fb8e414d4e0acdf8c1addc0af4e82
+2026-09-24-home-end-caret-in-text-fields.zh.md: c5171713684559a7cb21247f78eae197d91f3caa

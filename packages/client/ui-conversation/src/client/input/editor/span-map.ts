@@ -61,6 +61,25 @@ function resolvePoint(layout: ComposerLayout, offset: number): ResolvedPoint | n
 }
 
 /**
+ * Build and apply a live RangeSelection between two detect offsets, keeping
+ * their argument order as the selection's direction.
+ * @param layout - current walk product.
+ * @param anchorOffset - the fixed end.
+ * @param focusOffset - the moving end.
+ * @returns the applied selection, or null when either endpoint fails to map.
+ */
+function selectPoints(layout: ComposerLayout, anchorOffset: number, focusOffset: number): RangeSelection | null {
+  const anchor = resolvePoint(layout, anchorOffset)
+  const focus = resolvePoint(layout, focusOffset)
+  if (anchor === null || focus === null) return null
+  const selection = $createRangeSelection()
+  selection.anchor.set(anchor.key, anchor.offset, anchor.type)
+  selection.focus.set(focus.key, focus.offset, focus.type)
+  $setSelection(selection)
+  return selection
+}
+
+/**
  * Build and apply a live RangeSelection over one detect span.
  * @param layout - current walk product.
  * @param span - detect span.
@@ -68,15 +87,18 @@ function resolvePoint(layout: ComposerLayout, offset: number): ResolvedPoint | n
  */
 function selectSpan(layout: ComposerLayout, span: DetectSpan): RangeSelection | null {
   if (span.start < 0 || span.start > span.end || span.end > layout.detectLength) return null
-  const anchor = resolvePoint(layout, span.start)
-  const focus = resolvePoint(layout, span.end)
-  /* v8 ignore next -- bounds were checked above; resolvePoint only fails out of bounds. */
-  if (anchor === null || focus === null) return null
-  const selection = $createRangeSelection()
-  selection.anchor.set(anchor.key, anchor.offset, anchor.type)
-  selection.focus.set(focus.key, focus.offset, focus.type)
-  $setSelection(selection)
-  return selection
+  return selectPoints(layout, span.start, span.end)
+}
+
+/**
+ * Point the selection at two detect offsets without ordering them, so a
+ * backward selection stays backward (Shift+Home keeps growing leftward).
+ * @param anchorOffset - the fixed end.
+ * @param focusOffset - the moving end.
+ * @returns whether both endpoints mapped.
+ */
+export function $selectDetectPoints(anchorOffset: number, focusOffset: number): boolean {
+  return selectPoints($composerLayout(), anchorOffset, focusOffset) !== null
 }
 
 /**

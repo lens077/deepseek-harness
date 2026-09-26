@@ -25,6 +25,7 @@ const SETTINGS: ConversationSettings = {
   busyEnter: 'queue',
   sendShortcut: 'enter',
   contentWidth: 'adaptive',
+  homeEndInTextFields: true,
   questionNavigation: {
     previousShortcut: 'Ctrl+ArrowUp',
     nextShortcut: 'Ctrl+ArrowDown',

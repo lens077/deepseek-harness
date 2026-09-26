@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { ConversationSettingsSchema, type ConversationSettings } from '../src/submission-settings.ts'
 import {
-  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, DEFAULT_CONTENT_WIDTH_MODE, DEFAULT_QUESTION_NAVIGATION_SETTINGS, apply,
+  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, DEFAULT_CONTENT_WIDTH_MODE,
+  DEFAULT_QUESTION_NAVIGATION_SETTINGS, DEFAULT_HOME_END_CARET, apply,
 } from '@deepseek-ai/dsh-client-ui-conversation'
 
 class MemorySettings extends SettingsProvider {
@@ -21,6 +22,7 @@ describe('ui-conversation host', () => {
       busyEnter: 'steer',
       sendShortcut: 'enter',
       contentWidth: 'fill',
+      homeEndInTextFields: DEFAULT_HOME_END_CARET,
       questionNavigation: DEFAULT_QUESTION_NAVIGATION_SETTINGS,
     })
     const questionNavigation = {
@@ -28,7 +30,11 @@ describe('ui-conversation host', () => {
       focusPolicy: 'always', expandButtonSide: 'left',
     }
     expect(ConversationSettingsSchema({ busyEnter: 'queue', questionNavigation } as ConversationSettings)).toEqual({
-      busyEnter: 'queue', sendShortcut: 'enter', contentWidth: 'fill', questionNavigation,
+      busyEnter: 'queue',
+      sendShortcut: 'enter',
+      contentWidth: 'fill',
+      homeEndInTextFields: DEFAULT_HOME_END_CARET,
+      questionNavigation,
     })
   })
 
@@ -42,6 +48,7 @@ describe('ui-conversation host', () => {
       busyEnter: DEFAULT_BUSY_ENTER_BEHAVIOR,
       sendShortcut: 'enter',
       contentWidth: DEFAULT_CONTENT_WIDTH_MODE,
+      homeEndInTextFields: DEFAULT_HOME_END_CARET,
       questionNavigation: DEFAULT_QUESTION_NAVIGATION_SETTINGS,
     }
     expect(ctx.settings.get(ns)).toEqual(defaults)

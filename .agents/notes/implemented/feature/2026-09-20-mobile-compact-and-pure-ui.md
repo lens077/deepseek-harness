@@ -10,11 +10,11 @@ The mobile Web GUI gave too much space to session chrome and the composer. Openi
 
 ## Decision
 
-The composer no longer focuses itself on mount, unlock, or Session switch. Mobile composer controls stay on one non-wrapping row, the model label yields width with start-side ellipsis, and the draft surface has a compact resting height. A phone-only expand control grows the draft scrollport to 45dvh with an internal scrollbar.
+The composer no longer focuses itself on mount, unlock, or Session switch. Mobile composer controls stay on one row while they fit and wrap otherwise ([phone toolbar note](2026-09-25-phone-composer-toolbar-fit.md)), the model label yields width with start-side ellipsis, and the draft surface has a compact resting height. A phone-only expand control grows the draft scrollport to 45dvh with an internal scrollbar.
 
 The phone tab strip hosts the statistics pills after the Flow tab. File-open utilities, Session-log utilities, the right-panel corner control, and the mobile Session-panel toggle are hidden on phones. The tab strip and header use reduced spacing and fixed one-line controls.
 
-Theme settings own a `pureUi` boolean, defaulting to `false`. The setting is persisted with the existing `ui-theme` scope and is exposed to both the General Settings row and the phone header switch beside the gear. The layout publishes `data-pure-ui` on the frame. In pure UI, the Session header and docked composer disappear while the current question remains as plain text at the transcript's top-left. A floating bottom-right button reveals the composer on demand; elected interaction overlays remain mounted.
+Theme settings own a `pureUi` boolean, defaulting to `false`. The setting is persisted with the existing `ui-theme` scope and is exposed to both the [Layout Settings row](2026-09-26-shared-layout-settings-and-desktop-density.md) and the phone header switch beside the gear. The layout publishes `data-pure-ui` on the frame. In pure UI, the Session header and docked composer disappear while the current question remains as plain text at the transcript's top-left. A floating bottom-right button reveals the composer on demand; elected interaction overlays remain mounted.
 
 ## Alternatives considered
 
